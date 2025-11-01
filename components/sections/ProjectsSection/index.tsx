@@ -38,7 +38,7 @@ export default function ProjectsSection() {
             <Paragraph variant="t4" color="grey-500" className="mb-4">
               아직 등록된 프로젝트가 없습니다
             </Paragraph>
-            <Paragraph variant="t6" color="grey-400">
+            <Paragraph variant="t6" color="grey-900">
               곧 멋진 프로젝트로 찾아뵙겠습니다! 🚀
             </Paragraph>
           </div>
