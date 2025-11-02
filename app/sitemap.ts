@@ -1,7 +1,7 @@
 import { MetadataRoute } from 'next';
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = 'https://kimtaein.dev'; // 배포 후 실제 URL로 변경 필요
+  const baseUrl = 'https://portfolio-kimtaein.vercel.app';
   const currentDate = new Date();
 
   return [

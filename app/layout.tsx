@@ -3,8 +3,9 @@ import { Metadata } from 'next';
 import { pretendard } from '@/lib/fonts';
 import JsonLd from '@/components/seo/JsonLd';
 import '@/styles/design-tokens.css';
+import { Analytics } from '@vercel/analytics/next';
 
-const siteUrl = 'https://kimtaein.dev'; // 배포 후 실제 URL로 변경 필요
+const siteUrl = 'https://portfolio-kimtaein.vercel.app';
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -112,7 +113,10 @@ export default function RootLayout({
       <head>
         <JsonLd />
       </head>
-      <body className="font-pretendard antialiased">{children}</body>
+      <body className="font-pretendard antialiased">
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }
