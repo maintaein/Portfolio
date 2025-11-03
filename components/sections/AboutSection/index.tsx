@@ -11,10 +11,8 @@ export default function AboutSection() {
     <section id="about" aria-labelledby="about-heading" className="py-16 sm:py-20 lg:py-24 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
-        {/* 상단: 타이틀 & 소개 - 섹션 진입 시 fadeIn */}
         <HeaderSection />
 
-        {/* 하단: 3가지 핵심 역량 - 각각 스크롤 애니메이션 */}
         <div className="space-y-12 sm:space-y-16 lg:space-y-20">
           {coreValues.map((value, index) => (
             <CoreValueCard key={value.id} value={value} index={index} />
@@ -25,7 +23,6 @@ export default function AboutSection() {
   );
 }
 
-// 💡 헤더 섹션 - 섹션 진입 시 애니메이션
 function HeaderSection() {
   const { ref, isIntersecting } = useIntersection({
     threshold: 0.5,
@@ -61,7 +58,6 @@ function HeaderSection() {
         </span>
       </h2>
 
-      {/* Contact Links */}
       <div className="flex items-center justify-center gap-4 mt-8">
         <button
           onClick={() => handleLinkClick('https://github.com/maintaein', 'github')}
@@ -91,7 +87,6 @@ function HeaderSection() {
   );
 }
 
-// 💡 핵심 역량 카드 - 각각 개별 애니메이션
 interface CoreValueCardProps {
   value: CoreValue;
   index: number;
@@ -103,7 +98,6 @@ function CoreValueCard({ value, index }: CoreValueCardProps) {
     freezeOnceVisible: true
   });
 
-  // 홀수/짝수에 따라 방향 결정
   const isEven = index % 2 === 0;
 
   return (
@@ -122,16 +116,14 @@ function CoreValueCard({ value, index }: CoreValueCardProps) {
         transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)'
       }}
     >
-      {/* 애니메이션 영역 */}
       <div className="w-full lg:w-1/2">
-        <div className="relative aspect-[5/4]">
+        <div className="relative aspect-square max-w-[600px] mx-auto">
           {value.imagePlaceholder === 'tech-stack' && <TechParticleStorm />}
           {value.imagePlaceholder === 'ux-focus' && <EmpathyRadar />}
           {value.imagePlaceholder === 'collaboration' && <CollaborationMesh />}
         </div>
       </div>
 
-      {/* 텍스트 영역 */}
       <div className="w-full lg:w-1/2 space-y-4">
         <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900">
           {value.title}

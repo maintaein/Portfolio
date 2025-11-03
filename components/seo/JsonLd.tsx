@@ -4,9 +4,9 @@ export default function JsonLd() {
     '@type': 'Person',
     name: '김태인',
     jobTitle: 'Frontend Developer',
-    url: 'https://portfolio-kimtaein.vercel.app',
+    url: 'https://kimtaein.vercel.app',
     sameAs: [
-      'https://github.com/maintaein', // 실제 GitHub URL로 변경 필요
+      'https://github.com/maintaein',
     ],
     knowsAbout: [
       'React',
@@ -38,7 +38,7 @@ export default function JsonLd() {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     name: '김태인의 프론트엔드 포트폴리오',
-    url: 'https://portfolio-kimtaein.vercel.app',
+    url: 'https://kimtaein.vercel.app',
     description: '사용자 경험을 최우선으로 생각하는 프론트엔드 개발자 김태인의 포트폴리오',
     author: {
       '@type': 'Person',
@@ -55,37 +55,37 @@ export default function JsonLd() {
         '@type': 'ListItem',
         position: 1,
         name: 'Home',
-        item: 'https://portfolio-kimtaein.vercel.app',
+        item: 'https://kimtaein.vercel.app',
       },
       {
         '@type': 'ListItem',
         position: 2,
         name: 'About',
-        item: 'https://portfolio-kimtaein.vercel.app#about',
+        item: 'https://kimtaein.vercel.app#about',
       },
       {
         '@type': 'ListItem',
         position: 3,
         name: 'Skills',
-        item: 'https://portfolio-kimtaein.vercel.app#skills',
+        item: 'https://kimtaein.vercel.app#skills',
       },
       {
         '@type': 'ListItem',
         position: 4,
         name: 'Projects',
-        item: 'https://portfolio-kimtaein.vercel.app#projects',
+        item: 'https://kimtaein.vercel.app#projects',
       },
       {
         '@type': 'ListItem',
         position: 5,
         name: 'Awards & Certificates',
-        item: 'https://portfolio-kimtaein.vercel.app#awards-certificates',
+        item: 'https://kimtaein.vercel.app#awards-certificates',
       },
       {
         '@type': 'ListItem',
         position: 6,
         name: 'Experience',
-        item: 'https://portfolio-kimtaein.vercel.app#experience',
+        item: 'https://kimtaein.vercel.app#experience',
       },
     ],
   };

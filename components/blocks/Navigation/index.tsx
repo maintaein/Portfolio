@@ -3,19 +3,19 @@
 
 import { useState, useEffect } from 'react';
 import { useScroll } from '@/hooks';
-import { Button, IconButton, Icon } from '@/components/atoms';
+import { IconButton, Icon } from '@/components/atoms';
 import { cn } from '@/lib/utils/cn';
 
 interface NavigationItem {
   label: string;
   href: string;
-  id: string; // section id (href에서 # 제거한 부분)
+  id: string; 
 }
 
 interface NavigationProps {
   items: NavigationItem[];
   className?: string;
-  activeSection?: string; // ✅ 추가
+  activeSection?: string; 
 }
 
 export default function Navigation({
@@ -25,7 +25,6 @@ export default function Navigation({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
 
-  // 💡 Ultra Think: useScroll으로 현재 섹션 자동 감지
   // items에서 section id 배열 추출
   const sectionIds = items.map(item => item.id);
   const { activeSection } = useScroll(sectionIds, {
@@ -70,7 +69,6 @@ export default function Navigation({
     >
       <div className="max-w-7xl mx-auto px-6 py-4">
         <div className="flex items-center justify-between">
-          {/* Logo */}
           <button
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
             className="text-t4 font-bold text-grey-900 hover:text-primary-500 transition-colors duration-300"
@@ -79,7 +77,6 @@ export default function Navigation({
             Portfolio
           </button>
 
-          {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-8">
             {items.map((item) => (
               <button
@@ -92,7 +89,6 @@ export default function Navigation({
                   activeSection === item.id
                     ? 'text-blue-500'
                     : 'text-grey-700 hover:text-primary-500',
-                  // 💡 활성 섹션에 underline 애니메이션
                   activeSection === item.id && 'after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-500 after:transition-all after:duration-300'
                 )}
               >
@@ -101,7 +97,6 @@ export default function Navigation({
             ))}
           </div>
 
-          {/* Mobile Menu Button */}
           <IconButton
             icon={<Icon name={isMobileMenuOpen ? 'close' : 'menu'} />}
             variant="ghost"
@@ -111,7 +106,6 @@ export default function Navigation({
           />
         </div>
 
-        {/* Mobile Menu */}
         {isMobileMenuOpen && (
           <div className="md:hidden mt-4 pb-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
             {items.map((item) => (

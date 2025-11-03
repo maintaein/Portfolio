@@ -89,7 +89,6 @@ export default function SegmentedControl({
         className
       )}
     >
-      {/* 선택된 세그먼트의 배경 (애니메이션) */}
       <div
         className="absolute bg-white rounded-md shadow-sm transition-all duration-300 ease-out"
         style={{
@@ -100,7 +99,6 @@ export default function SegmentedControl({
         }}
       />
 
-      {/* 옵션 버튼들 */}
       {options.map((option, index) => {
         const isSelected = option.value === currentValue;
         const isDisabled = option.disabled || false;

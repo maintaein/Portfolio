@@ -29,41 +29,27 @@ export default function ProjectsSection() {
   return (
     <section id="projects" className="py-20 px-6 bg-white">
       <div className="max-w-6xl mx-auto">
-        {/* 섹션 헤더 - 진입 시 애니메이션 */}
         <HeaderSection />
-
-        {/* 프로젝트 그리드 - 각 카드 개별 애니메이션 */}
-        {projects.length === 0 ? (
-          <div className="text-center py-20">
-            <Paragraph variant="t4" color="grey-500" className="mb-4">
-              아직 등록된 프로젝트가 없습니다
-            </Paragraph>
-            <Paragraph variant="t6" color="grey-900">
-              곧 멋진 프로젝트로 찾아뵙겠습니다! 🚀
-            </Paragraph>
-          </div>
-        ) : (
-          <div
-            ref={sectionRef}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-          >
-            {projects.map((project, index) => (
-              <ProjectCard
-                key={project.title}
-                project={project}
-                index={index}
-                onOpenModal={handleOpenModal}
-              />
-            ))}
-          </div>
-        )}
+      
+        <div
+          ref={sectionRef}
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+        >
+          {projects.map((project, index) => (
+            <ProjectCard
+              key={project.title}
+              project={project}
+              index={index}
+              onOpenModal={handleOpenModal}
+            />
+          ))}
+        </div>  
       </div>
 
-      {/* 💡 ProjectModal: project를 null과 함께 전달 (개선) */}
       <ProjectModal
         isOpen={isOpen}
         onClose={close}
-        project={selectedProject}  // ✅ null 가능한 타입
+        project={selectedProject}  
       />
 
       <style jsx>{`
@@ -82,7 +68,6 @@ export default function ProjectsSection() {
   );
 }
 
-// 💡 헤더 섹션 - 섹션 진입 시 애니메이션
 function HeaderSection() {
   const { ref, isIntersecting } = useIntersection({
     threshold: 0.5,
@@ -108,7 +93,6 @@ function HeaderSection() {
   );
 }
 
-// 💡 프로젝트 카드 - 각각 개별 애니메이션
 interface ProjectCardProps {
   project: Project;
   index: number;
@@ -144,7 +128,6 @@ function ProjectCard({ project, index, onOpenModal }: ProjectCardProps) {
       }}
       aria-label={`${project.title} 프로젝트 상세 보기`}
     >
-      {/* 썸네일 - 호버 효과 */}
       <div className="relative w-full h-48 bg-grey-100 overflow-hidden">
         <Image
           src={project.image}
@@ -152,9 +135,7 @@ function ProjectCard({ project, index, onOpenModal }: ProjectCardProps) {
           fill
           className="object-cover group-hover:scale-110 transition-transform duration-300"
         />
-        {/* 오버레이 - 호버 시 어두워짐 */}
         <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-30 transition-opacity duration-300" />
-        {/* 타이틀 오버레이 - 하단에 표시 */}
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-4">
           <Paragraph variant="t5" weight="bold" className="text-white">
             {project.title}
@@ -162,13 +143,11 @@ function ProjectCard({ project, index, onOpenModal }: ProjectCardProps) {
         </div>
       </div>
 
-      {/* 내용 */}
       <div className="p-5">
         <Paragraph variant="t6" color="grey-700" className="mb-4 line-clamp-2">
           {project.description}
         </Paragraph>
 
-        {/* 태그 - 스크롤 진입 시 순차 등장 */}
         <div 
           className="flex flex-wrap gap-2 transition-all duration-500"
           style={{

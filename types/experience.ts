@@ -1,4 +1,3 @@
-// types/experience.ts
 
 export interface Experience {
     id: string;

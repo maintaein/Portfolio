@@ -1,4 +1,3 @@
-// components/atoms/Badge/index.tsx
 import { cn } from '@/lib/utils/cn';
 import { ReactNode } from 'react';
 

@@ -18,9 +18,9 @@ interface UXCard {
   Icon: typeof EyeIcon;
   label: string;
   tooltip: string;
-  angle: number; // Position angle in degrees
-  distance: number; // Distance from center in %
-  delay: number; // Animation delay
+  angle: number; 
+  distance: number; 
+  delay: number; 
 }
 
 export default function EmpathyRadar() {
@@ -41,14 +41,11 @@ export default function EmpathyRadar() {
   return (
     <div
       ref={ref}
-      className="relative w-full h-full min-h-[400px] md:min-h-[500px]"
+      className="relative w-full aspect-square max-w-[600px] max-h-[600px] mx-auto"
     >
-      {/* Background Layer - with rounded corners and overflow hidden */}
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-100 via-blue-50 to-purple-50 rounded-2xl overflow-hidden">
-        {/* Radar Circles Container */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-100 via-blue-50 to-purple-50 rounded-2xl overflow-hidden aspect-square">
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="relative w-full h-full max-w-[500px] max-h-[500px]">
-            {/* Outer Circle - Slow rotation */}
+          <div className="relative w-full h-full aspect-square">
             <div
               className={`absolute inset-0 rounded-full border-2 border-blue-200/40 ${
                 isIntersecting ? 'animate-radar-slow' : ''
@@ -56,7 +53,6 @@ export default function EmpathyRadar() {
               style={{ margin: '10%' }}
             />
 
-            {/* Middle Circle - Medium rotation (reverse) */}
             <div
               className={`absolute inset-0 rounded-full border-2 border-blue-300/50 ${
                 isIntersecting ? 'animate-radar-medium' : ''
@@ -64,7 +60,6 @@ export default function EmpathyRadar() {
               style={{ margin: '20%' }}
             />
 
-            {/* Inner Circle - Fast rotation */}
             <div
               className={`absolute inset-0 rounded-full border-2 border-blue-400/60 ${
                 isIntersecting ? 'animate-radar-fast' : ''
@@ -72,7 +67,6 @@ export default function EmpathyRadar() {
               style={{ margin: '30%' }}
             />
 
-            {/* Radar Sweep Effect */}
             {isIntersecting && (
               <div className="absolute inset-0 opacity-20">
                 <div
@@ -88,10 +82,8 @@ export default function EmpathyRadar() {
         </div>
       </div>
 
-      {/* Foreground Layer - UX Cards & Center Avatar (overflow visible) */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="relative w-full h-full max-w-[500px] max-h-[500px]">
-          {/* Center User Avatar */}
+        <div className="relative w-full h-full aspect-square">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-auto">
             <div
               className={`w-16 h-16 md:w-20 md:h-20 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white text-2xl md:text-3xl ${
@@ -102,7 +94,6 @@ export default function EmpathyRadar() {
             </div>
           </div>
 
-          {/* UX Cards */}
           {uxCards.map((card) => (
             <UXCardElement
               key={card.id}
@@ -114,7 +105,6 @@ export default function EmpathyRadar() {
             />
           ))}
 
-          {/* Connection Beams (when hovered) */}
           {hoveredCard && uxCards.find((c) => c.id === hoveredCard) && (
             <ConnectionBeam card={uxCards.find((c) => c.id === hoveredCard)!} />
           )}
@@ -135,7 +125,6 @@ interface UXCardElementProps {
 function UXCardElement({ card, isActive, isHovered, onHover, onLeave }: UXCardElementProps) {
   const Icon = card.Icon;
 
-  // Calculate position based on angle and distance
   const x = 50 + card.distance * Math.cos((card.angle * Math.PI) / 180);
   const y = 50 + card.distance * Math.sin((card.angle * Math.PI) / 180);
 
@@ -166,7 +155,6 @@ function UXCardElement({ card, isActive, isHovered, onHover, onLeave }: UXCardEl
       >
         <Icon className="w-6 h-6 md:w-7 md:h-7 text-blue-500" />
 
-        {/* Tooltip */}
         {isHovered && (
           <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap bg-grey-900 text-white text-xs px-3 py-1.5 rounded-lg animate-[fadeIn_200ms_ease-out] z-50">
             {card.tooltip}
@@ -183,7 +171,6 @@ interface ConnectionBeamProps {
 }
 
 function ConnectionBeam({ card }: ConnectionBeamProps) {
-  // Calculate line from center to card
   const x1 = 50;
   const y1 = 50;
   const x2 = 50 + card.distance * Math.cos((card.angle * Math.PI) / 180);

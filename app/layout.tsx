@@ -5,7 +5,7 @@ import JsonLd from '@/components/seo/JsonLd';
 import '@/styles/design-tokens.css';
 import { Analytics } from '@vercel/analytics/next';
 
-const siteUrl = 'https://portfolio-kimtaein.vercel.app';
+const siteUrl = 'https://kimtaein.vercel.app';
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

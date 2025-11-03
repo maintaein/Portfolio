@@ -1,4 +1,3 @@
-// components/blocks/SkillItemCard/index.tsx
 'use client';
 
 import Image from 'next/image';
@@ -35,7 +34,6 @@ export default function SkillItemCard({
         animationFillMode: 'forwards'
       }}
     >
-      {/* Icon */}
       {icon && (
         <div className="w-12 h-12 mb-3 relative flex-shrink-0">
           <Image
@@ -48,12 +46,10 @@ export default function SkillItemCard({
         </div>
       )}
 
-      {/* Skill Name */}
       <Paragraph variant="t6" weight="bold" className="mb-1.5">
         {name}
       </Paragraph>
 
-      {/* Experience Description */}
       {experience && (
         <Paragraph variant="t7" color="grey-600" className="leading-relaxed text-xs">
           {experience}

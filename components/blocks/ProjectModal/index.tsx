@@ -35,7 +35,6 @@ export default function ProjectModal({
       size="large"
     >
       <div className="space-y-8">
-        {/* Subtitle */}
         {project.subtitle && (
           <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
             <Paragraph variant="t5" color="grey-800" className="leading-relaxed">
@@ -44,7 +43,6 @@ export default function ProjectModal({
           </div>
         )}
 
-        {/* Project Image */}
         <div className={cn(
           "relative w-3/4 mx-auto bg-grey-100 rounded-lg overflow-hidden flex items-center justify-center",
           project.imageAspect === 'portrait' ? 'aspect-[9/16] max-h-[600px] max-w-[400px]' :
@@ -82,7 +80,6 @@ export default function ProjectModal({
           )}
         </div>
 
-        {/* Description */}
         {project.longDescription && (
           <div>
             <Paragraph variant="t6" color="grey-700" className="leading-relaxed">
@@ -91,7 +88,6 @@ export default function ProjectModal({
           </div>
         )}
 
-        {/* Project Info Grid */}
         <div className="grid grid-cols-3 gap-4 p-4 bg-grey-50 rounded-lg">
           {project.duration && (
             <div>
@@ -125,7 +121,6 @@ export default function ProjectModal({
           )}
         </div>
 
-        {/* Implementations */}
         {project.implementations && project.implementations.length > 0 && (
           <div>
             <Paragraph variant="t4" weight="bold" className="mb-3 flex items-center gap-2">
@@ -143,12 +138,10 @@ export default function ProjectModal({
                   const group = impl as ImplementationGroup;
                   return (
                     <div key={index} className="space-y-4">
-                      {/* 카테고리 헤더 */}
                       <Paragraph variant="t5" weight="bold" className="text-grey-800 border-l-4 border-blue-500 pl-3">
                         {group.category}
                       </Paragraph>
 
-                      {/* 그룹 아이템들 */}
                       <ul className="space-y-4 pl-2">
                         {group.items.map((item, itemIdx) => {
                           const isObject = typeof item === 'object' && item !== null;
@@ -239,7 +232,6 @@ export default function ProjectModal({
           </div>
         )}
 
-        {/* Responsibilities */}
         {project.responsibilities && project.responsibilities.length > 0 && (
           <div>
             <Paragraph variant="t4" weight="bold" className="mb-3 flex items-center gap-2">
@@ -259,7 +251,6 @@ export default function ProjectModal({
           </div>
         )}
 
-        {/* Tech Stack & Reasons */}
         {project.techReasons && project.techReasons.length > 0 && (
           <div>
             <Paragraph variant="t4" weight="bold" className="mb-3 flex items-center gap-2">
@@ -288,7 +279,6 @@ export default function ProjectModal({
           </div>
         )}
 
-        {/* Key Learnings */}
         {project.keyLearnings && project.keyLearnings.length > 0 && (
           <div>
             <Paragraph variant="t4" weight="bold" className="mb-4 flex items-center gap-2">
@@ -329,7 +319,6 @@ export default function ProjectModal({
           </div>
         )}
 
-        {/* Project Reviews */}
         {project.reviews && project.reviews.length > 0 && (
           <div>
             <Paragraph variant="t4" weight="bold" className="mb-4 flex items-center gap-2">
@@ -337,7 +326,6 @@ export default function ProjectModal({
               프로젝트 리뷰
             </Paragraph>
 
-            {/* Review Tabs */}
             {project.reviews.length > 1 && (
               <div className="flex gap-2 mb-4 overflow-x-auto">
                 {project.reviews.map((review, index) => (
@@ -356,12 +344,10 @@ export default function ProjectModal({
               </div>
             )}
 
-            {/* Active Review */}
             <ReviewContent review={project.reviews[activeReviewTab]} />
           </div>
         )}
 
-        {/* Links */}
         <div className="flex gap-3 justify-end pt-4 border-t border-grey-200">
           {project.githubUrl && (
             <Button
@@ -394,7 +380,6 @@ function ReviewContent({ review }: { review: ProjectReview }) {
         {review.title}
       </Paragraph>
 
-      {/* Review Image(s) */}
       {review.image && (
         <div className="w-full flex justify-center gap-4">
           {Array.isArray(review.image) ? (
@@ -423,7 +408,6 @@ function ReviewContent({ review }: { review: ProjectReview }) {
         </div>
       )}
 
-      {/* Main Features */}
       {review.features && review.features.length > 0 && (
         <div>
           <Paragraph variant="t5" weight="semibold" className="mb-3">
@@ -442,7 +426,6 @@ function ReviewContent({ review }: { review: ProjectReview }) {
         </div>
       )}
 
-      {/* Intent */}
       {review.intent && (
         <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-lg">
           <Paragraph variant="t6" weight="semibold" className="mb-2 text-yellow-800">
@@ -454,14 +437,12 @@ function ReviewContent({ review }: { review: ProjectReview }) {
         </div>
       )}
 
-      {/* Troubleshooting */}
       {review.troubleShooting && (
         <div className="border-2 border-orange-200 rounded-lg p-6 bg-white">
           <Paragraph variant="t5" weight="bold" className="mb-4 text-orange-600">
             🛠 트러블 슈팅: {review.troubleShooting.title}
           </Paragraph>
 
-          {/* Initial Implementation */}
           {review.troubleShooting.initialImpl && (
             <div className="mb-4">
               <Paragraph variant="t6" weight="semibold" className="mb-2">
@@ -473,7 +454,6 @@ function ReviewContent({ review }: { review: ProjectReview }) {
             </div>
           )}
 
-          {/* Problem */}
           {review.troubleShooting.problem && review.troubleShooting.problem.length > 0 && (
             <div className="mb-4">
               <Paragraph variant="t6" weight="semibold" className="mb-2">
@@ -492,7 +472,6 @@ function ReviewContent({ review }: { review: ProjectReview }) {
             </div>
           )}
 
-          {/* Analysis */}
           {review.troubleShooting.analysis && review.troubleShooting.analysis.length > 0 && (
             <div className="mb-4">
               <Paragraph variant="t6" weight="semibold" className="mb-2">
@@ -511,7 +490,6 @@ function ReviewContent({ review }: { review: ProjectReview }) {
             </div>
           )}
 
-          {/* Solution */}
           {review.troubleShooting.solution && (
             <div className="mb-4">
               <Paragraph variant="t6" weight="semibold" className="mb-2">
@@ -523,7 +501,6 @@ function ReviewContent({ review }: { review: ProjectReview }) {
             </div>
           )}
 
-          {/* Solution Code */}
           {review.troubleShooting.solutionCode && (
             <div className="mb-4">
               <pre className="bg-grey-900 text-grey-100 p-4 rounded-lg overflow-x-auto">
@@ -532,7 +509,6 @@ function ReviewContent({ review }: { review: ProjectReview }) {
             </div>
           )}
 
-          {/* Results */}
           {review.troubleShooting.results && review.troubleShooting.results.length > 0 && (
             <div className="mb-4">
               <Paragraph variant="t6" weight="semibold" className="mb-2">
@@ -551,7 +527,6 @@ function ReviewContent({ review }: { review: ProjectReview }) {
             </div>
           )}
 
-          {/* Lessons */}
           {review.troubleShooting.lessons && review.troubleShooting.lessons.length > 0 && (
             <div>
               <Paragraph variant="t6" weight="semibold" className="mb-2">

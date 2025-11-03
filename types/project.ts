@@ -1,4 +1,3 @@
-// types/project.ts
 
 export interface ImplementationItem {
   text: string;
@@ -50,14 +49,12 @@ export interface Project {
   role?: string;
   teamSize?: string;
 
-  // 새로운 필드
   implementations?: (string | ImplementationItem | ImplementationGroup)[];
   responsibilities?: string[];
   techReasons?: TechReason[];
   reviews?: ProjectReview[];
   keyLearnings?: string[];
 
-  // 링크
   demoUrl?: string;
   githubUrl?: string;
 }

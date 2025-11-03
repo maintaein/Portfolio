@@ -1,4 +1,3 @@
-// components/atoms/Border/index.tsx
 import { cn } from '@/lib/utils/cn';
 
 type BorderPosition = 'top' | 'bottom' | 'left' | 'right' | 'all';

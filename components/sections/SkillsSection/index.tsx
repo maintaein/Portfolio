@@ -33,7 +33,6 @@ export default function SkillsSection() {
     <section id="skills" className="py-20 px-6 bg-gradient-to-br from-grey-50 to-grey-100">
       <div className="max-w-6xl mx-auto">
 
-        {/* 섹션 헤더 - 진입 시 애니메이션 */}
         <div
           ref={headerRef}
           className={`text-center mb-12 transition-all duration-1000 ${
@@ -50,7 +49,6 @@ export default function SkillsSection() {
           </Paragraph>
         </div>
 
-        {/* SegmentedControl - 진입 시 애니메이션 */}
         <div
           ref={tabRef}
           className={`flex justify-center mb-12 transition-all duration-1000 ${
@@ -71,7 +69,6 @@ export default function SkillsSection() {
           />
         </div>
 
-        {/* 스킬 그리드 - 진입 시 애니메이션 */}
         <div ref={gridRef}>
           <div
             key={currentCategory.id}

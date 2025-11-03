@@ -1,4 +1,3 @@
-// components/atoms/Paragraph/index.tsx
 import { cn } from '@/lib/utils/cn';
 import { ReactNode, HTMLAttributes, CSSProperties } from 'react';
 

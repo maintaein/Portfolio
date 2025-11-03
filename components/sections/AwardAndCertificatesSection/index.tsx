@@ -27,7 +27,6 @@ export default function AwardsAndCertificatesSection() {
   return (
     <section id="awards-certificates" className="py-20 px-6 bg-grey-50">
       <div className="max-w-4xl mx-auto">
-        {/* 섹션 헤더 - 진입 시 애니메이션 */}
         <div 
           ref={headerRef}
           className={`mb-12 text-center transition-all duration-1000 ${
@@ -44,15 +43,12 @@ export default function AwardsAndCertificatesSection() {
           </Paragraph>
         </div>
 
-        {/* 탭 컨트롤 - 진입 시 애니메이션 */}
         <TabControlSection activeTab={activeTab} setActiveTab={setActiveTab} tabs={tabs} />
 
-        {/* 수상 경력 */}
         {activeTab === 'awards' && (
           <ItemsContainer items={awards} itemType="award" />
         )}
 
-        {/* 자격증 */}
         {activeTab === 'certificates' && (
           <ItemsContainer items={certificates} itemType="certificate" />
         )}
@@ -74,7 +70,6 @@ export default function AwardsAndCertificatesSection() {
   );
 }
 
-// 💡 탭 컨트롤 - 진입 시 애니메이션
 interface TabControlSectionProps {
   activeTab: TabValue;
   setActiveTab: (tab: TabValue) => void;
@@ -106,7 +101,6 @@ function TabControlSection({ activeTab, setActiveTab, tabs }: TabControlSectionP
   );
 }
 
-// 💡 아이템 컨테이너 - 각 아이템 개별 애니메이션
 interface ItemsContainerProps {
   items: (Award | Certificate)[];
   itemType: 'award' | 'certificate';
@@ -127,7 +121,6 @@ function ItemsContainer({ items, itemType }: ItemsContainerProps) {
   );
 }
 
-// 💡 개별 아이템 - useIntersection으로 애니메이션
 interface AnimatedItemProps {
   item: Award | Certificate;
   index: number;

@@ -1,4 +1,3 @@
-// components/atoms/Icon/index.tsx
 import { cn } from '@/lib/utils/cn';
 
 type IconName =

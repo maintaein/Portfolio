@@ -1,4 +1,3 @@
-// components/atoms/Skeleton/index.tsx
 import { cn } from '@/lib/utils/cn';
 
 type SkeletonVariant = 'text' | 'circular' | 'rectangular' | 'rounded';

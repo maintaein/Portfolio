@@ -1,4 +1,3 @@
-// components/atoms/IconButton/index.tsx
 'use client';
 
 import { cn } from '@/lib/utils/cn';

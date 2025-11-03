@@ -1,4 +1,3 @@
-// types/skill.ts
 
 export type SkillLevel = 'beginner' | 'intermediate' | 'advanced' | 'expert';
 

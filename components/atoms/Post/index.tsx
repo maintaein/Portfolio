@@ -45,7 +45,6 @@ export default function Post({
         )}
         onClick={onClick}
       >
-        {/* 이미지 */}
         {image && (
           <div className="relative w-full h-48 bg-grey-100 overflow-hidden">
             <Image
@@ -58,9 +57,7 @@ export default function Post({
           </div>
         )}
 
-        {/* 컨텐츠 */}
         <div className="p-6">
-          {/* 태그 */}
           {tags && tags.length > 0 && (
             <div className="flex gap-2 mb-3 flex-wrap">
               {tags.map((tag, index) => (
@@ -74,19 +71,16 @@ export default function Post({
             </div>
           )}
 
-          {/* 제목 */}
           <h3 className="text-t3 font-bold text-grey-900 mb-2 line-clamp-2">
             {title}
           </h3>
 
-          {/* 설명 */}
           {description && (
             <p className="text-t6 text-grey-700 mb-4 line-clamp-3">
               {description}
             </p>
           )}
 
-          {/* 메타 정보 */}
           <div className="flex items-center justify-between text-t7 text-grey-500">
             {author && (
               <div className="flex items-center gap-2">
@@ -105,7 +99,6 @@ export default function Post({
             {date && <time>{date}</time>}
           </div>
 
-          {/* Footer */}
           {footer && <div className="mt-4 pt-4 border-t border-grey-200">{footer}</div>}
         </div>
       </article>
@@ -123,7 +116,6 @@ export default function Post({
         )}
         onClick={onClick}
       >
-        {/* 이미지 */}
         {image && (
           <div className="flex-shrink-0 w-24 h-24 bg-grey-100 rounded-lg overflow-hidden">
             <Image
@@ -136,21 +128,19 @@ export default function Post({
           </div>
         )}
 
-        {/* 컨텐츠 */}
+        
         <div className="flex-1 min-w-0">
-          {/* 제목 */}
+          
           <h3 className="text-t4 font-semibold text-grey-900 mb-1 truncate">
             {title}
           </h3>
 
-          {/* 설명 */}
           {description && (
             <p className="text-t6 text-grey-700 mb-2 line-clamp-2">
               {description}
             </p>
           )}
 
-          {/* 메타 정보 */}
           <div className="flex items-center gap-3 text-t7 text-grey-500">
             {author && <span>{author.name}</span>}
             {date && <time>{date}</time>}
@@ -179,12 +169,10 @@ export default function Post({
       )}
       onClick={onClick}
     >
-      {/* 제목 */}
       <h3 className="text-t5 font-medium text-grey-900 mb-1 line-clamp-1">
         {title}
       </h3>
 
-      {/* 메타 정보 */}
       <div className="flex items-center gap-2 text-t7 text-grey-500">
         {author && <span>{author.name}</span>}
         {date && (

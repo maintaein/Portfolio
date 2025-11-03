@@ -126,7 +126,6 @@ export default function HeroSection() {
       role="banner"
       className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center pt-0 pb-4 px-4 sm:pt-0 sm:pb-6 sm:px-6 lg:pt-0 lg:pb-8 lg:px-8 relative"
     >
-      {/* 애니메이션 중 하단 콘텐츠 숨김 오버레이 */}
       <div
         className={`absolute inset-0 bg-gradient-to-br from-gray-100 to-gray-200 transition-opacity duration-1000 pointer-events-none ${
           isAnimationComplete ? 'opacity-0' : 'opacity-100'
@@ -136,16 +135,13 @@ export default function HeroSection() {
 
       <div className="w-full max-w-7xl flex flex-col items-center relative z-10">
         
-        {/* IDE와 Browser가 하나의 고정된 레이아웃 */}
         <div className="relative w-full max-w-[1200px] mb-8 sm:mb-12 lg:mb-16" style={{ aspectRatio: '16/9' }}>
           
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="relative w-full h-full max-w-[95%] max-h-[95%]">
               
-              {/* IDE - 왼쪽 50% */}
               <div className="absolute left-0 top-[5%] w-[50%] h-[80%] z-20">
                 <div className="w-full h-full bg-gray-900 rounded-xl shadow-2xl overflow-hidden border border-gray-700 flex flex-col">
-                  {/* IDE Header */}
                   <div className="bg-gray-800 px-4 py-3 flex items-center gap-2 border-b border-gray-700 flex-shrink-0">
                     <div className="w-3 h-3 rounded-full bg-red-500"></div>
                     <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
@@ -153,7 +149,6 @@ export default function HeroSection() {
                     <span className="ml-4 text-gray-400 text-sm font-mono">styles.css</span>
                   </div>
                   
-                  {/* IDE Code - 커스텀 스크롤바 */}
                   <div className="flex-1 overflow-auto p-6 font-mono text-sm ide-scrollbar">
                     {codeLines.map((line, index) => (
                       <div key={index} className="flex leading-relaxed">
@@ -172,10 +167,8 @@ export default function HeroSection() {
                 </div>
               </div>
 
-              {/* Browser - 오른쪽 63% */}
               <div className="absolute right-0 top-[10%] w-[63%] h-[85%] z-10">
                 <div className="w-full h-full bg-white rounded-xl shadow-2xl overflow-hidden border border-gray-300 flex flex-col">
-                  {/* Browser Header */}
                   <div className="bg-gray-200 px-4 py-3 flex items-center gap-2 border-b border-gray-300 flex-shrink-0">
                     <div className="w-3 h-3 rounded-full bg-red-400"></div>
                     <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
@@ -184,39 +177,32 @@ export default function HeroSection() {
                       <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                       </svg>
-                      <span className="truncate">https://portfolio-kimtaein.vercel.app/</span>
+                      <span className="truncate">https://kimtaein.vercel.app/</span>
                     </div>
                   </div>
                   
-                  {/* Browser Content */}
                   <div className="flex-1 overflow-auto p-8 lg:p-12 bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
                     <div className="h-full flex flex-col justify-center">
-                      {/* 상단 장식 바 */}
                       <div className="mb-8">
                         <div className="h-2 w-32 bg-gradient-to-r from-blue-400 to-purple-400 rounded-full"></div>
                       </div>
                       
-                      {/* 메인 텍스트 - 타이핑 효과 */}
                       <div className="ml-auto w-full pl-[20%]">
                         <h1 className="text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold text-gray-900 mb-6 leading-tight">
-                          {/* 첫 번째 줄 */}
                           <div className="flex items-center">
                             <span>
                               {displayText.line1}
                             </span>
-                            {/* 첫 줄에 커서 표시 */}
                             {browserText.length < fullText.length && displayText.showCursorOnLine === 1 && showCursor && (
                               <span className="inline-block w-1 h-10 lg:h-12 bg-gray-900 animate-blink ml-1"></span>
                             )}
                           </div>
                           
-                          {/* 두 번째 줄 */}
                           {displayText.line2 && (
                             <div className="flex items-center">
                               <span>
                                 {displayText.line2}
                               </span>
-                              {/* 둘째 줄에 커서 표시 */}
                               {browserText.length < fullText.length && displayText.showCursorOnLine === 2 && showCursor && (
                                 <span className="inline-block w-1 h-10 lg:h-12 bg-gray-900 animate-blink ml-1"></span>
                               )}
@@ -224,7 +210,6 @@ export default function HeroSection() {
                           )}
                         </h1>
                         
-                        {/* 하단 장식 요소들 */}
                         <div 
                           className={`space-y-3 transition-all duration-1000 ${
                             browserText.length >= fullText.length 
@@ -245,7 +230,6 @@ export default function HeroSection() {
           </div>
         </div>
 
-        {/* 하단 텍스트 - 애니메이션 완료 후에만 표시 */}
         <div
           className={`text-center px-4 transition-all duration-1000 ${
             isAnimationComplete
@@ -284,7 +268,6 @@ export default function HeroSection() {
           animation: blink 0.8s infinite;
         }
 
-        /* IDE 스크롤바 커스터마이징 */
         .ide-scrollbar::-webkit-scrollbar {
           width: 14px;
           height: 14px;
@@ -305,7 +288,6 @@ export default function HeroSection() {
           background: rgba(107, 114, 128, 0.7);
         }
 
-        /* Firefox용 스크롤바 */
         .ide-scrollbar {
           scrollbar-width: thin;
           scrollbar-color: rgba(75, 85, 99, 0.5) rgba(31, 41, 55, 0.3);

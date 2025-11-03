@@ -9,9 +9,9 @@ interface CollabTool {
   name: string;
   icon: string;
   tooltip: string;
-  x: number; // Position in %
+  x: number; 
   y: number;
-  bobDelay: number; // Bob animation delay
+  bobDelay: number; 
 }
 
 interface Connection {
@@ -24,7 +24,7 @@ export default function CollaborationMesh() {
   const [hoveredTool, setHoveredTool] = useState<string | null>(null);
   const { ref, isIntersecting } = useIntersection({ threshold: 0.2, freezeOnceVisible: true });
 
-  // 4 collaboration tools in square formation
+
   const tools: CollabTool[] = [
     { id: 'github', name: 'GitHub', icon: '/icons/github.png', tooltip: '버전 관리 & 코드 리뷰', x: 25, y: 25, bobDelay: 0 },
     { id: 'jira', name: 'Jira', icon: '/icons/Jira.png', tooltip: '애자일 스프린트 관리', x: 75, y: 25, bobDelay: 0.75 },
@@ -32,7 +32,6 @@ export default function CollaborationMesh() {
     { id: 'notion', name: 'Notion', icon: '/icons/Notion.png', tooltip: '문서화 & 지식 공유', x: 75, y: 75, bobDelay: 2.25 },
   ];
 
-  // 6 connections (all pairs)
   const connections: Connection[] = [
     { from: 'github', to: 'jira', pulseDelay: 0 },
     { from: 'github', to: 'figma', pulseDelay: 0.5 },
@@ -47,7 +46,6 @@ export default function CollaborationMesh() {
       ref={ref}
       className="relative w-full h-full min-h-[400px] md:min-h-[500px] bg-gradient-to-br from-green-100 via-green-50 to-blue-50 rounded-2xl overflow-hidden"
     >
-      {/* Grid Background (GitHub contribution style) */}
       <div className="absolute inset-0 opacity-20">
         <div className="grid grid-cols-12 grid-rows-8 gap-2 p-8 h-full">
           {Array.from({ length: 96 }).map((_, index) => (
@@ -62,7 +60,6 @@ export default function CollaborationMesh() {
         </div>
       </div>
 
-      {/* Connection Lines & Dots Container */}
       <div className="absolute inset-0">
         <svg className="w-full h-full" style={{ zIndex: 1 }}>
           {connections.map((conn, index) => {
@@ -87,10 +84,9 @@ export default function CollaborationMesh() {
         </svg>
       </div>
 
-      {/* Tool Cards */}
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="relative w-full h-full max-w-[500px] max-h-[500px]">
-          {tools.map((tool, index) => (
+          {tools.map((tool) => (
             <CollabToolCard
               key={tool.id}
               tool={tool}
@@ -139,7 +135,6 @@ function CollabToolCard({ tool, isActive, isHovered, onHover, onLeave }: CollabT
           animationDelay: `${tool.bobDelay}s`,
         }}
       >
-        {/* Tool Icon */}
         <div className="w-12 h-12 md:w-14 md:h-14 relative">
           <Image
             src={tool.icon}
@@ -149,12 +144,10 @@ function CollabToolCard({ tool, isActive, isHovered, onHover, onLeave }: CollabT
           />
         </div>
 
-        {/* Tool Name */}
         <div className="mt-2 text-xs md:text-sm font-semibold text-grey-800">
           {tool.name}
         </div>
 
-        {/* Tooltip */}
         {isHovered && (
           <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 whitespace-nowrap bg-grey-900 text-white text-xs px-3 py-1.5 rounded-lg animate-[fadeIn_200ms_ease-out] z-20">
             {tool.tooltip}
@@ -180,7 +173,6 @@ function ConnectionLine({ from, to, isActive, isHighlighted, pulseDelay, index }
 
   return (
     <g>
-      {/* Line */}
       <line
         x1={`${from.x}%`}
         y1={`${from.y}%`}
@@ -196,7 +188,6 @@ function ConnectionLine({ from, to, isActive, isHighlighted, pulseDelay, index }
         }}
       />
 
-      {/* Pulse Dot (traveling along the line) */}
       {isActive && (
         <circle
           r="4"
@@ -217,7 +208,6 @@ function ConnectionLine({ from, to, isActive, isHighlighted, pulseDelay, index }
         </circle>
       )}
 
-      {/* Hidden path for animateMotion */}
       <path
         id={`path-${index}`}
         d={`M ${from.x}% ${from.y}% L ${to.x}% ${to.y}%`}

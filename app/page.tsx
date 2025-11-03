@@ -12,7 +12,6 @@ import {
 } from '@/components/sections';
 
 export default function Home() {
-  // 💡 Navigation에 전달할 아이템 배열
   // href는 section id를 #로 시작하는 형식으로, id는 useScroll에 사용
   const navigationItems = [
     { label: 'About', href: '#about', id: 'about' },

@@ -1,4 +1,3 @@
-// components/atoms/Modal/index.tsx
 'use client';
 
 import { cn } from '@/lib/utils/cn';
@@ -42,7 +41,6 @@ export default function Modal({
   const contentRef = useRef<HTMLDivElement>(null);
 
   // SSR 대응: 클라이언트에서만 Portal 렌더링
-  // Next.js에서 document를 사용하려면 클라이언트 확인 필수!
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -57,7 +55,6 @@ export default function Modal({
       }
     };
 
-    // ✅ Next.js 권장: useEffect 내부에서 document 사용
     document.addEventListener('keydown', handleEsc);
     return () => document.removeEventListener('keydown', handleEsc);
   }, [isOpen, closeOnEsc, onClose]);
@@ -70,7 +67,6 @@ export default function Modal({
         contentRef.current.scrollTop = 0;
       }
 
-      // ✅ Next.js 권장: useEffect 내부에서 document.body 접근
       const originalStyle = window.getComputedStyle(document.body).overflow;
       document.body.style.overflow = 'hidden';
 
@@ -80,7 +76,6 @@ export default function Modal({
     }
   }, [isOpen]);
 
-  // ✅ SSR 안전: mounted가 false면 렌더링 안 함
   if (!mounted || !isOpen) return null;
 
   const modalContent = (
@@ -88,14 +83,12 @@ export default function Modal({
       className="fixed inset-0 z-[1050] flex items-center justify-center p-4"
       style={{ zIndex: 1050 }}
     >
-      {/* Backdrop */}
       <div
         className="absolute inset-0 bg-grey-opacity-800 transition-opacity duration-base"
         onClick={closeOnBackdropClick ? onClose : undefined}
         aria-hidden="true"
       />
 
-      {/* Modal */}
       <div
         className={cn(
           'relative bg-white rounded-xl shadow-xl w-full transition-all duration-base',
@@ -107,7 +100,6 @@ export default function Modal({
         aria-modal="true"
         aria-labelledby={title ? 'modal-title' : undefined}
       >
-        {/* Header - 고정 */}
         {(title || showCloseButton) && (
           <div className="flex items-center justify-between p-6 border-b border-grey-200 flex-shrink-0">
             {title && (
@@ -127,13 +119,11 @@ export default function Modal({
           </div>
         )}
 
-        {/* Content - 스크롤 가능 */}
         <div ref={contentRef} className="p-6 overflow-y-auto flex-1">{children}</div>
       </div>
     </div>
   );
 
-  // ✅ Next.js 권장: Portal은 클라이언트에서만 사용
   // mounted 체크로 SSR 안전성 확보
   return createPortal(modalContent, document.body);
 }
