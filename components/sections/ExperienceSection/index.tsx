@@ -17,10 +17,8 @@ export default function ExperienceSection() {
   return (
     <section id="experience" className="py-20 px-6 bg-white">
       <div className="max-w-4xl mx-auto">
-        {/* 섹션 헤더 - 진입 시 애니메이션 */}
         <HeaderSection />
 
-        {/* 경험 리스트 - 각 아이템 개별 애니메이션 */}
         <div 
           ref={sectionRef}
           className="space-y-8"
@@ -38,7 +36,6 @@ export default function ExperienceSection() {
   );
 }
 
-// 💡 헤더 섹션 - 섹션 진입 시 애니메이션
 function HeaderSection() {
   const { ref, isIntersecting } = useIntersection({
     threshold: 0.5,
@@ -58,13 +55,12 @@ function HeaderSection() {
         Experience
       </Paragraph>
       <Paragraph variant="t5" color="grey-600">
-        실무 경험과 프로젝트를 통해 성장해왔습니다
+        실무와 프로젝트를 통해 성장해왔습니다
       </Paragraph>
     </div>
   );
 }
 
-// 💡 경험 카드 - 각각 개별 애니메이션
 interface ExperienceCardProps {
   experience: Experience;
   index: number;
@@ -89,16 +85,13 @@ function ExperienceCard({ experience: exp, index }: ExperienceCardProps) {
         transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)'
       }}
     >
-      {/* 회사 로고 및 헤더 */}
       <div className="flex items-start gap-4 mb-4">
-        {/* 로고 */}
         <div className="flex-shrink-0 w-16 h-16 bg-primary-50 rounded-lg flex items-center justify-center border border-primary-100 transform group-hover:scale-110 transition-transform duration-300">
           <Paragraph variant="t4" weight="bold" color="grey-600">
             {exp.logo}
           </Paragraph>
         </div>
 
-        {/* 정보 */}
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
             <Paragraph variant="t3" weight="bold">
@@ -121,12 +114,10 @@ function ExperienceCard({ experience: exp, index }: ExperienceCardProps) {
         </div>
       </div>
 
-      {/* 설명 */}
       <Paragraph variant="t6" color="grey-700" className="mb-4 leading-relaxed">
         {exp.description}
       </Paragraph>
 
-      {/* 주요 업무 - 순차적 진입 애니메이션 */}
       {exp.responsibilities.length > 0 && (
         <div className="mb-4">
           <ul className="space-y-2">
@@ -152,7 +143,6 @@ function ExperienceCard({ experience: exp, index }: ExperienceCardProps) {
         </div>
       )}
 
-      {/* 기술 스택 */}
       {exp.skills && exp.skills.length > 0 && (
         <div 
           className={`flex flex-wrap gap-2 transition-all duration-500 transform ${

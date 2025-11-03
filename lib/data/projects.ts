@@ -950,92 +950,138 @@ export default function Modal({ isOpen, onClose, children }: ModalProps) {
         }
       },
       {
-        id: 'atomic-architecture',
-        title: '2. Atomic Design 아키텍처',
+        id: 'component-reusability',
+        title: '2. 효율적인 컴포넌트 재사용과 상태 관리 아키텍처',
         features: [
-          'Atoms 13개: Badge, Border, Button, BoardRow, Icon, IconButton, Modal, Paragraph, Post, SegmentedControl, Skeleton, TextButton 등',
-          'Blocks 4개: Navigation, ProjectModal, SkillCard, SkillItemCard',
-          'Sections 6개: HeroSection, AboutSection, SkillsSection, ProjectsSection, ExperienceSection, AwardsAndCertificatesSection',
-          'Button 컴포넌트: 4 variants × 5 colors × 3 sizes = 60가지 조합 지원',
-          'Paragraph 컴포넌트: 8가지 타이포그래피 레벨 (t1~t8) 지원'
+          '재사용 가능한 Atoms 컴포넌트: Button (7 variants), Badge (8 colors), Modal (Portal 기반), SegmentedControl (범용 탭)',
+          '범용 Custom Hooks: useIntersection (모든 섹션의 스크롤 애니메이션), useScroll (활성 섹션 감지), useModal (모달 상태 관리)',
+          '컴포넌트 합성 패턴: ProjectCard + ProjectModal 조합으로 복잡한 UI 구성',
+          '단 3줄로 스크롤 애니메이션 구현: useIntersection hook으로 로직 재사용성 극대화',
+          '일관된 UX: 동일한 threshold, freezeOnceVisible 옵션으로 통일된 애니메이션'
         ],
-        intent: '재사용 가능한 컴포넌트 시스템을 구축하여 코드 중복을 최소화하고 일관된 UI를 유지하고자 했습니다. Atomic Design 패턴을 적용하여 작은 단위부터 체계적으로 쌓아올리면 확장성과 유지보수성이 높아질 것이라 판단했습니다. 또한 각 컴포넌트가 단일 책임을 가지도록 설계하여 변경의 영향 범위를 최소화하고자 했습니다.',
+        intent: '포트폴리오 전체에서 반복되는 UI 패턴과 로직을 재사용 가능한 컴포넌트와 커스텀 훅으로 추상화하여 코드 중복을 최소화하고 유지보수성을 극대화하고자 했습니다. 특히 AboutSection의 3가지 크리에이티브 애니메이션(TechParticleStorm, EmpathyRadar, CollaborationMesh) 구현 시, 각 컴포넌트가 독립적으로 스크롤 감지를 해야 했는데, 매번 IntersectionObserver를 직접 구현하면 코드 중복이 심각할 것이라 판단했습니다. 이를 해결하기 위해 useIntersection hook을 개발하여 모든 컴포넌트에서 일관되게 사용할 수 있도록 설계했습니다.',
         troubleShooting: {
-          title: '컴포넌트 간 Props 복잡도 증가와 타입 일관성 문제',
-          initialImpl: 'Atomic Design을 처음 적용하면서 각 컴포넌트 파일에서 개별적으로 Props 인터페이스를 정의했습니다. Button, Modal, ProjectModal 등 각 컴포넌트마다 필요한 타입을 정의하여 사용했습니다.',
+          title: '반복되는 스크롤 애니메이션 로직과 SSR 환경 대응',
+          initialImpl: 'AboutSection의 3가지 크리에이티브 애니메이션 (TechParticleStorm, EmpathyRadar, CollaborationMesh) 구현 시, 각 컴포넌트마다 IntersectionObserver를 직접 구현했습니다. 화면에 진입하면 애니메이션이 시작되고, 한 번만 실행되어야 하는 요구사항이 있었습니다.',
           problem: [
-            'Project, Skill, Experience 등 동일한 타입이 여러 파일에 중복 정의됨',
-            'ProjectModal과 ProjectSection에서 사용하는 Project 타입이 서로 달라 props 전달 시 타입 에러 발생',
-            '타입 수정 시 여러 파일을 찾아다니며 일일이 수정해야 하는 번거로움',
-            'Button variant 같은 union 타입이 각 파일마다 다르게 정의되어 일관성 부족'
+            '각 애니메이션 컴포넌트마다 IntersectionObserver 로직이 중복됨 (약 30줄씩 3번 반복)',
+            'SSR 환경에서 window, document 접근 시 에러 발생 위험',
+            'freezeOnceVisible 옵션 구현 시 상태 관리 로직이 복잡해짐',
+            'threshold, rootMargin 같은 옵션을 각 컴포넌트마다 다르게 설정하여 일관성 부족'
           ],
           analysis: [
-            '컴포넌트 수가 증가하면서 타입 관리의 복잡도가 기하급수적으로 증가',
-            '특히 Blocks와 Sections는 Atoms를 조합하는데, 각 Atom의 Props 타입이 일치하지 않으면 조합이 어려움',
-            'TypeScript의 장점인 타입 안정성을 제대로 활용하지 못하고 있다고 판단',
-            '타입 중복으로 인해 번들 크기도 불필요하게 증가'
+            'IntersectionObserver API는 브라우저 전용 API로 서버에서 실행 불가',
+            '각 애니메이션 컴포넌트가 독립적으로 스크롤 위치를 추적해야 하지만, 로직은 동일',
+            'freezeOnceVisible 옵션: 한 번 화면에 나타나면 다시 스크롤해도 애니메이션이 재실행되지 않아야 함',
+            '컴포넌트마다 동일한 Observer 로직을 복사-붙여넣기하면 유지보수 시 모든 파일을 수정해야 함'
           ],
-          solution: 'types/ 디렉토리를 생성하여 모든 타입을 중앙에서 관리하고, variant 시스템을 도입하여 Props 복잡도를 줄였습니다.',
-          solutionCode: `// types/index.ts
-export * from './project';
-export * from './skill';
-export * from './experience';
-export * from './award';
+          solution: '범용 useIntersection hook을 구축하여 SSR 안전성을 확보하고, 모든 스크롤 애니메이션 로직을 재사용 가능하게 만들었습니다.',
+          solutionCode: `// hooks/useIntersection.ts
+import { useEffect, useRef, useState } from 'react';
 
-// types/project.ts
-export interface Project {
-  title: string;
-  description: string;
-  tags: string[];
-  // ... 모든 필드 정의
+interface UseIntersectionOptions {
+  threshold?: number;
+  freezeOnceVisible?: boolean;
+  rootMargin?: string;
 }
 
-// components/atoms/Button/index.tsx
-import { ButtonHTMLAttributes } from 'react';
+export function useIntersection({
+  threshold = 0,
+  freezeOnceVisible = false,
+  rootMargin = '0px',
+}: UseIntersectionOptions = {}) {
+  const [isIntersecting, setIsIntersecting] = useState(false);
+  const [hasIntersected, setHasIntersected] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
-type ButtonVariant = 'fill' | 'weak' | 'outline' | 'ghost';
-type ButtonColor = 'blue' | 'purple' | 'gray' | 'green' | 'red';
-type ButtonSize = 'small' | 'medium' | 'large';
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || (freezeOnceVisible && hasIntersected)) return;
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: ButtonVariant;
-  color?: ButtonColor;
-  size?: ButtonSize;
-  loading?: boolean;
-  leftIcon?: React.ReactNode;
-  rightIcon?: React.ReactNode;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        const isElementIntersecting = entry.isIntersecting;
+        setIsIntersecting(isElementIntersecting);
+
+        if (isElementIntersecting && freezeOnceVisible) {
+          setHasIntersected(true);
+        }
+      },
+      { threshold, rootMargin }
+    );
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [threshold, rootMargin, freezeOnceVisible, hasIntersected]);
+
+  return { ref, isIntersecting };
 }
 
-// variant 조합을 className으로 매핑
-const variantStyles: Record<ButtonVariant, Record<ButtonColor, string>> = {
-  fill: {
-    blue: 'bg-blue-500 text-white hover:bg-blue-600',
-    purple: 'bg-purple-500 text-white hover:bg-purple-600',
-    // ...
-  },
-  // ...
-};
+// 적용 사례 1: TechParticleStorm
+export default function TechParticleStorm() {
+  const { ref, isIntersecting } = useIntersection({
+    threshold: 0.2,
+    freezeOnceVisible: true
+  });
 
-// 사용하는 곳에서
-import { Project } from '@/types';
+  return (
+    <div ref={ref} className="relative w-full h-full">
+      {/* 192개 배경 그리드 셀 */}
+      {Array.from({ length: 192 }).map((_, i) => (
+        <div
+          key={i}
+          className={isIntersecting ? 'animate-[grid-pulse_4s_ease-in-out_infinite]' : 'bg-purple-200/30'}
+          style={{ animationDelay: \`\${(i * 0.02) % 3}s\` }}
+        />
+      ))}
 
-interface ProjectModalProps {
-  project: Project; // 중앙 타입 사용
-  isOpen: boolean;
-  onClose: () => void;
+      {/* 8개 기술 아이콘 */}
+      {techIcons.map((icon, index) => (
+        <div
+          key={icon.name}
+          className={isIntersecting ? 'animate-[particle-fly-in_1.2s_cubic-bezier(0.34,1.56,0.64,1)_forwards]' : 'opacity-0'}
+          style={{ animationDelay: \`\${index * 0.05}s\` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// 적용 사례 2: ProjectCard (순차 애니메이션)
+function ProjectCard({ project, index, onOpenModal }: ProjectCardProps) {
+  const { ref, isIntersecting } = useIntersection({
+    threshold: 0.2,
+    freezeOnceVisible: true
+  });
+
+  return (
+    <div
+      ref={ref}
+      className={\`transition-all duration-700 \${
+        isIntersecting
+          ? 'opacity-100 scale-100 translate-y-0'
+          : 'opacity-0 scale-95 translate-y-8'
+      }\`}
+      style={{ transitionDelay: \`\${index * 0.1}s\` }}
+      onClick={() => onOpenModal(project)}
+    >
+      {/* 프로젝트 카드 내용 */}
+    </div>
+  );
 }`,
           results: [
-            '타입 중복 제거: 5개 파일에 흩어져 있던 Project 타입을 1곳으로 통합',
-            '타입 일관성 확보: 모든 컴포넌트가 동일한 타입 정의를 참조하여 props 전달 시 에러 없음',
-            '유지보수성 향상: 타입 수정 시 types/ 디렉토리만 수정하면 전체 프로젝트에 반영',
-            'IDE 자동완성 개선: 중앙 타입 관리로 자동완성이 정확하고 빠르게 동작',
-            'Button 컴포넌트 재사용성: variant 시스템으로 60가지 조합을 하나의 컴포넌트로 구현'
+            '코드 재사용성: 약 30줄의 Observer 로직이 단 3줄(useIntersection 호출)로 축소',
+            '일관성: 동일한 threshold(0.2), freezeOnceVisible(true) 옵션으로 통일된 UX',
+            '성능: IntersectionObserver 자동 cleanup (useEffect return)으로 메모리 누수 방지',
+            'SSR 안전: useEffect 내부에서만 DOM 접근하여 Next.js 환경에서 에러 없음',
+            '유지보수성: 애니메이션 로직 변경 시 hook만 수정하면 전체 프로젝트에 반영'
           ],
           lessons: [
-            '타입 시스템 설계의 중요성: 초기에 타입 구조를 잘 설계하면 나중에 리팩토링 비용이 크게 줄어듦',
-            '중앙 관리의 가치: 타입, 상수, 유틸 함수 등은 중앙에서 관리할 때 일관성과 유지보수성이 극대화됨',
-            'Variant 시스템의 효율성: 여러 조합을 지원하는 컴포넌트는 variant prop으로 설계하면 확장이 용이',
-            'TypeScript의 진정한 활용: 단순히 타입 체크용이 아닌, 설계 도구로 활용할 때 진가를 발휘'
+            '추상화의 힘: 반복되는 로직을 hook으로 추출하면 코드량이 1/10로 줄어들고 가독성이 극대화됨',
+            '컴포넌트 합성: Atomic Design 패턴을 따르면 복잡한 UI도 조립식으로 쉽게 구축 가능',
+            'TypeScript의 가치: 커스텀 hook의 타입 정의로 개발자 경험이 크게 향상됨 (자동완성, 타입 안전성)',
+            '성능 최적화: freezeOnceVisible 옵션 하나로 불필요한 재렌더링을 완전히 제거',
+            '확장성: 새로운 섹션 추가 시 단 3줄로 스크롤 애니메이션 적용 가능하여 개발 속도 향상'
           ]
         }
       },
