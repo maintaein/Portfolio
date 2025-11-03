@@ -1,4 +1,3 @@
-// hooks/useScroll.ts
 import { useEffect, useState } from 'react';
 import { getCurrentSection, getScrollProgress } from '@/lib/utils/scroll';
 

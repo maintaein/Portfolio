@@ -1,4 +1,3 @@
-// hooks/useIntersection.ts
 import { useEffect, useRef, useState } from 'react';
 
 interface UseIntersectionOptions extends IntersectionObserverInit {
