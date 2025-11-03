@@ -124,11 +124,6 @@ export const skillCategories: SkillCategory[] = [
           name: 'Express.js',
           icon: '/icons/express.png',
           experience: 'Node.js 기반의 RESTful API 서버 설계 및 구축 이해.'
-        },
-        {
-          name: 'Fastify',
-          icon: '/icons/fastify.png',
-          experience: 'React, Next.js와의 연동을 통한 비동기 데이터 통신 및 API 관리 경험 보유.'
         }
       ]
     },
