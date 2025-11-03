@@ -28,20 +28,20 @@ export default function EmpathyRadar() {
   const { ref, isIntersecting } = useIntersection({ threshold: 0.2, freezeOnceVisible: true });
 
   const uxCards: UXCard[] = [
-    { id: 'eye', Icon: EyeIcon, label: '👁️', tooltip: '사용자 관점', angle: 0, distance: 45, delay: 0 },
-    { id: 'heart', Icon: HeartIcon, label: '❤️', tooltip: '공감 능력', angle: 45, distance: 45, delay: 0.1 },
-    { id: 'star', Icon: StarIcon, label: '⭐', tooltip: '품질 우선', angle: 90, distance: 45, delay: 0.2 },
-    { id: 'check', Icon: CheckCircleIcon, label: '✓', tooltip: '직관적 UX', angle: 135, distance: 45, delay: 0.3 },
-    { id: 'cursor', Icon: CursorArrowRaysIcon, label: '🖱️', tooltip: '인터랙션', angle: 180, distance: 45, delay: 0.4 },
-    { id: 'hand', Icon: HandRaisedIcon, label: '✋', tooltip: '접근성', angle: 225, distance: 45, delay: 0.5 },
-    { id: 'bulb', Icon: LightBulbIcon, label: '💡', tooltip: '혁신적 사고', angle: 270, distance: 45, delay: 0.6 },
-    { id: 'smile', Icon: FaceSmileIcon, label: '😊', tooltip: '만족도 향상', angle: 315, distance: 45, delay: 0.7 },
+    { id: 'eye', Icon: EyeIcon, label: '👁️', tooltip: '사용자 관점', angle: 0, distance: 38, delay: 0 },
+    { id: 'heart', Icon: HeartIcon, label: '❤️', tooltip: '공감 능력', angle: 45, distance: 38, delay: 0.1 },
+    { id: 'star', Icon: StarIcon, label: '⭐', tooltip: '품질 우선', angle: 90, distance: 38, delay: 0.2 },
+    { id: 'check', Icon: CheckCircleIcon, label: '✓', tooltip: '직관적 UX', angle: 135, distance: 38, delay: 0.3 },
+    { id: 'cursor', Icon: CursorArrowRaysIcon, label: '🖱️', tooltip: '인터랙션', angle: 180, distance: 38, delay: 0.4 },
+    { id: 'hand', Icon: HandRaisedIcon, label: '✋', tooltip: '접근성', angle: 225, distance: 38, delay: 0.5 },
+    { id: 'bulb', Icon: LightBulbIcon, label: '💡', tooltip: '혁신적 사고', angle: 270, distance: 38, delay: 0.6 },
+    { id: 'smile', Icon: FaceSmileIcon, label: '😊', tooltip: '만족도 향상', angle: 315, distance: 38, delay: 0.7 },
   ];
 
   return (
     <div
       ref={ref}
-      className="relative w-full aspect-square max-w-[600px] max-h-[600px] mx-auto"
+      className="relative w-full aspect-square max-w-[500px] max-h-[500px] mx-auto"
     >
       <div className="absolute inset-0 bg-gradient-to-br from-blue-100 via-blue-50 to-purple-50 rounded-2xl overflow-hidden aspect-square">
         <div className="absolute inset-0 flex items-center justify-center">

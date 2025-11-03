@@ -117,7 +117,7 @@ function CoreValueCard({ value, index }: CoreValueCardProps) {
       }}
     >
       <div className="w-full lg:w-1/2">
-        <div className="relative aspect-square max-w-[600px] mx-auto">
+        <div className="relative aspect-square max-w-[500px] mx-auto">
           {value.imagePlaceholder === 'tech-stack' && <TechParticleStorm />}
           {value.imagePlaceholder === 'ux-focus' && <EmpathyRadar />}
           {value.imagePlaceholder === 'collaboration' && <CollaborationMesh />}
