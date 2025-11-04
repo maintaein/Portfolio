@@ -140,7 +140,7 @@ export default function HeroSection() {
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="relative w-full h-full max-w-[95%] max-h-[95%]">
               
-              <div className="absolute left-0 top-[5%] w-[50%] h-[80%] z-20">
+              <div className="absolute left-0 top-[5%] w-[50%] h-[80%] z-10">
                 <div className="w-full h-full bg-gray-900 rounded-xl shadow-2xl overflow-hidden border border-gray-700 flex flex-col">
                   <div className="bg-gray-800 px-2 py-1.5 sm:px-3 sm:py-2 md:px-4 md:py-3 flex items-center gap-1.5 sm:gap-2 border-b border-gray-700 flex-shrink-0">
                     <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-3 md:h-3 rounded-full bg-red-500"></div>
@@ -167,7 +167,7 @@ export default function HeroSection() {
                 </div>
               </div>
 
-              <div className="absolute right-0 top-[10%] w-[63%] h-[85%] z-10">
+              <div className="absolute right-0 top-[10%] w-[63%] h-[85%] z-20">
                 <div className="w-full h-full bg-white rounded-xl shadow-2xl overflow-hidden border border-gray-300 flex flex-col">
                   <div className="bg-gray-200 px-2 py-1.5 sm:px-3 sm:py-2 md:px-4 md:py-3 flex items-center gap-1.5 sm:gap-2 border-b border-gray-300 flex-shrink-0">
                     <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-3 md:h-3 rounded-full bg-red-400"></div>
@@ -184,7 +184,6 @@ export default function HeroSection() {
                   <div className="flex-1 overflow-auto p-3 sm:p-5 md:p-7 lg:p-10 bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
                     <div className="h-full flex flex-col justify-center">
                       <div className="mb-3 sm:mb-5 md:mb-7">
-                        <div className="h-1.5 w-16 sm:h-2 sm:w-24 md:w-28 bg-gradient-to-r from-blue-400 to-purple-400 rounded-full"></div>
                       </div>
 
                       <div className="ml-auto w-full pl-0 sm:pl-[8%] md:pl-[12%] lg:pl-[18%]">
