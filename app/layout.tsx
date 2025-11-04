@@ -113,7 +113,7 @@ export default function RootLayout({
       <head>
         <JsonLd />
       </head>
-      <body className="font-pretendard antialiased">
+      <body className="font-pretendard antialiased overflow-x-hidden">
         {children}
         <Analytics />
       </body>

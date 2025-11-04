@@ -25,8 +25,8 @@ export default function AwardsAndCertificatesSection() {
   });
 
   return (
-    <section id="awards-certificates" className="py-20 px-6 bg-grey-50">
-      <div className="max-w-4xl mx-auto">
+    <section id="awards-certificates" className="py-12 sm:py-16 lg:py-20 bg-grey-50">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6">
         <div 
           ref={headerRef}
           className={`mb-12 text-center transition-all duration-1000 ${
@@ -96,6 +96,7 @@ function TabControlSection({ activeTab, setActiveTab, tabs }: TabControlSectionP
         value={activeTab}
         onChange={(value) => setActiveTab(value as TabValue)}
         size="large"
+        fullWidth={false}
       />
     </div>
   );
@@ -154,9 +155,9 @@ function AnimatedItem({ item, index }: AnimatedItemProps) {
         <div>
           <div className="flex items-start justify-between mb-3">
             <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
                 {item.rank && (
-                  <span className="text-2xl">{item.rank}</span>
+                  <span className="text-xl sm:text-2xl whitespace-nowrap">{item.rank}</span>
                 )}
                 <Paragraph variant="t4" weight="bold">
                   {item.title}

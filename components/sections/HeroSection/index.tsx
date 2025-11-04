@@ -135,30 +135,30 @@ export default function HeroSection() {
 
       <div className="w-full max-w-7xl flex flex-col items-center relative z-10">
         
-        <div className="relative w-full max-w-[1200px] mb-8 sm:mb-12 lg:mb-16" style={{ aspectRatio: '16/9' }}>
+        <div className="relative w-full max-w-[1200px] mb-6 sm:mb-10 lg:mb-16" style={{ aspectRatio: '16/9' }}>
           
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="relative w-full h-full max-w-[95%] max-h-[95%]">
               
               <div className="absolute left-0 top-[5%] w-[50%] h-[80%] z-20">
                 <div className="w-full h-full bg-gray-900 rounded-xl shadow-2xl overflow-hidden border border-gray-700 flex flex-col">
-                  <div className="bg-gray-800 px-4 py-3 flex items-center gap-2 border-b border-gray-700 flex-shrink-0">
-                    <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                    <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                    <span className="ml-4 text-gray-400 text-sm font-mono">styles.css</span>
+                  <div className="bg-gray-800 px-2 py-1.5 sm:px-3 sm:py-2 md:px-4 md:py-3 flex items-center gap-1.5 sm:gap-2 border-b border-gray-700 flex-shrink-0">
+                    <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-3 md:h-3 rounded-full bg-red-500"></div>
+                    <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-3 md:h-3 rounded-full bg-yellow-500"></div>
+                    <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-3 md:h-3 rounded-full bg-green-500"></div>
+                    <span className="ml-2 sm:ml-3 md:ml-4 text-gray-400 text-xs sm:text-sm font-mono">styles.css</span>
                   </div>
-                  
-                  <div className="flex-1 overflow-auto p-6 font-mono text-sm ide-scrollbar">
+
+                  <div className="flex-1 overflow-auto p-3 sm:p-4 md:p-6 font-mono text-xs sm:text-sm ide-scrollbar">
                     {codeLines.map((line, index) => (
                       <div key={index} className="flex leading-relaxed">
-                        <span className="text-gray-600 mr-6 select-none w-8 text-right flex-shrink-0">
+                        <span className="text-gray-600 mr-3 sm:mr-4 md:mr-6 select-none w-6 sm:w-8 text-right flex-shrink-0 text-xs sm:text-sm">
                           {index + 1}
                         </span>
-                        <pre className="text-green-400 whitespace-pre flex-1">
+                        <pre className="text-green-400 whitespace-pre flex-1 text-xs sm:text-sm">
                           {line}
                           {index === currentLine && currentChar < code[currentLine]?.length && (
-                            <span className="inline-block w-2 h-5 bg-green-400 animate-pulse ml-0.5"></span>
+                            <span className="inline-block w-1.5 h-4 sm:w-2 sm:h-5 bg-green-400 animate-pulse ml-0.5"></span>
                           )}
                         </pre>
                       </div>
@@ -169,42 +169,42 @@ export default function HeroSection() {
 
               <div className="absolute right-0 top-[10%] w-[63%] h-[85%] z-10">
                 <div className="w-full h-full bg-white rounded-xl shadow-2xl overflow-hidden border border-gray-300 flex flex-col">
-                  <div className="bg-gray-200 px-4 py-3 flex items-center gap-2 border-b border-gray-300 flex-shrink-0">
-                    <div className="w-3 h-3 rounded-full bg-red-400"></div>
-                    <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
-                    <div className="w-3 h-3 rounded-full bg-green-400"></div>
-                    <div className="ml-4 flex-1 bg-white rounded-md px-4 py-1.5 text-sm text-gray-600 flex items-center gap-2 border border-gray-300">
-                      <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="bg-gray-200 px-2 py-1.5 sm:px-3 sm:py-2 md:px-4 md:py-3 flex items-center gap-1.5 sm:gap-2 border-b border-gray-300 flex-shrink-0">
+                    <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-3 md:h-3 rounded-full bg-red-400"></div>
+                    <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-3 md:h-3 rounded-full bg-yellow-400"></div>
+                    <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 md:w-3 md:h-3 rounded-full bg-green-400"></div>
+                    <div className="ml-2 sm:ml-3 md:ml-4 flex-1 bg-white rounded-md px-2 py-1 sm:px-3 sm:py-1.5 md:px-4 text-xs sm:text-sm text-gray-600 flex items-center gap-1.5 sm:gap-2 border border-gray-300">
+                      <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                       </svg>
                       <span className="truncate">https://kimtaein.vercel.app/</span>
                     </div>
                   </div>
                   
-                  <div className="flex-1 overflow-auto p-8 lg:p-12 bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
+                  <div className="flex-1 overflow-auto p-3 sm:p-5 md:p-7 lg:p-10 bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
                     <div className="h-full flex flex-col justify-center">
-                      <div className="mb-8">
-                        <div className="h-2 w-32 bg-gradient-to-r from-blue-400 to-purple-400 rounded-full"></div>
+                      <div className="mb-3 sm:mb-5 md:mb-7">
+                        <div className="h-1.5 w-16 sm:h-2 sm:w-24 md:w-28 bg-gradient-to-r from-blue-400 to-purple-400 rounded-full"></div>
                       </div>
-                      
-                      <div className="ml-auto w-full pl-[20%]">
-                        <h1 className="text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold text-gray-900 mb-6 leading-tight">
+
+                      <div className="ml-auto w-full pl-0 sm:pl-[8%] md:pl-[12%] lg:pl-[18%]">
+                        <h1 className="text-sm sm:text-lg md:text-xl lg:text-2xl xl:text-3xl font-bold text-gray-900 mb-2 sm:mb-3 md:mb-5 leading-tight">
                           <div className="flex items-center">
                             <span>
                               {displayText.line1}
                             </span>
                             {browserText.length < fullText.length && displayText.showCursorOnLine === 1 && showCursor && (
-                              <span className="inline-block w-1 h-10 lg:h-12 bg-gray-900 animate-blink ml-1"></span>
+                              <span className="inline-block w-0.5 sm:w-1 h-4 sm:h-6 md:h-7 lg:h-8 xl:h-9 bg-gray-900 animate-blink ml-0.5 sm:ml-1"></span>
                             )}
                           </div>
-                          
+
                           {displayText.line2 && (
                             <div className="flex items-center">
                               <span>
                                 {displayText.line2}
                               </span>
                               {browserText.length < fullText.length && displayText.showCursorOnLine === 2 && showCursor && (
-                                <span className="inline-block w-1 h-10 lg:h-12 bg-gray-900 animate-blink ml-1"></span>
+                                <span className="inline-block w-0.5 sm:w-1 h-4 sm:h-6 md:h-7 lg:h-8 xl:h-9 bg-gray-900 animate-blink ml-0.5 sm:ml-1"></span>
                               )}
                             </div>
                           )}
@@ -237,17 +237,17 @@ export default function HeroSection() {
               : 'opacity-0 translate-y-8'
           }`}
         >
-          <h1 id="hero-title" className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mb-3 sm:mb-4">
+          <h1 id="hero-title" className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-3 sm:mb-4">
             안녕하세요
           </h1>
-          <h2 className="text-xl sm:text-2xl lg:text-3xl font-semibold text-gray-700 mb-3 sm:mb-4">
+          <h2 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-semibold text-gray-700 mb-3 sm:mb-4">
             프론트엔드 개발자{' '}
             <span className="bg-gradient-to-r from-blue-600 to-blue-300 bg-clip-text text-transparent">
               김태인
             </span>
             입니다.
           </h2>
-          <p className="text-base sm:text-lg lg:text-xl text-gray-600 leading-relaxed max-w-2xl mx-auto">
+          <p className="text-sm sm:text-base md:text-lg lg:text-xl text-gray-600 leading-relaxed max-w-2xl mx-auto">
             사용자 경험을 최우선으로 생각하며,<br />
             코드로 아름다운 인터페이스를 만듭니다.
           </p>

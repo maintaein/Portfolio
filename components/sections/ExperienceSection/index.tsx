@@ -15,8 +15,8 @@ export default function ExperienceSection() {
   });
 
   return (
-    <section id="experience" className="py-20 px-6 bg-white">
-      <div className="max-w-4xl mx-auto">
+    <section id="experience" className="py-12 sm:py-16 lg:py-20 bg-white">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6">
         <HeaderSection />
 
         <div 

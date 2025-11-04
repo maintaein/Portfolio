@@ -61,7 +61,7 @@ export default function CollaborationMesh() {
       </div>
 
       <div className="absolute inset-0">
-        <svg className="w-full h-full" style={{ zIndex: 1 }}>
+        <svg className="w-full h-full" viewBox="0 0 100 100" style={{ zIndex: 1 }}>
           {connections.map((conn, index) => {
             const fromTool = tools.find((t) => t.id === conn.from)!;
             const toTool = tools.find((t) => t.id === conn.to)!;
@@ -188,29 +188,9 @@ function ConnectionLine({ from, to, isActive, isHighlighted, pulseDelay, index }
         }}
       />
 
-      {isActive && (
-        <circle
-          r="4"
-          fill="rgba(34, 197, 94, 0.9)"
-          className="opacity-0"
-          style={{
-            animation: `pulse-dot 3s ease-in-out infinite`,
-            animationDelay: `${pulseDelay}s`,
-          }}
-        >
-          <animateMotion
-            dur="3s"
-            repeatCount="indefinite"
-            begin={`${pulseDelay}s`}
-          >
-            <mpath href={`#path-${index}`} />
-          </animateMotion>
-        </circle>
-      )}
-
       <path
         id={`path-${index}`}
-        d={`M ${from.x}% ${from.y}% L ${to.x}% ${to.y}%`}
+        d={`M ${from.x} ${from.y} L ${to.x} ${to.y}`}
         fill="none"
         stroke="none"
       />

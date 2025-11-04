@@ -23,7 +23,7 @@ interface SegmentedControlProps {
 const sizeStyles = {
   small: 'text-sm py-1.5 px-3',
   medium: 'text-base py-2 px-4',
-  large: 'text-lg py-2.5 px-5',
+  large: 'text-sm sm:text-base md:text-lg py-2 px-3 sm:py-2.5 sm:px-5',
 };
 
 export default function SegmentedControl({
@@ -121,7 +121,7 @@ export default function SegmentedControl({
                 : isSelected
                   ? 'text-gray-900'
                   : 'text-gray-600 hover:text-gray-900',
-              !fullWidth && 'min-w-[100px]'
+              !fullWidth && 'min-w-[70px] sm:min-w-[90px] md:min-w-[100px]'
             )}
             type="button"
           >

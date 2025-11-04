@@ -27,8 +27,8 @@ export default function ProjectsSection() {
   };
 
   return (
-    <section id="projects" className="py-20 px-6 bg-white">
-      <div className="max-w-6xl mx-auto">
+    <section id="projects" className="py-12 sm:py-16 lg:py-20 bg-white">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <HeaderSection />
       
         <div

@@ -30,8 +30,8 @@ export default function SkillsSection() {
   const currentCategory = skillCategories.find(cat => cat.id === selectedCategory) || skillCategories[0];
 
   return (
-    <section id="skills" className="py-20 px-6 bg-gradient-to-br from-grey-50 to-grey-100">
-      <div className="max-w-6xl mx-auto">
+    <section id="skills" className="py-12 sm:py-16 lg:py-20 bg-gradient-to-br from-grey-50 to-grey-100">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6">
 
         <div
           ref={headerRef}

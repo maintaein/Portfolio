@@ -25,7 +25,7 @@ export default function Home() {
     <>
       <Navigation items={navigationItems} />
 
-      <main className="">
+      <main className="overflow-x-hidden">
         <HeroSection />
 
         <AboutSection />
