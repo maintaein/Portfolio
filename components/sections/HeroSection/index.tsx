@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useIntersection } from '@/hooks';
 
 export default function HeroSection() {
   const [codeLines, setCodeLines] = useState<string[]>([]);
@@ -9,6 +10,12 @@ export default function HeroSection() {
   const [browserText, setBrowserText] = useState('');
   const [showCursor, setShowCursor] = useState(true);
   const [isAnimationComplete, setIsAnimationComplete] = useState(false);
+
+  // 스크롤 감지를 위한 useIntersection 훅
+  const { ref: introRef, isIntersecting: isIntroVisible } = useIntersection({
+    threshold: 0.3,
+    freezeOnceVisible: true
+  });
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const code = [
@@ -230,8 +237,9 @@ export default function HeroSection() {
         </div>
 
         <div
+          ref={introRef}
           className={`text-center px-4 transition-all duration-1000 ${
-            isAnimationComplete
+            isIntroVisible
               ? 'opacity-100 translate-y-0'
               : 'opacity-0 translate-y-8'
           }`}

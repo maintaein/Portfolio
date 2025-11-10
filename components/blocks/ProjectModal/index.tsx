@@ -358,14 +358,14 @@ export default function ProjectModal({
               GitHub
             </Button>
           )}
-          {project.demoUrl && (
+          {/* {project.demoUrl && (
             <Button
               leftIcon={<Icon name="arrow-right" />}
               onClick={() => window.open(project.demoUrl, '_blank')}
             >
               Live Demo
             </Button>
-          )}
+          )} */}
         </div>
       </div>
     </Modal>

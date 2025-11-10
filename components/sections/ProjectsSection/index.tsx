@@ -84,7 +84,7 @@ function HeaderSection() {
       }`}
     >
       <Paragraph variant="t2" weight="bold" className="mb-3">
-        Projects
+        PROJECTS
       </Paragraph>
       <Paragraph variant="t5" color="grey-600">
         직접 기획하고 개발한 프로젝트들입니다

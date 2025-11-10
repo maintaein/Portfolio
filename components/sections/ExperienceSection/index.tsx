@@ -16,7 +16,7 @@ export default function ExperienceSection() {
 
   return (
     <section id="experience" className="py-12 sm:py-16 lg:py-20 bg-white">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <HeaderSection />
 
         <div 
@@ -52,10 +52,10 @@ function HeaderSection() {
       }`}
     >
       <Paragraph variant="t2" weight="bold" className="mb-3">
-        Experience
+        EXPERIENCES
       </Paragraph>
       <Paragraph variant="t5" color="grey-600">
-        실무와 프로젝트를 통해 성장해왔습니다
+        실무와 교육을 통해 성장해왔습니다
       </Paragraph>
     </div>
   );

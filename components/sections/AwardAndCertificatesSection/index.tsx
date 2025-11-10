@@ -26,7 +26,7 @@ export default function AwardsAndCertificatesSection() {
 
   return (
     <section id="awards-certificates" className="py-12 sm:py-16 lg:py-20 bg-grey-50">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div 
           ref={headerRef}
           className={`mb-12 text-center transition-all duration-1000 ${
@@ -36,7 +36,7 @@ export default function AwardsAndCertificatesSection() {
           }`}
         >
           <Paragraph variant="t2" weight="bold" className="mb-3">
-            Awards & Certificates
+            AWARDS & CERTIFICATES
           </Paragraph>
           <Paragraph variant="t5" color="grey-600">
             다양한 경험을 통해 인정받은 성과들입니다
