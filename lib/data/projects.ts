@@ -276,8 +276,8 @@ const { attachments, addAttachment, removeAttachment } = useMailStore((state) =>
       }
     ],
 
-    githubUrl: 'https://github.com/username/alphamail',
-    demoUrl: 'https://alphamail.vercel.app'
+    githubUrl: 'https://github.com/mail-coding/AlphaMail',
+    // demoUrl: 'https://alphamail.vercel.app'
   },
 
   {
@@ -548,7 +548,10 @@ fun completePayment(token: String) {
         ],
         intent: '소비 리포트는 사용자가 자신의 상세한 소비 데이터를 직관적으로 확인할 수 있도록 만든 화면입니다. 가계부는 토스의 월별 소비 내역에서 많은 레퍼런스를 얻었습니다. 일반적인 리스트 형식 대신 캘린더를 사용함으로써 월간 소비를 좀 더 한눈에 볼 수 있도록 만들어봤습니다. 또한 소비 리포트를 통해 지금까지의 소비에 대한 인사이트를 제공하고자 했습니다.',
       }
-    ]
+    ],
+
+    githubUrl: 'https://github.com/Xylitol311/ReBirth',
+
   },
   {
     title: 'Ttabong',
@@ -682,7 +685,10 @@ fun completePayment(token: String) {
         ],
         intent: '기관 담당자가 모든 공고와 지원자를 한눈에 관리할 수 있도록 설계했습니다.  템플릿 저장 기능으로 반복되는 공고 작성 시간을 단축하여 기관의 업무 효율을 높입니다. 기관과 봉사자 양측의 투명한 평가를 통해 신뢰도를 높이는 양방향 평가 시스템도 추가했습니다.',
       },
-    ]
+    ],
+
+    githubUrl: 'https://github.com/maintaein/ttabong',
+
   },
   {
     title: 'PoseTive',
@@ -787,7 +793,9 @@ fun completePayment(token: String) {
         ],
         intent: '제한된 서버 환경에서 많은 동시 사용자의 요청을 처리하면서도 빠른 응답 시간을 보장하기 위해 고안되었습니다. 이미지 해상도와 모델 정밀도를 전략적으로 조정하여 성능 손실을 최소화하면서도 실질적인 속도 향상을 달성했습니다.'
       }
-    ]
+    ],
+
+    githubUrl: 'https://github.com/Kim-Taein/9jodae_pose'
   },
   {
     title: 'Portfolio',
@@ -1109,6 +1117,6 @@ function ProjectCard({ project, index, onOpenModal }: ProjectCardProps) {
       }
     ],
 
-    githubUrl: 'https://github.com/username/portfolio'
+    githubUrl: 'https://github.com/maintaein/portfolio'
   },
 ];
