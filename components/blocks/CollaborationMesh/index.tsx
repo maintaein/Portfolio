@@ -168,9 +168,7 @@ interface ConnectionLineProps {
   index: number;
 }
 
-function ConnectionLine({ from, to, isActive, isHighlighted, pulseDelay, index }: ConnectionLineProps) {
-  const strokeDasharray = 1000;
-
+function ConnectionLine({ from, to, isActive, isHighlighted, pulseDelay }: ConnectionLineProps) {
   return (
     <g>
       <line
@@ -180,19 +178,11 @@ function ConnectionLine({ from, to, isActive, isHighlighted, pulseDelay, index }
         y2={`${to.y}%`}
         stroke={isHighlighted ? 'rgba(34, 197, 94, 0.8)' : 'rgba(34, 197, 94, 0.3)'}
         strokeWidth={isHighlighted ? '3' : '2'}
-        strokeDasharray={strokeDasharray}
-        strokeDashoffset={isActive ? '0' : strokeDasharray}
-        className="transition-all duration-300"
+        strokeDasharray="5,5"
+        className={`transition-all duration-300 ${isActive ? 'animate-[line-pulse_2s_ease-in-out_infinite]' : ''}`}
         style={{
-          animation: isActive ? `line-draw 1.5s ease-out ${index * 0.2}s forwards` : 'none',
+          animationDelay: `${pulseDelay}s`,
         }}
-      />
-
-      <path
-        id={`path-${index}`}
-        d={`M ${from.x} ${from.y} L ${to.x} ${to.y}`}
-        fill="none"
-        stroke="none"
       />
     </g>
   );
