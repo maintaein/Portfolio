@@ -5,6 +5,7 @@ export const pretendard = localFont({
   src: '../public/fonts/PretendardVariable.woff2',
   display: 'swap',
   variable: '--font-pretendard',
+  preload: true,
   fallback: [
     '-apple-system',
     'BlinkMacSystemFont',
@@ -17,5 +18,6 @@ export const pretendard = localFont({
     'Malgun Gothic',
     'sans-serif',
   ],
+  adjustFontFallback: 'Arial',
 });
 
