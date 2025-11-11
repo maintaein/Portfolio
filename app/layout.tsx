@@ -4,6 +4,8 @@ import { pretendard } from '@/lib/fonts';
 import JsonLd from '@/components/seo/JsonLd';
 import '@/styles/design-tokens.css';
 import { Analytics } from '@vercel/analytics/next';
+import { SpeedInsights } from '@vercel/speed-insights/next';
+
 
 const siteUrl = 'https://kimtaein.vercel.app';
 
@@ -116,6 +118,7 @@ export default function RootLayout({
       <body className="font-pretendard antialiased overflow-x-hidden">
         {children}
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
