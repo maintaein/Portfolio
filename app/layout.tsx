@@ -117,10 +117,7 @@ export default function RootLayout({
   return (
     <html lang="ko" className={pretendard.variable}>
       <head>
-        <link rel="preconnect" href="https://vercel.live" />
-        <link rel="dns-prefetch" href="https://vercel.live" />
-        <link rel="preconnect" href="https://vitals.vercel-insights.com" />
-        <link rel="dns-prefetch" href="https://vitals.vercel-insights.com" />
+        <meta name="naver-site-verification" content="125d5eedfefaa060cae94d8d07f62f7a9127b907" />
         <JsonLd />
       </head>
       <body className="font-pretendard antialiased overflow-x-hidden">

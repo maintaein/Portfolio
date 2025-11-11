@@ -179,6 +179,7 @@ function TechIconElement({ icon, index, isActive, isHovered, onHover, onLeave }:
             width={48}
             height={48}
             priority={index < 4}
+            quality={65}
             className="w-full h-full object-contain"
           />
         </div>
