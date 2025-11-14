@@ -98,34 +98,85 @@ Next.js 기반의 프론트엔드 개발자 포트폴리오 웹사이트를 Reac
 
 ---
 
-## Phase 2: HeroSection 디자인 개선 (진행 예정)
+## Phase 2: HeroSection 디자인 개선 ✅
 
-### Step 2.1: React Bits 컴포넌트 설치 (대기 중)
-**예정 작업**:
-- [ ] Meteors 컴포넌트 설치
-- [ ] Grid Pattern 컴포넌트 설치 (선택)
-- [ ] 기타 필요한 컴포넌트 설치
+### 최종 선택: Aurora + Spotlight + BlurFade
+**결정일**: 2025-11-14
 
-### Step 2.2: HeroSection 리팩토링 (대기 중)
-**예정 작업**:
-- [ ] CLAUDE.md 지침 준수 확인
-- [ ] TypeScript 타입 안정성 검증
-- [ ] useEffect dependency array 검증
-- [ ] 불필요한 import 제거
+**선택 이유**:
+- **Aurora**: 사용자의 마음을 위한 아름다움 (부드러운 그라데이션)
+- **Spotlight**: 사용자 중심의 완벽한 은유 (마우스 따라가는 빛)
+- **BlurFade**: 사용자의 눈을 배려 (부드러운 페이드인)
+- **메시지 전달**: "사용자의 눈과 마음을 고려하는 프론트엔드 개발자" 완벽 표현
 
-### Step 2.3: React Bits 효과 적용 (대기 중)
-**예정 작업**:
-- [ ] Meteors 배경 효과 추가
-- [ ] 기존 그라데이션과 조화롭게 통합
-- [ ] 애니메이션 성능 최적화
-- [ ] 모바일 반응형 확인
+### Step 2.1: UI 컴포넌트 직접 구현 ✅
+**완료일**: 2025-11-14
 
-### Step 2.4: 테스트 및 최적화 (대기 중)
-**예정 작업**:
-- [ ] Lighthouse 성능 평가
-- [ ] 접근성 검증
-- [ ] 모바일/태블릿/데스크톱 테스트
-- [ ] 콘솔 오류 확인
+**작업 내용**:
+
+#### Aurora 컴포넌트 (`components/ui/Aurora.tsx`)
+- 부드럽게 움직이는 3개의 그라데이션 레이어
+- 20s, 25s, 30s 주기로 독립적인 애니메이션
+- Radial gradient 오버레이로 깊이감 추가
+- TypeScript 엄격 모드 준수 (any 금지)
+- Props 인터페이스 명확히 정의
+
+#### Spotlight 컴포넌트 (`components/ui/Spotlight.tsx`)
+- 마우스 위치를 실시간 추적하는 빛 효과
+- useCallback으로 이벤트 핸들러 메모이제이션
+- useEffect dependency array 엄격 관리
+- 마우스 진입/퇴장 시 부드러운 transition
+- 커스터마이징 가능한 색상/크기
+
+#### BlurFade 컴포넌트 (`components/ui/BlurFade.tsx`)
+- Intersection Observer로 스크롤 기반 애니메이션
+- delay 기반 순차 애니메이션 지원
+- blur + translateY 효과로 부드러운 등장
+- ESLint exhaustive-deps 경고 해결 (ref.current 올바른 처리)
+- 접근성 고려한 애니메이션 타이밍
+
+### Step 2.2: HeroSection 완전 재설계 ✅
+**완료일**: 2025-11-14
+
+**이전 디자인**:
+- IDE/브라우저 윈도우 타이핑 애니메이션
+- 복잡한 상태 관리 (12개의 useState)
+- 정적인 회색 그라데이션 배경
+
+**새 디자인**:
+- **프로필 중심 레이아웃**: 친근하고 인간적인 첫인상
+- **Aurora 배경**: 부드럽게 움직이는 감성적 배경
+- **Spotlight 효과**: 마우스를 따라가는 인터랙티브 빛
+- **BlurFade 애니메이션**: 순차적으로 나타나는 컨텐츠 (0.2s ~ 1.2s delay)
+- **그라데이션 텍스트**: "사용자의 눈과 마음" 강조
+- **CTA 버튼**: Hover 시 scale + shadow 효과
+- **스크롤 인디케이터**: 사용자 유도
+
+**CLAUDE.md 지침 준수**:
+- ✅ TypeScript 엄격 모드 (any 사용 금지)
+- ✅ useEffect dependency array 엄격 관리
+- ✅ 불필요한 import 제거
+- ✅ type 키워드로 타입 import
+- ✅ 모바일 우선 반응형 디자인
+- ✅ 접근성 (ARIA, 시맨틱 HTML)
+- ✅ 파일명 PascalCase, 변수 camelCase
+
+### Step 2.3: 빌드 및 검증 ✅
+**완료일**: 2025-11-14
+
+**빌드 결과**:
+```
+✓ Compiled successfully
+✓ Linting and checking validity of types
+✓ Generating static pages (8/8)
+Size: 59.1 kB (First Load JS: 161 kB)
+```
+
+**검증 항목**:
+- ✅ TypeScript 컴파일 오류 없음
+- ✅ ESLint 경고 모두 해결
+- ✅ 번들 크기 최적화 (59.1 kB)
+- ✅ 정적 생성 성공
 
 ---
 
@@ -163,23 +214,38 @@ Next.js 기반의 프론트엔드 개발자 포트폴리오 웹사이트를 Reac
 ## 변경 이력
 
 ### 2025-11-14
+
+**Phase 1 완료**:
 - ✅ React Bits MCP 서버 설정 완료
 - ✅ CLAUDE.md 개발 지침 문서 작성
 - ✅ PROJECT.md 작업 진행 상황 문서 작성
 - ✅ HeroSection 분석 완료
-- ✅ React Bits 효과 제안 완료
+- ✅ React Bits 효과 전체 탐색 및 비교 분석
+
+**Phase 2 완료**:
+- ✅ Aurora 컴포넌트 구현 (components/ui/Aurora.tsx)
+- ✅ Spotlight 컴포넌트 구현 (components/ui/Spotlight.tsx)
+- ✅ BlurFade 컴포넌트 구현 (components/ui/BlurFade.tsx)
+- ✅ HeroSection 완전 재설계 (components/sections/HeroSection/index.tsx)
+- ✅ ESLint exhaustive-deps 경고 해결
+- ✅ 빌드 성공 및 검증 완료
+
+**커밋 예정**:
+- `feat: Aurora + Spotlight + BlurFade 효과로 HeroSection 재설계`
 
 ---
 
 ## 다음 액션
 
-1. **사용자 확인 대기**: HeroSection에 적용할 React Bits 효과 선택
-   - Meteors (추천)
-   - Grid Pattern
-   - Meteors + Grid 조합
-   - 기타
+1. **Phase 2 최종 확인**:
+   - [ ] 로컬 개발 서버에서 시각적 확인
+   - [ ] 모바일/태블릿/데스크톱 반응형 테스트
+   - [ ] 접근성 테스트 (키보드 네비게이션)
+   - [ ] Lighthouse 성능 평가
 
-2. **Phase 2 시작**: 선택된 효과를 HeroSection에 적용
+2. **Phase 3 계획**:
+   - AboutSection 디자인 개선
+   - 다른 섹션들에 일관된 디자인 언어 적용
 
 ---
 
