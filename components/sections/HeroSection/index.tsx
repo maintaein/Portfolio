@@ -1,8 +1,24 @@
 'use client';
 
+import { useEffect } from 'react';
 import { Aurora, Spotlight, BlurFade } from '@/components/ui';
 
-export default function HeroSection() {
+interface HeroSectionProps {
+  onAnimationComplete?: () => void;
+}
+
+export default function HeroSection({ onAnimationComplete }: HeroSectionProps) {
+  // 애니메이션 완료 감지 (마지막 요소 delay 1.2s + duration 0.8s = 2s)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (onAnimationComplete) {
+        onAnimationComplete();
+      }
+    }, 2000); // 2초 후 완료
+
+    return () => clearTimeout(timer);
+  }, [onAnimationComplete]);
+
   return (
     <section
       id="hero"
