@@ -13,6 +13,7 @@ interface ModalProps {
   children: ReactNode;
   size?: ModalSize;
   title?: string;
+  headerAction?: ReactNode;
   showCloseButton?: boolean;
   closeOnBackdropClick?: boolean;
   closeOnEsc?: boolean;
@@ -32,6 +33,7 @@ export default function Modal({
   children,
   size = 'medium',
   title,
+  headerAction,
   showCloseButton = true,
   closeOnBackdropClick = true,
   closeOnEsc = true,
@@ -100,22 +102,25 @@ export default function Modal({
         aria-modal="true"
         aria-labelledby={title ? 'modal-title' : undefined}
       >
-        {(title || showCloseButton) && (
+        {(title || headerAction || showCloseButton) && (
           <div className="flex items-center justify-between p-6 border-b border-grey-200 flex-shrink-0">
             {title && (
               <h2 id="modal-title" className="text-t3 font-bold text-grey-900">
                 {title}
               </h2>
             )}
-            {showCloseButton && (
-              <button
-                onClick={onClose}
-                className="p-3 min-w-[44px] min-h-[44px] flex items-center justify-center text-grey-500 hover:text-grey-700 hover:bg-grey-100 rounded-lg transition-colors duration-fast"
-                aria-label="닫기"
-              >
-                <Icon name="close" size="medium" />
-              </button>
-            )}
+            <div className="flex items-center gap-2 ml-auto">
+              {headerAction}
+              {showCloseButton && (
+                <button
+                  onClick={onClose}
+                  className="p-3 min-w-[44px] min-h-[44px] flex items-center justify-center text-grey-500 hover:text-grey-700 hover:bg-grey-100 rounded-lg transition-colors duration-fast"
+                  aria-label="닫기"
+                >
+                  <Icon name="close" size="medium" />
+                </button>
+              )}
+            </div>
           </div>
         )}
 

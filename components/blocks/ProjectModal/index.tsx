@@ -27,11 +27,34 @@ export default function ProjectModal({
     return null;
   }
 
+  const headerAction = (
+    <>
+      {project.githubUrl && (
+        <Button
+          variant="outline"
+          leftIcon={<Icon name="share" />}
+          onClick={() => window.open(project.githubUrl, '_blank')}
+        >
+          GitHub
+        </Button>
+      )}
+      {project.demoUrl && (
+        <Button
+          leftIcon={<Icon name="arrow-right" />}
+          onClick={() => window.open(project.demoUrl, '_blank')}
+        >
+          Live Web
+        </Button>
+      )}
+    </>
+  );
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title={project.title}
+      headerAction={headerAction}
       size="large"
     >
       <div className="space-y-8">
@@ -348,25 +371,6 @@ export default function ProjectModal({
           </div>
         )}
 
-        <div className="flex gap-3 justify-end pt-4 border-t border-grey-200">
-          {project.githubUrl && (
-            <Button
-              variant="outline"
-              leftIcon={<Icon name="share" />}
-              onClick={() => window.open(project.githubUrl, '_blank')}
-            >
-              GitHub
-            </Button>
-          )}
-          {/* {project.demoUrl && (
-            <Button
-              leftIcon={<Icon name="arrow-right" />}
-              onClick={() => window.open(project.demoUrl, '_blank')}
-            >
-              Live Demo
-            </Button>
-          )} */}
-        </div>
       </div>
     </Modal>
   );

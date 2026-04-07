@@ -12,7 +12,6 @@ import { projects } from '@/lib/data';
 
 export default function ProjectsSection() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  // 💡 useModal 훅 적용: 모달 상태 관리
   const { isOpen, open, close } = useModal();
 
   // 섹션 전체 진입 감지

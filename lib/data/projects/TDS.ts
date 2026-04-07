@@ -220,10 +220,10 @@ const finishDrag = (diff: number) => {
     },
     {
       id: 'component-api-design',
-      title: '3. 컴포넌트 API 설계 전략 — Flat vs Compound',
-      image: '/projects/tds/api-design.png',
+      title: '3. 컴포넌트 API 설계 전략',
+      image: '/projects/TDS/API.png',
       features: [
-        'Flat API: 단순 props로 80%의 일반 케이스 처리 (variant, title, footer)',
+        'Flat API: 단순 props로 기본 일반 케이스 처리 (variant, title, footer)',
         'Compound API: 서브컴포넌트 조합으로 복잡한 레이아웃 표현 (Card.Header, Card.Body)',
         'Hybrid 자동 감지: props 존재 여부로 Flat/Compound 모드를 자동 전환',
         'Render Prop 패턴: FormField가 접근성 인프라(id, aria 속성)를 자식에게 위임'
@@ -248,7 +248,7 @@ const finishDrag = (diff: number) => {
   사용자 정보 내용
 </Card>
 
-// Compound API: 20%의 복잡한 레이아웃
+// Compound API: 복잡한 레이아웃
 <Card variant="elevated">
   <Card.Image src={coverImg}>
     <Card.ImageOverlay>Featured</Card.ImageOverlay>
@@ -287,8 +287,8 @@ const content = isFlat ? (
           '단순 케이스와 복잡한 케이스 모두 하나의 컴포넌트로 커버 — 학습 비용을 낮추면서 유연성 확보'
         ],
         lessons: [
-          '"Flat vs Compound" 二择一이 아니다. Hybrid 패턴은 props 감지로 두 모드를 자동 전환해 사용자가 익숙한 방식부터 시작하고 필요할 때 복잡한 조합으로 넘어갈 수 있게 한다.',
-          '컴포넌트 API는 사용 패턴 분포를 먼저 분석해야 한다. 80%의 단순 케이스를 위해 Compound 전용으로 만들면 불필요한 학습 비용을 요구하게 된다.',
+          '"Flat vs Compound" Hybrid 패턴은 props 감지로 두 모드를 자동 전환해 사용자가 익숙한 방식부터 시작하고 필요할 때 복잡한 조합으로 넘어갈 수 있게 한다.',
+          '컴포넌트 API는 사용 패턴 분포를 먼저 분석해야 한다. 단순히 커스터마이징 자유도를 위해 Compound 전용으로 만들면 불필요한 학습 비용을 요구하게 된다.',
           'FormField 같은 인프라 컴포넌트는 UI를 직접 렌더링하지 않고 접근성 속성만 생성·위임하는 역할로 분리하면, 여러 컴포넌트(TextField, TextArea)가 일관된 접근성을 재사용할 수 있다.'
         ]
       }
