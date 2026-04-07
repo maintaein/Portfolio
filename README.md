@@ -30,6 +30,7 @@ https://kimtaein.vercel.app/
 
 | 프로젝트 | 설명 | 기술 스택 |
 |----------|------|-----------|
+| **TDS-TaeinDesignSystem** | 개인 디자인 시스템 | React, TypeScript, Vanilla Extract CSS |
 | **Portfolio** | 개인 포트폴리오 웹사이트 | Next.js, TypeScript, TailwindCSS |
 | **AlphaMail** | AI 기반 업무 자동화 웹 메일 서비스 | React, TypeScript, React-query, Zustand, TailwindCSS |
 | **ReBirth** | 카드 혜택 기반 모바일 금융 서비스 | Kotlin, Jetpack Compose |
