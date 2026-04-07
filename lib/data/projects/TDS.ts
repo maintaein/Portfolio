@@ -97,7 +97,7 @@ export const tds: Project = {
         problem: [
           'Button만 import했는데 번들에 21개 컴포넌트가 모두 포함 (45KB)',
           '빌드 출력 파일명이 index.esm9.js, index.cjs2.js 같은 플랫 구조로 생성되어 모듈 경계 파괴',
-          'Rollup이 barrel file(index.ts)을 side-effectful로 판단하여 전체 re-export를 포함'
+          'Rollup이 barrel file을 side-effectful로 판단하여 전체 re-export를 포함'
         ],
         analysis: [
           'fileName 함수가 format 구분 없이 동일 디렉토리에 ESM/CJS를 생성 → 파일명 충돌로 숫자 접미사 추가됨',
@@ -122,12 +122,11 @@ fileName: (format, entryName) => {
 }`,
         results: [
           'Button 단일 import: 45KB → 4.17KB (gzip 1.43KB) — 91% 감소',
-          '전체 테스트 1,048개 통과, 데모 앱 빌드 정상 동작',
-          'npm pack 검증: 384 files, 165KB 패키지로 정리'
+          'npm pack 검증: 384 files, 23KB(gzip) 패키지로 정리'
         ],
         lessons: [
           'Tree-shaking은 설정만으로 되지 않는다. preserveModules를 켜도 파일명 충돌, barrel side-effect, CSS 주석 등 예상 밖의 요인이 있었다. "동작할 것이다"가 아닌 실측 검증이 필수.',
-          'barrel file(index.ts)은 re-export 전용이어야 한다. 단 한 줄의 export const도 번들러가 전체 모듈을 side-effectful로 판단하게 만들 수 있다.',
+          'barrel file은 re-export 전용이어야 한다. 단 한 줄의 export const도 번들러가 전체 모듈을 side-effectful로 판단하게 만들 수 있다.',
           '라이브러리 제작자는 사용자의 빌드 환경을 시뮬레이션해야 한다. 라이브러리 자체 빌드가 성공해도, 사용자 프로젝트에서 tree-shaking이 되는지는 별개 문제.'
         ]
       }
@@ -142,23 +141,23 @@ fileName: (format, entryName) => {
         'isClosingViaDragRef 플래그로 드래그/버튼 닫기 경로를 명시적으로 분리',
         'JS transition 기반 드래그 닫기로 CSS exit 애니메이션 충돌 제거'
       ],
-      intent: '모바일 UX에서 BottomSheet는 드래그로 닫을 수 있어야 자연스럽습니다. 이 인터랙션은 React 렌더링 모델, 브라우저 이벤트 시스템, CSS와 JS 애니메이션 우선순위가 모두 교차하는 복잡한 문제였습니다. 하나의 버그를 고치면 다른 닫기 경로가 깨지는 연쇄 충돌을 반복하면서, 결국 닫기 경로를 플래그로 명시적으로 분리하는 구조적 해결책에 도달했습니다.',
+      intent: '모바일 UX에서 BottomSheet는 드래그로 닫을 수 있어야 자연스럽습니다. 이 인터랙션은 React 렌더링 모델, 브라우저 이벤트 시스템, CSS와 JS 애니메이션 우선순위가 모두 교차하는 복잡한 문제였습니다. 하나의 버그를 고치면 다른 닫기 경로가 깨지는 연쇄 충돌을 반복하면서, 결국 닫기 경로를 플래그로 명시적으로 분리하는 해결책에 도달했습니다.',
       troubleShooting: {
         title: 'BottomSheet 드래그 구현 중 발생한 4가지 연쇄 버그',
         initialImpl: 'useState로 드래그 상태(startY, isDragging)를 관리하고, BottomSheet 요소에 mousedown/mousemove/mouseup 이벤트를 바인딩하는 방식으로 구현.',
         problem: [
           '이슈 1: 드래그가 동작하지 않음 — useState 변경마다 useEffect 재실행으로 이벤트 리스너가 초기화되고, 클로저 stale 참조로 isDragging이 항상 false',
           '이슈 2: 마우스가 시트 영역 밖으로 나가면 드래그가 해제되지 않고 시트가 마우스에 매달림 — mousemove/mouseup이 요소에만 바인딩',
-          '이슈 3: 드래그로 닫을 때 시트가 원위치로 snap-back한 뒤 다시 내려가는 이중 애니메이션 — JS transition과 CSS exit 애니메이션이 충돌',
+          '이슈 3: 드래그로 닫을 때 시트가 원위치로 복귀한 뒤 다시 내려가는 이중 애니메이션 — JS transition과 CSS exit 애니메이션이 충돌',
           '이슈 4: X 버튼으로 닫을 때 바텀시트가 화면에 그대로 남아 먹통 상태 발생 — 드래그 시 주입한 인라인 스타일이 CSS exit 애니메이션을 막아 언마운트 트리거가 실행되지 않음'
         ],
         analysis: [
           '이슈 1: useState로 드래그 좌표를 관리하면 매 변경마다 리렌더링 → useEffect 재실행 → 리스너 재등록. 재등록 시점에 새 클로저가 생성되어 이전 isDragging=true 값을 참조하지 못함',
           '이슈 2: mousemove/mouseup을 BottomSheet DOM에만 등록하면 마우스가 요소 밖으로 나갈 때 이벤트를 수신 못해 isDraggingRef가 true로 영구히 잔류',
-          '이슈 3: 드래그 완료 시 JS로 translateY(100%) 이동 후 onClose() 호출 → open=false → 인라인 스타일 초기화 useEffect가 transform을 리셋(snap-back) → CSS slideDown 애니메이션이 translateY(0)에서 다시 실행됨. 단순 fix를 적용할 때마다 다른 닫기 경로(X버튼)가 깨지는 연쇄 충돌이 반복됨',
+          '이슈 3: 드래그 완료 시 JS로 translateY(100%) 이동 후 onClose() 호출 → open=false → 인라인 스타일 초기화 useEffect가 transform을 리셋 → CSS slideDown 애니메이션이 translateY(0)에서 다시 실행됨. 단순 fix를 적용할 때마다 다른 닫기 경로가 깨지는 연쇄 충돌이 반복됨',
           '이슈 4: mousedown 핸들러가 시트 전체에 바인딩되어 X버튼 클릭 시에도 animation: none이 인라인으로 주입됨 → CSS exit 애니메이션 실행 불가 → onAnimationEnd가 발화하지 않아 shouldRender가 false로 전환되지 않음 → 투명한 시트 DOM이 잔류하여 화면 전체 클릭 차단'
         ],
-        solution: '닫기 경로(드래그 vs 버튼)를 isClosingViaDragRef 플래그로 명시적으로 분리하여, 각 경로가 독립적인 언마운트 흐름을 갖도록 재설계했습니다.',
+        solution: '닫기 경로(드래그 or 버튼)를 isClosingViaDragRef 플래그로 명시적으로 분리하여, 각 경로가 독립적인 언마운트 흐름을 갖도록 재설계했습니다.',
         solutionCode: `// 이슈 1 해결: useState → useRef로 드래그 상태 관리
 // 리렌더링 없이 값을 추적하여 클로저 stale 참조와 리스너 재등록 문제를 동시에 해결
 const startYRef = useRef(0);
@@ -231,14 +230,14 @@ const finishDrag = (diff: number) => {
       intent: '디자인 시스템에서 가장 어려운 결정은 컴포넌트 API를 어떤 형태로 노출할 것인가입니다. Flat API는 쓰기 쉽지만 복잡한 레이아웃을 표현하기 어렵고, Compound API는 유연하지만 학습 비용이 높습니다. TDS는 Card, Modal, SideSheet, BottomSheet 4개 컴포넌트에 두 패턴을 혼합한 Hybrid API를 적용했습니다. 단순한 사용은 Flat으로, 복잡한 레이아웃은 Compound로 동일한 컴포넌트에서 처리할 수 있도록 설계했습니다.',
       troubleShooting: {
         title: 'Flat API만으로는 커버되지 않는 복잡한 레이아웃 요구사항',
-        initialImpl: 'Card, Modal 등 복합 컴포넌트를 처음에는 Flat API(title, header, footer props)로만 설계. 단순한 경우는 문제없었으나, 이미지 오버레이·중첩 섹션·다중 액션 버튼처럼 레이아웃 자유도가 필요한 케이스에서 props 조합이 폭발적으로 증가했습니다.',
+        initialImpl: 'Card, Modal 등 복합 컴포넌트를 처음에는 Flat API로만 설계. 단순한 경우는 문제없었으나, 이미지 오버레이·중첩 섹션·다중 액션 버튼처럼 레이아웃 자유도가 필요한 케이스에서 props 조합이 폭발적으로 증가했습니다.',
         problem: [
           'Flat API만으로는 커버 불가한 레이아웃이 발생 — 이미지 위에 텍스트 오버레이, 커스텀 헤더 배치 등',
           'props 추가로 대응하면 컴포넌트 인터페이스가 비대해지고 사용법이 복잡해짐',
           'Compound API만 사용하면 단순한 Card 하나에도 서브컴포넌트를 여러 개 나열해야 해 DX 저하'
         ],
         analysis: [
-          '실제 사용 패턴을 분석하면 약 80%는 title/content/footer 정도의 단순 구조, 20%만 커스텀 레이아웃이 필요했음',
+          '디자인 시스템 관련 자료를 탐색 결과, 단순 구조의 API만 제공하게 되면 복잡한 커스텀 레이아웃 요구사항이 발생할 수 있음을 깨달음',
           'Flat과 Compound 중 하나를 선택하는 게 아니라, 두 모드를 하나의 컴포넌트에서 자동 감지하면 두 케이스를 모두 커버할 수 있다고 판단',
           'props 존재 여부로 렌더링 분기를 결정하는 isFlat 로직이 핵심: title/header/footer가 있으면 Flat 모드, 없으면 children을 그대로 받는 Compound 모드'
         ],
