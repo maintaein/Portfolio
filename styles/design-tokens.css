@@ -47,6 +47,18 @@
   --color-blue-800: #1957c2;
   --color-blue-900: #194aa6;
 
+  /* Colors - Primary (Blue alias) */
+  --color-primary-50:  #e8f3ff;
+  --color-primary-100: #c9e2ff;
+  --color-primary-200: #90c2ff;
+  --color-primary-300: #64a8ff;
+  --color-primary-400: #4593fc;
+  --color-primary-500: #3182f6;
+  --color-primary-600: #2272eb;
+  --color-primary-700: #1b64da;
+  --color-primary-800: #1957c2;
+  --color-primary-900: #194aa6;
+
   /* Colors - Semantic */
   --color-background: #ffffff;
   --color-grey-background: #f2f4f6;
