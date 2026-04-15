@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Button, Icon, Skeleton } from '@/components/atoms';
 import Image from 'next/image';
 import { cn } from '@/lib/utils/cn';
+import { RichText } from '@/lib/utils';
 import { Project, ImplementationItem, ImplementationGroup } from '@/types';
 import type { ProjectReview, TroubleShooting } from '@/types';
 
@@ -52,7 +53,7 @@ function TroubleShootingCard({ ts }: { ts: TroubleShooting }) {
       {ts.initialImpl && (
         <div className="px-5 py-4 bg-grey-50 border-b border-grey-200">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-grey-400 mb-2">초기 구현</p>
-          <p className="text-[12px] text-grey-600 leading-relaxed">{ts.initialImpl}</p>
+          <RichText text={ts.initialImpl} className="text-[12px] text-grey-600 leading-relaxed" />
         </div>
       )}
 
@@ -72,7 +73,7 @@ function TroubleShootingCard({ ts }: { ts: TroubleShooting }) {
                 {items.map((item, i) => (
                   <li key={i} className="flex items-start gap-2.5">
                     <span className={cn('mt-[6px] w-1.5 h-1.5 rounded-full flex-shrink-0', color)} />
-                    <span className="text-[12px] text-grey-700 leading-relaxed">{item}</span>
+                    <RichText text={item} className="text-[12px] text-grey-700 leading-relaxed" />
                   </li>
                 ))}
               </ul>
@@ -98,7 +99,7 @@ function TroubleShootingCard({ ts }: { ts: TroubleShooting }) {
             {ts.lessons.map((l, i) => (
               <li key={i} className="flex items-start gap-2.5">
                 <span className="text-[10px] font-bold text-blue-400 mt-0.5 flex-shrink-0">{String(i + 1).padStart(2, '0')}</span>
-                <span className="text-[12px] text-grey-700 leading-relaxed">{l}</span>
+                <RichText text={l} className="text-[12px] text-grey-700 leading-relaxed" />
               </li>
             ))}
           </ul>
@@ -108,7 +109,105 @@ function TroubleShootingCard({ ts }: { ts: TroubleShooting }) {
   );
 }
 
-function ReviewContent({ review }: { review: ProjectReview }) {
+interface ReviewNavProps {
+  reviews: ProjectReview[];
+  activeIndex: number;
+  onNavigate: (index: number) => void;
+}
+
+function ReviewNav({ reviews, activeIndex, onNavigate }: ReviewNavProps) {
+  const prev = activeIndex > 0 ? reviews[activeIndex - 1] : null;
+  const next = activeIndex < reviews.length - 1 ? reviews[activeIndex + 1] : null;
+
+  return (
+    <div className="mt-8 pt-5 border-t border-grey-200">
+      <div className="flex items-stretch gap-3">
+        {/* 이전 버튼 */}
+        <div className="flex-1">
+          {prev && (
+            <button
+              onClick={() => onNavigate(activeIndex - 1)}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-grey-200 bg-white hover:border-blue-300 hover:bg-blue-50/40 transition-all duration-200 text-left group"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0 text-grey-400 group-hover:text-blue-500 transition-colors duration-200">
+                <path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-grey-400 mb-0.5">이전 리뷰</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-[12px] font-medium text-grey-700 truncate">{prev.title}</p>
+                  {prev.troubleShooting && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                  )}
+                </div>
+              </div>
+            </button>
+          )}
+        </div>
+
+        {/* 현재 위치 인디케이터 */}
+        <div className="flex flex-col items-center justify-center gap-1.5 px-2 flex-shrink-0">
+          {reviews.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => onNavigate(i)}
+              className={cn(
+                'rounded-full transition-all duration-200',
+                i === activeIndex
+                  ? 'w-1.5 h-4 bg-blue-500'
+                  : 'w-1.5 h-1.5 bg-grey-300 hover:bg-grey-400'
+              )}
+              aria-label={reviews[i].title}
+            />
+          ))}
+        </div>
+
+        {/* 다음 버튼 */}
+        <div className="flex-1">
+          {next ? (
+            <button
+              onClick={() => onNavigate(activeIndex + 1)}
+              className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-grey-200 bg-white hover:border-blue-300 hover:bg-blue-50/40 transition-all duration-200 text-right group"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-grey-400 mb-0.5">다음 리뷰</p>
+                <div className="flex items-center justify-end gap-1.5">
+                  <p className="text-[12px] font-medium text-grey-700 truncate">{next.title}</p>
+                  {next.troubleShooting && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                  )}
+                </div>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0 text-grey-400 group-hover:text-blue-500 transition-colors duration-200">
+                <path d="M6 12l4-4-4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          ) : (
+            /* 마지막 탭: 리뷰 완료 메시지 */
+            <div className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-grey-100 bg-grey-50 text-right">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-grey-400 mb-0.5">완료</p>
+                <p className="text-[12px] font-medium text-grey-500">모든 리뷰를 확인했습니다</p>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0 text-emerald-400">
+                <path d="M3 8l3.5 3.5L13 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface ReviewContentProps {
+  review: ProjectReview;
+  reviews: ProjectReview[];
+  activeIndex: number;
+  onNavigate: (index: number) => void;
+}
+
+function ReviewContent({ review, reviews, activeIndex, onNavigate }: ReviewContentProps) {
   return (
     <div className="space-y-5">
       {/* 리뷰 이미지 */}
@@ -132,7 +231,7 @@ function ReviewContent({ review }: { review: ProjectReview }) {
       {review.intent && (
         <div className="rounded-lg border-l-2 border-blue-300 bg-blue-50/50 px-4 py-3">
           <p className="text-[11px] font-bold uppercase tracking-wider text-blue-400 mb-1.5">기획 의도</p>
-          <p className="text-[12px] text-grey-700 leading-relaxed">{review.intent}</p>
+          <RichText text={review.intent} className="text-[12px] text-grey-700 leading-relaxed" />
         </div>
       )}
 
@@ -144,7 +243,7 @@ function ReviewContent({ review }: { review: ProjectReview }) {
             {review.features.map((f, i) => (
               <li key={i} className="flex items-center gap-2">
                 <span className="w-1 h-1 rounded-full bg-blue-400 flex-shrink-0" />
-                <span className="text-[12px] text-grey-700">{f}</span>
+                <RichText text={f} className="text-[12px] text-grey-700" />
               </li>
             ))}
           </ul>
@@ -171,6 +270,15 @@ function ReviewContent({ review }: { review: ProjectReview }) {
           <TroubleShootingCard ts={review.troubleShooting} />
         </div>
       )}
+
+      {/* 리뷰 하단 네비게이션 */}
+      {reviews.length > 1 && (
+        <ReviewNav
+          reviews={reviews}
+          activeIndex={activeIndex}
+          onNavigate={onNavigate}
+        />
+      )}
     </div>
   );
 }
@@ -182,6 +290,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
   const [imgError, setImgError]               = useState(false);
   const [mounted, setMounted]                 = useState(false);
   const contentRef                            = useRef<HTMLDivElement>(null);
+  const reviewSectionRef                      = useRef<HTMLDivElement>(null);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -193,6 +302,16 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
       if (contentRef.current) contentRef.current.scrollTop = 0;
     }
   }, [isOpen, project]);
+
+  // 탭 전환 시 리뷰 섹션 상단으로 스크롤
+  const handleReviewTabChange = (index: number) => {
+    setActiveReviewTab(index);
+    if (!contentRef.current || !reviewSectionRef.current) return;
+    const containerTop = contentRef.current.getBoundingClientRect().top;
+    const sectionTop   = reviewSectionRef.current.getBoundingClientRect().top;
+    const offset       = sectionTop - containerTop + contentRef.current.scrollTop - 16;
+    contentRef.current.scrollTo({ top: offset, behavior: 'smooth' });
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -376,7 +495,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                                     <li key={itemIdx} className="space-y-2">
                                       <div className="flex items-start gap-2">
                                         <span className="mt-[5px] w-1 h-1 rounded-full bg-blue-400 flex-shrink-0" />
-                                        <span className="text-[12px] text-grey-700 leading-relaxed">{text}</span>
+                                        <RichText text={text as string} className="text-[12px] text-grey-700 leading-relaxed" />
                                       </div>
                                       {video && <video src={video} controls className="w-full rounded-lg" preload="metadata" />}
                                       {image && <Image src={image} alt={text} width={800} height={450} className="w-full rounded-lg" />}
@@ -395,7 +514,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                           <div key={index} className="space-y-2">
                             <div className="flex items-start gap-2">
                               <span className="mt-[5px] w-1 h-1 rounded-full bg-blue-400 flex-shrink-0" />
-                              <span className="text-[12px] text-grey-700 leading-relaxed">{text}</span>
+                              <RichText text={text as string} className="text-[12px] text-grey-700 leading-relaxed" />
                             </div>
                             {video && <video src={video} controls className="w-full rounded-lg" preload="metadata" />}
                             {image && <Image src={image} alt={text} width={800} height={450} className="w-full rounded-lg" />}
@@ -408,7 +527,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
 
                 {/* ── 프로젝트 리뷰 — 카드 컨테이너로 시각적 격리 ── */}
                 {project.reviews && project.reviews.length > 0 && (
-                  <div>
+                  <div ref={reviewSectionRef}>
                     <div className="border-t-2 border-grey-200 mb-6" />
                     <SectionLabel>Project Review</SectionLabel>
 
@@ -419,7 +538,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                           {project.reviews.map((review, index) => (
                             <button
                               key={review.id}
-                              onClick={() => setActiveReviewTab(index)}
+                              onClick={() => handleReviewTabChange(index)}
                               className={cn(
                                 'flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[12px] font-medium transition-all duration-200 whitespace-nowrap flex-shrink-0',
                                 activeReviewTab === index
@@ -441,7 +560,12 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
 
                       {/* 리뷰 콘텐츠 */}
                       <div className="p-5">
-                        <ReviewContent review={project.reviews[activeReviewTab] ?? project.reviews[0]} />
+                        <ReviewContent
+                          review={project.reviews[activeReviewTab] ?? project.reviews[0]}
+                          reviews={project.reviews}
+                          activeIndex={activeReviewTab}
+                          onNavigate={handleReviewTabChange}
+                        />
                       </div>
                     </div>
                   </div>
@@ -462,7 +586,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                             {tech.reasons.map((reason, idx) => (
                               <li key={idx} className="flex items-start gap-2">
                                 <span className="mt-[5px] w-1 h-1 rounded-full bg-grey-300 flex-shrink-0" />
-                                <span className="text-[12px] text-grey-600 leading-relaxed">{reason}</span>
+                                <RichText text={reason} className="text-[12px] text-grey-600 leading-relaxed" />
                               </li>
                             ))}
                           </ul>
