@@ -5,7 +5,7 @@ export const ttabong: Project = {
   subtitle: '봉사 기관과 봉사자를 연결하는 웹 SNS 큐레이팅 봉사 매칭 플랫폼',
   description: '봉사 기관과 봉사자를 연결하는 웹 SNS 큐레이팅 봉사 매칭 플랫폼',
   longDescription:'Ttabong을 통해 기관은 효율적으로 봉사자를 모집하고, 봉사자는 자신에게 맞는 봉사활동을 쉽게 찾을 수 있습니다.',
-  image: '/projects/Ttabong.png',
+  image: '/projects/Ttabong.webp',
   imageAspect: 'landscape',
   tags: ['React', 'TypeScript', 'TailwindCSS', 'Zustand', 'Framer Motion'],
   duration: '2025.01 - 2025.02',
@@ -84,9 +84,9 @@ export const ttabong: Project = {
       category: '봉사자 계정',
       title: '1. 홈 페이지(공고 큐레이션 매칭)',
       image: [
-        '/projects/ttabong/home1.png',
-        '/projects/ttabong/home2.png',
-        '/projects/ttabong/home3.png'
+        '/projects/ttabong/home1.webp',
+        '/projects/ttabong/home2.webp',
+        '/projects/ttabong/home3.webp'
       ],
       features: [
         '카드 스와이핑으로 직관적인 공고 탐색',
@@ -100,9 +100,9 @@ export const ttabong: Project = {
       category: '봉사자 계정',
       title: '2. 공고 검색/ 후기 관리',
       image: [
-        '/projects/ttabong/search.png',
-        '/projects/ttabong/review1.png',
-        '/projects/ttabong/review2.png'
+        '/projects/ttabong/search.webp',
+        '/projects/ttabong/review1.webp',
+        '/projects/ttabong/review2.webp'
       ],
       features: [
         '카테고리, 위치, 날짜별 필터링을 통한 정교한 검색',
@@ -117,9 +117,9 @@ export const ttabong: Project = {
       category: '봉사 기관 계정',
       title: '1. 공고 관리/ 공고 작성/ 후기 관리',
       image: [
-        '/projects/ttabong/organization-home.png',
-        '/projects/ttabong/organization-create.png',
-        '/projects/ttabong/organization-review.png'
+        '/projects/ttabong/organization-home.webp',
+        '/projects/ttabong/organization-create.webp',
+        '/projects/ttabong/organization-review.webp'
       ],
       features: [
         '등록한 모든 공고를 상태별로 필터링 (전체 → 모집중 → 모집마감 → 활동완료)',

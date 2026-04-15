@@ -5,7 +5,7 @@ export const portfolio: Project = {
   subtitle: 'Atomic Design과 타입 안정성으로 구축한 개인 포트폴리오 웹사이트',
   description: 'Next.js 15 + TypeScript 기반 개인 포트폴리오 웹사이트',
   longDescription: '최신 웹 기술과 디자인 시스템을 적용하여 완성도 높은 사용자 경험을 제공하는 개인 포트폴리오 웹사이트입니다. **Atomic Design** 패턴으로 체계적인 컴포넌트 구조를 구축하고, **TypeScript**로 타입 안정성을 확보했습니다.',
-  image: '/projects/Portfolio.png',
+  image: '/projects/Portfolio.webp',
   imageAspect: 'landscape',
   tags: ['Next.js 15', 'React 19', 'TypeScript', 'Tailwind CSS 4', 'Headless UI', 'Atomic Design'],
   duration: '2025.08 - 현재',

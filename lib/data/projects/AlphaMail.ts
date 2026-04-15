@@ -5,7 +5,7 @@ export const alphaMail: Project = {
   subtitle: '미래형 업무 환경을 제안하는 AI 기반 업무 자동화 웹 메일 서비스',
   description: 'AI 기반 업무 자동화 웹 메일 서비스',
   longDescription: 'AlphaMail은 이메일로 들어오는 다양한 업무를 AI가 자동으로 정리하고, 단순 작업까지 대신 수행하는 혁신적인 업무 환경을 지향합니다.',
-  image: '/projects/Alphamail.png',
+  image: '/projects/Alphamail.webp',
   imageAspect: 'landscape',
   tags: ['React', 'TypeScript', 'React-query', 'Zustand', 'TailwindCSS', 'MaterialUI', 'FSD', 'Atomic'],
   duration: '2025.04 - 2025.05',
@@ -92,7 +92,7 @@ export const alphaMail: Project = {
     {
       id: 'dashboard',
       title: '1. 홈 대시보드',
-      image: '/projects/alphamail/alphaHome.png',
+      image: '/projects/alphamail/alphaHome.webp',
       features: [
         'AI 업무 비서가 메일 내용 **자동 분석** 및 태그로 분류',
         '첨부파일(사업자등록증 등) **OCR 처리**',
@@ -172,7 +172,7 @@ useEffect(() => {
     {
       id: 'mail',
       title: '2. 메일',
-      image: '/projects/alphamail/mail.png',
+      image: '/projects/alphamail/mail.webp',
       features: [
         '**스레드 기반** 메일 이력 관리',
         '**AI 기반** 메일 요약',
@@ -258,7 +258,7 @@ const { attachments, addAttachment, removeAttachment } = useMailStore((state) =>
     {
       id: 'work',
       title:'3. 문서 관리',
-      image: '/projects/alphamail/work.png',
+      image: '/projects/alphamail/work.webp',
       features: [
         '견적서 **자동 생성** 및 문서화',
         '발주서 처리',
@@ -270,7 +270,7 @@ const { attachments, addAttachment, removeAttachment } = useMailStore((state) =>
     {
       id: 'chatbot',
       title:'4. 챗봇',
-      image: '/projects/alphamail/chatbot.png',
+      image: '/projects/alphamail/chatbot.webp',
       features: [
         '**실시간** 업무 지원',
         '일정 등록/조회',

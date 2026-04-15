@@ -5,7 +5,7 @@ export const tds: Project = {
   subtitle: '일관된 UI와 효율적 개발을 위한 React 기반 디자인 시스템 라이브러리',
   description: '30개 컴포넌트, Zero-runtime CSS, Tree-shakable, AI 친화적 디자인 시스템',
   longDescription: 'TDS는 개인 서비스 개발 시 일관된 UI와 효율적인 개발을 위해 만든 **React 기반 디자인 시스템**입니다. **Vanilla Extract**를 활용한 **Zero-runtime CSS**, 엄격 TypeScript, TDD 기반 개발, 접근성 준수, 그리고 **AI 친화적 설계**가 특징입니다.',
-  image: '/projects/TDS.png',
+  image: '/projects/TDS.webp',
   imageAspect: 'landscape',
   tags: ['React', 'TypeScript', 'Vanilla Extract', 'Vite', 'Vitest', 'pnpm', 'Monorepo', 'TDD'],
   duration: '2025.12 - 2026.03',
@@ -83,7 +83,7 @@ export const tds: Project = {
     {
       id: 'treeshaking',
       title: '1. Tree-shaking 검증 및 최적화',
-      image: '/projects/TDS/tree-shaking.png',
+      image: '/projects/TDS/tree-shaking.webp',
       features: [
         '`preserveModules`로 컴포넌트별 **개별 모듈 분리**',
         '**ESM(.mjs)/CJS(.cjs) 듀얼 포맷** 빌드',
@@ -150,7 +150,7 @@ fileName: (format, entryName) => {
     {
       id: 'bottomsheet',
       title: '2. BottomSheet 드래그 인터랙션',
-      image: '/projects/tds/bottomsheet.png',
+      image: '/projects/TDS/bottomsheet.webp',
       features: [
         '`useRef` 기반 드래그 상태 관리로 **클로저 stale 참조** 및 **리스너 재등록** 문제 해결',
         '**document 레벨 이벤트 등록**으로 시트 영역 밖 마우스 이탈 처리',
@@ -247,7 +247,7 @@ const finishDrag = (diff: number) => {
     {
       id: 'component-api-design',
       title: '3. 컴포넌트 API 설계 전략',
-      image: '/projects/TDS/API.png',
+      image: '/projects/TDS/API.webp',
       features: [
         '**Flat API**: 단순 props로 기본 일반 케이스 처리 (`variant`, `title`, `footer`)',
         '**Compound API**: 서브컴포넌트 조합으로 복잡한 레이아웃 표현 (`Card.Header`, `Card.Body`)',

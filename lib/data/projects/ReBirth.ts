@@ -5,7 +5,7 @@ export const reBirth: Project = {
   subtitle: '카드 사용 방식을 새롭게 정의하는 모바일 금융 서비스',
   description: '카드 혜택 기반 소비관리를 지원하는 모바일 금융 서비스',
   longDescription: 'ReBirth는 사용자가 결제를 할 때, 해당 결제 항목에 대한 **최적의 카드를 자동으로 골라서 결제**해주고, 소비 관리에 대한 전반적인 지원까지 해주는 모바일 금융 서비스입니다.',
-  image: '/projects/Rebirth.png',
+  image: '/projects/Rebirth.webp',
   imageAspect: 'landscape',
   tags: [ 'Android Studio', 'Figma' , 'Kotlin', 'Jetpack Compose', 'Coroutines', 'MVVM', 'Retrofit', 'material3'],
   duration: '2025.02 - 2025.04',
@@ -78,9 +78,9 @@ export const reBirth: Project = {
       id: 'payment',
       title: '1. 결제',
       image: [
-        '/projects/rebirth/payment1.png',
-        '/projects/rebirth/payment2.png',
-        '/projects/rebirth/payment3.png'
+        '/projects/rebirth/payment1.webp',
+        '/projects/rebirth/payment2.webp',
+        '/projects/rebirth/payment3.webp'
       ],
       features: [
         '현재 결제 항목의 정보를 읽고, **가장 혜택을 많이 볼 수 있는 카드를 자동으로 선택**',
@@ -186,9 +186,9 @@ fun completePayment(token: String) {
       id: 'myCard',
       title: '2. 내 카드',
       image: [
-        '/projects/rebirth/myCard1.png',
-        '/projects/rebirth/myCard2.png',
-        '/projects/rebirth/myCard3.png'
+        '/projects/rebirth/myCard1.webp',
+        '/projects/rebirth/myCard2.webp',
+        '/projects/rebirth/myCard3.webp'
       ],
       features: [
         '**가로 스크롤**로 여러 카드를 확인하며, 각 카드의 이번 달 사용액과 받은 혜택을 한눈에 파악',
@@ -242,9 +242,9 @@ fun completePayment(token: String) {
       id: 'home',
       title:'3. 홈',
       image: [
-        '/projects/rebirth/home1.png',
-        '/projects/rebirth/home2.png',
-        '/projects/rebirth/home3.png'
+        '/projects/rebirth/home1.webp',
+        '/projects/rebirth/home2.webp',
+        '/projects/rebirth/home3.webp'
       ],
       features: [
         '이번 달 **소비 현황**: 월 지출액, 받은 혜택과 놓친 혜택 표시',
@@ -257,9 +257,9 @@ fun completePayment(token: String) {
       id: 'report',
       title:'4. 소비 리포트',
       image: [
-        '/projects/rebirth/report1.png',
-        '/projects/rebirth/report2.png',
-        '/projects/rebirth/report3.png'
+        '/projects/rebirth/report1.webp',
+        '/projects/rebirth/report2.webp',
+        '/projects/rebirth/report3.webp'
       ],
       features: [
         '**월별 캘린더 기반** 거래내역 조회, 특정 날짜 선택 시 그날의 거래내역을 상세히 확인',

@@ -378,7 +378,8 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
   const hasUnlockedRef = useRef(false);
   const terminalBorderControls = useAnimation();
 
-  // 충전 단계: border glow 12단계 세분화 + 일렁임
+  // 충전 단계: border glow 12단계 세분화
+  // pulse 계산에서 Date.now() 제거 — 80ms interval 리렌더 비용 제거
   const chargeStyle = useMemo(() => {
     const t = chargeLevel;
     if (t <= 0) return { boxShadow: '0 0 0 1px rgba(100,168,255,0.12)' };
@@ -393,25 +394,17 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
     const a3 = 0.04 + step * 0.30;
     const a4 = 0.02 + step * 0.14;
     const borderA = 0.10 + step * 0.72;
-    const pulse = 1 + Math.sin(Date.now() * 0.003) * 0.12 * step;
 
     return {
       boxShadow: [
-        `0 0 0 1px rgba(140,200,255,${Math.min(borderA * pulse, 1).toFixed(2)})`,
-        `0 0 ${Math.round(blur1 * pulse)}px rgba(49,130,246,${Math.min(a1 * pulse, 1).toFixed(2)})`,
-        `0 0 ${Math.round(blur2 * pulse)}px rgba(80,160,255,${Math.min(a2 * pulse, 1).toFixed(2)})`,
-        `0 0 ${Math.round(blur3 * pulse)}px rgba(100,168,255,${Math.min(a3 * pulse, 1).toFixed(2)})`,
-        `0 0 ${Math.round(blur4 * pulse)}px rgba(147,197,253,${Math.min(a4 * pulse, 1).toFixed(2)})`,
+        `0 0 0 1px rgba(140,200,255,${Math.min(borderA, 1).toFixed(2)})`,
+        `0 0 ${Math.round(blur1)}px rgba(49,130,246,${Math.min(a1, 1).toFixed(2)})`,
+        `0 0 ${Math.round(blur2)}px rgba(80,160,255,${Math.min(a2, 1).toFixed(2)})`,
+        `0 0 ${Math.round(blur3)}px rgba(100,168,255,${Math.min(a3, 1).toFixed(2)})`,
+        `0 0 ${Math.round(blur4)}px rgba(147,197,253,${Math.min(a4, 1).toFixed(2)})`,
       ].join(', '),
     };
   }, [chargeLevel]);
-
-  // glow 일렁임 재렌더 트리거
-  useEffect(() => {
-    if (chargeLevel <= 0 || isComplete) return;
-    const id = setInterval(() => setChargeLevel(p => p), 80);
-    return () => clearInterval(id);
-  }, [chargeLevel, isComplete]);
 
   const triggerUnlock = useCallback(async () => {
     if (hasUnlockedRef.current) return;
