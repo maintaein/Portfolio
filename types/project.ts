@@ -21,7 +21,7 @@ export interface TroubleShooting {
   initialImpl?: string;
   problem?: string[];
   analysis?: string[];
-  solution?: string;
+  solution?: string | string[];
   solutionCode?: string;
   results?: string[];
   lessons?: string[];

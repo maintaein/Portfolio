@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useScroll } from '@/hooks';
 import { IconButton, Icon } from '@/components/atoms';
 import { cn } from '@/lib/utils/cn';
@@ -9,13 +10,13 @@ import { cn } from '@/lib/utils/cn';
 interface NavigationItem {
   label: string;
   href: string;
-  id: string; 
+  id: string;
 }
 
 interface NavigationProps {
   items: NavigationItem[];
   className?: string;
-  activeSection?: string; 
+  activeSection?: string;
 }
 
 export default function Navigation({
@@ -25,27 +26,22 @@ export default function Navigation({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
 
-  // items에서 section id 배열 추출
   const sectionIds = items.map(item => item.id);
   const { activeSection } = useScroll(sectionIds, {
-    offset: 80, // navbar 높이만큼 offset
-    throttle: 16 // 즉시 반응 (60fps 기준 1프레임)
+    offset: 80,
+    throttle: 16,
   });
 
-  // Navigation 표시/숨김 제어 (hero 섹션 80% 지점 통과 시 표시)
   useEffect(() => {
     const handleScroll = () => {
       const heroSection = document.getElementById('hero');
       if (heroSection) {
         const heroBottom = heroSection.offsetTop + heroSection.offsetHeight * 0.8;
-        const shouldShow = window.scrollY > heroBottom;
-        setIsVisible(shouldShow);
+        setIsVisible(window.scrollY > heroBottom);
       }
     };
-
     window.addEventListener('scroll', handleScroll, { passive: true });
-    handleScroll(); // 초기 체크
-
+    handleScroll();
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
@@ -58,73 +54,108 @@ export default function Navigation({
   };
 
   return (
-    <nav
-      aria-label="메인 네비게이션"
-      className={cn(
-        'fixed top-0 left-0 right-0 z-50 bg-white border-b border-grey-200 backdrop-blur-sm bg-white/95',
-        'transition-transform duration-500 ease-out',
-        isVisible ? 'translate-y-0' : '-translate-y-full',
-        className
+    <AnimatePresence>
+      {isVisible && (
+        <motion.nav
+          aria-label="메인 네비게이션"
+          className={cn(
+            'fixed top-0 left-0 right-0 z-50',
+            'bg-white/95 backdrop-blur-sm border-b border-grey-200/80',
+            className
+          )}
+          initial={{ y: -64, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: -64, opacity: 0 }}
+          transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <div className="max-w-7xl mx-auto px-6 py-4">
+            <div className="flex items-center justify-between">
+              {/* 로고 — hover 시 underline 슬라이드 */}
+              <button
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                aria-label="페이지 최상단으로 이동"
+                className="relative text-t4 font-bold text-grey-900 hover:text-blue-500 transition-colors duration-300 pb-0.5 group"
+              >
+                Portfolio
+                <span className={cn(
+                  'absolute bottom-0 left-0 h-0.5 bg-blue-500 rounded-full',
+                  'w-0 group-hover:w-full transition-all duration-300 ease-out'
+                )} />
+              </button>
+
+              {/* 데스크톱 nav items */}
+              <div className="hidden md:flex items-center gap-8">
+                {items.map((item) => {
+                  const isActive = activeSection === item.id;
+                  return (
+                    <button
+                      key={item.href}
+                      onClick={() => scrollToSection(item.href)}
+                      aria-current={isActive ? 'page' : undefined}
+                      aria-label={`${item.label} 섹션으로 이동`}
+                      className={cn(
+                        'relative text-t6 font-medium pb-1.5 transition-colors duration-250 group',
+                        isActive ? 'text-blue-500' : 'text-grey-600 hover:text-blue-500'
+                      )}
+                    >
+                      {item.label}
+                      {/* underline: 활성 = 항상 표시, 비활성 = hover 시 슬라이드 인 */}
+                      <span className={cn(
+                        'absolute bottom-0 left-0 h-0.5 bg-blue-500 rounded-full',
+                        'transition-all duration-300 ease-out origin-left',
+                        isActive
+                          ? 'w-full'
+                          : 'w-0 group-hover:w-full'
+                      )} />
+                    </button>
+                  );
+                })}
+              </div>
+
+              <IconButton
+                icon={<Icon name={isMobileMenuOpen ? 'close' : 'menu'} />}
+                variant="ghost"
+                className="md:hidden"
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                aria-label="메뉴 열기/닫기"
+              />
+            </div>
+
+            {/* 모바일 메뉴 — AnimatePresence */}
+            <AnimatePresence>
+              {isMobileMenuOpen && (
+                <motion.div
+                  className="md:hidden overflow-hidden"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  <div className="pt-4 pb-2 space-y-1">
+                    {items.map((item) => {
+                      const isActive = activeSection === item.id;
+                      return (
+                        <button
+                          key={item.href}
+                          onClick={() => scrollToSection(item.href)}
+                          className={cn(
+                            'block w-full text-left text-t5 font-medium py-2.5 px-4 rounded-lg transition-all duration-200',
+                            isActive
+                              ? 'bg-blue-50 text-blue-500 font-semibold'
+                              : 'text-grey-700 hover:bg-grey-50 hover:text-blue-500'
+                          )}
+                        >
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </motion.nav>
       )}
-    >
-      <div className="max-w-7xl mx-auto px-6 py-4">
-        <div className="flex items-center justify-between">
-          <button
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            className="text-t4 font-bold text-grey-900 hover:text-primary-500 transition-colors duration-300"
-            aria-label="페이지 최상단으로 이동"
-          >
-            Portfolio
-          </button>
-
-          <div className="hidden md:flex items-center gap-8">
-            {items.map((item) => (
-              <button
-                key={item.href}
-                onClick={() => scrollToSection(item.href)}
-                aria-current={activeSection === item.id ? 'page' : undefined}
-                aria-label={`${item.label} 섹션으로 이동`}
-                className={cn(
-                  'text-t6 font-medium transition-all duration-300 relative pb-2',
-                  activeSection === item.id
-                    ? 'text-blue-500'
-                    : 'text-grey-700 hover:text-primary-500',
-                  activeSection === item.id && 'after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary-500 after:transition-all after:duration-300'
-                )}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-
-          <IconButton
-            icon={<Icon name={isMobileMenuOpen ? 'close' : 'menu'} />}
-            variant="ghost"
-            className="md:hidden"
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            aria-label="Toggle menu"
-          />
-        </div>
-
-        {isMobileMenuOpen && (
-          <div className="md:hidden mt-4 pb-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-            {items.map((item) => (
-              <button
-                key={item.href}
-                onClick={() => scrollToSection(item.href)}
-                className={cn(
-                  'block w-full text-left text-t5 font-medium py-2 px-4 rounded-lg transition-all duration-300',
-                  activeSection === item.id
-                    ? 'bg-primary-50 text-primary-500 font-semibold'
-                    : 'text-grey-700 hover:bg-grey-50'
-                )}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </nav>
+    </AnimatePresence>
   );
 }

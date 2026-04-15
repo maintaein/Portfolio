@@ -1,212 +1,184 @@
 'use client';
 
 import { useState } from 'react';
-import { useIntersection } from '@/hooks';
+import { motion, AnimatePresence } from 'framer-motion';
 import Paragraph from '@/components/atoms/Paragraph';
 import Badge from '@/components/atoms/Badge';
 import SegmentedControl from '@/components/atoms/SegmentedControl';
+import { SectionHeader } from '@/components/blocks';
 import { Award, Certificate } from '@/types/index';
 import { awards, certificates } from '@/lib/data';
 
 type TabValue = 'awards' | 'certificates';
 
+const rankAccent = (rank?: string) => {
+  if (!rank) return { bar: 'bg-blue-400',    numColor: 'text-blue-300'    };
+  if (rank.includes('1') || rank.includes('최우수')) return { bar: 'bg-amber-400',  numColor: 'text-amber-200'  };
+  if (rank.includes('2') || rank.includes('우수'))   return { bar: 'bg-slate-400',  numColor: 'text-slate-300'  };
+  if (rank.includes('3') || rank.includes('장려'))   return { bar: 'bg-orange-400', numColor: 'text-orange-300' };
+  return { bar: 'bg-blue-400', numColor: 'text-blue-300' };
+};
+
 export default function AwardsAndCertificatesSection() {
   const [activeTab, setActiveTab] = useState<TabValue>('awards');
+  const [tabKey, setTabKey] = useState(0);
 
   const tabs = [
     { label: '수상 경력', value: 'awards' as TabValue },
-    { label: '자격증', value: 'certificates' as TabValue },
+    { label: '자격증',   value: 'certificates' as TabValue },
   ];
 
-  // 섹션 헤더 진입 감지
-  const { ref: headerRef, isIntersecting: isHeaderVisible } = useIntersection({
-    threshold: 0.5,
-    freezeOnceVisible: true
-  });
+  const handleTabChange = (value: string) => {
+    setActiveTab(value as TabValue);
+    setTabKey(prev => prev + 1);
+  };
+
+  const currentItems = activeTab === 'awards' ? awards : certificates;
 
   return (
     <section id="awards-certificates" className="py-12 sm:py-16 lg:py-20 bg-grey-50">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        <div 
-          ref={headerRef}
-          className={`mb-12 text-center transition-all duration-1000 ${
-            isHeaderVisible 
-              ? 'opacity-100 translate-y-0' 
-              : 'opacity-0 translate-y-8'
-          }`}
+      <div className="max-w-4xl mx-auto px-4 sm:px-6">
+        <SectionHeader
+          title="AWARDS & CERTIFICATES"
+          subtitle="다양한 경험을 통해 인정받은 성과들입니다"
+        />
+
+        {/* 탭 컨트롤 */}
+        <motion.div
+          className="mb-10 flex justify-center"
+          initial={{ opacity: 0, y: 10 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.5 }}
+          transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
         >
-          <Paragraph variant="t2" weight="bold" className="mb-3">
-            AWARDS & CERTIFICATES
-          </Paragraph>
-          <Paragraph variant="t5" color="grey-600">
-            다양한 경험을 통해 인정받은 성과들입니다
-          </Paragraph>
-        </div>
+          <SegmentedControl
+            options={tabs}
+            value={activeTab}
+            onChange={handleTabChange}
+            size="large"
+            fullWidth={false}
+          />
+        </motion.div>
 
-        <TabControlSection activeTab={activeTab} setActiveTab={setActiveTab} tabs={tabs} />
-
-        {activeTab === 'awards' && (
-          <ItemsContainer items={awards} itemType="award" />
-        )}
-
-        {activeTab === 'certificates' && (
-          <ItemsContainer items={certificates} itemType="certificate" />
-        )}
+        {/* 아이템 목록 */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={tabKey}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="space-y-3"
+          >
+            {currentItems.map((item, index) => (
+              <motion.div
+                key={item.id}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: index * 0.07, ease: [0.22, 1, 0.36, 1] }}
+              >
+                {activeTab === 'awards'
+                  ? <AwardItem item={item as Award} index={index} />
+                  : <CertItem item={item as Certificate} index={index} />
+                }
+              </motion.div>
+            ))}
+          </motion.div>
+        </AnimatePresence>
       </div>
-
-      <style jsx>{`
-        @keyframes fadeInUp {
-          from {
-            opacity: 0;
-            transform: translateY(30px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-      `}</style>
     </section>
   );
 }
 
-interface TabControlSectionProps {
-  activeTab: TabValue;
-  setActiveTab: (tab: TabValue) => void;
-  tabs: Array<{ label: string; value: TabValue }>;
-}
-
-function TabControlSection({ activeTab, setActiveTab, tabs }: TabControlSectionProps) {
-  const { ref, isIntersecting } = useIntersection({
-    threshold: 0.5,
-    freezeOnceVisible: true
-  });
+function AwardItem({ item, index }: { item: Award; index: number }) {
+  const accent = rankAccent(item.rank);
 
   return (
-    <div
-      ref={ref}
-      className={`mb-8 flex justify-center transition-all duration-1000 ${
-        isIntersecting
-          ? 'opacity-100 scale-100'
-          : 'opacity-0 scale-95'
-      }`}
-    >
-      <SegmentedControl
-        options={tabs}
-        value={activeTab}
-        onChange={(value) => setActiveTab(value as TabValue)}
-        size="large"
-        fullWidth={false}
-      />
-    </div>
-  );
-}
+    <div className="flex gap-0 bg-white rounded-2xl overflow-hidden border border-grey-100 shadow-sm">
+      {/* 왼쪽 accent bar + 순번 */}
+      <div className={`w-1.5 flex-shrink-0 ${accent.bar}`} />
 
-interface ItemsContainerProps {
-  items: (Award | Certificate)[];
-  itemType: 'award' | 'certificate';
-}
+      <div className="flex-1 px-5 py-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3 flex-1 min-w-0">
+            {/* 순번 */}
+            <span className={`text-[28px] font-black leading-none ${accent.numColor} select-none flex-shrink-0 mt-0.5`}>
+              {String(index + 1).padStart(2, '0')}
+            </span>
 
-function ItemsContainer({ items, itemType }: ItemsContainerProps) {
-  return (
-    <div className="space-y-4">
-      {items.map((item, index) => (
-        <AnimatedItem 
-          key={item.id}
-          item={item}
-          index={index}
-          itemType={itemType}
-        />
-      ))}
-    </div>
-  );
-}
-
-interface AnimatedItemProps {
-  item: Award | Certificate;
-  index: number;
-  itemType: 'award' | 'certificate';
-}
-
-function AnimatedItem({ item, index }: AnimatedItemProps) {
-  const { ref, isIntersecting } = useIntersection({
-    threshold: 0.1,
-    freezeOnceVisible: true
-  });
-
-  // Award인지 Certificate인지 타입 체크
-  const isAward = (item: Award | Certificate): item is Award => 'rank' in item;
-
-  return (
-    <div
-      ref={ref}
-      className={`bg-white border border-grey-200 rounded-xl p-6 hover:shadow-lg hover:border-primary-300 transition-all duration-700 transform ${
-        isIntersecting
-          ? 'opacity-100 translate-x-0 scale-100'
-          : 'opacity-0 -translate-x-8 scale-95'
-      }`}
-      style={{
-        transitionDelay: isIntersecting ? `${index * 0.1}s` : '0s',
-        transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)'
-      }}
-    >
-      {isAward(item) ? (
-        // 수상 경력 아이템
-        <div>
-          <div className="flex items-start justify-between mb-3">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
                 {item.rank && (
-                  <span className="text-xl sm:text-2xl whitespace-nowrap">{item.rank}</span>
+                  <span className="text-[13px] font-bold text-grey-400">{item.rank}</span>
                 )}
-                <Paragraph variant="t4" weight="bold">
+                <Paragraph variant="t4" weight="bold" className="leading-snug">
                   {item.title}
                 </Paragraph>
               </div>
-              <Paragraph variant="t6" color="grey-600" className="mb-1">
+              <Paragraph variant="t6" color="grey-500">
                 {item.organization}
               </Paragraph>
-            </div>
-            <Badge color="blue" variant="weak" size="small">
-              {item.date}
-            </Badge>
-          </div>
-          {item.description && (
-            <Paragraph variant="t6" color="grey-700" className="leading-relaxed">
-              {item.description}
-            </Paragraph>
-          )}
-        </div>
-      ) : (
-        // 자격증 아이템
-        <div>
-          <div className="flex items-start justify-between mb-2">
-            <Paragraph variant="t4" weight="bold">
-              {item.name}
-            </Paragraph>
-            <Badge color="green" variant="weak" size="small">
-              {item.date}
-            </Badge>
-          </div>
-          <Paragraph variant="t6" color="grey-600" className="mb-2">
-            {item.organization}
-          </Paragraph>
-          {(item.validUntil || item.credentialId) && (
-            <div className="flex gap-4 text-sm text-grey-500">
-              {item.validUntil && (
-                <Paragraph variant="t7" color="grey-500">
-                  유효기간: {item.validUntil}
-                </Paragraph>
-              )}
-              {item.credentialId && (
-                <Paragraph variant="t7" color="grey-500">
-                  ID: {item.credentialId}
+              {item.description && (
+                <Paragraph variant="t6" color="grey-600" className="mt-2 leading-relaxed">
+                  {item.description}
                 </Paragraph>
               )}
             </div>
-          )}
+          </div>
+
+          {/* 날짜 badge */}
+          <Badge color="blue" variant="weak" size="small" className="flex-shrink-0 mt-0.5">
+            {item.date}
+          </Badge>
         </div>
-      )}
+      </div>
+    </div>
+  );
+}
+
+function CertItem({ item, index }: { item: Certificate; index: number }) {
+  return (
+    <div className="flex gap-0 bg-white rounded-2xl overflow-hidden border border-grey-100 shadow-sm">
+      {/* 왼쪽 accent bar */}
+      <div className="w-1.5 flex-shrink-0 bg-emerald-400" />
+
+      <div className="flex-1 px-5 py-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3 flex-1 min-w-0">
+            {/* 순번 */}
+            <span className="text-[28px] font-black leading-none text-emerald-200 select-none flex-shrink-0 mt-0.5">
+              {String(index + 1).padStart(2, '0')}
+            </span>
+
+            <div className="flex-1 min-w-0">
+              <Paragraph variant="t4" weight="bold" className="mb-1 leading-snug">
+                {item.name}
+              </Paragraph>
+              <Paragraph variant="t6" color="grey-500" className="mb-1">
+                {item.organization}
+              </Paragraph>
+              {(item.validUntil || item.credentialId) && (
+                <div className="flex gap-4 mt-1.5">
+                  {item.validUntil && (
+                    <Paragraph variant="t7" color="grey-500">
+                      유효기간: {item.validUntil}
+                    </Paragraph>
+                  )}
+                  {item.credentialId && (
+                    <Paragraph variant="t7" color="grey-500">
+                      ID: {item.credentialId}
+                    </Paragraph>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <Badge color="green" variant="weak" size="small" className="flex-shrink-0 mt-0.5">
+            {item.date}
+          </Badge>
+        </div>
+      </div>
     </div>
   );
 }

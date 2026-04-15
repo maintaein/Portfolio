@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useIntersection } from '@/hooks';
+import { motion } from 'framer-motion';
 import { CoreValue } from '@/types';
 import { coreValues } from '@/lib/data';
 import { TechParticleStorm, EmpathyRadar, CollaborationMesh } from '@/components/blocks';
@@ -10,10 +10,10 @@ export default function AboutSection() {
   return (
     <section id="about" aria-labelledby="about-heading" className="py-16 sm:py-20 lg:py-24 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        
+
         <HeaderSection />
 
-        <div className="space-y-12 sm:space-y-16 lg:space-y-20">
+        <div className="space-y-20 sm:space-y-24 lg:space-y-32">
           {coreValues.map((value, index) => (
             <CoreValueCard key={value.id} value={value} index={index} />
           ))}
@@ -24,10 +24,6 @@ export default function AboutSection() {
 }
 
 function HeaderSection() {
-  const { ref, isIntersecting } = useIntersection({
-    threshold: 0.5,
-    freezeOnceVisible: true
-  });
   const [copiedItem, setCopiedItem] = useState<string | null>(null);
 
   const githubUrl = 'https://github.com/maintaein';
@@ -48,13 +44,12 @@ function HeaderSection() {
   };
 
   return (
-    <div
-      ref={ref}
-      className={`text-center mb-16 sm:mb-20 lg:mb-24 transition-all duration-1000 ${
-        isIntersecting
-          ? 'opacity-100 translate-y-0'
-          : 'opacity-0 translate-y-8'
-      }`}
+    <motion.div
+      className="text-center mb-16 sm:mb-20 lg:mb-28"
+      initial={{ opacity: 0, y: 28 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.4 }}
+      transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
     >
       <h2 id="about-heading" className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold mb-6 sm:mb-8">
         About{' '}
@@ -92,8 +87,7 @@ function HeaderSection() {
           </button>
         </div>
 
-        {/* Divider */}
-        <div className="hidden sm:block w-px h-6 bg-gray-300"></div>
+        <div className="hidden sm:block w-px h-6 bg-gray-300" />
 
         {/* Email */}
         <div className="flex items-center gap-2 group">
@@ -123,9 +117,11 @@ function HeaderSection() {
           </button>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
+
+const ORDINALS = ['01', '02', '03'];
 
 interface CoreValueCardProps {
   value: CoreValue;
@@ -133,45 +129,50 @@ interface CoreValueCardProps {
 }
 
 function CoreValueCard({ value, index }: CoreValueCardProps) {
-  const { ref, isIntersecting } = useIntersection({
-    threshold: 0.2,
-    freezeOnceVisible: true
-  });
-
   const isEven = index % 2 === 0;
 
   return (
-    <div
-      ref={ref}
-      className={`flex flex-col ${
-        isEven ? 'lg:flex-row' : 'lg:flex-row-reverse'
-      } gap-8 lg:gap-12 items-center transition-all duration-1000 transform ${
-        isIntersecting
-          ? 'opacity-100 translate-x-0'
-          : isEven
-            ? 'opacity-0 -translate-x-8 sm:-translate-x-12'
-            : 'opacity-0 translate-x-8 sm:translate-x-12'
-      }`}
-      style={{
-        transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)'
-      }}
+    <motion.div
+      className={`flex flex-col ${isEven ? 'lg:flex-row' : 'lg:flex-row-reverse'} gap-8 lg:gap-16 items-center group`}
+      initial={{ opacity: 0, x: isEven ? -40 : 40 }}
+      whileInView={{ opacity: 1, x: 0 }}
+      viewport={{ once: true, amount: 0.2 }}
+      transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
     >
-      <div className="w-full lg:w-1/2">
+      {/* 비주얼 영역 */}
+      <motion.div
+        className="w-full lg:w-1/2"
+        whileHover={{ scale: 1.015 }}
+        transition={{ duration: 0.4, ease: 'easeOut' }}
+      >
         <div className="relative aspect-square max-w-[500px] mx-auto">
           {value.imagePlaceholder === 'tech-stack' && <TechParticleStorm />}
           {value.imagePlaceholder === 'ux-focus' && <EmpathyRadar />}
           {value.imagePlaceholder === 'collaboration' && <CollaborationMesh />}
         </div>
-      </div>
+      </motion.div>
 
-      <div className="w-full lg:w-1/2 space-y-4">
-        <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900">
-          {value.title}
-        </h3>
-        <p className="text-base sm:text-lg lg:text-xl text-gray-600 leading-relaxed">
+      {/* 텍스트 영역 */}
+      <div className="w-full lg:w-1/2 space-y-5 relative">
+        {/* 대형 배경 순번 — 장식용, 텍스트 뒤에 깔림 */}
+        <span
+          className="absolute -top-6 -left-2 text-[7rem] sm:text-[9rem] font-black leading-none select-none pointer-events-none"
+          style={{ color: 'rgba(49,130,246,0.055)' }}
+          aria-hidden="true"
+        >
+          {ORDINALS[index]}
+        </span>
+
+        <div className="relative">
+          <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 leading-tight">
+            {value.title}
+          </h3>
+        </div>
+
+        <p className="text-base sm:text-lg text-gray-500 leading-relaxed">
           {value.description}
         </p>
       </div>
-    </div>
+    </motion.div>
   );
 }

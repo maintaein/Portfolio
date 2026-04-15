@@ -4,7 +4,7 @@ export const coreValues: CoreValue[] = [
     {
       id: '1',
       title: '새로움을 즐기는 개발자',
-      description: '새로운 기술과 트렌드를 빠르게 습득하고, 프로젝트에 적극 도입합니다. React와 Typescript를 주로 사용하며, 최근 Next.js와 테스트 자동화에 관심이 많습니다.',
+      description: '새로운 기술과 트렌드에 관심이 많으며, 프로젝트에 적극 도입합니다. React와 Typescript를 주로 사용합니다.',
       imagePlaceholder: 'tech-stack'
     },
     {
@@ -53,16 +53,9 @@ export const certificates: Certificate[] = [
     {
       id: '1',
       name: 'OPIC IH',
-      organization: '한국산업인력공단',
+      organization: 'ACTFL',
       date: '2025. 03',
       validUntil: '2027. 03',
-    },
-    {
-      id: '2',
-      name: 'TOEIC 850',
-      organization: 'Amazon Web Services',
-      date: '2024. 03',
-      validUntil: '2026. 03',
     },
   ];
   

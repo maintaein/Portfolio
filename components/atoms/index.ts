@@ -21,3 +21,6 @@ export { SkeletonText, SkeletonCard, SkeletonAvatar } from './Skeleton';
 
 // Content 관련
 export { default as Post } from './Post';
+
+// Overlay 관련
+export { default as Tooltip } from './Tooltip';

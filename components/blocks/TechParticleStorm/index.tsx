@@ -167,7 +167,7 @@ function TechIconElement({ icon, index, isActive, isHovered, onHover, onLeave }:
           className={`relative w-full h-full rounded-lg bg-white shadow-md flex items-center justify-center p-2 transition-all duration-300 ${
             isActive ? 'animate-float' : ''
           } ${
-            isHovered ? 'scale-110 shadow-xl ring-2 ring-purple-400' : ''
+            isHovered ? 'scale-110 shadow-xl' : ''
           }`}
           style={{
             animationDelay: `${index * 0.15}s`,

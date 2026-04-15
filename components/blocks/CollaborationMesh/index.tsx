@@ -34,11 +34,11 @@ export default function CollaborationMesh() {
 
   const connections: Connection[] = [
     { from: 'github', to: 'jira', pulseDelay: 0 },
-    { from: 'github', to: 'figma', pulseDelay: 0.5 },
     { from: 'github', to: 'notion', pulseDelay: 1 },
     { from: 'jira', to: 'figma', pulseDelay: 1.5 },
-    { from: 'jira', to: 'notion', pulseDelay: 2 },
     { from: 'figma', to: 'notion', pulseDelay: 2.5 },
+    { from: 'github', to: 'figma', pulseDelay: 0.5 },
+    { from: 'jira', to: 'notion', pulseDelay: 2 },
   ];
 
   return (
@@ -61,8 +61,17 @@ export default function CollaborationMesh() {
       </div>
 
       <div className="absolute inset-0">
-        <svg className="w-full h-full" viewBox="0 0 100 100" style={{ zIndex: 1 }}>
-          {connections.map((conn, index) => {
+        <svg
+          className="w-full h-full"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          style={{ zIndex: 1 }}
+        >
+          <defs>
+            {/* gradientUnits="userSpaceOnUse" 없이 수평 그라디언트를 정의하면 수직/대각선 선에 색이 안 보임 */}
+          </defs>
+
+          {connections.map((conn) => {
             const fromTool = tools.find((t) => t.id === conn.from)!;
             const toTool = tools.find((t) => t.id === conn.to)!;
 
@@ -70,14 +79,12 @@ export default function CollaborationMesh() {
               hoveredTool === conn.from || hoveredTool === conn.to;
 
             return (
-              <ConnectionLine
+              <ConnectionCurve
                 key={`${conn.from}-${conn.to}`}
                 from={fromTool}
                 to={toTool}
                 isActive={isIntersecting}
                 isHighlighted={isHighlighted}
-                pulseDelay={conn.pulseDelay}
-                index={index}
               />
             );
           })}
@@ -129,7 +136,7 @@ function CollabToolCard({ tool, isActive, isHovered, onHover, onLeave }: CollabT
         className={`relative w-20 h-20 md:w-24 md:h-24 bg-white rounded-2xl shadow-lg flex flex-col items-center justify-center cursor-pointer transition-all duration-300 ${
           isActive ? 'animate-bob' : ''
         } ${
-          isHovered ? 'scale-110 shadow-2xl ring-2 ring-green-400' : ''
+          isHovered ? 'scale-110 shadow-2xl' : ''
         }`}
         style={{
           animationDelay: `${tool.bobDelay}s`,
@@ -159,29 +166,53 @@ function CollabToolCard({ tool, isActive, isHovered, onHover, onLeave }: CollabT
   );
 }
 
-interface ConnectionLineProps {
+interface ConnectionCurveProps {
   from: CollabTool;
   to: CollabTool;
   isActive: boolean;
   isHighlighted: boolean;
-  pulseDelay: number;
-  index: number;
 }
 
-function ConnectionLine({ from, to, isActive, isHighlighted }: ConnectionLineProps) {
+function ConnectionCurve({ from, to, isActive, isHighlighted }: ConnectionCurveProps) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const length = Math.sqrt(dx * dx + dy * dy) || 1;
+
+  // 거리 기반 두께/불투명도 — 짧은 연결은 또렷하게, 긴 대각선은 부드럽게
+  const isLong = length > 60;
+  const baseWidth = isLong ? 0.55 : 0.85;
+  const baseOpacity = isLong ? 0.45 : 0.75;
+
   return (
-    <g>
+    <g
+      className="transition-opacity duration-500"
+      style={{ opacity: isActive ? 1 : 0 }}
+    >
+      {isHighlighted && (
+        <line
+          x1={`${from.x}%`}
+          y1={`${from.y}%`}
+          x2={`${to.x}%`}
+          y2={`${to.y}%`}
+          stroke="rgb(34, 197, 94)"
+          strokeWidth={2.5}
+          strokeLinecap="round"
+          opacity={0.25}
+          style={{ filter: 'blur(1.5px)' }}
+          vectorEffect="non-scaling-stroke"
+        />
+      )}
       <line
         x1={`${from.x}%`}
         y1={`${from.y}%`}
         x2={`${to.x}%`}
         y2={`${to.y}%`}
-        stroke={isHighlighted ? 'rgba(34, 197, 94, 0.8)' : 'rgba(34, 197, 94, 0.2)'}
-        strokeWidth={isHighlighted ? '3' : '2'}
-        className="transition-all duration-300"
-        style={{
-          opacity: isActive ? 1 : 0,
-        }}
+        stroke={isHighlighted ? 'rgba(34, 197, 94, 1)' : 'rgba(34, 197, 94, 0.3)'}
+        strokeWidth={isHighlighted ? 1.6 : baseWidth}
+        strokeLinecap="round"
+        opacity={isHighlighted ? 1 : baseOpacity}
+        className="transition-all duration-300 ease-out"
+        vectorEffect="non-scaling-stroke"
       />
     </g>
   );
