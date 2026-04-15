@@ -23,11 +23,11 @@ export default function Tooltip({ content, children, position = 'top', className
       {children}
 
       <AnimatePresence>
-        {isVisible && (
+        {isVisible && content && (
           <motion.div
             role="tooltip"
             className={cn(
-              'absolute left-1/2 z-50 w-max max-w-[160px]',
+              'absolute left-1/2 z-50 w-max max-w-[220px]',
               'px-2.5 py-1.5 rounded-lg',
               'bg-grey-900 text-white text-t7',
               'shadow-lg pointer-events-none',
@@ -39,7 +39,6 @@ export default function Tooltip({ content, children, position = 'top', className
             transition={{ duration: 0.15, ease: 'easeOut' }}
           >
             {content}
-            {/* 화살표 */}
             <span
               className={cn(
                 'absolute left-1/2 -translate-x-1/2 w-0 h-0',
