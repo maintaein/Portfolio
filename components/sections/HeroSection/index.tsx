@@ -28,7 +28,7 @@ const BOOT_SEQUENCE: TerminalLine[] = [
   { type: 'output',  text: '> Building interface...', delay: 110 },
   { type: 'output',  text: '✓ Components compiled  (0.8s)', delay: 230 },
   { type: 'output',  text: '✓ Animations ready     (0.2s)', delay: 190 },
-  { type: 'output',  text: '✓ Portfolio is live  →  http://localhost:3000', delay: 200 },
+  { type: 'output',  text: '✓ Portfolio is live  →  https://kimtaein.vercel.app/', delay: 200 },
 ];
 
 const NPM_RUN_IDX = 11;
@@ -49,7 +49,6 @@ interface HeroSectionProps {
   burstPhase?: 'idle' | 'burst' | 'done';
 }
 
-// ===== 태양 플레어 Canvas =====
 // 번개 제거 → 부드러운 곡선 플레어 (베지어 기반)
 // border 4면에서 시작해 바깥으로 뻗어나가다 사라짐
 interface FlareCanvasProps {
@@ -369,7 +368,7 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
   const [lines, setLines] = useState<DisplayLine[]>([]);
   const [sequenceIdx, setSequenceIdx] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
-  const [isRunningNpm, setIsRunningNpm] = useState(false);
+  const [isBuilding, setIsBuilding] = useState(false);
   const [chargeLevel, setChargeLevel] = useState(0);
   const [termRect, setTermRect] = useState<DOMRect | null>(null);
   const [impactActive, setImpactActive] = useState(false);
@@ -463,8 +462,8 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
 
     const seq = BOOT_SEQUENCE[sequenceIdx];
 
-    if (sequenceIdx === NPM_RUN_IDX) setIsRunningNpm(false);
-    if (sequenceIdx === NPM_RUN_IDX + 1) setIsRunningNpm(true);
+    if (sequenceIdx === NPM_RUN_IDX) setIsBuilding(false);
+    if (sequenceIdx === NPM_RUN_IDX + 1) setIsBuilding(true);
 
     if (sequenceIdx <= NPM_RUN_IDX) {
       setChargeLevel(sequenceIdx / NPM_RUN_IDX);
@@ -625,17 +624,7 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
       {/* 메인 컨테이너 */}
       <div className="relative z-10 w-full max-w-2xl mx-auto px-4 sm:px-6 flex flex-col items-center">
 
-        <motion.div
-          className="mb-6 flex items-center gap-2"
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.15 }}
-        >
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-100 text-blue-600 text-xs font-medium tracking-wide">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-            PORTFOLIO BOOT SEQUENCE
-          </span>
-        </motion.div>
+        <div className="mb-6 h-5" aria-hidden="true" />
 
         {/* 터미널 윈도우 — z-15 */}
         <motion.div
@@ -662,27 +651,41 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
             <span className="ml-3 text-[11px] text-slate-500 font-mono tracking-wide select-none">
               kimtaein ~ zsh
             </span>
-            {isRunningNpm && !isComplete && (
+          </div>
+
+          {/* CLI 고정 높이 + building overlay 래퍼 */}
+          <div className="relative">
+          {/* building progress 오버레이 — CLI 전체를 덮음 */}
+          <AnimatePresence>
+            {isBuilding && !isComplete && (
               <motion.div
-                className="ml-auto flex items-center gap-2"
+                className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 rounded-b-2xl"
+                style={{
+                  background: 'rgba(14,19,32,0.38)',
+                  backdropFilter: 'blur(3px)',
+                  WebkitBackdropFilter: 'blur(3px)',
+                }}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.25 }}
               >
-                <div className="w-24 h-[3px] rounded-full bg-slate-700 overflow-hidden">
+                <span className="text-[11px] text-blue-300 font-mono tracking-[0.18em] uppercase select-none">
+                  Building...
+                </span>
+                <div className="w-48 sm:w-64 h-[3px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
                   <motion.div
                     className="h-full rounded-full"
-                    style={{ background: 'linear-gradient(90deg, #3182f6, #64a8ff)' }}
+                    style={{ background: 'linear-gradient(90deg, #3182f6, #64a8ff, #90c2ff)' }}
                     initial={{ width: '0%' }}
                     animate={{ width: '100%' }}
                     transition={{ duration: 2.2, ease: 'easeInOut' }}
                   />
                 </div>
-                <span className="text-[10px] text-blue-400 font-mono">building...</span>
               </motion.div>
             )}
-          </div>
+          </AnimatePresence>
 
-          {/* CLI 고정 높이 — CLI_HEIGHT 상수로 조정 */}
           <div className="p-5 sm:p-6 font-mono text-[13px] sm:text-sm" style={{ height: CLI_HEIGHT, overflow: 'hidden' }}>
             <AnimatePresence initial={false}>
               {lines.map((line) => (
@@ -729,6 +732,7 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
                 />
               </motion.div>
             )}
+          </div>
           </div>
         </motion.div>
 
