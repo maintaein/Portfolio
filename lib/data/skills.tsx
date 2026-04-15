@@ -2,8 +2,8 @@ import { SkillCategory } from "@/types";
 
 export const skillCategories: SkillCategory[] = [
     {
-      id: 'language',
-      label: 'Language',
+      id: 'Programing Languages',
+      label: 'Programing Languages',
       icon: (
         <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
@@ -29,30 +29,25 @@ export const skillCategories: SkillCategory[] = [
         {
           name: 'Java',
           icon: '/icons/Java.png',
-          experience: '객체지향 프로그래밍 기반 애플리케이션 개발, 컬렉션 프레임워크 활용 및 성능 최적화 경험 보유유.'
-        },
-        {
-          name: 'Kotlin',
-          icon: '/icons/Kotlin.png',
-          experience: '객체지향 프로그래밍 기반 애플리케이션 개발, 컬렉션 프레임워크 활용 및 성능 최적화 경험 보유유.'
-        },
-        {
-          name: 'SQL',
-          icon: '/icons/SQL.png',
-          experience: '객체지향 프로그래밍 기반 애플리케이션 개발, 컬렉션 프레임워크 활용 및 성능 최적화 경험 보유유.'
+          experience: '객체지향 프로그래밍 기반 애플리케이션 개발, 컬렉션 프레임워크 활용 및 성능 최적화 경험 보유.'
         },
       ]
     },
     {
-      id: 'frontend',
-      label: 'Frontend',
+      id: 'Framework / Library',
+      label: 'Framework / Library',
       icon: (
         <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
         </svg>
       ),
-      description: '프론트엔드',
+      description: '프레임워크 및 라이브러리',
       skills: [
+        {
+          name: 'Node.js',
+          icon: '/icons/nodejs.png',
+          experience: 'Express 기반 REST API 서버 구현, 미들웨어 체계 구성 및 비동기 이벤트 루프 활용 경험.'
+        },
         {
           name: 'React',
           icon: '/icons/React.png',
@@ -79,51 +74,31 @@ export const skillCategories: SkillCategory[] = [
           experience: '전역 상태 관리 및 스토어 구조 설계 경험 보유.'
         },
         {
-          name: 'Headless UI',
-          icon: '/icons/headless.png',
-          experience: 'Tailwind CSS와 조합하여 UI 컴포넌트 구현 경험'
+          name: 'Spring Framework',
+          icon: '/icons/Spring.png',
+          experience: 'MVC 패턴을 이해하고 REST API 구현 및 HTTP 요청 처리 가능.'
         },
-        {
-          name: 'Jetpack Compose',
-          icon: '/icons/Jetpack.png',
-          experience: 'Kotlin기반의 선언적 UI 라이브러리 활용 가능'
-        },
-        {
-          name: 'HTML5',
-          icon: '/icons/HTML.png',
-          experience: '시맨틱 마크업, 웹 접근성(WAI-ARIA) 준수, SEO 최적화 마크업 작성.'
-        },
-        {
-          name: 'CSS3',
-          icon: '/icons/CSS.png',
-          experience: 'Flexbox, Grid 레이아웃, 애니메이션, 반응형 디자인 구현 경험.'
-        }
       ]
     },
     {
-      id: 'backend',
-      label: 'Backend',
+      id: 'server',
+      label: 'Server',
       icon: (
         <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
         </svg>
       ),
-      description: '백엔드',
+      description: '서버',
       skills: [
-        {
-          name: 'Spring Framework',
-          icon: '/icons/Spring.png',
-          experience: 'MVC 패턴을 이해하고 REST API 구현 및 HTTP 요청 처리 가능.'
-        },
         {
           name: 'MySQL',
           icon: '/icons/MySQL.png',
           experience: '데이터 모델링 및 정규화된 스키마 설계 경험.'
         },
         {
-          name: 'Express.js',
-          icon: '/icons/express.png',
-          experience: 'Node.js 기반의 RESTful API 서버 설계 및 구축 이해.'
+          name: 'Linux',
+          icon: '/icons/linux.png',
+          experience: '리눅스 서버 구축 및 통신체계 이해.'
         }
       ]
     },
