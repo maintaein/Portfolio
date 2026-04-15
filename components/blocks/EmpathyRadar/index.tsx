@@ -147,7 +147,7 @@ function UXCardElement({ card, isActive, isHovered, onHover, onLeave }: UXCardEl
         className={`relative w-12 h-12 md:w-14 md:h-14 bg-white rounded-xl shadow-md flex items-center justify-center cursor-pointer transition-all duration-300 ${
           isActive ? 'animate-float' : ''
         } ${
-          isHovered ? 'scale-110 shadow-xl ring-2 ring-blue-400' : ''
+          isHovered ? 'scale-110 shadow-xl' : ''
         }`}
         style={{
           animationDelay: `${card.delay * 0.5}s`,

@@ -164,25 +164,6 @@ function CoreValueCard({ value, index }: CoreValueCardProps) {
         </span>
 
         <div className="relative">
-          {/* 제목 위 gradient 강조 라인 — hover 시 확장 */}
-          <div
-            className="h-[3px] rounded-full mb-4 transition-all duration-500 ease-out"
-            style={{
-              width: '3rem',
-              background: 'linear-gradient(90deg, #3182f6, #64a8ff)',
-            }}
-          >
-            {/* group-hover로 width 확장 — inline style 대신 CSS custom prop 활용 */}
-          </div>
-          {/* hover 확장 라인은 sibling 위에 absolute로 오버레이 */}
-          <div
-            className="absolute top-0 left-0 h-[3px] rounded-full opacity-0 group-hover:opacity-100 transition-all duration-500 ease-out"
-            style={{
-              width: '5rem',
-              background: 'linear-gradient(90deg, #3182f6, #93c5fd)',
-            }}
-          />
-
           <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 leading-tight">
             {value.title}
           </h3>
