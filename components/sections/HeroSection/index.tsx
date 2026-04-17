@@ -500,6 +500,28 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
       className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden"
       style={{ background: 'linear-gradient(150deg, #eef4ff 0%, #f8faff 55%, #edf3ff 100%)' }}
     >
+      {/* LCP 앵커 h1 — SSR HTML에 즉시 존재, Chrome이 LCP 후보로 채택
+          color: rgba(...,0.01) → opacity:0이 아니므로 LCP 계산 포함되지만 시각적으로 배경과 동일 */}
+      <h1
+        id="hero-title"
+        style={{
+          position: 'absolute',
+          top: '62%',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          fontSize: 'clamp(1.5rem, 3vw, 2.25rem)',
+          fontWeight: 700,
+          color: 'rgba(238,244,255,0.01)',
+          pointerEvents: 'none',
+          zIndex: 0,
+          userSelect: 'none',
+          whiteSpace: 'nowrap',
+          margin: 0,
+        }}
+      >
+        프론트엔드 개발자 김태인
+      </h1>
+
       {/* dot grid 배경 */}
       <div
         className="absolute inset-0 pointer-events-none"
@@ -735,7 +757,7 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
           animate={isComplete ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
           transition={{ duration: 0.75, delay: 0.25, ease: [0.22, 1, 0.36, 1] }}
         >
-          <h1 id="hero-title" className="text-2xl sm:text-3xl md:text-4xl font-bold text-grey-900 mb-3">
+          <h1 aria-hidden="true" className="text-2xl sm:text-3xl md:text-4xl font-bold text-grey-900 mb-3">
             프론트엔드 개발자{' '}
             <span className="bg-gradient-to-r from-blue-600 to-blue-400 bg-clip-text text-transparent">
               김태인

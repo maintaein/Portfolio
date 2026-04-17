@@ -2,6 +2,10 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  experimental: {
+    // framer-motion, heroicons, headlessui tree-shaking 강화 — legacy polyfill 제거
+    optimizePackageImports: ['framer-motion', '@heroicons/react', '@headlessui/react'],
+  },
   images: {
     remotePatterns: [
       {
