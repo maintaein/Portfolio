@@ -435,7 +435,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                       <p className="text-[13px] font-medium text-blue-600 mb-2 leading-snug">{project.subtitle}</p>
                     )}
                     {project.longDescription && (
-                      <p className="text-[12px] text-grey-600 leading-relaxed mb-4">{project.longDescription}</p>
+                      <RichText text={project.longDescription} className="text-[12px] text-grey-600 leading-relaxed mb-4 block" />
                     )}
                     <div className="flex flex-wrap gap-x-6 gap-y-2">
                       {project.duration && (

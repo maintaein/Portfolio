@@ -12,11 +12,11 @@ import { awards, certificates } from '@/lib/data';
 type TabValue = 'awards' | 'certificates';
 
 const rankAccent = (rank?: string) => {
-  if (!rank) return { bar: 'bg-blue-400',    numColor: 'text-blue-300'    };
-  if (rank.includes('1') || rank.includes('최우수')) return { bar: 'bg-amber-400',  numColor: 'text-amber-200'  };
-  if (rank.includes('2') || rank.includes('우수'))   return { bar: 'bg-slate-400',  numColor: 'text-slate-300'  };
-  if (rank.includes('3') || rank.includes('장려'))   return { bar: 'bg-orange-400', numColor: 'text-orange-300' };
-  return { bar: 'bg-blue-400', numColor: 'text-blue-300' };
+  if (!rank) return { bar: 'bg-blue-400', rankColor: 'text-blue-600', rankBg: 'bg-blue-50' };
+  if (rank.includes('1') || rank.includes('최우수')) return { bar: 'bg-amber-400',  rankColor: 'text-amber-600',  rankBg: 'bg-amber-50'  };
+  if (rank.includes('2') || rank.includes('우수'))   return { bar: 'bg-slate-400',  rankColor: 'text-slate-600',  rankBg: 'bg-slate-50'  };
+  if (rank.includes('3') || rank.includes('장려'))   return { bar: 'bg-orange-400', rankColor: 'text-orange-600', rankBg: 'bg-orange-50' };
+  return { bar: 'bg-blue-400', rankColor: 'text-blue-600', rankBg: 'bg-blue-50' };
 };
 
 export default function AwardsAndCertificatesSection() {
@@ -90,40 +90,36 @@ export default function AwardsAndCertificatesSection() {
   );
 }
 
-function AwardItem({ item, index }: { item: Award; index: number }) {
+function AwardItem({ item }: { item: Award; index: number }) {
   const accent = rankAccent(item.rank);
 
   return (
     <div className="flex gap-0 bg-white rounded-2xl overflow-hidden border border-grey-100 shadow-sm">
-      {/* 왼쪽 accent bar + 순번 */}
+      {/* 왼쪽 accent bar */}
       <div className={`w-1.5 flex-shrink-0 ${accent.bar}`} />
 
       <div className="flex-1 px-5 py-4">
         <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-3 flex-1 min-w-0">
-            {/* 순번 */}
-            <span className={`text-[28px] font-black leading-none ${accent.numColor} select-none flex-shrink-0 mt-0.5`}>
-              {String(index + 1).padStart(2, '0')}
-            </span>
-
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap mb-1">
-                {item.rank && (
-                  <span className="text-[13px] font-bold text-grey-400">{item.rank}</span>
-                )}
-                <Paragraph variant="t4" weight="bold" className="leading-snug">
-                  {item.title}
-                </Paragraph>
-              </div>
-              <Paragraph variant="t6" color="grey-500">
-                {item.organization}
-              </Paragraph>
-              {item.description && (
-                <Paragraph variant="t6" color="grey-600" className="mt-2 leading-relaxed">
-                  {item.description}
-                </Paragraph>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-1.5">
+              {/* 수상 등급 강조 배지 */}
+              {item.rank && (
+                <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[13px] font-bold ${accent.rankColor} ${accent.rankBg}`}>
+                  {item.rank}
+                </span>
               )}
+              <Paragraph variant="t4" weight="bold" className="leading-snug">
+                {item.title}
+              </Paragraph>
             </div>
+            <Paragraph variant="t6" color="grey-500">
+              {item.organization}
+            </Paragraph>
+            {item.description && (
+              <Paragraph variant="t6" color="grey-600" className="mt-2 leading-relaxed">
+                {item.description}
+              </Paragraph>
+            )}
           </div>
 
           {/* 날짜 badge */}
@@ -136,7 +132,7 @@ function AwardItem({ item, index }: { item: Award; index: number }) {
   );
 }
 
-function CertItem({ item, index }: { item: Certificate; index: number }) {
+function CertItem({ item }: { item: Certificate; index: number }) {
   return (
     <div className="flex gap-0 bg-white rounded-2xl overflow-hidden border border-grey-100 shadow-sm">
       {/* 왼쪽 accent bar */}
@@ -144,13 +140,7 @@ function CertItem({ item, index }: { item: Certificate; index: number }) {
 
       <div className="flex-1 px-5 py-4">
         <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-3 flex-1 min-w-0">
-            {/* 순번 */}
-            <span className="text-[28px] font-black leading-none text-emerald-200 select-none flex-shrink-0 mt-0.5">
-              {String(index + 1).padStart(2, '0')}
-            </span>
-
-            <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0">
               <Paragraph variant="t4" weight="bold" className="mb-1 leading-snug">
                 {item.name}
               </Paragraph>
@@ -171,7 +161,6 @@ function CertItem({ item, index }: { item: Certificate; index: number }) {
                   )}
                 </div>
               )}
-            </div>
           </div>
 
           <Badge color="green" variant="weak" size="small" className="flex-shrink-0 mt-0.5">

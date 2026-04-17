@@ -4,7 +4,7 @@ import React from 'react';
  * 강조 마크업 규칙:
  *   **텍스트**  → <strong> (핵심 기술어, 수치, 결론)
  *   `텍스트`    → <code>   (코드 심볼, API명, 메서드명, 속성명)
- *   __텍스트__  → <u>      (문제·해결의 핵심 문장 밑줄)
+ *   __텍스트__  → <mark>   (형광펜 강조 — 핵심 문장)
  */
 export function parseRichText(text: string): React.ReactNode[] {
   // 토큰 분리: **...**, `...`, __...__ 순서로 파싱
@@ -28,9 +28,9 @@ export function parseRichText(text: string): React.ReactNode[] {
     }
     if (part.startsWith('__') && part.endsWith('__')) {
       return (
-        <u key={i} className="underline decoration-amber-400 decoration-2 underline-offset-2 font-medium text-grey-800">
+        <mark key={i} className="bg-amber-200/70 text-grey-900 font-medium px-0.5 rounded-sm" style={{ boxDecorationBreak: 'clone' }}>
           {part.slice(2, -2)}
-        </u>
+        </mark>
       );
     }
     return <React.Fragment key={i}>{part}</React.Fragment>;
