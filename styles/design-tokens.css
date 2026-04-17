@@ -7,7 +7,7 @@
 /* Custom Properties (CSS Variables) */
 /* ============================================ */
 .font-pretendard {
-  font-family: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-family: var(--font-pretendard), -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 }
 
 @theme {
@@ -64,7 +64,7 @@
   --color-grey-background: #f2f4f6;
 
   /* Typography */
-  --font-family-pretendard: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-family-pretendard: var(--font-pretendard), -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   
   /* Font Sizes - t1~t8 */
   --font-size-t1: 1.875rem;
