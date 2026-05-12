@@ -24,3 +24,6 @@ export { default as Post } from './Post';
 
 // Overlay 관련
 export { default as Tooltip } from './Tooltip';
+
+// Icon 관련
+export { default as GitHubIcon } from './GitHubIcon';
