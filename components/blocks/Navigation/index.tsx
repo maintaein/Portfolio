@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useScroll } from '@/hooks';
 import { IconButton, Icon } from '@/components/atoms';
 import { cn } from '@/lib/utils/cn';
+import { scrollToSection } from '@/lib/utils/scroll';
 
 interface NavigationItem {
   label: string;
@@ -45,12 +46,9 @@ export default function Navigation({
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const scrollToSection = (href: string) => {
-    const element = document.querySelector(href);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
-      setIsMobileMenuOpen(false);
-    }
+  const handleNavClick = (href: string) => {
+    scrollToSection(href.replace('#', ''));
+    setIsMobileMenuOpen(false);
   };
 
   return (
@@ -90,7 +88,7 @@ export default function Navigation({
                   return (
                     <button
                       key={item.href}
-                      onClick={() => scrollToSection(item.href)}
+                      onClick={() => handleNavClick(item.href)}
                       aria-current={isActive ? 'page' : undefined}
                       aria-label={`${item.label} 섹션으로 이동`}
                       className={cn(
@@ -137,7 +135,7 @@ export default function Navigation({
                       return (
                         <button
                           key={item.href}
-                          onClick={() => scrollToSection(item.href)}
+                          onClick={() => handleNavClick(item.href)}
                           className={cn(
                             'block w-full text-left text-t5 font-medium py-2.5 px-4 rounded-lg transition-all duration-200',
                             isActive

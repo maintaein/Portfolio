@@ -60,9 +60,9 @@ export default function Post({
         <div className="p-6">
           {tags && tags.length > 0 && (
             <div className="flex gap-2 mb-3 flex-wrap">
-              {tags.map((tag, index) => (
+              {tags.map((tag) => (
                 <span
-                  key={index}
+                  key={tag}
                   className="px-2 py-1 bg-blue-50 text-blue-700 text-t8 rounded-full"
                 >
                   {tag}
@@ -146,8 +146,8 @@ export default function Post({
             {date && <time>{date}</time>}
             {tags && tags.length > 0 && (
               <div className="flex gap-1">
-                {tags.slice(0, 3).map((tag, index) => (
-                  <span key={index} className="text-blue-600">
+                {tags.slice(0, 3).map((tag) => (
+                  <span key={tag} className="text-blue-600">
                     #{tag}
                   </span>
                 ))}
