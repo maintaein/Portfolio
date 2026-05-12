@@ -2,333 +2,215 @@ import { Project } from '@/types';
 
 export const tds: Project = {
   title: 'TDS (Taein Design System)',
-  subtitle: '일관된 UI와 효율적 개발을 위한 React 기반 디자인 시스템 라이브러리',
-  description: '30개 컴포넌트, Zero-runtime CSS, Tree-shakable, AI 친화적 디자인 시스템',
-  longDescription: 'TDS는 개인 서비스 개발 시 일관된 UI와 효율적인 개발을 위해 만든 **React 기반 디자인 시스템**입니다. **Vanilla Extract**를 활용한 **Zero-runtime CSS**, 엄격 TypeScript, TDD 기반 개발, 접근성 준수, 그리고 **AI 친화적 설계**가 특징입니다.',
-  image: '/projects/TDS.webp',
+  subtitle: '프론트엔드 개발자로서 나만의 디자인 일관성을 \n 갖기 위해 제작한 디자인 시스템',
+  description: '라이브러리 제작에 필요한 영역을 직접 경험해보고, 디자인 시스템에 대한 이해를 키우기 위해 만든 React 디자인 시스템입니다. 이후 개인 프로젝트에서 가져다 쓰며 개발 속도와 디자인 일관성을 함께 챙길 수 있었습니다.',
+  image: '/projects/TDS.png',
   imageAspect: 'landscape',
-  tags: ['React', 'TypeScript', 'Vanilla Extract', 'Vite', 'Vitest', 'pnpm', 'Monorepo', 'TDD'],
+  tags: ['React 19', 'TypeScript', 'Vanilla Extract', 'Vite', 'Vitest', 'pnpm Monorepo', 'TDD'],
   duration: '2025.12 - 2026.03',
   role: '1인 설계 및 개발',
-  teamSize: '1명',
+  teamSize: '1명 (개인 프로젝트)',
+
+  motivation: '프론트엔드를 시작하면서 어려웠던 부분 중 하나가 디자인 시스템에 대한 이해입니다. MUI나 Headless UI를 써봤지만, 컴포넌트 내부 구조를 알 수없어 스타일을 원하는 대로 바꾸기 어려웠습니다. 또한 컴포넌트들이 어떤 코드로 작동하는지 모른 채 쓰고 있다는 불안감이 있었고, 디자인 시스템이 뭘 의미하는지도 잘 몰랐습니다.\n\n직접 만들어보면 번들러·접근성·테스트·타입 시스템처럼 라이브러리 제작에 필요한 영역을 한꺼번에 경험할 수 있겠다고 판단했습니다. 동시에, 이후 개인 프로젝트에서도 Button이나 Modal을 매번 처음부터 만드는 대신 가져다 쓸 수 있으면 개발 속도와 디자인 일관성 두 가지를 함께 얻을 수 있을 것 같아 이 프로젝트를 시작했습니다.',
 
   implementations: [
     {
-      text: '**30개 UI 컴포넌트**: Button, Modal, Card 등 디자인 컴포넌트를 일관된 API(`variant`/`size`/`disabled`) 패턴으로 제공',
+      category: '핵심 컴포넌트 (30개)',
+      items: [
+        '버튼/입력: Button, IconButton, SegmentedButtons, TextField, TextArea, Checkbox, Switch, Slider, NumericSpinner',
+        '표시/피드백: Text, Badge, Chip, Avatar, Icon, Loader, LoadingSpinner, Skeleton, Snackbar, Tooltip',
+        '오버레이: Modal, BottomSheet, SideSheet, Popover (포커스 트랩·ESC·backdrop 닫기)',
+        '레이아웃: Card, List, BoardRow, Divider, Border, HeaderBar',
+        '폼 인프라: FormField (render prop 패턴으로 label/id/ARIA 자동 연결)',
+      ],
     },
     {
-      text: '**디자인시스템 가이드 웹**: 라이브 코드 에디터, Props 테이블, 접근성 가이드를 갖춘 데모 앱',
+      category: '디자인 토큰 시스템',
+      items: [
+        'Theme Contract 기반 색상·타이포·간격·그림자·애니메이션 토큰 (`.css.ts`로 타입 안전)',
+        '8pt Grid System, TypeScript 자동완성으로 존재하지 않는 토큰 참조를 컴파일 타임 차단',
+      ],
     },
     {
-      text: '**디자인 토큰 시스템**: 8pt Grid 간격, 색상·타이포그래피·그림자·애니메이션 토큰을 **Theme Contract**로 관리',
+      category: '데모 문서 앱 (packages/demo)',
+      items: [
+        '라이브 코드 에디터(EditableCodeBlock): Sucrase 런타임 JSX 트랜스파일 + React Hooks 지원',
+        'Props 테이블, 접근성 가이드, Dog-fooding 적용(UI라이브러리를 활용해 개발)',
+      ],
     },
     {
-      text: '**AI 친화 설계**: `llms.txt`/`llms-full.txt` 제공, AI 도구와의 협업 최적화',
-    }
+      category: '빌드·배포 인프라',
+      items: [
+        '컴포넌트 하나만 가져다 써도 나머지가 번들에 딸려오지 않도록, 빌드 시 컴포넌트별로 파일을 쪼개어 소비자 번들러가 실제로 쓰는 것만 골라갈 수 있게 구성했습니다.',
+        '디자인 시스템과 데모 앱을 하나의 저장소에서 함께 개발하면서도 독립적으로 빌드·배포할 수 있도록 모노레포 구조를 채택했고, 코드를 올리면 Vercel이 자동으로 배포합니다.',
+        'AI 코딩 도구가 이 라이브러리의 API를 올바르게 이해하고 추천할 수 있도록, 모든 컴포넌트 사용법을 구조화한 문서 파일(llms.txt)을 함께 제공합니다.',
+      ],
+    },
   ],
 
   responsibilities: [
-    '디자인 시스템 설계 및 전체 아키텍처 구축',
-    '**30개** React 컴포넌트 TDD 기반 개발',
-    '데모 문서 앱 개발',
-    'NPM 패키지 배포 및 빌드 최적화'
+    '디자인 시스템 전체 아키텍처 설계 및 1인 개발',
+    '30개 React 컴포넌트 TDD(Red→Green→Refactor) 기반 구축',
+    '빌드 파이프라인 설계 및 Tree-shaking 실측 검증',
+    '데모 문서 앱 개발 (Dog-fooding 적용)',
   ],
 
   techReasons: [
     {
-      name: 'React',
+      name: 'React 19',
       reasons: [
-        '가장 널리 사용되는 UI 라이브러리로 사용자 기반이 넓어 **디자인 시스템의 접근성**을 높임',
-        '`forwardRef`, **Compound Component** 등 라이브러리 제작에 필요한 패턴을 네이티브로 지원'
-      ]
+        '디자인 시스템은 라이브러리를 사용하는 사람이 많을수록 가치가 있습니다. 가장 넓은 사용자 기반을 가진 React를 선택함으로써 다양한 프로젝트에서 곧바로 쓸 수 있도록 했습니다.',
+        'React 18과 19를 동시에 지원하여 기존 프로젝트에서도 별도 변경 없이 사용할 수 있고, React 19로 전환한 이후에는 더 간결한 방식으로 코드를 개선할 여지도 열어두었습니다.',
+      ],
     },
     {
-      name: 'TypeScript (strict, no any)',
+      name: 'TypeScript (strict, no-any)',
       reasons: [
-        '컴포넌트 Props의 **자동완성과 타입 추론**을 통해 사용자 DX를 극대화',
-        '`any`를 완전히 배제하고 **제네릭, Union, 타입 가드**로 해결하여 런타임 에러 방지'
-      ]
+        '라이브러리를 쓰는 사람의 경험은 "내가 넣은 값이 맞는지 바로 알 수 있냐"에서 갈립니다. 타입을 느슨하게 두면 그 지점부터 자동완성이 멈추기 때문에, 프로젝트 전체에 strict 모드를 강제하고 예외를 허용하지 않았습니다.',
+        '복잡한 컴포넌트에서 타입 충돌이 생길 때마다 제네릭으로 해결하는 규칙 덕분에, 사용자가 잘못된 props를 넘기면 편집기에서 즉시 빨간 줄로 알려줍니다.',
+      ],
     },
     {
       name: 'Vanilla Extract CSS',
       reasons: [
-        '**Zero-runtime**: 빌드 타임에 CSS를 생성하여 **런타임 오버헤드 제로**',
-        'TypeScript로 스타일을 작성해 **토큰 참조 시 타입 안전성**을 보장하고, 존재하지 않는 토큰 참조를 컴파일 타임에 방지'
-      ]
+        '스타일을 빌드 시점에 CSS 파일로 미리 만들어두기 때문에, 브라우저에서 스타일을 계산하고 주입하는 JavaScript 코드가 전혀 필요 없습니다. Emotion 같은 런타임 방식은 이 과정에서 추가 비용이 발생해 모바일 환경에서 로딩이 느려질 수 있습니다.',
+        '디자인 토큰(색상, 간격 등)을 TypeScript로 정의하기 때문에, 존재하지 않는 토큰을 참조하면 코드를 저장하는 순간 바로 오류가 납니다. 디자인 시스템에서 토큰 일관성이 깨지는 것은 가장 큰 위험 중 하나라 이 방식을 선택했습니다.',
+        '단, 이 선택이 빌드 최적화(Tree-shaking)와 충돌하는 문제가 발생해 별도로 해결해야 했고, 이 과정이 첫 번째 트러블슈팅이 되었습니다.',
+      ],
     },
     {
-      name: 'Vite',
+      name: 'Vite 7',
       reasons: [
-        '`preserveModules` 옵션으로 **컴포넌트별 개별 번들**을 생성해 Tree-shaking 지원',
-        '**ESM/CJS 듀얼 포맷** 라이브러리 빌드와 Vanilla Extract 플러그인 통합이 자연스러움'
-      ]
+        '스타일 도구, 테스트 도구가 모두 같은 빌드 설정을 공유하기 때문에 "테스트는 통과했는데 실제로는 안 된다"는 환경 불일치가 구조적으로 발생하지 않습니다.',
+        '라이브러리를 소비하는 프로젝트가 실제로 쓰는 컴포넌트만 번들에 담을 수 있도록, 컴포넌트별로 파일을 분리해서 빌드하는 방식을 선택했습니다. 어떻게 합칠지는 소비자 번들러에게 위임하는 것이 라이브러리 설계 관습에 맞다고 판단했습니다.',
+      ],
     },
     {
-      name: 'Vitest + Testing Library',
+      name: 'Vitest + @testing-library/react',
       reasons: [
-        'Vite 기반 테스트 러너로 **빌드 설정을 공유**하여 환경 불일치 방지',
-        '**사용자 관점의 테스트**로 접근성과 실제 동작을 함께 검증'
-      ]
+        '테스트를 작성할 때 버튼이 "화면에 보이는가", "클릭하면 반응하는가"처럼 사용자 시각으로 검증하기 때문에, 접근성(ARIA, role) 확인이 자연스럽게 테스트에 포함됩니다. 별도 접근성 도구 없이도 WCAG 기준 항목 대부분이 테스트 커버에 들어옵니다.',
+        'Vite 빌드 설정을 공유하여, 테스트 환경과 실제 빌드 환경의 차이로 인한 예상치 못한 오류를 줄였습니다.',
+      ],
     },
     {
       name: 'pnpm Monorepo',
       reasons: [
-        '`core`, `demo`, `docs` 패키지를 **하나의 저장소에서 관리**하면서도 독립적 빌드/배포 가능',
-        '`workspace:*` 프로토콜로 패키지 간 실시간 연동, **dog-fooding 워크플로우** 지원'
-      ]
-    }
+        '디자인 시스템과 데모 앱을 하나의 저장소에서 함께 개발하면서, 코어 패키지가 바뀌면 데모 앱이 즉시 그 변화를 반영합니다. 실제 사용자 입장에서 직접 써보는 Dog-fooding 구조를 만들기 위해 필수적인 선택이었습니다.',
+        '패키지 간 공유 의존성을 한 번만 설치해 디스크를 효율적으로 사용하고, 타입 변경이 즉시 다른 패키지에 반영됩니다.',
+      ],
+    },
+  ],
+
+  keyMetrics: [
+    {
+      label: 'Tree-shaking 실측',
+      before: '45KB (21 컴포넌트)',
+      after: '4.17KB (gzip 1.43KB)',
+      measuredBy: 'npm pack + esbuild를 통한 실측',
+      learned: '컴포넌트별로 파일을 분리했으니 당연히 Tree-shaking이 될 것이라고 추측했지만, 실제로 측정해보니 Button 1개만 써도 연계된 컴포넌트 전체가 번들에 포함되고 있었습니다. 라이브러리를 만드는 사람은 자기 빌드가 성공했다는 것에서 멈추지 말고, 그 라이브러리를 가져다 쓰는 사람의 환경에서도 검증해야 한다는 원칙을 얻었습니다.',
+    },
+    {
+      label: '테스트 커버리지',
+      after: '1,048 tests / 커버리지 90%+',
+      measuredBy: 'pnpm test:coverage (Vitest v8 coverage provider)',
+      learned: '코드를 짜기 전에 먼저 이 기능이 어떻게 동작해야 하는가를 테스트로 정의하고, 그 테스트를 통과하는 코드를 작성한 뒤 개선하는 TDD의 Red → Green → Refactor 사이클에 대해 이해를 쌓았습니다. 또한 프로젝트에 따라 테스트를 어느 정도까지 수행할지에 대해 판단하는 역량을 키울 수 있었습니다.',
+    },
+    {
+      label: 'Dog-fooding',
+      after: '소개 문서를 직접 TDS 컴포넌트로 구성',
+      measuredBy: 'packages/demo/src 경로 내 core 외 UI 라이브러리 의존성 0건',
+      learned: '직접 만든 라이브러리로 소개 문서 페이지를 만들어보면서, 문서나 코드 리뷰에서는 보이지 않던 불편함이 실사용에서 드러났습니다. Modal에 닫기 버튼을 외부에서 커스터마이즈할 방법이 없다, Card의 안쪽 여백을 조정하기 어렵다.. 와 같이, 실제로 써봐야 알 수 있는 지점들이 컴포넌트 개선에 가장 큰 영향을 줬습니다.',
+    },
+    {
+      label: '접근성',
+      after: '접근성 항목 준수, 테스트 내 ARIA/role 검증 345건',
+      measuredBy: '컴포넌트별 체크리스트(시맨틱 HTML / ARIA / 키보드 포커스 / 색상 대비) + 테스트 코드 내 접근성 속성 검증 쿼리 실측',
+      learned: '접근성을 나중에 추가하려고 하면 컴포넌트 구조 자체를 바꿔야 하는 경우가 많았습니다. 처음 설계할 때부터 키보드로도 쓸 수 있는지, 스크린 리더가 올바른 정보를 읽는지를 기준으로 두면, 오히려 더 빠르게 컴포넌트 개발을 마무리할 수 있었습니다.',
+    },
   ],
 
   reviews: [
     {
       id: 'treeshaking',
-      title: '1. Tree-shaking 검증 및 최적화',
-      image: '/projects/TDS/tree-shaking.webp',
-      features: [
-        '`preserveModules`로 컴포넌트별 **개별 모듈 분리**',
-        '**ESM(.mjs)/CJS(.cjs) 듀얼 포맷** 빌드',
-        '`sideEffects` 필드 기반 **CSS-only 사이드이펙트** 선언',
-        '**barrel file** 사이드이펙트 제거'
+      title: '1. Tree-shaking 검증 및 빌드 최적화',
+      problem: '디자인 시스템의 가장 큰 가치는 "필요한 컴포넌트만 골라 쓸 수 있다"는 점입니다. 그런데 npm 패키지를 만들어 실제 소비자 환경을 시뮬레이션해보니, Button 한 개만 import해도 45KB(21개 컴포넌트 전체)가 그대로 번들에 실렸습니다. "Tree-shakable"이라는 주장을 실측으로 뒷받침하지 못하면 라이브러리의 핵심 가치 자체가 무너지는 상황이었습니다.',
+      analysis: [
+        '**진단 — 무엇이 Tree-shaking을 막고 있는가**: 번들러가 "이 코드는 쓰지 않으니 빼도 된다"고 판단하려면 모듈에 부수효과(side effect)가 없다는 확신이 있어야 합니다. 빌드 결과물을 직접 열어 단계별로 검증해보니 세 가지 신호가 번들러를 막고 있었습니다. (1) ESM·CJS 두 포맷 파일이 같은 폴더에서 이름 충돌로 뒤섞여 진입점이 불분명했고, (2) 진입 파일에서 버전 정보를 내보내는 한 줄이 있어 번들러가 모듈 전체를 안전하게 제거하지 못했으며, (3) Vanilla Extract가 CSS 파일에 자동 생성한 주석이 번들러에게 "실행 효과가 있을 수 있다"는 신호로 읽히고 있었습니다.',
+        '**선택지 1 — 번들 구성을 수동으로 통제하기**: 라이브러리 빌드 단계에서 컴포넌트별로 미리 합쳐 내보내는 방법입니다. 소비자가 어떤 번들러를 쓰든 결과가 균일하다는 장점이 있지만, 이 라이브러리를 가져다 쓰는 사람의 번들 전략에 강하게 간섭하게 됩니다. 라이브러리는 원본을 제공하고 최종 가공은 소비자 번들러에게 맡기는 것이 관습이라 선택하지 않았습니다.',
+        '**선택지 2 — CSS를 JS에 인라인하기**: 부수효과 신호를 만드는 CSS 파일 자체를 JS 안으로 합치면 Tree-shaking 막힘은 깨끗하게 사라집니다. 그러나 그 순간 Vanilla Extract를 선택한 이유였던 Zero-runtime(빌드 시점에 CSS를 미리 만들어 런타임 비용 0) 이점이 함께 사라집니다. 핵심 가치를 깎아 다른 가치를 얻는 트레이드오프는 비용에 비해 얻는 이득이 적다고 판단했습니다.',
+        '**선택지 3 — 번들러에게 정확한 메타데이터 제공 (선택)**: 소비자 자율성 유지와 Zero-runtime 유지를 동시에 만족시키는 방향입니다. 패키지 설정에 "CSS 파일만 부수효과가 있고 나머지 JS는 순수하다"고 명시하고, ESM·CJS를 확장자로 분리하고, 진입 파일에서 부수효과 코드를 제거하는 세 가지를 동시에 적용하면 주요 번들러(Vite·webpack)가 이 정보를 존중해 불필요한 코드를 정리해줍니다. 라이브러리 설계 관습("판단은 소비자에게, 정보는 메타데이터로")에 정확히 부합합니다.',
+        '**검증을 빌드 단계에 묶어두기**: 한 번 고쳐도 이후 코드 변경으로 회귀할 수 있다는 점이 문제였습니다. 소비자 환경을 직접 시뮬레이션하는 스크립트를 만들어, 빌드마다 "Button 1개만 import했을 때 번들 크기"를 자동으로 측정하면 회귀를 구조적으로 차단할 수 있다고 판단했습니다.',
       ],
-      intent: '디자인 시스템 라이브러리의 핵심 가치 중 하나는 **사용자가 Button 하나만 import해도 나머지 29개 컴포넌트가 번들에 포함되지 않는 것**입니다. "Tree-shakable 라이브러리"라고 말할 수 있으려면 실제로 검증해야 한다고 판단해, **Vite 프로덕션 빌드에서 단일 컴포넌트 import 시 번들 크기를 측정**했습니다.',
-      troubleShooting: {
-        title: 'Button 단일 import 시 45KB 번들 — Tree-shaking이 동작하지 않음',
-        initialImpl: 'Vite의 `preserveModules: true` 설정으로 컴포넌트별 개별 청크를 생성했으나, 실제 소비자 프로젝트에서 **Button만 import해도 전체 라이브러리(21개 컴포넌트, 45KB)가 포함**됨.',
-        problem: [
-          'Button만 import했는데 번들에 **21개 컴포넌트가 모두 포함 (45KB)**',
-          '빌드 출력 파일명이 `index.esm9.js`, `index.cjs2.js` 같은 플랫 구조로 생성되어 **모듈 경계 파괴**',
-          '**Rollup**이 barrel file을 side-effectful로 판단하여 전체 re-export를 포함'
-        ],
-        analysis: [
-          '`fileName` 함수가 format 구분 없이 동일 디렉토리에 ESM/CJS를 생성 → **파일명 충돌로 숫자 접미사 추가**됨 (주요 원인 1)',
-          'barrel file에 `export const version = "0.1.0"`이 있어 Rollup이 __"이 모듈은 re-export만 하는 게 아니라 자체 코드가 있다"고 판단 → side-effect로 취급__ (주요 원인 2)',
-          '추가로 빌드 파일명 변경(`.mjs`/`.cjs`)에 따라 `package.json`의 `main`/`module`/`exports` 경로도 **불일치가 발생** → 함께 수정 필요'
-        ],
-        solution: [
-          '**파일명 충돌 수정** — `fileName` 함수에서 `format` 파라미터를 읽어 `es`면 `.mjs`, `cjs`면 `.cjs` 확장자를 붙이도록 수정. 확장자로 포맷을 구분하면 동일 디렉토리에 두 포맷을 같이 놓아도 충돌이 없어 숫자 접미사가 생기지 않고, `preserveModules`의 디렉토리 구조 보존 효과가 유지됨.',
-          '**barrel file side-effect 제거** — `src/index.ts`에서 `export const version = \'0.1.0\'`을 제거하고 re-export만 남김. Rollup은 __"모듈이 자체 실행 코드를 갖지 않으면 side-effect-free"로 판단__하므로, barrel을 순수 re-export 전용으로 유지하면 안전하게 제거 대상이 됨. **이 한 줄 제거로 45KB → 4.17KB 감소**.',
-          '**부수 수정** — 파일명이 `.esm.js` → `.mjs`로 바뀌면서 `package.json`의 `main`/`module`/`exports` 경로가 이전 파일명을 가리켜 demo 빌드가 깨짐. 경로를 새 확장자에 맞게 업데이트.',
-        ],
-        solutionCode: `// 1. 파일명 함수 수정 — .mjs/.cjs 확장자로 포맷 구분
-fileName: (format, entryName) => {
-  const ext = format === 'es' ? 'mjs' : 'cjs';
-  return \`\${entryName}.\${ext}\`;
-}
-
-// 2. barrel file에서 version export 제거 (핵심)
-// Before: export const version = '0.1.0';  ← side-effect 유발
-// After: re-export만 남김
-
-// 3. [확인] package.json의 sideEffects는 이미 올바르게 설정돼 있었음
-// Vite/webpack이 이 필드를 참고하여 CSS만 side-effect로 취급
-{
-  "sideEffects": ["./dist/core.css"]
-}
-
-// 4. 부수 수정 — package.json의 exports 경로를 새 확장자에 맞게 업데이트
-{
-  "main": "./dist/index.cjs",       // .cjs.js → .cjs
-  "module": "./dist/index.mjs",     // .esm.js → .mjs
-  "exports": {
-    ".": {
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs"
-    }
-  }
-}`,
-        results: [
-          'Button 단일 import: **45KB → 4.17KB** (gzip 1.43KB) — **91% 감소**',
-          'npm pack 검증: **384 files, 23KB(gzip)** 패키지로 정리'
-        ],
-        lessons: [
-          '__Tree-shaking은 설정만으로 되지 않는다.__ `preserveModules`를 켜도 파일명 충돌, barrel side-effect, CSS 주석 등 예상 밖의 요인이 있었다. "동작할 것이다"가 아닌 **실측 검증이 필수**.',
-          '__barrel file은 re-export 전용이어야 한다.__ 단 한 줄의 `export const`도 번들러가 전체 모듈을 **side-effectful로 판단**하게 만들 수 있다.',
-          '**라이브러리 제작자는 사용자의 빌드 환경을 시뮬레이션해야 한다.** 라이브러리 자체 빌드가 성공해도, 사용자 프로젝트에서 tree-shaking이 되는지는 별개 문제.'
-        ]
-      }
+      action: [
+        'ESM(.mjs)과 CJS(.cjs) 확장자를 분리해 두 포맷이 같은 폴더에서 충돌 없이 공존하도록 빌드 설정 변경',
+        '진입 파일에서 버전 정보 내보내기 코드를 제거 — 번들러가 진입 모듈을 안전하게 제거할 수 있도록',
+        '패키지 설정에 `sideEffects: ["./dist/core.css"]`를 명시해 CSS 파일만 부수효과로 표기',
+        '`npm pack` + esbuild 소비자 시뮬레이션 스크립트를 빌드 단계에 추가해 회귀를 자동 감지',
+      ],
+      result: [
+        { label: '소비자 번들 크기', before: '45KB (컴포넌트 1개 import에 전체 포함)', after: '4.17KB (gzip 1.43KB) — 사용한 컴포넌트만 번들에 포함', delta: '-91%', measuredBy: 'npm pack + esbuild 소비자 시뮬레이션' },
+        { label: '회귀 방지', after: '빌드마다 번들 크기 자동 측정 — 코드 변경으로 Tree-shaking이 깨져도 CI에서 즉시 감지', measuredBy: 'npm pack + esbuild 시뮬레이션 스크립트를 빌드 단계에 통합' },
+        { label: '전체 테스트', after: '1,048 / 1,048 통과 — Tree-shaking 수정 후 기존 컴포넌트 동작 이상 없음 확인', measuredBy: 'pnpm test' },
+      ],
+      tradeOffs: [
+        '`preserveModules`를 적용하면 dist 파일 수가 140개 이상으로 늘어납니다. 다만 npm 배포 크기는 `files` 필드로 dev 산출물을 제외해 상쇄했고, 파일 수 자체는 소비자 번들러가 트리 쉐이킹 후 합치므로 런타임에는 영향이 없습니다.',
+        'Vite 없이 Rollup을 직접 설정 파일로 쓰는 경우에서는 `sideEffects` 필드가 무시되어 45KB가 그대로 번들링됩니다. Vite 없이 순수 rollup일 경우, README에 `moduleSideEffects: false` 권장 설정을 명시하는 방향으로 대응했습니다.',
+      ],
     },
     {
       id: 'bottomsheet',
       title: '2. BottomSheet 드래그 인터랙션',
-      image: '/projects/TDS/bottomsheet.webp',
-      features: [
-        '`useRef` 기반 드래그 상태 관리로 **클로저 stale 참조** 및 **리스너 재등록** 문제 해결',
-        '**document 레벨 이벤트 등록**으로 시트 영역 밖 마우스 이탈 처리',
-        '`isClosingViaDragRef` **플래그**로 드래그/버튼 닫기 경로를 명시적으로 분리',
-        '**JS transition 기반** 드래그 닫기로 CSS exit 애니메이션 충돌 제거'
+      problem: 'BottomSheet에 드래그로 닫기 인터랙션을 구현했는데 시트가 손가락을 따라오지 않았습니다. 고치니 마우스가 시트 밖으로 나가면 드래그가 멈추지 않았고, 다시 고치니 닫힐 때 원위치로 튕겼다가 내려갔으며, 마지막엔 닫히는 순간 한 프레임 깜빡였습니다. 표면 증상만 고칠 때마다 다음 버그가 드러나는 패턴이었고, 디자인 시스템 핵심 컴포넌트가 거칠게 동작하면 라이브러리 전체의 신뢰가 흔들리는 상황이었습니다.',
+      analysis: [
+        '**진단 — 네 증상이 서로 다른 레이어의 문제**: 같은 컴포넌트 안에서 네 레이어가 얽혀 있었습니다.\n- React 상태 모델 → 시트가 손가락을 따라오지 않음\n- 브라우저 이벤트 스코프 → 시트 밖에서 드래그가 멈추지 않음\n- CSS 애니메이션 vs JS 인라인 스타일 우선순위 → 닫힐 때 원위치로 튕김\n- 컴포넌트 정리 타이밍 → 닫히는 순간 깜빡임\n각 레이어를 별도 결정으로 풀어야 다음 버그가 나오지 않는 구조였습니다.',
+        '**선택지 1 — useState / useReducer로 드래그 좌표 관리**: 변경마다 리렌더가 발생해 이벤트 핸들러가 매 프레임 새로 등록·해제되고, 핸들러는 클로저에 묶인 옛 값을 보게 됩니다. useReducer는 디버깅이 쉬운 장점이 있지만 리렌더 구조는 동일합니다.',
+        '**선택지 2 — useRef로 드래그 좌표 관리 (선택)**: React DevTools에서 추적이 어렵다는 단점이 있지만, 리렌더 없이 값을 누적할 수 있어 매 프레임 좌표 추적에 적합합니다. 이벤트 스코프는 드래그 시작 시 document에 등록하고 종료 시 해제하는 패턴으로 시트 밖 이탈과 메모리 누수를 동시에 차단합니다. CSS 애니메이션 충돌은 드래그 시작 시 `animation: none`으로 JS가 단독 통제하고 종료 후 복원하는 모드 전환으로 해결했습니다. 닫힘 깜빡임은 `isClosingViaDrag` 플래그로 드래그 경로(인라인 transform 보존)와 일반 경로(스타일 리셋)를 분기했습니다.',
       ],
-      intent: '모바일 UX에서 BottomSheet는 **드래그로 닫을 수 있어야 자연스럽습니다**. 이 인터랙션은 React 렌더링 모델, 브라우저 이벤트 시스템, CSS와 JS 애니메이션 우선순위가 모두 교차하는 복잡한 문제였습니다. 하나의 버그를 고치면 다른 닫기 경로가 깨지는 연쇄 충돌을 반복하면서, 결국 **닫기 경로를 플래그로 명시적으로 분리**하는 해결책에 도달했습니다.',
-      troubleShooting: {
-        title: 'BottomSheet 드래그 구현 중 발생한 6가지 연쇄 버그 (4가지 주요 이슈 + 파생 이슈 2건)',
-        initialImpl: '`useState`로 드래그 상태(`startY`, `isDragging`)를 관리하고, BottomSheet 요소에 `mousedown`/`mousemove`/`mouseup` 이벤트를 바인딩하는 방식으로 구현.',
-        problem: [
-          '**이슈 1**: 드래그가 동작하지 않음 — `useState` 변경마다 `useEffect` 재실행으로 이벤트 리스너가 초기화되고, **클로저 stale 참조**로 `isDragging`이 항상 `false`',
-          '**이슈 2**: 마우스가 시트 영역 밖으로 나가면 드래그가 해제되지 않고 시트가 마우스에 매달림 — `mousemove`/`mouseup`이 요소에만 바인딩',
-          '**이슈 3**: 드래그로 닫을 때 시트가 원위치로 복귀한 뒤 다시 내려가는 **이중 애니메이션** — JS transition과 CSS exit 애니메이션이 충돌',
-          '**이슈 4**: 드래그 닫기 직후 열린 상태가 **한 프레임 깜빡임** — `setShouldRender(false)`와 `onClose()`의 배치 처리 순서 문제',
-          '**이슈 5(파생)**: X 버튼으로 닫을 때 시트가 화면에 그대로 남아 먹통 상태 발생 — 드래그 시 주입한 인라인 `animation: none`이 CSS exit 애니메이션을 막아 `onAnimationEnd`가 발화하지 않음',
-          '**이슈 6(파생)**: 이슈 5 수정이 드래그 닫기 흐름과 충돌 — 인라인 스타일 초기화 `useEffect`가 드래그 경로에서도 실행되어 snap-back + 재애니메이션이 연쇄 발생'
-        ],
-        analysis: [
-          '**이슈 1**: `useState`로 드래그 좌표를 관리하면 매 변경마다 **리렌더링 → `useEffect` 재실행 → 리스너 재등록**. 재등록 시점에 새 클로저가 생성되어 이전 `isDragging=true` 값을 참조하지 못함',
-          '**이슈 2**: `mousemove`/`mouseup`을 BottomSheet DOM에만 등록하면 마우스가 요소 밖으로 나갈 때 이벤트를 수신 못해 `isDraggingRef`가 `true`로 **영구히 잔류**',
-          '__이슈 3, 4는 JS 인라인 스타일과 CSS 클래스 애니메이션의 공존에서 비롯된 동일 근본 원인.__ JS로 `translateY(100%)` 이동 후 `onClose()` 호출 → `open=false` → CSS slideDown이 `translateY(0)`에서 다시 실행되거나, `setShouldRender`/`onClose` 배치 순서에 따라 한 프레임 열린 상태가 노출됨',
-          '**이슈 5**: `mousedown` 핸들러가 시트 전체에 바인딩되어 X버튼 클릭 시에도 `animation: none`이 인라인으로 주입됨 → CSS exit 애니메이션 실행 불가 → `onAnimationEnd`가 발화하지 않아 `shouldRender`가 `false`로 전환되지 않음 → __투명한 시트 DOM이 잔류하여 화면 전체 클릭 차단__',
-          '**이슈 6**: `open=false` 시 인라인 스타일을 초기화하는 `useEffect`를 추가했는데, 이게 드래그 닫기 경로에도 실행됐다. __드래그로 `translateY(100%)`를 설정한 직후 `onClose()` → `useEffect`가 transform을 `""`으로 리셋 → 시트가 원래 위치로 snap-back → 그 뒤 `.bottomSheetExit` 클래스가 붙어 slideDown이 다시 실행.__ "하나의 버그를 고치면 다른 경로가 깨지는" 전형적인 연쇄 충돌로, **두 경로를 명시적으로 분기할 필요성이 드러남**'
-        ],
-        solution: [
-          '**이슈 1** — `useState`를 `useRef`로 교체. 드래그 좌표는 매 프레임 바뀌지만 UI에 직접 반영되지 않으므로 **리렌더링이 불필요**. `useState`를 쓰면 값이 바뀔 때마다 컴포넌트가 리렌더링되고 `useEffect`가 재실행되어 리스너가 재등록되는 연쇄가 발생. __`useRef`는 리렌더링을 유발하지 않으므로 연쇄를 끊는다.__',
-          '**이슈 2** — `mousemove`·`mouseup`을 BottomSheet DOM이 아닌 **`document`에 등록**. 포인터가 시트 영역 밖으로 벗어나도 이벤트를 수신할 수 있어 드래그 종료를 안정적으로 감지.',
-          '**이슈 3~6 (근본 해결)** — `isClosingViaDragRef` **플래그로 두 닫기 경로를 명시적으로 분리**. 이슈 3~6의 근본 원인은 JS 인라인 스타일과 CSS 클래스 애니메이션이 동일 요소에 공존하는데 "어떤 경로로 닫혔는가"를 구분하지 않았기 때문. 각 이슈에 대한 단발 수정이 다른 경로를 깨뜨리는 연쇄 충돌이 반복되어 근본 해결이 필요했다.',
-          '**드래그 닫기 경로**: `isClosingViaDragRef=true` → JS transition으로 `translateY(100%)` 이동 → `transitionend` 시점에 즉시 `setShouldRender(false)` + `onClose()`. CSS exit 애니메이션을 거치지 않아 충돌 없음.',
-          '**버튼/ESC/백드롭 닫기 경로**: `isClosingViaDragRef=false` 상태에서 `open=false` → `useEffect`가 인라인 스타일 초기화 → CSS exit 애니메이션 → `onAnimationEnd` → `setShouldRender(false)`. `isClosingViaDragRef` 체크로 드래그 경로를 건드리지 않음.',
-          '**자기평가**: 현재 해결은 "두 시스템 공존 + 경로 플래그"라는 완화책에 가깝다. 더 근본적인 방향은 드래그 오프셋을 CSS 변수(`--drag-offset`)로 단일화해 JS/CSS 애니메이션 시스템을 통합하는 것이나, 브라우저별 CSS Typed OM 지원 차이와 설계 복잡도를 감수해야 한다.',
-        ],
-        solutionCode: `// 이슈 1 해결: useState → useRef로 드래그 상태 관리
-// 리렌더링 없이 값을 추적하여 클로저 stale 참조와 리스너 재등록 문제를 동시에 해결
-const startYRef = useRef(0);
-const isDraggingRef = useRef(false);
-
-// 이슈 2 해결: document 레벨 이벤트 등록
-// 마우스가 어디서 놓이든 드래그 종료 감지 가능
-const handleMouseDown = (e: MouseEvent) => {
-  if (e.button !== 0) return;
-  // X버튼 등 인터랙티브 요소 클릭 시 드래그 시작 차단 (이슈 4 예방)
-  if ((e.target as HTMLElement).closest('button, a, input')) return;
-  startYRef.current = e.clientY;
-  isDraggingRef.current = true;
-  document.addEventListener('mousemove', handleMouseMove);
-  document.addEventListener('mouseup', handleMouseUp);
-};
-
-// 이슈 3, 4 핵심: 닫기 경로를 플래그로 분리
-const isClosingViaDragRef = useRef(false);
-
-// open=false 시 인라인 스타일 초기화 — 드래그 중일 때는 건드리지 않음
-useEffect(() => {
-  if (!open && sheetRef.current && !isClosingViaDragRef.current) {
-    sheetRef.current.style.transform = '';
-    sheetRef.current.style.transition = '';
-    sheetRef.current.style.animation = '';
-  }
-}, [open]);
-
-// 드래그 완료: JS transition으로 직접 닫고 CSS exit 애니메이션을 생략
-const finishDrag = (diff: number) => {
-  if (diff > THRESHOLD) {
-    isClosingViaDragRef.current = true;
-    sheet.style.transition = 'transform 0.2s ease-out';
-    sheet.style.transform = 'translateY(100%)';
-
-    sheet.addEventListener('transitionend', function handler() {
-      sheet.removeEventListener('transitionend', handler);
-      setShouldRender(false);   // CSS 애니메이션 틈 없이 즉시 언마운트
-      onClose();
-    });
-  }
-};
-
-// 결과적인 닫기 경로 분리
-// X버튼/ESC/백드롭: open=false → 인라인 스타일 초기화 → CSS exit 애니메이션 → onAnimationEnd → 언마운트
-// 드래그:          JS transition → transitionend → 즉시 setShouldRender(false) + onClose()`,
-        results: [
-          '**4번의 이슈**를 거치며 드래그/버튼 두 닫기 경로가 **완전히 독립적으로 동작**',
-          '**애니메이션 연속성**: 드래그 위치 → JS transition → 언마운트가 하나의 흐름으로 연결',
-          '**엣지 케이스 처리**: 영역 밖 마우스, X버튼, 빠른 연타 등 모두 안정적으로 동작'
-        ],
-        lessons: [
-          '**`useState` vs `useRef`의 선택은 "리렌더링이 필요한가?"로 판단한다.** 드래그 좌표처럼 매 프레임 변하지만 UI에 직접 반영하지 않는 값은 `useRef`가 맞다. `useState`를 쓰면 **클로저 stale 참조**와 **이벤트 리스너 재등록** 문제가 동시에 발생한다.',
-          '__JS 인라인 스타일과 CSS 클래스 애니메이션이 공존할 때는 "어떤 경로로 닫혔는가"를 명시적으로 추적해야 한다.__ 하나의 버그를 고치면 다른 경로가 깨지는 연쇄 충돌을 막으려면 **경로별 분기가 필수**다.',
-          '이벤트 핸들러를 컴포넌트 전체에 바인딩하면 내부 버튼 클릭도 핸들러가 실행된다. `closest()`로 인터랙티브 요소를 걸러내거나, **핸들러를 드래그 핸들 영역에만 바인딩**하는 것이 안전하다.',
-          '**자기평가**: 현재 해결은 "두 시스템 공존 + 경로 플래그"라는 완화책에 가깝다. 더 근본적인 방향은 드래그 오프셋을 **CSS 변수로 단일화**해 JS/CSS 애니메이션 시스템을 통합하는 것이다. 또한 `handleTouchStart`/`handleMouseDown` 로직이 거의 동일하게 중복되어 있어, 공통 시작 함수로 추출하면 클린 코드 측면에서 개선 여지가 있다.'
-        ]
-      }
+      action: [
+        '드래그 상태(시작 위치·진행 여부)를 useState에서 useRef로 이전 — 매 프레임 리렌더 없이 값 누적',
+        'mousemove·mouseup 이벤트를 드래그 시작 시 document에 등록하고 종료 시 해제하는 패턴으로 일원화',
+        '드래그 시작 시점에 `sheet.style.animation = "none"`으로 CSS 애니메이션을 끄고 JS가 위치를 단독 제어',
+        '`isClosingViaDragRef` 플래그를 두어 닫기 정리 경로를 "드래그 닫기"와 "props 닫기"로 분기',
+        '터치·마우스 이벤트를 동일 핸들러로 처리해 모바일·데스크톱 코드 분기 제거',
+      ],
+      result: [
+        { label: '드래그 체감 품질', before: '손가락을 따라오지 않고 시트 밖 이탈 시 멈추지 않음', after: '드래그가 화면 어디서든 손가락에 붙어 움직이고, 손을 떼면 즉시 종료', measuredBy: '수동 재현 테스트 (시트 영역 밖 mousemove/mouseup)' },
+        { label: '닫기 애니메이션', before: '드래그 후 원위치로 튀어 돌아온 뒤 닫기 재생 — 부자연스러운 두 단계 동작', after: '드래그 멈춘 위치에서 그대로 이어져 닫힘 — 한 번의 연속된 동작으로 체감', measuredBy: '수동 재현 + 화면 녹화 비교' },
+        { label: '회귀 안전망', after: '드래그·ESC·backdrop·포커스·스크롤 관련 엣지케이스 15개 테스트 통과 — 수정 후 기존 동작 이상 없음 확인', measuredBy: 'Vitest — BottomSheet.test.tsx 44개 중 15개 엣지케이스 블록' },
+      ],
+      tradeOffs: [
+        '`useRef`로 드래그 상태를 관리하면 React DevTools에서 값 변화를 추적할 수 없습니다. 60fps를 유지하기 위해 감수한 비용이고, 디버깅이 필요할 때는 `console.log`로 대응합니다.',
+        '`isClosingViaDrag` 플래그로 두 닫기 경로를 분기했는데, "드래그 취소 후 즉시 `open=false`"처럼 두 경로가 겹치는 엣지 케이스가 생기면 플래그 관리가 복잡해질 수 있습니다. 상태 수가 늘어날 경우 상태 머신으로 전환할 여지를 남겨두었습니다.',
+      ],
     },
     {
-      id: 'component-api-design',
+      id: 'api-design',
       title: '3. 컴포넌트 API 설계 전략',
-      image: '/projects/TDS/API.webp',
-      features: [
-        '**Flat API**: 단순 props로 기본 일반 케이스 처리 (`variant`, `title`, `footer`)',
-        '**Compound API**: 서브컴포넌트 조합으로 복잡한 레이아웃 표현 (`Card.Header`, `Card.Body`)',
-        '`isFlat` **단일 조건 분기**: 별도 파일 분리 없이 단일 컴포넌트 내부에서 Flat/Compound 모드 자동 전환',
-        '**Render Prop 패턴**: `FormField`가 접근성 인프라(id, aria 속성)를 자식에게 위임'
+      problem: '사용자가 "이 라이브러리는 일관된 방식으로 쓰는구나"라고 느끼도록, 초기에는 모든 컴포넌트를 props만으로 조작하는 Flat방식으로 통일했습니다. Flat 방식이 사용 방법이 간결하여 사용자의 편의성도 높여줄 것이라고 판단했습니다. 실제로 Button·TextField처럼 단순한 컴포넌트는 문제없었지만, 직접 라이브러리를 써서 데모 앱을 만들어보니 Modal·Card처럼 내부 레이아웃을 자유롭게 구성해야 하는 컴포넌트에서 문제가 드러났습니다. 커스터마이징 요구사항이 있을 때마다 props를 늘려야 했고, 이는 사용자 경험 뿐만아니라 확장 및 유지보수에서 불편함을 느끼게 하여 문제가 되었습니다.',
+      analysis: [
+        '**진단 — props만으로는 레이아웃 자유도를 보장할 수 없음**: 제목·내용·버튼처럼 내부 구조가 고정된 컴포넌트는 props로 값을 받는 방식이 직관적입니다. 그런데 Modal 푸터에 버튼을 두 개 넣거나, Card 안에 커스텀 레이아웃을 구성하는 경우처럼 -> 내부 구조를 사용자가 결정해야 하는 상황에서는 props가 몇개가 될지, 어떤 props가 필요할지 미리 알기 어렵습니다. 굳이 구현한다면 JSX 조각을 props 값으로 전달하는 방법이 있었지만, 이는 컴포넌트 바깥에서 컴포넌트 내부 구조를 직접 밀어넣는 방식이라 가독성도 타입 안전성도 모두 나빠졌습니다.',
+        '**선택지 1 — 모두 Compound 방식으로 바꾸기**: 서브 컴포넌트를 조합하는 방식으로 전환하면 내부 레이아웃을 사용자가 자유롭게 결정할 수 있습니다. 그런데 제목과 본문만 있는 단순한 카드를 쓰려고 해도 서브 컴포넌트를 항상 나열해야 합니다. 기존에 Flat으로 쓰던 단순한 컴포넌트들까지 전부 바꿔야 하는 비용도 있었고, 단순한 케이스에 불필요한 복잡도를 강요하는 방향이라 폐기했습니다.',
+        '**선택지 2 — Flat 방식을 유지하되, 복잡한 컴포넌트에만 오버로드 추가**: 기존 API를 유지하면서 복잡한 케이스를 위한 props 경로를 추가로 만드는 방법입니다. 하지만 이 방법 역시 JSX를 객체로 묶어 받는 방식으로 기존 문제와 다를 게 없었고, props 수가 더 늘어나기만 하여 진단에서 발견한 문제가 해결되지 않았습니다.',
+        '**선택지 3 — 컴포넌트에 따라 제공 방식을 나누기(선택)**: 컴포넌트가 표현하는 것이 하나의 값이나 상태인지 아닌지를 기준으로 제공 방식을 나눴습니다. 예를 들어, Button은 하나의 행동, Badge는 하나의 상태, TextField는 하나의 입력값이라 내부 레이아웃이 달라질 이유가 없습니다 . 반면 Card·Modal처럼 이미지가 들어갈 수도 없을 수도 있고 푸터 버튼 구성이 상황마다 달라지는 컴포넌트는 내부 구조를 고정하는 순간 사용자가 원하는 조합을 표현할 수 없게 됩니다. 전자는 Flat 방식을 유지하고, 후자는 Compound 방식으로 전환했습니다. Compound로 전환한 컴포넌트에는 단순하게 쓸 수 있도록 제목·푸터 props가 있으면 자동으로 Flat 모드로 동작하는 자동 감지를 추가해, 단순한 경우는 props 하나로 끝나고 복잡한 경우는 Compound로 자유롭게 구성할 수 있도록 했습니다.',
       ],
-      intent: '디자인 시스템에서 가장 어려운 결정은 **컴포넌트 API를 어떤 형태로 노출할 것인가**입니다. Flat API는 쓰기 쉽지만 복잡한 레이아웃을 표현하기 어렵고, Compound API는 유연하지만 학습 비용이 높습니다. TDS는 Card, Modal, SideSheet, BottomSheet **4개 컴포넌트에 두 패턴을 혼합한 Hybrid API**를 적용했습니다. 초기 설계 문서에서는 `CardBase`/`CardFlat`/`CardCompound` 3파일로 구조를 분리하는 방안을 제시했지만, 실제 구현 단계에서 **"같은 효과를 `isFlat` 조건 분기 한 줄로 달성 가능하다"는 판단으로 파일 분리 없이 단일 컴포넌트에 통합**했습니다. 과설계를 의도적으로 피하고 더 단순한 구조로 같은 목적을 달성한 사례입니다.',
-      troubleShooting: {
-        title: 'Flat API만으로는 커버되지 않는 복잡한 레이아웃 요구사항',
-        initialImpl: 'Card, Modal 등 복합 컴포넌트를 처음에는 **Flat API로만 설계**. 단순한 경우는 문제없었으나, 이미지 오버레이·중첩 섹션·다중 액션 버튼처럼 레이아웃 자유도가 필요한 케이스에서 **props 조합이 폭발적으로 증가**했습니다.',
-        problem: [
-          'Flat API만으로는 커버 불가한 레이아웃이 발생 — **이미지 위에 텍스트 오버레이**, 커스텀 헤더 배치 등',
-          'props 추가로 대응하면 **컴포넌트 인터페이스가 비대**해지고 사용법이 복잡해짐',
-          'Compound API만 사용하면 단순한 Card 하나에도 **서브컴포넌트를 여러 개 나열**해야 해 DX 저하'
-        ],
-        analysis: [
-          '__Flat API의 한계는 "표현 가능한 레이아웃의 종류가 props 조합 수에 종속된다"는 구조적 문제였다.__ 이미지 오버레이 하나를 지원하려면 `imageOverlay` props가 필요하고, 그 위에 배지를 얹으려면 또 다른 props가 필요해진다. 결국 **컴포넌트가 렌더링 로직을 소유하는 구조에서는 케이스를 예측할 수 없다**.',
-          '**Compound API**는 이 문제를 반대로 해결한다. 컴포넌트가 렌더링을 포기하고 "슬롯 구조"만 정의하면, 사용자가 어떤 조합이든 조립할 수 있다. 단, 단순한 카드 하나에도 `Card.Header`, `Card.Body`, `Card.Footer`를 전부 써야 하는 DX 비용이 생긴다.',
-          '초기 설계 시 `Base`/`Flat`/`Compound` 3파일 분리안(`CardBase.tsx` + `CardFlat.tsx` + `CardCompound.tsx`)을 설계함. Base를 추출하면 두 API가 중복 없이 내부 구현을 공유할 수 있다는 장점 존재.',
-          '__하지만 구현 단계에서 재검토한 결과, 두 API가 실제로 공유해야 할 내부 구현이 "className 조합 + variant 적용" 정도로 단순.__ 이 정도라면 Base 추출이 중복 제거보다 파일 수와 간접 참조 비용을 더 발생시킨다고 판단했다. 대신 `isFlat = !!(title || header || footer || image)` 한 줄로 모드를 감지하고, 두 경로가 동일한 루트 요소를 공유하는 방식을 택했다.'
-        ],
-        solution: [
-          '**`isFlat` 자동 감지로 단일 파일 내 두 모드 공존** — Flat props(`title`, `header`, `footer`, `image`) 중 하나라도 전달되면 컴포넌트가 직접 렌더링하고, 없으면 `children`을 그대로 통과시켜 서브컴포넌트 조합을 허용. 진입점이 다르므로 두 모드가 서로 간섭하지 않음.',
-          '`Object.assign(Root, { Header, Title, Content })`으로 서브컴포넌트를 **네임스페이스 방식**으로 묶어 Compound API를 노출. Root 내부의 삼항 분기(`isFlat ? flatLayout : children`)가 Flat 경로를 처리. 서브컴포넌트는 **React Context**를 통해 `onClose` 같은 부모 상태를 공유.',
-          '**`FormField`에는 별도로 Render Prop 패턴 적용** — 레이블-입력 연결, `aria-describedby` 주입, 에러 상태 전달처럼 접근성에 필요한 속성들을 `FormField`가 생성해서 children 함수에 넘겨줌. `TextField`·`Textarea`가 동일한 접근성 인프라를 재사용 가능.',
-          '**과설계 판단**: Base/Flat/Compound 3파일 분리는 이론상 깔끔하지만 실제 공유해야 할 내부 구현이 className 조합 정도로 단순했다. __`isFlat` 한 줄로 같은 목적을 달성할 수 있다면 파일 수를 늘리는 것은 오히려 비용이다.__',
-        ],
-        solutionCode: `// Flat API: 간단한 사용 케이스
-<Card title="프로필" footer={<Button>수정</Button>}>
-  사용자 정보 내용
-</Card>
-
-// Compound API: 복잡한 레이아웃
-<Card variant="elevated">
-  <Card.Image src={coverImg}>
-    <Card.ImageOverlay>Featured</Card.ImageOverlay>
-  </Card.Image>
-  <Card.Header>
-    <Card.Title>커스텀 레이아웃</Card.Title>
-  </Card.Header>
-  <Card.Body padding="lg">복잡한 내용</Card.Body>
-  <Card.Footer>여러 액션 버튼들</Card.Footer>
-</Card>
-
-// Card.tsx 내부 — isFlat 자동 감지 로직
-const isFlat = !!(title || header || footer || image);
-const content = isFlat ? (
-  <>
-    {image && <div>{/* 이미지 렌더링 */}</div>}
-    {header && <header>{header}</header>}
-    <div>{children}</div>
-    {footer && <footer>{footer}</footer>}
-  </>
-) : children; // Compound 모드: children을 그대로 전달
-
-// Render Prop 패턴 — FormField가 접근성 인프라를 자식에게 위임
-<FormField label="이메일" error={hasError} errorMessage="올바르지 않습니다">
-  {({ inputId, helperId, hasHelper, isError }) => (
-    <input
-      id={inputId}
-      aria-describedby={hasHelper ? helperId : undefined}
-      aria-invalid={isError}
-    />
-  )}
-</FormField>`,
-        results: [
-          'Card, Modal, SideSheet, BottomSheet **4개 컴포넌트**에 **Hybrid API** 적용',
-          '`FormField`는 **Render Prop**으로 label-input 연결, 에러 메시지, 헬퍼 텍스트를 일관되게 처리',
-          '__단순 케이스와 복잡한 케이스 모두 하나의 컴포넌트로 커버__ — 학습 비용을 낮추면서 유연성 확보'
-        ],
-        lessons: [
-          '__"Flat vs Compound" Hybrid 패턴은 props 감지로 두 모드를 자동 전환__해 사용자가 익숙한 방식부터 시작하고 필요할 때 복잡한 조합으로 넘어갈 수 있게 한다.',
-          '**컴포넌트 API는 사용 패턴 분포를 먼저 분석해야 한다.** 단순히 커스터마이징 자유도를 위해 Compound 전용으로 만들면 불필요한 학습 비용을 요구하게 된다.',
-          '__설계 시의 계획을 맹목적으로 따르지 않는 것도 필요할 수 있다.__ Base/Flat/Compound 3파일 분리는 이론적으로 깔끔해 보이지만, 실제 공유해야 할 내부 구현이 얼마 안 될 때는 오히려 파일 수만 늘리는 **과설계**가 된다. "같은 목적을 더 적은 구조로 달성할 수 있는가"를 구현 단계에서 재질문하는 습관이 필요하다.',
-          '`FormField` 같은 **인프라 컴포넌트**는 UI를 직접 렌더링하지 않고 **접근성 속성만 생성·위임**하는 역할로 분리하면, 여러 컴포넌트(`TextField`, `TextArea`)가 일관된 접근성을 재사용할 수 있다.',
-          '**자기평가**: Card/Modal/SideSheet/BottomSheet 네 컴포넌트가 각자 독립적으로 Header/Title/Content 서브 구조를 구현하고 있어, **공통 `SheetBase` 추출 여지**가 남아있다. 현재는 각 컴포넌트의 스타일과 동작이 조금씩 달라 추출 비용이 명확하지 않아 보류했지만, 향후 새로운 Sheet 변형이 추가된다면 공통 추출이 정당화될 수 있다.'
-        ]
-      }
-    }
+      action: [
+        '단순 컴포넌트 (Button, TextField, Badge 등)에 Flat props 방식 적용',
+        '레이아웃 조합 컴포넌트(Card, Modal, SideSheet, BottomSheet)에 `Card.Header` 형태의 네임스페이스 조합 API 적용',
+        '위 4개에 Hybrid 자동 감지 추가 — title/header/footer props 존재 시 Flat 모드, 없으면 Compound 모드',
+        '30개 컴포넌트 전체에 variant·size·disabled 네이밍 규칙 통일',
+      ],
+      result: [
+        { label: '컴포넌트 확장성 및 유지보수 편의성', after: 'Flat 방식만 있을 때 JSX를 props로 밀어넣어야 했던 컴포넌트들이 역할에 맞는 API를 갖게 되어, 새로운 조합이 필요할 때 기존 컴포넌트를 수정하지 않고 Compound로 확장 가능', measuredBy: '데모 앱 제작 중 Modal·Card 실사용 확인' },
+        { label: 'API 설계 관점 전환', after: '내가 만들기 편한 구조와 쓰는 사람이 쓰기 편한 구조는 다르다는 것을 직접 써보고 나서야 알았습니다. 구현보다 사용자 입장에서 먼저 생각하는 것이 설계의 출발점이라는 것을 배웠습니다' },
+        { label: '처음부터 완벽한 설계는 없다', after: 'Flat으로 통일하면 일관성을 얻는다고 생각했지만, 실제로 데모 앱을 만들면서 사용해보고 나서야 한계가 드러났습니다. 처음부터 완벽한 설계는 없고, 직접 써보는 단계가 설계의 일부라는 것을 배웠습니다' },
+      ],
+      tradeOffs: [
+        'Hybrid 자동 감지는 두 모드를 섞어 쓰면 `Card.Header`가 오류 없이 조용히 무시됩니다. 개발 환경에서 `console.warn`으로 경고하고 있지만, 타입 레벨에서 원천 차단하려면 `title`과 `children`을 discriminated union으로 분기해야 합니다. 현재는 비용 대비 효용이 작다고 판단해 후속 과제로 남겨두었습니다.',
+        'Compound API는 `Card`를 import하면 서브 컴포넌트 전체가 번들에 딸려옵니다. 서브 컴포넌트를 별도 export로 분리하면 Tree-shaking이 가능하지만, 그 순간 `Card.Header` 네임스페이스 문법이 깨져 사용성이 나빠집니다. 네임스페이스를 유지하는 쪽이 디자인 시스템 관습에 맞다고 판단해 이 비용을 감수했습니다.',
+      ],
+    },
   ],
 
   githubUrl: 'https://github.com/maintaein/TDS_TaeinDesignSystem',
-  demoUrl: 'https://tds-taein-design-system.vercel.app'
+  demoUrl: 'https://tds-taein-design-system.vercel.app/',
 };

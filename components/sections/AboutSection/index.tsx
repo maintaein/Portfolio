@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { CoreValue } from '@/types';
-import { coreValues } from '@/lib/data';
+import { coreValues, contact } from '@/lib/data';
+import { useCopyToClipboard } from '@/hooks';
+import { GitHubIcon } from '@/components/atoms';
 import { TechParticleStorm, EmpathyRadar, CollaborationMesh } from '@/components/blocks';
 
 export default function AboutSection() {
@@ -24,23 +25,10 @@ export default function AboutSection() {
 }
 
 function HeaderSection() {
-  const [copiedItem, setCopiedItem] = useState<string | null>(null);
-
-  const githubUrl = 'https://github.com/maintaein';
-  const email = 'vostmfvostmf@naver.com';
-
-  const handleCopy = async (text: string, type: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedItem(type);
-      setTimeout(() => setCopiedItem(null), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
-  };
+  const { copiedKey, copy } = useCopyToClipboard();
 
   const handleLinkClick = (url: string) => {
-    window.open(url, '_blank');
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -61,21 +49,19 @@ function HeaderSection() {
       <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 mt-8">
         {/* GitHub */}
         <div className="flex items-center gap-2 group">
-          <svg className="w-5 h-5 sm:w-6 sm:h-6 text-gray-700 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-            <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" />
-          </svg>
+          <GitHubIcon className="w-5 h-5 sm:w-6 sm:h-6 text-gray-700 flex-shrink-0" width={24} height={24} />
           <button
-            onClick={() => handleLinkClick(githubUrl)}
+            onClick={() => handleLinkClick(contact.githubUrl)}
             className="text-sm sm:text-base md:text-lg text-gray-700 hover:text-blue-600 transition-colors duration-200 font-medium underline decoration-gray-300 hover:decoration-blue-600 underline-offset-4"
           >
-            {githubUrl}
+            {contact.githubUrl}
           </button>
           <button
-            onClick={() => handleCopy(githubUrl, 'github')}
+            onClick={() => copy(contact.githubUrl, 'github')}
             className="relative p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all duration-200"
             title="Copy GitHub URL"
           >
-            {copiedItem === 'github' ? (
+            {copiedKey === 'github' ? (
               <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
@@ -95,17 +81,17 @@ function HeaderSection() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
           </svg>
           <button
-            onClick={() => window.location.href = `mailto:${email}`}
+            onClick={() => copy(contact.email, 'email')}
             className="text-sm sm:text-base md:text-lg text-gray-700 hover:text-blue-600 transition-colors duration-200 font-medium underline decoration-gray-300 hover:decoration-blue-600 underline-offset-4"
           >
-            {email}
+            {contact.email}
           </button>
           <button
-            onClick={() => handleCopy(email, 'email')}
+            onClick={() => copy(contact.email, 'email')}
             className="relative p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all duration-200"
             title="Copy Email"
           >
-            {copiedItem === 'email' ? (
+            {copiedKey === 'email' ? (
               <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
