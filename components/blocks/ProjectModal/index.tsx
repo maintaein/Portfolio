@@ -54,7 +54,7 @@ function ResultBlock({ metrics }: { metrics: KeyMetric[] }) {
             {m.before && (
               <div className="flex items-start gap-2 pl-1">
                 <span className="text-red-400 select-none mt-px font-bold shrink-0">−</span>
-                <span className="text-grey-400 line-through leading-snug text-[11px]">{m.before}</span>
+                <RichText text={m.before} className="text-grey-400 line-through leading-snug text-[11px]" />
               </div>
             )}
 
@@ -62,7 +62,7 @@ function ResultBlock({ metrics }: { metrics: KeyMetric[] }) {
             <div className="flex items-start gap-2 pl-1">
               <span className="text-emerald-500 select-none font-bold mt-px shrink-0">+</span>
               <span className="text-emerald-700 font-semibold leading-snug text-[11px]">
-                {m.after}
+                <RichText text={m.after} />
                 {m.delta && (
                   <span className="ml-2 text-[10px] font-bold text-emerald-500">({m.delta})</span>
                 )}
@@ -72,7 +72,7 @@ function ResultBlock({ metrics }: { metrics: KeyMetric[] }) {
             {/* measuredBy */}
             <div className="flex items-center gap-1.5 pl-1 pt-0.5">
               <span className="text-[9px] font-bold uppercase tracking-wider text-grey-300 shrink-0">측정</span>
-              <span className="text-[10px] text-grey-400 leading-snug">{m.measuredBy}</span>
+              <RichText text={m.measuredBy ?? ''} className="text-[10px] text-grey-400 leading-snug" />
             </div>
           </div>
         ))}
@@ -147,7 +147,7 @@ function OverviewBlock({ project }: { project: NonNullable<Parameters<typeof Pro
                   <p className="mt-1 mb-2.5 text-[11px] font-bold text-blue-600 leading-snug">{m.after}</p>
                 )}
                 {/* 배운 점 — 주인공 */}
-                <p className="text-[12px] text-grey-700 leading-[1.65]">{m.learned}</p>
+                {m.learned && <RichText text={m.learned} className="text-[12px] text-grey-700 leading-[1.65]" />}
               </div>
             ))}
           </div>
@@ -224,7 +224,7 @@ function TechReasonExpand({ tech }: { tech: TechReason }) {
       {tech.selectionCriteria && (
         <div>
           <p className="text-[10px] font-bold uppercase tracking-wider text-grey-500 mb-1">선택 기준</p>
-          <p className="text-[11px] text-grey-700 leading-relaxed">{tech.selectionCriteria}</p>
+          <RichText text={tech.selectionCriteria} className="text-[11px] text-grey-700 leading-relaxed" />
         </div>
       )}
       {tech.alternatives && tech.alternatives.length > 0 && (
@@ -378,70 +378,42 @@ function ReviewContent({ review, reviews, activeIndex, onNavigate }: ReviewConte
             ))
           ) : (
             <div className="w-full rounded-lg overflow-hidden border border-grey-100">
-              <Image src={review.image} alt={review.title} width={800} height={450} className="w-full" />
+              <Image src={review.image} alt={review.title} width={650} height={350} className="w-full" />
             </div>
           )}
         </div>
       )}
 
-      {/* PAAR 블록 — 신규 필드가 하나라도 있으면 PAAR 렌더, 없으면 기존 intent/features fallback */}
-      {(review.problem || review.analysis?.length || review.action?.length || review.result?.length || review.tradeOffs?.length) ? (
-        <>
-          {review.problem && (
-            <div className="rounded-lg border-l-4 border-red-400 bg-red-50/60 px-4 py-3">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-red-500 mb-1.5">문제</p>
-              <RichText text={review.problem} className="text-[12px] text-grey-700 leading-relaxed" />
-            </div>
-          )}
-          {review.analysis && review.analysis.length > 0 && (
-            <div className="rounded-lg border-l-4 border-amber-400 bg-amber-50/60 px-4 py-3">
-              <p className="text-[12px] font-bold uppercase tracking-wider text-amber-600 mb-3">분석</p>
-              <AnalysisBlock items={review.analysis} />
-            </div>
-          )}
-          {review.action && review.action.length > 0 && (
-            <div className="rounded-lg border-l-4 border-blue-400 bg-blue-50/60 px-4 py-3">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-600 mb-2">실행</p>
-              <ul className="space-y-1.5">
-                {review.action.map((a, i) => (
-                  <li key={i} className="flex items-start gap-2">
-                    <span className="mt-[6px] w-1 h-1 rounded-full bg-blue-400 flex-shrink-0" />
-                    <RichText text={a} className="text-[12px] text-grey-700 leading-relaxed" />
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {review.result && review.result.length > 0 && (
-            <ResultBlock metrics={review.result} />
-          )}
-          {review.tradeOffs && review.tradeOffs.length > 0 && (
-            <TradeOffBlock items={review.tradeOffs} />
-          )}
-        </>
-      ) : (
-        <>
-          {/* 하위호환: 기존 intent/features 렌더 */}
-          {review.intent && (
-            <div className="rounded-lg border-l-2 border-blue-300 bg-blue-50/50 px-4 py-3">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-400 mb-1.5">기획 의도</p>
-              <RichText text={review.intent} className="text-[12px] text-grey-700 leading-relaxed" />
-            </div>
-          )}
-          {review.features && review.features.length > 0 && (
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-grey-400 mb-2.5">주요 기능</p>
-              <ul className="space-y-1.5">
-                {review.features.map((f, i) => (
-                  <li key={i} className="flex items-center gap-2">
-                    <span className="w-1 h-1 rounded-full bg-blue-400 flex-shrink-0" />
-                    <RichText text={f} className="text-[12px] text-grey-700" />
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </>
+      {review.problem && (
+        <div className="rounded-lg border-l-4 border-red-400 bg-red-50/60 px-4 py-3">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-red-500 mb-1.5">문제</p>
+          <RichText text={review.problem} className="text-[12px] text-grey-700 leading-relaxed" />
+        </div>
+      )}
+      {review.analysis && review.analysis.length > 0 && (
+        <div className="rounded-lg border-l-4 border-amber-400 bg-amber-50/60 px-4 py-3">
+          <p className="text-[12px] font-bold uppercase tracking-wider text-amber-600 mb-3">분석</p>
+          <AnalysisBlock items={review.analysis} />
+        </div>
+      )}
+      {review.action && review.action.length > 0 && (
+        <div className="rounded-lg border-l-4 border-blue-400 bg-blue-50/60 px-4 py-3">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-blue-600 mb-2">실행</p>
+          <ul className="space-y-1.5">
+            {review.action.map((a, i) => (
+              <li key={i} className="flex items-start gap-2">
+                <span className="mt-[6px] w-1 h-1 rounded-full bg-blue-400 flex-shrink-0" />
+                <RichText text={a} className="text-[12px] text-grey-700 leading-relaxed" />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {review.result && review.result.length > 0 && (
+        <ResultBlock metrics={review.result} />
+      )}
+      {review.tradeOffs && review.tradeOffs.length > 0 && (
+        <TradeOffBlock items={review.tradeOffs} />
       )}
 
       {/* 리뷰 하단 네비게이션 */}
@@ -532,7 +504,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
             transition={{ duration: 0.44, ease: [0.16, 1, 0.3, 1] }}
             role="dialog" aria-modal="true" aria-labelledby="modal-title"
           >
-            {/* ── 헤더 ── */}
+            {/* 헤더 */}
             <motion.div
               className="flex items-center justify-between px-6 py-4 border-b border-grey-100 flex-shrink-0"
               initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
@@ -569,7 +541,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
               </div>
             </motion.div>
 
-            {/* ── 콘텐츠 ── */}
+            {/* 콘텐츠 */}
             <motion.div
               ref={contentRef}
               className="overflow-y-auto flex-1 px-6 py-6"
@@ -643,7 +615,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                   </div>
                 </div>
 
-                {/* ── 프로젝트 요약: 만든 이유(P) + 성과·배움(R) ── */}
+                {/* 프로젝트 요약: 만든 이유(P) + 성과·배움(R) */}
                 {(project.motivation || project.keyMetrics?.length) && (
                   <div>
                     <div className="border-t-2 border-grey-200 mb-6" />
@@ -652,7 +624,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                   </div>
                 )}
 
-                {/* ── 구현 사항 ── */}
+                {/* 구현 사항 */}
                 {project.implementations && project.implementations.length > 0 && (
                   <div>
                     <SectionLabel>구현 사항</SectionLabel>
@@ -704,7 +676,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                   </div>
                 )}
 
-                {/* ── 프로젝트 리뷰 — 카드 컨테이너로 시각적 격리 ── */}
+                {/* 프로젝트 리뷰: 카드 컨테이너로 시각적 격리 */}
                 {project.reviews && project.reviews.length > 0 && (
                   <div ref={reviewSectionRef}>
                     <div className="border-t-2 border-grey-200 mb-6" />
@@ -726,12 +698,6 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                               )}
                             >
                               {review.title}
-                              {review.troubleShooting && (
-                                <span className={cn(
-                                  'w-1.5 h-1.5 rounded-full flex-shrink-0',
-                                  activeReviewTab === index ? 'bg-amber-300' : 'bg-amber-400'
-                                )} />
-                              )}
                             </button>
                           ))}
                         </div>
@@ -750,7 +716,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                   </div>
                 )}
 
-                {/* ── 기술 스택 & 선정 이유 ── */}
+                {/* 기술 스택 & 선정 이유 */}
                 {project.techReasons && project.techReasons.length > 0 && (
                   <div>
                     <div className="border-t-2 border-grey-200 mb-6" />
@@ -776,7 +742,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                   </div>
                 )}
 
-                {/* ── 배운 점 ── */}
+                {/* 배운 점 */}
                 {project.keyLearnings && project.keyLearnings.length > 0 && (
                   <div>
                     <div className="border-t-2 border-grey-200 mb-6" />
@@ -793,7 +759,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                             </span>
                             <div>
                               {title && <p className="text-[12px] font-bold text-grey-800 mb-0.5">{title}</p>}
-                              <p className="text-[12px] text-grey-600 leading-relaxed">{content}</p>
+                              <RichText text={content} className="text-[12px] text-grey-600 leading-relaxed" />
                             </div>
                           </li>
                         );
