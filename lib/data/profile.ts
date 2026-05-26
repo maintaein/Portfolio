@@ -58,4 +58,10 @@ export const certificates: Certificate[] = [
       validUntil: '2027. 03',
     },
   ];
+
+export const contact = {
+  name: '김태인',
+  email: 'vostmfvostmf@naver.com',
+  githubUrl: 'https://github.com/maintaein',
+};
   

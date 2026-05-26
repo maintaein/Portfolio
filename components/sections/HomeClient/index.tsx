@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import Navigation from '@/components/blocks/Navigation';
-import { HeroSection } from '@/components/sections';
+import { Footer, HeroSection } from '@/components/sections';
 
 const AboutSection = dynamic(() => import('@/components/sections/AboutSection'), {
   loading: () => <div className="min-h-[600px]" />,
@@ -89,6 +89,8 @@ export default function HomeClient() {
           </div>
         )}
       </main>
+
+      {isUnlocked && <Footer />}
     </>
   );
 }

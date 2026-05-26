@@ -279,7 +279,7 @@ function ProjectCard({ project, isFeatured }: ProjectCardProps) {
         {isFeatured && (
           <motion.div
             className="absolute inset-y-0 left-0 z-10 flex flex-col justify-between"
-            style={{ width: 300, padding: '28px 24px' }}
+            style={{ width: 360, padding: '28px 28px' }}
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -12 }}
@@ -294,21 +294,36 @@ function ProjectCard({ project, isFeatured }: ProjectCardProps) {
                 </span>
               </div>
 
-              <h3 className="text-[22px] font-bold text-white leading-tight mb-2 drop-shadow-md">
+              <h3 className="text-[22px] font-bold text-white leading-tight mb-4 drop-shadow-md">
                 {project.title}
               </h3>
 
               {project.subtitle && (
-                <p className="text-[12px] mb-3 leading-relaxed font-medium"
-                  style={{ color: 'rgba(200,220,255,0.95)' }}>
+                <p className="text-[12px] leading-relaxed whitespace-pre-line"
+                  style={{ color: 'rgba(180,205,255,0.7)' }}>
                   {project.subtitle}
                 </p>
               )}
 
-              <p className="text-[12px] leading-relaxed line-clamp-4"
-                style={{ color: 'rgba(210,225,245,0.90)' }}>
-                {project.description}
-              </p>
+              {/* 구현 사항 — 번호 인덱스 */}
+              {project.implementations && project.implementations.length > 0 && (() => {
+                const items = project.implementations.slice(0, 3).map(impl => impl.category);
+                return (
+                  <div className="mt-4 pt-4 border-t space-y-2.5" style={{ borderColor: 'rgba(99,160,255,0.15)' }}>
+                    {items.map((label, i) => (
+                      <div key={i} className="flex items-center gap-3">
+                        <span className="text-[10px] font-bold tabular-nums flex-shrink-0 w-4 text-right"
+                          style={{ color: 'rgba(99,160,255,0.7)' }}>
+                          {String(i + 1).padStart(2, '0')}
+                        </span>
+                        <span className="text-[12px] font-semibold leading-snug text-white">
+                          {label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* 하단 — 메타 + 태그 + 클릭 힌트 */}
