@@ -4,19 +4,19 @@ export const coreValues: CoreValue[] = [
     {
       id: '1',
       title: '새로움을 즐기는 개발자',
-      description: '새로운 기술과 트렌드에 관심이 많으며, 프로젝트에 적극 도입합니다. React와 Typescript를 주로 사용합니다.',
+      description: '처음 접하는 개념도 직접 만들며 이해합니다. 디자인 시스템을 밑바닥부터 구축해 번들러·접근성·타입 시스템을 익히고 Tree-shaking 91% 감소를 실측 검증했으며, 포트폴리오 프로젝트에서는 SSR/Hydration 원리를 파고들어 렌더링 에러를 0건으로 잡았습니다.',
       imagePlaceholder: 'tech-stack'
     },
     {
       id: '2',
       title: '사용자의 눈과 마음으로',
-      description: '사용자 경험을 최우선으로 생각하며, 직관적이고 아름다운 인터페이스를 만듭니다. 개발 시 성능 최적화와 직관성있는 디자인을 함께 고려합니다.',
+      description: '쓰는 사람의 입장에서 성능과 사용 방식을 다듬습니다. 디자인 시스템에서 단순한 컴포넌트는 Flat, 레이아웃 조합 컴포넌트는 Compound로 API를 나눠 단순한 경우는 props 하나로, 복잡한 경우는 자유롭게 조합하도록 설계했습니다.',
       imagePlaceholder: 'ux-focus'
     },
     {
       id: '3',
       title: '원활한 소통과 협업 역량',
-      description: '팀원들과 적극적으로 소통하며, 협업 도구를 활용해 효율적으로 일합니다. 코드 리뷰와 문서화를 통해 팀의 생산성을 높입니다.',
+      description: '팀이 효율적인 방식으로 일할 구조를 고민합니다. Alphamail 프로젝트에서 프론트엔드 리더를 맡아 git과 jira 컨벤션을 설정하여 팀의 협업 효율성을 끌어올리고, FSD·Atomic 기반 구조를 잡아 기능별 독립 개발 환경을 만든 경험이 있습니다.',
       imagePlaceholder: 'collaboration'
     }
   ];
