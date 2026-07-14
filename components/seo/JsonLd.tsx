@@ -1,10 +1,12 @@
+import { siteConfig } from '@/lib/siteConfig';
+
 export default function JsonLd() {
   const personSchema = {
     '@context': 'https://schema.org',
     '@type': 'Person',
     name: '김태인',
     jobTitle: 'Frontend Developer',
-    url: 'https://kimtaein.vercel.app',
+    url: siteConfig.url,
     sameAs: [
       'https://github.com/maintaein',
     ],
@@ -38,7 +40,7 @@ export default function JsonLd() {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     name: '김태인의 프론트엔드 포트폴리오',
-    url: 'https://kimtaein.vercel.app',
+    url: siteConfig.url,
     description: '사용자 경험을 최우선으로 생각하는 프론트엔드 개발자 김태인의 포트폴리오',
     author: {
       '@type': 'Person',
@@ -55,37 +57,37 @@ export default function JsonLd() {
         '@type': 'ListItem',
         position: 1,
         name: 'Home',
-        item: 'https://kimtaein.vercel.app',
+        item: siteConfig.url,
       },
       {
         '@type': 'ListItem',
         position: 2,
         name: 'About',
-        item: 'https://kimtaein.vercel.app#about',
+        item: `${siteConfig.url}#about`,
       },
       {
         '@type': 'ListItem',
         position: 3,
         name: 'Skills',
-        item: 'https://kimtaein.vercel.app#skills',
+        item: `${siteConfig.url}#skills`,
       },
       {
         '@type': 'ListItem',
         position: 4,
         name: 'Projects',
-        item: 'https://kimtaein.vercel.app#projects',
+        item: `${siteConfig.url}#projects`,
       },
       {
         '@type': 'ListItem',
         position: 5,
         name: 'Awards & Certificates',
-        item: 'https://kimtaein.vercel.app#awards-certificates',
+        item: `${siteConfig.url}#awards-certificates`,
       },
       {
         '@type': 'ListItem',
         position: 6,
         name: 'Experience',
-        item: 'https://kimtaein.vercel.app#experience',
+        item: `${siteConfig.url}#experience`,
       },
     ],
   };

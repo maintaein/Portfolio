@@ -5,12 +5,10 @@ import JsonLd from '@/components/seo/JsonLd';
 import '@/styles/design-tokens.css';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
-
-
-const siteUrl = 'https://kimtaein.vercel.app';
+import { siteConfig } from '@/lib/siteConfig';
 
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
+  metadataBase: new URL(siteConfig.url),
 
   title: {
     default: '김태인의 프론트엔드 포트폴리오',
@@ -55,7 +53,7 @@ export const metadata: Metadata = {
   authors: [
     {
       name: '김태인',
-      url: siteUrl,
+      url: siteConfig.url,
     }
   ],
 
@@ -65,7 +63,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'ko_KR',
-    url: siteUrl,
+    url: siteConfig.url,
     title: '김태인의 프론트엔드 포트폴리오',
     description: '사용자 경험을 최우선으로 생각하는 프론트엔드 개발자 김태인입니다. React, Next.js, TypeScript를 활용한 웹 개발 프로젝트를 소개합니다.',
     siteName: '김태인 Portfolio',
@@ -99,7 +97,7 @@ export const metadata: Metadata = {
   },
 
   alternates: {
-    canonical: siteUrl,
+    canonical: siteConfig.url,
   },
 
   category: 'technology',

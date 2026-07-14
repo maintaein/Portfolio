@@ -1,12 +1,12 @@
 import { MetadataRoute } from 'next';
+import { siteConfig } from '@/lib/siteConfig';
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = 'https://kimtaein.vercel.app';
   const currentDate = new Date();
 
   return [
     {
-      url: baseUrl,
+      url: siteConfig.url,
       lastModified: currentDate,
       changeFrequency: 'weekly',
       priority: 1.0,

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence, useAnimation } from 'framer-motion';
+import { siteConfig } from '@/lib/siteConfig';
 
 type LineType = 'command' | 'output' | 'blank';
 
@@ -28,7 +29,7 @@ const BOOT_SEQUENCE: TerminalLine[] = [
   { type: 'output',  text: '> Building interface...', delay: 110 },
   { type: 'output',  text: '✓ Components compiled  (0.8s)', delay: 230 },
   { type: 'output',  text: '✓ Animations ready     (0.2s)', delay: 190 },
-  { type: 'output',  text: '✓ Portfolio is live  →  https://kimtaein.vercel.app/', delay: 200 },
+  { type: 'output',  text: `✓ Portfolio is live  →  ${siteConfig.url}/`, delay: 200 },
 ];
 
 const NPM_RUN_IDX = 11;
