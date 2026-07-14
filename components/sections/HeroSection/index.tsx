@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence, useAnimation } from 'framer-motion';
 
 type LineType = 'command' | 'output' | 'blank';
@@ -34,6 +34,14 @@ const BOOT_SEQUENCE: TerminalLine[] = [
 const NPM_RUN_IDX = 11;
 const TYPING_SPEED = 36;
 
+// 실제 부팅 시퀀스와 같은 타임라인으로 충전량을 연속 보간한다.
+// command는 타이핑 시간과 다음 라인으로 넘어가는 150ms까지 포함한다.
+const BOOT_CHARGE_DURATION = BOOT_SEQUENCE.reduce(
+  (total, line) => total + line.delay
+    + (line.type === 'command' ? line.text.length * TYPING_SPEED + 150 : 0),
+  0,
+);
+
 // CLI 고정 높이 — 전체 시퀀스가 들어가도록 여기서 조정
 const CLI_HEIGHT = 450;
 
@@ -48,6 +56,13 @@ interface HeroSectionProps {
   onUnlock?: () => void;
   burstPhase?: 'idle' | 'burst' | 'done';
 }
+
+type LaunchStatus = 'building' | 'complete' | 'run';
+type RunInteraction = 'idle' | 'press' | 'settle';
+
+const wait = (duration: number) => new Promise<void>((resolve) => {
+  setTimeout(resolve, duration);
+});
 
 // 번개 제거 → 부드러운 곡선 플레어 (베지어 기반)
 // border 4면에서 시작해 바깥으로 뻗어나가다 사라짐
@@ -240,6 +255,227 @@ const CHARGE_PARTICLES = Array.from({ length: 36 }, (_, i) => ({
   bright: 0.7 + (i % 4) * 0.075,
 }));
 
+interface EnergyAuraCanvasProps {
+  terminalRef: { current: HTMLDivElement | null };
+  chargeLevelRef: { current: number };
+  activityRef: { current: number };
+  active: boolean;
+}
+
+// 터미널 뒤에서만 렌더링되는 외곽 에너지 덩어리.
+// 선이 border를 따라 이동하지 않고, 플라즈마가 끓듯 각 지점이 독립적으로 솟고 가라앉는다.
+function EnergyAuraCanvas({ terminalRef, chargeLevelRef, activityRef, active }: EnergyAuraCanvasProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    if (!active || !canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let rafId = 0;
+    let width = window.innerWidth;
+    let height = window.innerHeight;
+    let animationTime = 0;
+    let lastFrame = performance.now();
+    let visualActivity = 1;
+
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = Math.max(1, Math.round(width * dpr));
+      canvas.height = Math.max(1, Math.round(height * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+
+    type Side = 'top' | 'right' | 'bottom' | 'left';
+
+    const pointOnSide = (rect: DOMRect, side: Side, progress: number) => {
+      const corner = 16;
+      if (side === 'top') {
+        return { x: rect.left + corner + progress * (rect.width - corner * 2), y: rect.top, nx: 0, ny: -1 };
+      }
+      if (side === 'right') {
+        return { x: rect.right, y: rect.top + corner + progress * (rect.height - corner * 2), nx: 1, ny: 0 };
+      }
+      if (side === 'bottom') {
+        return { x: rect.right - corner - progress * (rect.width - corner * 2), y: rect.bottom, nx: 0, ny: 1 };
+      }
+      return { x: rect.left, y: rect.bottom - corner - progress * (rect.height - corner * 2), nx: -1, ny: 0 };
+    };
+
+    const getMotionStrength = (energy: number) => (
+      (0.27 + Math.pow(energy, 0.9) * 0.82) * (0.35 + visualActivity * 0.65)
+    );
+
+    const turbulence = (progress: number, time: number, seed: number, motionStrength: number) => {
+      const calmRipple = Math.sin(progress * 11.7 + time * 0.74 + seed) * 0.04;
+      const activeBoil =
+        Math.sin(progress * 17.3 + time * 1.31 * 3.05 + seed) * 0.29
+        + Math.sin(progress * 31.7 - time * 2.07 * 3.05 + seed * 1.7) * 0.20
+        + Math.sin(progress * 57.1 + time * 3.43 * 3.05 + seed * 0.6) * 0.13;
+
+      // 초반부터 충분히 움직이며, 두꺼워질수록 진폭과 속도가 더 가파르게 커진다.
+      return 0.62 + calmRipple + activeBoil * motionStrength;
+    };
+
+    const drawBoilingBand = (
+      rect: DOMRect,
+      side: Side,
+      time: number,
+      energy: number,
+      layer: number,
+    ) => {
+      const sampleCount = side === 'top' || side === 'bottom' ? 42 : 30;
+      const baseDepth = (2.3 + energy * (layer === 0 ? 20 : 36))
+        * (0.65 + visualActivity * 0.35);
+      const motionStrength = getMotionStrength(energy);
+      const globalSurge = 1 + Math.sin(time * 1.76 + layer * 1.8)
+        * motionStrength * 0.20;
+      const seed = layer * 4.8 + (side === 'top' ? 0 : side === 'right' ? 1.3 : side === 'bottom' ? 2.6 : 3.9);
+
+      ctx.beginPath();
+      const start = pointOnSide(rect, side, 0);
+      ctx.moveTo(start.x, start.y);
+
+      for (let i = 0; i <= sampleCount; i++) {
+        const progress = i / sampleCount;
+        const point = pointOnSide(rect, side, progress);
+        const boil = Math.max(
+          0.08,
+          turbulence(progress, time * (layer === 0 ? 1 : 0.74), seed, motionStrength),
+        );
+        const depth = baseDepth * boil * globalSurge;
+        ctx.lineTo(point.x + point.nx * depth, point.y + point.ny * depth);
+      }
+
+      const end = pointOnSide(rect, side, 1);
+      ctx.lineTo(end.x, end.y);
+      ctx.closePath();
+      ctx.filter = `blur(${layer === 0 ? 4.5 : 13}px)`;
+      const alphaScale = 0.55 + visualActivity * 0.45;
+      ctx.fillStyle = layer === 0
+        ? `rgba(93, 173, 255, ${(0.15 + energy * 0.31) * alphaScale})`
+        : `rgba(49, 130, 246, ${(0.05 + energy * 0.145) * alphaScale})`;
+      ctx.fill();
+    };
+
+    const drawFlareLobes = (rect: DOMRect, time: number, energy: number) => {
+      const sides: Side[] = ['top', 'right', 'bottom', 'left'];
+      const motionStrength = getMotionStrength(energy);
+      const slowSpeed = 2.20;
+      const quickSpeed = 4.04;
+
+      sides.forEach((side, sideIndex) => {
+        const lobeCount = side === 'top' || side === 'bottom' ? 7 : 5;
+        for (let i = 0; i < lobeCount; i++) {
+          const progress = (i + 0.5) / lobeCount;
+          const point = pointOnSide(rect, side, progress);
+          const seed = sideIndex * 7 + i * 1.83;
+          const slowWave = 0.5
+            + Math.sin(time * slowSpeed * (0.82 + (i % 3) * 0.17) + seed) * 0.5;
+          const quickWave = 0.5
+            + Math.sin(time * quickSpeed * (1.9 + (i % 2) * 0.31) - seed * 0.7) * 0.5;
+          const reach = energy * (6.5 + motionStrength * (31 * slowWave + 16 * quickWave))
+            * (0.60 + visualActivity * 0.40);
+          const tangentRadius = 7.5 + (i % 3) * 3 + energy * 5.5;
+          const normalRadius = 4.7 + reach * 0.71;
+          const x = point.x + point.nx * (normalRadius * 0.6);
+          const y = point.y + point.ny * (normalRadius * 0.6);
+          const horizontal = side === 'top' || side === 'bottom';
+
+          ctx.save();
+          ctx.filter = `blur(${3.8 + energy * 5.5}px)`;
+          ctx.fillStyle = `rgba(120, 194, 255, ${(0.047 + slowWave * 0.12) * energy * (0.55 + visualActivity * 0.45)})`;
+          ctx.beginPath();
+          ctx.ellipse(
+            x,
+            y,
+            horizontal ? tangentRadius : normalRadius,
+            horizontal ? normalRadius : tangentRadius,
+            0,
+            0,
+            Math.PI * 2,
+          );
+          ctx.fill();
+          ctx.restore();
+        }
+      });
+    };
+
+    const draw = (now: number) => {
+      const delta = Math.min((now - lastFrame) / 1000, 0.05);
+      lastFrame = now;
+      const targetActivity = Math.max(0, Math.min(activityRef.current, 1));
+      visualActivity += (targetActivity - visualActivity) * (1 - Math.exp(-delta * 3));
+
+      // RUN 이후에는 위상 점프 없이 끓는 속도와 강도가 함께 부드럽게 낮아진다.
+      animationTime += delta * 0.84 * (0.45 + visualActivity * 0.55);
+      const time = animationTime;
+      const energy = Math.max(0, Math.min(chargeLevelRef.current, 1));
+      const rect = terminalRef.current?.getBoundingClientRect();
+
+      ctx.clearRect(0, 0, width, height);
+      if (!rect || energy <= 0.002) {
+        rafId = requestAnimationFrame(draw);
+        return;
+      }
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const sides: Side[] = ['top', 'right', 'bottom', 'left'];
+      sides.forEach((side) => drawBoilingBand(rect, side, time, energy, 1));
+      sides.forEach((side) => drawBoilingBand(rect, side, time, energy, 0));
+      drawFlareLobes(rect, time, energy);
+
+      ctx.restore();
+      rafId = requestAnimationFrame(draw);
+    };
+
+    resize();
+    window.addEventListener('resize', resize);
+    rafId = requestAnimationFrame(draw);
+
+    return () => {
+      window.removeEventListener('resize', resize);
+      cancelAnimationFrame(rafId);
+    };
+  }, [active, activityRef, chargeLevelRef, terminalRef]);
+
+  if (!active) return null;
+
+  return (
+    <canvas
+      ref={canvasRef}
+      aria-hidden="true"
+      className="fixed inset-0 z-[9] h-full w-full pointer-events-none"
+    />
+  );
+}
+
+const getChargeShadow = (chargeLevel: number) => {
+  const t = Math.max(0, Math.min(chargeLevel, 1));
+  const blur1 = 4  + t * 28;
+  const blur2 = 10 + t * 54;
+  const blur3 = 20 + t * 100;
+  const blur4 = 40 + t * 160;
+  const a1 = 0.15 + t * 0.70;
+  const a2 = 0.08 + t * 0.52;
+  const a3 = 0.04 + t * 0.30;
+  const a4 = 0.02 + t * 0.14;
+  const borderA = 0.10 + t * 0.72;
+
+  return [
+    `0 0 0 1px rgba(140,200,255,${Math.min(borderA, 1).toFixed(3)})`,
+    `0 0 ${blur1.toFixed(2)}px rgba(49,130,246,${Math.min(a1, 1).toFixed(3)})`,
+    `0 0 ${blur2.toFixed(2)}px rgba(80,160,255,${Math.min(a2, 1).toFixed(3)})`,
+    `0 0 ${blur3.toFixed(2)}px rgba(100,168,255,${Math.min(a3, 1).toFixed(3)})`,
+    `0 0 ${blur4.toFixed(2)}px rgba(147,197,253,${Math.min(a4, 1).toFixed(3)})`,
+  ].join(', ');
+};
+
 // ===== 임팩트 링 Canvas =====
 // 발산 직전 "완료" 강렬한 순간 효과: 터미널 중심에서 동심원 링이 팽창 후 소멸
 interface ImpactCanvasProps {
@@ -369,42 +605,44 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
   const [sequenceIdx, setSequenceIdx] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
   const [isBuilding, setIsBuilding] = useState(false);
-  const [chargeLevel, setChargeLevel] = useState(0);
+  const [launchStatus, setLaunchStatus] = useState<LaunchStatus>('building');
+  const [runInteraction, setRunInteraction] = useState<RunInteraction>('idle');
+  const [chargeParticlesActive, setChargeParticlesActive] = useState(true);
   const [termRect, setTermRect] = useState<DOMRect | null>(null);
   const [impactActive, setImpactActive] = useState(false);
   const [flashActive, setFlashActive]   = useState(false);
   const terminalRef = useRef<HTMLDivElement>(null);
+  const chargeParticleLayerRef = useRef<HTMLDivElement>(null);
+  const chargeLevelRef = useRef(0);
+  const auraActivityRef = useRef(1);
   const idRef = useRef(0);
   const hasUnlockedRef = useRef(false);
   const terminalBorderControls = useAnimation();
 
-  // 충전 단계: border glow 12단계 세분화
-  // pulse 계산에서 Date.now() 제거 — 80ms interval 리렌더 비용 제거
-  const chargeStyle = useMemo(() => {
-    const t = chargeLevel;
-    if (t <= 0) return { boxShadow: '0 0 0 1px rgba(100,168,255,0.12)' };
+  // 부팅 라인 단위가 아닌 실제 경과 시간으로 0→0.96을 부드럽게 누적한다.
+  useEffect(() => {
+    const startedAt = performance.now();
+    let rafId = 0;
 
-    const step = Math.floor(t * 12) / 12;
-    const blur1 = 4  + step * 28;
-    const blur2 = 10 + step * 54;
-    const blur3 = 20 + step * 100;
-    const blur4 = 40 + step * 160;
-    const a1 = 0.15 + step * 0.70;
-    const a2 = 0.08 + step * 0.52;
-    const a3 = 0.04 + step * 0.30;
-    const a4 = 0.02 + step * 0.14;
-    const borderA = 0.10 + step * 0.72;
+    const updateCharge = (now: number) => {
+      const raw = Math.min((now - startedAt) / BOOT_CHARGE_DURATION, 1);
+      const smooth = raw * raw * (3 - 2 * raw);
+      const nextCharge = smooth * 0.96;
+      chargeLevelRef.current = nextCharge;
 
-    return {
-      boxShadow: [
-        `0 0 0 1px rgba(140,200,255,${Math.min(borderA, 1).toFixed(2)})`,
-        `0 0 ${Math.round(blur1)}px rgba(49,130,246,${Math.min(a1, 1).toFixed(2)})`,
-        `0 0 ${Math.round(blur2)}px rgba(80,160,255,${Math.min(a2, 1).toFixed(2)})`,
-        `0 0 ${Math.round(blur3)}px rgba(100,168,255,${Math.min(a3, 1).toFixed(2)})`,
-        `0 0 ${Math.round(blur4)}px rgba(147,197,253,${Math.min(a4, 1).toFixed(2)})`,
-      ].join(', '),
+      if (terminalRef.current) {
+        terminalRef.current.style.boxShadow = getChargeShadow(nextCharge);
+      }
+      if (chargeParticleLayerRef.current) {
+        chargeParticleLayerRef.current.style.opacity = String(nextCharge);
+      }
+
+      if (raw < 1) rafId = requestAnimationFrame(updateCharge);
     };
-  }, [chargeLevel]);
+
+    rafId = requestAnimationFrame(updateCharge);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
 
   const triggerUnlock = useCallback(async () => {
     if (hasUnlockedRef.current) return;
@@ -414,7 +652,7 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
       setTermRect(terminalRef.current.getBoundingClientRect());
     }
 
-    setChargeLevel(1);
+    chargeLevelRef.current = 1;
 
     // 에너지 최고조 수렴
     await terminalBorderControls.start({
@@ -425,6 +663,30 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
       ],
       transition: { duration: 1.2, ease: [0.4, 0, 0.6, 1] },
     });
+
+    // progress가 100%에 도달한 뒤에만 실행 준비 UI로 전환한다.
+    await wait(220);
+
+    if (chargeParticleLayerRef.current) {
+      chargeParticleLayerRef.current.style.opacity = '0';
+    }
+    setChargeParticlesActive(false);
+    auraActivityRef.current = 0.78;
+    setLaunchStatus('complete');
+    await wait(600);
+
+    auraActivityRef.current = 0.58;
+    setLaunchStatus('run');
+    await wait(530);
+
+    // RUN 클릭과 동시에 외곽 에너지를 한 번 더 안정화한다.
+    auraActivityRef.current = 0.46;
+    setRunInteraction('press');
+    await wait(460);
+
+    // 클릭 반응이 외부로 퍼지는 여운 뒤에 발산을 연결한다.
+    setRunInteraction('settle');
+    await wait(330);
 
     // 임팩트 효과 — 동심원 링 + 화면 플래시
     setImpactActive(true);
@@ -457,10 +719,6 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
 
     if (sequenceIdx === NPM_RUN_IDX) setIsBuilding(false);
     if (sequenceIdx === NPM_RUN_IDX + 1) setIsBuilding(true);
-
-    if (sequenceIdx <= NPM_RUN_IDX) {
-      setChargeLevel(sequenceIdx / NPM_RUN_IDX);
-    }
 
     const delayTimer = setTimeout(() => {
       if (seq.type === 'command') {
@@ -558,12 +816,14 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
 
       {/* 충전 입자 — 터미널 바깥에서 border로 수렴, 터미널 내부 침범 없음 */}
       <AnimatePresence>
-        {chargeLevel > 0 && !isComplete && (
+        {chargeParticlesActive && !isComplete && (
           // clip 범위: 터미널 창 바깥까지만. overflow-hidden으로 터미널 내부 침범 방지
-          <div className="absolute inset-0 pointer-events-none z-20" style={{ overflow: 'hidden' }}>
+          <div
+            ref={chargeParticleLayerRef}
+            className="absolute inset-0 pointer-events-none z-20"
+            style={{ overflow: 'hidden', opacity: 0 }}
+          >
             {CHARGE_PARTICLES.map((p) => {
-              if (p.id / CHARGE_PARTICLES.length > chargeLevel + 0.12) return null;
-
               // 터미널 창 좌표 (viewport 비율)
               const termL = 0.5 - 0.25;
               const termR = 0.5 + 0.25;
@@ -636,6 +896,13 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
         )}
       </AnimatePresence>
 
+      <EnergyAuraCanvas
+        terminalRef={terminalRef}
+        chargeLevelRef={chargeLevelRef}
+        activityRef={auraActivityRef}
+        active={!isComplete}
+      />
+
       {/* 메인 컨테이너 */}
       <div className="relative z-10 w-full max-w-2xl mx-auto px-4 sm:px-6 flex flex-col items-center">
 
@@ -649,7 +916,7 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
           style={{
             background: 'rgba(14,19,32,0.97)',
             border: '1px solid rgba(100,168,255,0.15)',
-            ...chargeStyle,
+            boxShadow: getChargeShadow(0),
           }}
           initial={{ opacity: 0, y: 26, scale: 0.97 }}
           whileInView={{ opacity: 1, y: 0, scale: 1 }}
@@ -685,18 +952,137 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.25 }}
               >
-                <span className="text-[11px] text-blue-300 font-mono tracking-[0.18em] uppercase select-none">
-                  Building...
-                </span>
-                <div className="w-48 sm:w-64 h-[3px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                  <motion.div
-                    className="h-full rounded-full"
-                    style={{ background: 'linear-gradient(90deg, #3182f6, #64a8ff, #90c2ff)' }}
-                    initial={{ width: '0%' }}
-                    animate={{ width: '100%' }}
-                    transition={{ duration: 2.2, ease: 'easeInOut' }}
-                  />
-                </div>
+                {launchStatus === 'building' ? (
+                  <>
+                    <span className="text-[11px] text-blue-300 font-mono tracking-[0.18em] uppercase select-none">
+                      Building...
+                    </span>
+                    <div
+                      className="w-48 sm:w-64 h-[3px] rounded-full overflow-hidden"
+                      style={{ background: 'rgba(255,255,255,0.08)' }}
+                    >
+                      <motion.div
+                        className="h-full rounded-full"
+                        style={{ background: 'linear-gradient(90deg, #3182f6, #64a8ff, #90c2ff)' }}
+                        initial={{ width: '0%' }}
+                        animate={{ width: '100%' }}
+                        transition={{ duration: 2.2, ease: 'easeInOut' }}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={launchStatus}
+                      className="flex flex-col items-center gap-3"
+                      initial={{ opacity: 0, y: 4, scale: 0.96 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -3, scale: 0.96 }}
+                      transition={{
+                        duration: launchStatus === 'complete' ? 0.24 : 0.18,
+                        ease: [0.22, 1, 0.36, 1],
+                      }}
+                    >
+                      {launchStatus === 'complete' && (
+                        <>
+                          <motion.span
+                            className="flex h-7 w-7 items-center justify-center rounded-full border border-emerald-300/50 bg-emerald-400/10 text-sm text-emerald-300"
+                            initial={{ scale: 0.5, rotate: -14 }}
+                            animate={{ scale: 1, rotate: 0 }}
+                            transition={{ type: 'spring', stiffness: 420, damping: 22 }}
+                          >
+                            ✓
+                          </motion.span>
+                          <span className="text-[11px] text-emerald-300 font-mono tracking-[0.18em] uppercase select-none">
+                            Build Complete
+                          </span>
+                        </>
+                      )}
+
+                      {launchStatus === 'run' && (
+                        <>
+                          <span className="text-[10px] text-blue-200/80 font-mono tracking-[0.2em] uppercase select-none">
+                            Ready to launch
+                          </span>
+                          <motion.div
+                            className="relative flex h-8 min-w-24 items-center justify-center gap-2 overflow-visible rounded-full border border-blue-200/50 px-5 font-mono text-[11px] font-semibold tracking-[0.16em] text-white"
+                            style={{
+                              background: 'linear-gradient(110deg, #2563eb, #3182f6 48%, #76b7ff)',
+                              boxShadow: '0 0 18px rgba(49,130,246,0.48)',
+                            }}
+                            initial={{ scale: 0.78 }}
+                            animate={runInteraction === 'press'
+                              ? {
+                                  scale: [1, 0.76, 0.76, 1.09, 1],
+                                  y: [0, 3, 3, -1, 0],
+                                  filter: [
+                                    'brightness(1)',
+                                    'brightness(0.88)',
+                                    'brightness(1.38)',
+                                    'brightness(1.18)',
+                                    'brightness(1)',
+                                  ],
+                                  boxShadow: [
+                                    '0 0 18px rgba(49,130,246,0.48)',
+                                    '0 0 8px rgba(49,130,246,0.35)',
+                                    '0 0 34px rgba(135,205,255,0.88)',
+                                    '0 0 24px rgba(80,165,255,0.68)',
+                                    '0 0 18px rgba(49,130,246,0.48)',
+                                  ],
+                                }
+                              : runInteraction === 'settle'
+                                ? {
+                                    scale: 1,
+                                    y: 0,
+                                    filter: 'brightness(1)',
+                                    boxShadow: [
+                                      '0 0 28px rgba(115,195,255,0.74)',
+                                      '0 0 18px rgba(49,130,246,0.48)',
+                                    ],
+                                  }
+                                : {
+                                    scale: [0.78, 1.04, 1],
+                                    y: 0,
+                                    filter: 'brightness(1)',
+                                    boxShadow: '0 0 18px rgba(49,130,246,0.48)',
+                                  }}
+                            transition={runInteraction === 'press'
+                              ? { duration: 0.46, times: [0, 0.24, 0.48, 0.76, 1], ease: [0.4, 0, 0.2, 1] }
+                              : runInteraction === 'settle'
+                                ? { duration: 0.33, ease: 'easeOut' }
+                                : { duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                          >
+                            <AnimatePresence>
+                              {runInteraction === 'press' && (
+                                <motion.span
+                                  className="absolute inset-0 rounded-full bg-white"
+                                  initial={{ opacity: 0 }}
+                                  animate={{ opacity: [0, 0.08, 0.48, 0] }}
+                                  exit={{ opacity: 0 }}
+                                  transition={{ duration: 0.46, times: [0, 0.32, 0.58, 1] }}
+                                  aria-hidden="true"
+                                />
+                              )}
+
+                              {runInteraction === 'settle' && (
+                                <motion.span
+                                  className="absolute inset-0 rounded-full border border-blue-200/70"
+                                  initial={{ opacity: 0.75, scale: 0.88 }}
+                                  animate={{ opacity: 0, scale: 1.8 }}
+                                  exit={{ opacity: 0 }}
+                                  transition={{ duration: 0.33, ease: 'easeOut' }}
+                                  aria-hidden="true"
+                                />
+                              )}
+                            </AnimatePresence>
+                            <span className="relative z-10 text-[10px]">▶</span>
+                            <span className="relative z-10">RUN</span>
+                          </motion.div>
+                        </>
+                      )}
+                    </motion.div>
+                  </AnimatePresence>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
