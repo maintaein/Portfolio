@@ -16,8 +16,8 @@ const nextConfig: NextConfig = {
     ];
   },
   experimental: {
-    // framer-motion, heroicons, headlessui tree-shaking 강화 — legacy polyfill 제거
-    optimizePackageImports: ['framer-motion', '@heroicons/react', '@headlessui/react'],
+    // 실제 사용하는 대형 패키지의 import 최적화
+    optimizePackageImports: ['framer-motion', '@heroicons/react'],
   },
   images: {
     remotePatterns: [
