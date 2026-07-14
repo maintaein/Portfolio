@@ -19,24 +19,24 @@ export default function TechParticleStorm() {
 
   const techIcons: TechIcon[] = [
 
-    { name: 'JavaScript', path: '/icons/JS.png', gridX: 0, gridY: 0, direction: 'top', distance: 120 },
-    { name: 'TypeScript', path: '/icons/TS.png', gridX: 1, gridY: 0, direction: 'right', distance: 130 },
-    { name: 'React', path: '/icons/React.png', gridX: 2, gridY: 0, direction: 'top', distance: 140 },
-    { name: 'Next.js', path: '/icons/next.png', gridX: 3, gridY: 0, direction: 'right', distance: 110 },
+    { name: 'JavaScript', path: '/icons/JS.webp', gridX: 0, gridY: 0, direction: 'top', distance: 120 },
+    { name: 'TypeScript', path: '/icons/TS.webp', gridX: 1, gridY: 0, direction: 'right', distance: 130 },
+    { name: 'React', path: '/icons/React.webp', gridX: 2, gridY: 0, direction: 'top', distance: 140 },
+    { name: 'Next.js', path: '/icons/next.webp', gridX: 3, gridY: 0, direction: 'right', distance: 110 },
 
-    { name: 'Python', path: '/icons/Python.png', gridX: 0, gridY: 1, direction: 'left', distance: 125 },
-    { name: 'Java', path: '/icons/Java.png', gridX: 1, gridY: 1, direction: 'bottom', distance: 135 },
-    { name: 'HTML', path: '/icons/HTML.png', gridX: 2, gridY: 1, direction: 'left', distance: 115 },
-    { name: 'CSS', path: '/icons/CSS.png', gridX: 3, gridY: 1, direction: 'bottom', distance: 145 },
+    { name: 'Python', path: '/icons/Python.webp', gridX: 0, gridY: 1, direction: 'left', distance: 125 },
+    { name: 'Java', path: '/icons/Java.webp', gridX: 1, gridY: 1, direction: 'bottom', distance: 135 },
+    { name: 'HTML', path: '/icons/HTML.webp', gridX: 2, gridY: 1, direction: 'left', distance: 115 },
+    { name: 'CSS', path: '/icons/CSS.webp', gridX: 3, gridY: 1, direction: 'bottom', distance: 145 },
 
-    { name: 'Tailwind', path: '/icons/Tailwind.png', gridX: 0, gridY: 2, direction: 'top', distance: 135 },
-    { name: 'React Query', path: '/icons/react-query.png', gridX: 1, gridY: 2, direction: 'right', distance: 120 },
-    { name: 'Zustand', path: '/icons/zustand.png', gridX: 2, gridY: 2, direction: 'top', distance: 125 },
-    { name: 'Vite', path: '/icons/Vite.png', gridX: 3, gridY: 2, direction: 'right', distance: 140 },
+    { name: 'Tailwind', path: '/icons/Tailwind.webp', gridX: 0, gridY: 2, direction: 'top', distance: 135 },
+    { name: 'React Query', path: '/icons/react-query.webp', gridX: 1, gridY: 2, direction: 'right', distance: 120 },
+    { name: 'Zustand', path: '/icons/zustand.webp', gridX: 2, gridY: 2, direction: 'top', distance: 125 },
+    { name: 'Vite', path: '/icons/Vite.webp', gridX: 3, gridY: 2, direction: 'right', distance: 140 },
 
-    { name: 'Spring', path: '/icons/Spring.png', gridX: 0, gridY: 3, direction: 'left', distance: 130 },
-    { name: 'MySQL', path: '/icons/MySQL.png', gridX: 1, gridY: 3, direction: 'bottom', distance: 120 },
-    { name: 'Node.js', path: '/icons/nodejs.png', gridX: 2, gridY: 3, direction: 'left', distance: 140 },
+    { name: 'Spring', path: '/icons/Spring.webp', gridX: 0, gridY: 3, direction: 'left', distance: 130 },
+    { name: 'MySQL', path: '/icons/MySQL.webp', gridX: 1, gridY: 3, direction: 'bottom', distance: 120 },
+    { name: 'Node.js', path: '/icons/nodejs.webp', gridX: 2, gridY: 3, direction: 'left', distance: 140 },
   ];
 
   return (

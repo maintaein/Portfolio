@@ -26,10 +26,10 @@ export default function CollaborationMesh() {
 
 
   const tools: CollabTool[] = [
-    { id: 'github', name: 'GitHub', icon: '/icons/github.png', tooltip: '버전 관리 & 코드 리뷰', x: 25, y: 25, bobDelay: 0 },
-    { id: 'jira', name: 'Jira', icon: '/icons/Jira.png', tooltip: '애자일 스프린트 관리', x: 75, y: 25, bobDelay: 0.75 },
-    { id: 'figma', name: 'Figma', icon: '/icons/Figma.png', tooltip: '디자인 협업', x: 25, y: 75, bobDelay: 1.5 },
-    { id: 'notion', name: 'Notion', icon: '/icons/Notion.png', tooltip: '문서화 & 지식 공유', x: 75, y: 75, bobDelay: 2.25 },
+    { id: 'github', name: 'GitHub', icon: '/icons/github.webp', tooltip: '버전 관리 & 코드 리뷰', x: 25, y: 25, bobDelay: 0 },
+    { id: 'jira', name: 'Jira', icon: '/icons/Jira.webp', tooltip: '애자일 스프린트 관리', x: 75, y: 25, bobDelay: 0.75 },
+    { id: 'figma', name: 'Figma', icon: '/icons/Figma.webp', tooltip: '디자인 협업', x: 25, y: 75, bobDelay: 1.5 },
+    { id: 'notion', name: 'Notion', icon: '/icons/Notion.webp', tooltip: '문서화 & 지식 공유', x: 75, y: 75, bobDelay: 2.25 },
   ];
 
   const connections: Connection[] = [
