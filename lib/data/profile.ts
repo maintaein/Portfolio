@@ -1,4 +1,4 @@
-import { Award, Certificate, CoreValue } from "@/types";
+import { Award, Certificate, Contact, CoreValue } from "@/types";
 
 export const coreValues: CoreValue[] = [
     {
@@ -59,9 +59,8 @@ export const certificates: Certificate[] = [
     },
   ];
 
-export const contact = {
+export const contact: Contact = {
   name: '김태인',
   email: 'vostmfvostmf@naver.com',
   githubUrl: 'https://github.com/maintaein',
 };
-  

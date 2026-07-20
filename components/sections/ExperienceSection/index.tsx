@@ -8,6 +8,7 @@ import { SectionHeader } from '@/components/blocks';
 import { Experience } from '@/types';
 import { typeLabels } from '@/types';
 import { experiences } from '@/lib/data';
+import { SECTION_IDS } from '@/lib/constants';
 
 const typeColors: Record<Experience['type'], { dot: string; ring: string; badge: string }> = {
   'full-time': { dot: 'bg-blue-500',   ring: 'ring-blue-200',   badge: 'text-blue-500' },
@@ -17,7 +18,7 @@ const typeColors: Record<Experience['type'], { dot: string; ring: string; badge:
 
 export default function ExperienceSection() {
   return (
-    <section id="experience" className="py-12 sm:py-16 lg:py-20 bg-white">
+    <section id={SECTION_IDS.EXPERIENCE} className="py-12 sm:py-16 lg:py-20 bg-white">
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
         <SectionHeader
           title="EXPERIENCES"

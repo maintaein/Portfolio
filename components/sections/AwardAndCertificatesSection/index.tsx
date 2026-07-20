@@ -7,6 +7,7 @@ import Badge from '@/components/atoms/Badge';
 import SegmentedControl from '@/components/atoms/SegmentedControl';
 import { SectionHeader } from '@/components/blocks';
 import { Award, Certificate } from '@/types/index';
+import { SECTION_IDS } from '@/lib/constants';
 import { awards, certificates } from '@/lib/data';
 
 type TabValue = 'awards' | 'certificates';
@@ -36,7 +37,7 @@ export default function AwardsAndCertificatesSection() {
   const currentItems = activeTab === 'awards' ? awards : certificates;
 
   return (
-    <section id="awards-certificates" className="py-12 sm:py-16 lg:py-20 bg-grey-50">
+    <section id={SECTION_IDS.AWARDS_CERTIFICATES} className="py-12 sm:py-16 lg:py-20 bg-grey-50">
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
         <SectionHeader
           title="AWARDS & CERTIFICATES"

@@ -5,19 +5,13 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useScroll } from '@/hooks';
 import { IconButton, Icon } from '@/components/atoms';
+import { SECTION_IDS, type NavigationItem } from '@/lib/constants';
 import { cn } from '@/lib/utils/cn';
 import { scrollToSection } from '@/lib/utils/scroll';
 
-interface NavigationItem {
-  label: string;
-  href: string;
-  id: string;
-}
-
 interface NavigationProps {
-  items: NavigationItem[];
+  items: readonly NavigationItem[];
   className?: string;
-  activeSection?: string;
 }
 
 export default function Navigation({
@@ -35,7 +29,7 @@ export default function Navigation({
 
   useEffect(() => {
     const handleScroll = () => {
-      const heroSection = document.getElementById('hero');
+      const heroSection = document.getElementById(SECTION_IDS.HERO);
       if (heroSection) {
         const heroBottom = heroSection.offsetTop + heroSection.offsetHeight * 0.8;
         setIsVisible(window.scrollY > heroBottom);
@@ -46,7 +40,7 @@ export default function Navigation({
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const handleNavClick = (href: string) => {
+  const handleNavClick = (href: NavigationItem['href']) => {
     scrollToSection(href.replace('#', ''));
     setIsMobileMenuOpen(false);
   };

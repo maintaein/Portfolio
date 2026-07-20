@@ -3,7 +3,6 @@ import { Project } from '@/types';
 export const poseTive: Project = {
   title: 'PoseTive',
   subtitle: '이미지의 포즈를 사용자가 그리는 대로 변환할 수 있는 AI 기반 웹 서비스',
-  description: `PoseTive는 이미지에서 사람의 포즈를 인식하고, 이 사람의 포즈를 사용자가 업로드한 이미지나 그린 그림에서 추출한 포즈로 바꿔주는 이미지 인식 모델 기반 웹 서비스입니다.`,
   image: '/projects/Posetive.webp',
   imageAspect: 'landscape',
   tags: ['Python', 'PyTorch', 'Image Recognition', 'Pose Estimation', 'Pandas', 'NumPy'],
@@ -53,10 +52,6 @@ export const poseTive: Project = {
       category: '모델 최적화',
       items: ['8-bit 양자화 + 해상도 조정으로 모델 450MB → 45MB, 추론 속도 48% 개선'],
     },
-  ],
-
-  responsibilities: [
-    'AI 모델링'
   ],
 
   techReasons: [

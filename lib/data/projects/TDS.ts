@@ -3,7 +3,6 @@ import { Project } from '@/types';
 export const tds: Project = {
   title: 'TDS (Taein Design System)',
   subtitle: '프론트엔드 개발자로서 나만의 디자인 일관성을 \n 갖기 위해 제작한 디자인 시스템',
-  description: '라이브러리 제작에 필요한 영역을 직접 경험해보고, 디자인 시스템에 대한 이해를 키우기 위해 만든 React 디자인 시스템입니다. 이후 개인 프로젝트에서 가져다 쓰며 개발 속도와 디자인 일관성을 함께 챙길 수 있었습니다.',
   image: '/projects/TDS.webp',
   imageAspect: 'landscape',
   tags: ['React 19', 'TypeScript', 'Vanilla Extract', 'Vite', 'Vitest', 'pnpm Monorepo', 'TDD'],
@@ -46,13 +45,6 @@ export const tds: Project = {
         'AI 코딩 도구가 이 라이브러리의 API를 올바르게 이해하고 추천할 수 있도록, 모든 컴포넌트 사용법을 구조화한 문서 파일(llms.txt)을 함께 제공.',
       ],
     },
-  ],
-
-  responsibilities: [
-    '디자인 시스템 전체 아키텍처 설계 및 1인 개발',
-    '30개 React 컴포넌트 TDD(Red→Green→Refactor) 기반 구축',
-    '빌드 파이프라인 설계 및 Tree-shaking 실측 검증',
-    '데모 문서 앱 개발 (Dog-fooding 적용)',
   ],
 
   techReasons: [

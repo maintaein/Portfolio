@@ -1,4 +1,8 @@
-
+export interface Contact {
+  name: string;
+  email: string;
+  githubUrl: string;
+}
 
 export interface CoreValue {
   id: string;

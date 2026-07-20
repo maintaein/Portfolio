@@ -3,7 +3,6 @@ import { Project } from '@/types';
 export const reBirth: Project = {
   title: 'ReBirth',
   subtitle: '카드 혜택에 기반해 최적의 소비를 도와주는 모바일 페이 서비스',
-  description: 'ReBirth는 사용자가 결제를 할 때, 해당 결제 항목에 대한 **최적의 카드를 자동으로 골라서 결제**해주고, 소비 관리에 대한 전반적인 지원까지 해주는 모바일 금융 서비스입니다.',
   image: '/projects/Rebirth.webp',
   imageAspect: 'landscape',
   tags: [ 'Android Studio', 'Figma' , 'Kotlin', 'Jetpack Compose', 'Coroutines', 'MVVM', 'Retrofit', 'material3'],
@@ -46,10 +45,6 @@ export const reBirth: Project = {
       category: '데이터 관리',
       items: ['마이데이터 연동으로 실시간 거래 내역 동기화, 카드 혜택 요약 및 관리'],
     },
-  ],
-
-  responsibilities: [
-    '모바일 프론트엔드 개발'
   ],
 
   techReasons: [

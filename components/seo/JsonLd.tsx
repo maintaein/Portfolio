@@ -1,3 +1,4 @@
+import { SECTION_IDS } from '@/lib/constants';
 import { siteConfig } from '@/lib/siteConfig';
 
 export default function JsonLd() {
@@ -63,31 +64,31 @@ export default function JsonLd() {
         '@type': 'ListItem',
         position: 2,
         name: 'About',
-        item: `${siteConfig.url}#about`,
+        item: `${siteConfig.url}#${SECTION_IDS.ABOUT}`,
       },
       {
         '@type': 'ListItem',
         position: 3,
         name: 'Skills',
-        item: `${siteConfig.url}#skills`,
+        item: `${siteConfig.url}#${SECTION_IDS.SKILLS}`,
       },
       {
         '@type': 'ListItem',
         position: 4,
         name: 'Projects',
-        item: `${siteConfig.url}#projects`,
+        item: `${siteConfig.url}#${SECTION_IDS.PROJECTS}`,
       },
       {
         '@type': 'ListItem',
         position: 5,
         name: 'Awards & Certificates',
-        item: `${siteConfig.url}#awards-certificates`,
+        item: `${siteConfig.url}#${SECTION_IDS.AWARDS_CERTIFICATES}`,
       },
       {
         '@type': 'ListItem',
         position: 6,
         name: 'Experience',
-        item: `${siteConfig.url}#experience`,
+        item: `${siteConfig.url}#${SECTION_IDS.EXPERIENCE}`,
       },
     ],
   };

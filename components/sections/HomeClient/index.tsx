@@ -1,10 +1,16 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, type ComponentType } from 'react';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import Navigation from '@/components/blocks/Navigation';
 import { Footer, HeroSection } from '@/components/sections';
+import {
+  HOME_SECTION_CONFIG,
+  NAV_ITEMS,
+  SECTION_IDS,
+  type HomeSectionId,
+} from '@/lib/constants';
 
 const AboutSection = dynamic(() => import('@/components/sections/AboutSection'), {
   loading: () => <div className="min-h-[600px]" />,
@@ -23,15 +29,13 @@ const ExperienceSection = dynamic(() => import('@/components/sections/Experience
   loading: () => <div className="min-h-[400px]" />,
 });
 
-const SECTION_DELAYS = [0.1, 0.22, 0.34, 0.46, 0.58];
-
-const navigationItems = [
-  { label: 'About',       href: '#about',               id: 'about' },
-  { label: 'Skills',      href: '#skills',              id: 'skills' },
-  { label: 'Projects',    href: '#projects',            id: 'projects' },
-  { label: 'Awards',      href: '#awards-certificates', id: 'awards-certificates' },
-  { label: 'Experiences', href: '#experience',          id: 'experience' },
-];
+const SECTION_COMPONENTS = {
+  [SECTION_IDS.ABOUT]: AboutSection,
+  [SECTION_IDS.SKILLS]: SkillsSection,
+  [SECTION_IDS.PROJECTS]: ProjectsSection,
+  [SECTION_IDS.AWARDS_CERTIFICATES]: AwardAndCertificatesSection,
+  [SECTION_IDS.EXPERIENCE]: ExperienceSection,
+} satisfies Record<HomeSectionId, ComponentType>;
 
 export default function HomeClient() {
   const [isUnlocked, setIsUnlocked] = useState(false);
@@ -54,7 +58,7 @@ export default function HomeClient() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.3 }}
           >
-            <Navigation items={navigationItems} />
+            <Navigation items={NAV_ITEMS} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -66,26 +70,24 @@ export default function HomeClient() {
         {/* 섹션 언락 후 stagger 등장 */}
         {isUnlocked && (
           <div style={{ overflow: 'hidden' }}>
-            {[
-              <AboutSection key="about" />,
-              <SkillsSection key="skills" />,
-              <ProjectsSection key="projects" />,
-              <AwardAndCertificatesSection key="awards" />,
-              <ExperienceSection key="experience" />,
-            ].map((Section, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 40 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  duration: 0.75,
-                  delay: SECTION_DELAYS[i],
-                  ease: 'easeOut',
-                }}
-              >
-                {Section}
-              </motion.div>
-            ))}
+            {HOME_SECTION_CONFIG.map(({ id, revealDelay }) => {
+              const Section = SECTION_COMPONENTS[id];
+
+              return (
+                <motion.div
+                  key={id}
+                  initial={{ opacity: 0, y: 40 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{
+                    duration: 0.75,
+                    delay: revealDelay,
+                    ease: 'easeOut',
+                  }}
+                >
+                  <Section />
+                </motion.div>
+              );
+            })}
           </div>
         )}
       </main>

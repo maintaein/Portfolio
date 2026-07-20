@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence, useAnimation } from 'framer-motion';
+import { SECTION_IDS } from '@/lib/constants';
 import { siteConfig } from '@/lib/siteConfig';
 
 type LineType = 'command' | 'output' | 'blank';
@@ -753,7 +754,7 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
 
   return (
     <section
-      id="hero"
+      id={SECTION_IDS.HERO}
       aria-labelledby="hero-title"
       role="banner"
       className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden"

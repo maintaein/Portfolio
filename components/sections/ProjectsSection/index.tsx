@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ProjectModal from '@/components/blocks/ProjectModal';
 import { SectionHeader } from '@/components/blocks';
 import { Project } from '@/types/index';
+import { SECTION_IDS } from '@/lib/constants';
 import { projects } from '@/lib/data';
 
 const CARD_H          = 420;
@@ -100,7 +101,7 @@ export default function ProjectsSection() {
 
   return (
     <section
-      id="projects"
+      id={SECTION_IDS.PROJECTS}
       className="py-12 sm:py-16 lg:py-20 overflow-hidden bg-white relative"
       onClick={handleSectionClick}
     >
@@ -183,7 +184,6 @@ export default function ProjectsSection() {
                   <ProjectCard
                     project={project}
                     isFeatured={isFeatured}
-                    onOpenModal={() => setModalOpen(true)}
                   />
                 </motion.div>
               );
@@ -216,7 +216,6 @@ export default function ProjectsSection() {
 interface ProjectCardProps {
   project: Project;
   isFeatured: boolean;
-  onOpenModal: () => void;
 }
 
 function ProjectCard({ project, isFeatured }: ProjectCardProps) {

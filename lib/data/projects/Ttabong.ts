@@ -3,7 +3,6 @@ import { Project } from '@/types';
 export const ttabong: Project = {
   title: 'Ttabong',
   subtitle: '따뜻한 봉사, 따봉. 웹 SNS 큐레이팅 봉사 매칭 플랫폼',
-  description:'Ttabong을 통해 기관은 효율적으로 봉사자를 모집하고, 봉사자는 자신에게 맞는 봉사활동을 쉽게 찾을 수 있습니다.',
   image: '/projects/Ttabong.webp',
   imageAspect: 'landscape',
   tags: ['React', 'TypeScript', 'TailwindCSS', 'Zustand', 'Framer Motion'],
@@ -53,10 +52,6 @@ export const ttabong: Project = {
     }
   ],
 
-  responsibilities: [
-    '웹 프론트엔드 개발'
-  ],
-
   techReasons: [
     {
       name: 'React',
@@ -102,7 +97,6 @@ export const ttabong: Project = {
   reviews: [
     {
       id: 'volunteer-home',
-      category: '봉사자 계정',
       title: '1. 홈 페이지 — 카드 스와이프 공고 탐색',
       image: [
         '/projects/ttabong/home1.webp',
@@ -121,7 +115,6 @@ export const ttabong: Project = {
     },
     {
       id: 'volunteer-search',
-      category: '봉사자 계정',
       title: '2. 공고 검색 / 후기 관리',
       image: [
         '/projects/ttabong/search.webp',
@@ -142,7 +135,6 @@ export const ttabong: Project = {
     },
     {
       id: 'organization-home',
-      category: '봉사 기관 계정',
       title: '1. 공고 관리 / 공고 작성 / 후기 관리',
       image: [
         '/projects/ttabong/organization-home.webp',

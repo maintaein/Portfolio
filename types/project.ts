@@ -12,7 +12,6 @@ export interface KeyMetric {
   after: string;
   delta?: string;
   measuredBy?: string;
-  note?: string;
   learned?: string; // 이 수치에서 얻은 핵심 깨달음 (한눈에 보기 성과+배움 페어)
 }
 
@@ -34,7 +33,6 @@ export interface TechReason {
 export interface ProjectReview {
   id: string;
   title: string;
-  category?: string;
   image?: string | string[];
   problem?: string;
   analysis?: string[];
@@ -46,7 +44,6 @@ export interface ProjectReview {
 export interface Project {
   title: string;
   subtitle?: string;
-  description?: string;
   image: string;
   imageAspect?: 'landscape' | 'portrait' | 'square' | 'auto';
   tags: string[];
@@ -55,11 +52,9 @@ export interface Project {
   teamSize?: string;
 
   motivation?: string;          
-  designDecisions?: string[];   
   keyMetrics?: KeyMetric[];     
 
   implementations?: Implementation[];
-  responsibilities?: string[];
   techReasons?: TechReason[];
   reviews?: ProjectReview[];
   keyLearnings?: string[];

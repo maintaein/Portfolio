@@ -3,7 +3,6 @@ import { Project } from '@/types';
 export const portfolio: Project = {
   title: 'Portfolio',
   subtitle: 'Next.js 15 + TypeScript 기반 개인 포트폴리오 웹사이트',
-  description: '프론트엔드 개발자라면 내 포트폴리오 정도는 웹으로 보여줘야지 하는 마음에서 시작한 프로젝트입니다. Next.jS와 Typescript를 활용하여 개발했습니다.',
   image: '/projects/Portfolio.webp',
   imageAspect: 'landscape',
   tags: ['Next.js 15', 'React 19', 'TypeScript', 'Tailwind CSS 4', 'Headless UI', 'Atomic Design'],
@@ -43,10 +42,6 @@ export const portfolio: Project = {
         '색상·글자 크기·간격 같은 디자인 값을 한 곳에 모아두고, 그 값을 바꾸면 사이트 전체에 즉시 반영되도록 구성했습니다.',
       ],
     },
-  ],
-
-  responsibilities: [
-    '웹 프론트엔드 개발'
   ],
 
   techReasons: [

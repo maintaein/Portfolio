@@ -3,7 +3,6 @@ import { Project } from '@/types';
 export const alphaMail: Project = {
   title: 'AlphaMail',
   subtitle: 'AI 기반 업무 자동화 웹 메일 서비스',
-  description: 'AlphaMail은 이메일로 들어오는 다양한 업무를 AI가 자동으로 정리하고, 단순 작업까지 대신 수행하는 업무 환경을 지향합니다.',
   image: '/projects/Alphamail.webp',
   imageAspect: 'landscape',
   tags: ['React', 'TypeScript', 'React-query', 'Zustand', 'TailwindCSS', 'MaterialUI', 'FSD', 'Atomic'],
@@ -54,11 +53,6 @@ export const alphaMail: Project = {
       items: ['거래처, 발주서, 견적서 관리 등 문서 업무 자동 처리'],
       video: '/projects/alphamail/workService.mp4',
     },
-  ],
-
-  responsibilities: [
-    '웹 프론트엔드 개발',
-    '프론트엔드 리더'
   ],
 
   techReasons: [

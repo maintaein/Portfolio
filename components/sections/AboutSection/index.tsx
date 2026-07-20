@@ -6,10 +6,11 @@ import { coreValues, contact } from '@/lib/data';
 import { useCopyToClipboard } from '@/hooks';
 import { GitHubIcon } from '@/components/atoms';
 import { TechParticleStorm, EmpathyRadar, CollaborationMesh } from '@/components/blocks';
+import { SECTION_IDS } from '@/lib/constants';
 
 export default function AboutSection() {
   return (
-    <section id="about" aria-labelledby="about-heading" className="py-16 sm:py-20 lg:py-24 bg-white">
+    <section id={SECTION_IDS.ABOUT} aria-labelledby="about-heading" className="py-16 sm:py-20 lg:py-24 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
         <HeaderSection />

@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SegmentedControl } from '@/components/atoms';
 import { SectionHeader } from '@/components/blocks';
+import { SECTION_IDS } from '@/lib/constants';
 import { skillCategories } from '@/lib/data';
 
 const gridVariants = {
@@ -29,7 +30,7 @@ export default function SkillsSection() {
   };
 
   return (
-    <section id="skills" className="py-12 sm:py-16 lg:py-20 bg-gradient-to-br from-grey-50 to-grey-100">
+    <section id={SECTION_IDS.SKILLS} className="py-12 sm:py-16 lg:py-20 bg-gradient-to-br from-grey-50 to-grey-100">
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
 
         <SectionHeader

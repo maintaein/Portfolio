@@ -14,18 +14,36 @@ export const PERSONAL_INFO = {
     ABOUT: 'about',
     SKILLS: 'skills',
     PROJECTS: 'projects',
+    AWARDS_CERTIFICATES: 'awards-certificates',
     EXPERIENCE: 'experience',
-    CONTACT: 'contact',
   } as const;
-  
-  export const NAV_ITEMS = [
-    { id: SECTION_IDS.HERO, label: 'Home' },
-    { id: SECTION_IDS.ABOUT, label: 'About' },
-    { id: SECTION_IDS.SKILLS, label: 'Skills' },
-    { id: SECTION_IDS.PROJECTS, label: 'Projects' },
-    { id: SECTION_IDS.EXPERIENCE, label: 'Experience' },
-    { id: SECTION_IDS.CONTACT, label: 'Contact' },
+
+  // Hero 완료 후 표시되는 섹션의 순서, navigation 정보, 등장 지연을 한곳에서 관리한다.
+  export const HOME_SECTION_CONFIG = [
+    { id: SECTION_IDS.ABOUT, label: 'About', href: `#${SECTION_IDS.ABOUT}`, revealDelay: 0.1 },
+    { id: SECTION_IDS.SKILLS, label: 'Skills', href: `#${SECTION_IDS.SKILLS}`, revealDelay: 0.22 },
+    { id: SECTION_IDS.PROJECTS, label: 'Projects', href: `#${SECTION_IDS.PROJECTS}`, revealDelay: 0.34 },
+    {
+      id: SECTION_IDS.AWARDS_CERTIFICATES,
+      label: 'Awards',
+      href: `#${SECTION_IDS.AWARDS_CERTIFICATES}`,
+      revealDelay: 0.46,
+    },
+    {
+      id: SECTION_IDS.EXPERIENCE,
+      label: 'Experiences',
+      href: `#${SECTION_IDS.EXPERIENCE}`,
+      revealDelay: 0.58,
+    },
   ] as const;
+
+  export type HomeSectionConfig = (typeof HOME_SECTION_CONFIG)[number];
+  export type HomeSectionId = HomeSectionConfig['id'];
+  export type NavigationItem = Pick<HomeSectionConfig, 'id' | 'label' | 'href'>;
+
+  export const NAV_ITEMS: readonly NavigationItem[] = HOME_SECTION_CONFIG.map(
+    ({ id, label, href }) => ({ id, label, href }),
+  );
   
   export const SOCIAL_LINKS = {
     GITHUB: 'https://github.com/maintaein',
@@ -105,15 +123,6 @@ export const PERSONAL_INFO = {
       icon: 'github',
     },
   ] as const;
-  
-  export const SECTION_TITLES = {
-    [SECTION_IDS.HERO]: '환영합니다',
-    [SECTION_IDS.ABOUT]: 'About Me',
-    [SECTION_IDS.SKILLS]: 'Skills',
-    [SECTION_IDS.PROJECTS]: 'Projects',
-    [SECTION_IDS.EXPERIENCE]: 'Experience',
-    [SECTION_IDS.CONTACT]: 'Contact',
-  } as const;
   
   export const THEME = {
     LIGHT: 'light',
