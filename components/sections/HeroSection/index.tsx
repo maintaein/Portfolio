@@ -687,7 +687,7 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
     // RUN 클릭과 동시에 외곽 에너지를 한 번 더 안정화한다.
     auraActivityRef.current = 0.46;
     setRunInteraction('press');
-    await wait(620);
+    await wait(520);
 
     // 버튼 가까이에서 은은한 링이 퍼지는 여운 뒤에 발산을 연결한다.
     setRunInteraction('settle');
@@ -1031,18 +1031,18 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
                             initial={{ scale: 0.9 }}
                             animate={runInteraction === 'press'
                               ? {
-                                  scale: [1, 0.93, 0.93, 1],
-                                  y: [0, 1.5, 1.5, 0],
+                                  scale: [1, 0.985, 0.985, 1],
+                                  y: [0, 0.2, 0.2, 0],
                                   filter: [
                                     'brightness(1)',
-                                    'brightness(0.96)',
-                                    'brightness(0.96)',
+                                    'brightness(0.86)',
+                                    'brightness(1.5)',
                                     'brightness(1)',
                                   ],
                                   boxShadow: [
                                     '0 0 18px rgba(49,130,246,0.48)',
-                                    '0 0 12px rgba(49,130,246,0.38)',
-                                    '0 0 12px rgba(49,130,246,0.38)',
+                                    '0 0 10px rgba(49,130,246,0.34)',
+                                    '0 0 32px rgba(125,202,255,0.82)',
                                     '0 0 18px rgba(49,130,246,0.48)',
                                   ],
                                 }
@@ -1060,7 +1060,7 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
                                     boxShadow: '0 0 18px rgba(49,130,246,0.48)',
                                   }}
                             transition={runInteraction === 'press'
-                              ? { duration: 0.62, times: [0, 0.32, 0.58, 1], ease: [0.4, 0, 0.2, 1] }
+                              ? { duration: 0.52, times: [0, 0.28, 0.5, 1], ease: [0.4, 0, 0.2, 1] }
                               : runInteraction === 'settle'
                                 ? { duration: 0.18, ease: 'easeOut' }
                                 : { duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
@@ -1070,9 +1070,9 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
                                 <motion.span
                                   className="absolute inset-0 rounded-full bg-white"
                                   initial={{ opacity: 0 }}
-                                  animate={{ opacity: [0, 0.05, 0.18, 0.08, 0] }}
+                                  animate={{ opacity: [0, 0.05, 0.3, 0.15, 0] }}
                                   exit={{ opacity: 0 }}
-                                  transition={{ duration: 0.62, times: [0, 0.24, 0.5, 0.72, 1] }}
+                                  transition={{ duration: 0.8, times: [0, 0.2, 0.46, 0.72, 1] }}
                                   aria-hidden="true"
                                 />
                               )}
@@ -1163,7 +1163,7 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
         >
           <h1 aria-hidden="true" className="text-2xl sm:text-3xl md:text-4xl font-bold text-grey-900 mb-3">
             프론트엔드 개발자{' '}
-            <span className="bg-gradient-to-r from-blue-600 to-blue-400 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-blue-600 to-blue-500 bg-clip-text text-transparent">
               김태인
             </span>
           </h1>

@@ -42,7 +42,7 @@ function HeaderSection() {
     >
       <h2 id="about-heading" className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold mb-6 sm:mb-8">
         About{' '}
-        <span className="bg-gradient-to-r from-blue-600 to-blue-300 bg-clip-text text-transparent">
+        <span className="bg-gradient-to-r from-blue-600 to-blue-500 bg-clip-text text-transparent">
           Kim Taein
         </span>
       </h2>
