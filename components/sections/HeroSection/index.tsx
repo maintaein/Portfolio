@@ -66,7 +66,6 @@ const wait = (duration: number) => new Promise<void>((resolve) => {
   setTimeout(resolve, duration);
 });
 
-// 번개 제거 → 부드러운 곡선 플레어 (베지어 기반)
 // border 4면에서 시작해 바깥으로 뻗어나가다 사라짐
 interface FlareCanvasProps {
   termRect: DOMRect | null;
@@ -245,7 +244,7 @@ function FlareCanvas({ termRect, active }: FlareCanvasProps) {
   );
 }
 
-// 충전 입자 — border 주변 수렴. 크기 축소, 끊김 없이 연속 이동
+// 충전 입자 — border 주변 수렴. BUILD가 시작되면 섞인 순서로 서서히 줄어든다.
 const CHARGE_PARTICLES = Array.from({ length: 36 }, (_, i) => ({
   id: i,
   side: i % 4 as 0 | 1 | 2 | 3,
@@ -255,6 +254,9 @@ const CHARGE_PARTICLES = Array.from({ length: 36 }, (_, i) => ({
   delay: (i * 0.13) % 1.6,
   duration: 1.0 + (i * 0.08) % 0.8,
   bright: 0.7 + (i % 4) * 0.075,
+  // BUILD 시작부터 RUN 직전까지 한쪽에 치우치지 않고 입자 수가 줄어들도록 순서를 섞는다.
+  drainDelay: 0.12 + (((i * 13) % 36) / 35) * 2.18,
+  drainDuration: 0.34 + (i % 3) * 0.05,
 }));
 
 interface EnergyAuraCanvasProps {
@@ -669,26 +671,27 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
     // progress가 100%에 도달한 뒤에만 실행 준비 UI로 전환한다.
     await wait(220);
 
-    if (chargeParticleLayerRef.current) {
-      chargeParticleLayerRef.current.style.opacity = '0';
-    }
-    setChargeParticlesActive(false);
     auraActivityRef.current = 0.78;
     setLaunchStatus('complete');
     await wait(600);
 
     auraActivityRef.current = 0.58;
+    // BUILD 동안 개별 감쇠가 끝난 입자 레이어를 RUN 진입 시 완전히 제거한다.
+    if (chargeParticleLayerRef.current) {
+      chargeParticleLayerRef.current.style.opacity = '0';
+    }
+    setChargeParticlesActive(false);
     setLaunchStatus('run');
     await wait(530);
 
     // RUN 클릭과 동시에 외곽 에너지를 한 번 더 안정화한다.
     auraActivityRef.current = 0.46;
     setRunInteraction('press');
-    await wait(460);
+    await wait(620);
 
-    // 클릭 반응이 외부로 퍼지는 여운 뒤에 발산을 연결한다.
+    // 버튼 가까이에서 은은한 링이 퍼지는 여운 뒤에 발산을 연결한다.
     setRunInteraction('settle');
-    await wait(330);
+    await wait(560);
 
     // 임팩트 효과 — 동심원 링 + 화면 플래시
     setImpactActive(true);
@@ -867,31 +870,44 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
               return (
                 <motion.div
                   key={p.id}
-                  className="absolute rounded-full"
-                  style={{
-                    width: p.size,
-                    height: p.size,
-                    background: `radial-gradient(circle, rgba(255,255,255,${p.bright}) 0%, rgba(150,210,255,${p.bright * 0.85}) 40%, rgba(49,130,246,${p.bright * 0.6}) 80%, transparent 100%)`,
-                    boxShadow: `0 0 ${glowR}px ${glowR * 0.5}px rgba(100,180,255,0.55)`,
-                    left: `${startX * 100}%`,
-                    top:  `${startY * 100}%`,
-                  }}
-                  animate={{
-                    // 끊김 없이 startX/Y → endX/Y로 직선 이동
-                    left: [`${startX * 100}%`, `${endX * 100}%`],
-                    top:  [`${startY * 100}%`, `${endY * 100}%`],
-                    opacity: [0, 0.9, 0],
-                    scale: [0.4, 1.0, 0.3],
-                  }}
-                  transition={{
-                    duration: p.duration,
-                    delay: p.delay,
-                    ease: 'easeIn',       // border에 가까워질수록 가속
-                    repeat: Infinity,
-                    repeatDelay: 0.1,    // 거의 연속 — 끊김 없음
-                    times: [0, 0.75, 1],
-                  }}
-                />
+                  className="absolute inset-0"
+                  initial={{ opacity: 1 }}
+                  animate={{ opacity: isBuilding ? 0 : 1 }}
+                  transition={isBuilding
+                    ? {
+                        delay: p.drainDelay,
+                        duration: p.drainDuration,
+                        ease: [0.4, 0, 0.2, 1],
+                      }
+                    : { duration: 0 }}
+                >
+                  <motion.div
+                    className="absolute rounded-full"
+                    style={{
+                      width: p.size,
+                      height: p.size,
+                      background: `radial-gradient(circle, rgba(255,255,255,${p.bright}) 0%, rgba(150,210,255,${p.bright * 0.85}) 40%, rgba(49,130,246,${p.bright * 0.6}) 80%, transparent 100%)`,
+                      boxShadow: `0 0 ${glowR}px ${glowR * 0.5}px rgba(100,180,255,0.55)`,
+                      left: `${startX * 100}%`,
+                      top:  `${startY * 100}%`,
+                    }}
+                    animate={{
+                      // 끊김 없이 startX/Y → endX/Y로 직선 이동
+                      left: [`${startX * 100}%`, `${endX * 100}%`],
+                      top:  [`${startY * 100}%`, `${endY * 100}%`],
+                      opacity: [0, 0.9, 0],
+                      scale: [0.4, 1.0, 0.3],
+                    }}
+                    transition={{
+                      duration: p.duration,
+                      delay: p.delay,
+                      ease: 'easeIn',       // border에 가까워질수록 가속
+                      repeat: Infinity,
+                      repeatDelay: 0.1,    // 거의 연속 — 끊김 없음
+                      times: [0, 0.75, 1],
+                    }}
+                  />
+                </motion.div>
               );
             })}
           </div>
@@ -1012,23 +1028,21 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
                               background: 'linear-gradient(110deg, #2563eb, #3182f6 48%, #76b7ff)',
                               boxShadow: '0 0 18px rgba(49,130,246,0.48)',
                             }}
-                            initial={{ scale: 0.78 }}
+                            initial={{ scale: 0.9 }}
                             animate={runInteraction === 'press'
                               ? {
-                                  scale: [1, 0.76, 0.76, 1.09, 1],
-                                  y: [0, 3, 3, -1, 0],
+                                  scale: [1, 0.93, 0.93, 1],
+                                  y: [0, 1.5, 1.5, 0],
                                   filter: [
                                     'brightness(1)',
-                                    'brightness(0.88)',
-                                    'brightness(1.38)',
-                                    'brightness(1.18)',
+                                    'brightness(0.96)',
+                                    'brightness(0.96)',
                                     'brightness(1)',
                                   ],
                                   boxShadow: [
                                     '0 0 18px rgba(49,130,246,0.48)',
-                                    '0 0 8px rgba(49,130,246,0.35)',
-                                    '0 0 34px rgba(135,205,255,0.88)',
-                                    '0 0 24px rgba(80,165,255,0.68)',
+                                    '0 0 12px rgba(49,130,246,0.38)',
+                                    '0 0 12px rgba(49,130,246,0.38)',
                                     '0 0 18px rgba(49,130,246,0.48)',
                                   ],
                                 }
@@ -1037,42 +1051,44 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
                                     scale: 1,
                                     y: 0,
                                     filter: 'brightness(1)',
-                                    boxShadow: [
-                                      '0 0 28px rgba(115,195,255,0.74)',
-                                      '0 0 18px rgba(49,130,246,0.48)',
-                                    ],
+                                    boxShadow: '0 0 18px rgba(49,130,246,0.48)',
                                   }
                                 : {
-                                    scale: [0.78, 1.04, 1],
+                                    scale: 1,
                                     y: 0,
                                     filter: 'brightness(1)',
                                     boxShadow: '0 0 18px rgba(49,130,246,0.48)',
                                   }}
                             transition={runInteraction === 'press'
-                              ? { duration: 0.46, times: [0, 0.24, 0.48, 0.76, 1], ease: [0.4, 0, 0.2, 1] }
+                              ? { duration: 0.62, times: [0, 0.32, 0.58, 1], ease: [0.4, 0, 0.2, 1] }
                               : runInteraction === 'settle'
-                                ? { duration: 0.33, ease: 'easeOut' }
-                                : { duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                                ? { duration: 0.18, ease: 'easeOut' }
+                                : { duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
                           >
                             <AnimatePresence>
                               {runInteraction === 'press' && (
                                 <motion.span
                                   className="absolute inset-0 rounded-full bg-white"
                                   initial={{ opacity: 0 }}
-                                  animate={{ opacity: [0, 0.08, 0.48, 0] }}
+                                  animate={{ opacity: [0, 0.05, 0.18, 0.08, 0] }}
                                   exit={{ opacity: 0 }}
-                                  transition={{ duration: 0.46, times: [0, 0.32, 0.58, 1] }}
+                                  transition={{ duration: 0.62, times: [0, 0.24, 0.5, 0.72, 1] }}
                                   aria-hidden="true"
                                 />
                               )}
 
                               {runInteraction === 'settle' && (
                                 <motion.span
-                                  className="absolute inset-0 rounded-full border border-blue-200/70"
-                                  initial={{ opacity: 0.75, scale: 0.88 }}
-                                  animate={{ opacity: 0, scale: 1.8 }}
+                                  className="absolute inset-0 rounded-full border border-blue-200/40"
+                                  style={{ boxShadow: '0 0 10px rgba(96,165,250,0.16)' }}
+                                  initial={{ opacity: 0.34, scale: 0.96 }}
+                                  animate={{ opacity: [0.34, 0.22, 0], scale: [0.96, 1.18, 1.48] }}
                                   exit={{ opacity: 0 }}
-                                  transition={{ duration: 0.33, ease: 'easeOut' }}
+                                  transition={{
+                                    duration: 0.56,
+                                    times: [0, 0.45, 1],
+                                    ease: [0.22, 1, 0.36, 1],
+                                  }}
                                   aria-hidden="true"
                                 />
                               )}
