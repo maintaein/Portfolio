@@ -6,7 +6,7 @@ export const tds: Project = {
   image: '/projects/TDS.webp',
   imageAspect: 'landscape',
   tags: ['React 19', 'TypeScript', 'Vanilla Extract', 'Vite', 'Vitest', 'pnpm Monorepo', 'TDD'],
-  duration: '2025.12 - 2026.03',
+  duration: '2025.12 - 2026.07',
   role: '1인 설계 및 개발',
   teamSize: '1명 (개인 프로젝트)',
 
@@ -128,10 +128,10 @@ export const tds: Project = {
       image: '/projects/TDS/tree-shaking.webp',
       problem: '디자인 시스템의 가치 중 하나는 필요한 컴포넌트만 골라 쓸 수 있다는 점입니다. 그런데 npm 패키지를 만들어 실제 소비자 환경을 시뮬레이션해보니, Button 한 개만 import해도 컴포넌트 전체가 그대로 번들에 실렸습니다. Tree-shakable이라는 목표를 실측으로 뒷받침하지 못하면 라이브러리의 핵심 가치가 지켜지지 못하는 상황이었습니다.',
       analysis: [
-        '**진단 — 무엇이 Tree-shaking을 막고 있는가**: Button 하나만 사용하는 소비자 예제를 만들고 번들 결과물을 확인했습니다. 목표는 Button에 필요한 코드만 남고, Modal·BottomSheet·Slider처럼 사용하지 않은 컴포넌트 코드는 제거되는 것이었습니다. 그런데 실제 번들에는 사용하지 않은 컴포넌트 코드까지 함께 포함되어 있었습니다. 원인은 세 가지로 나눠 확인했습니다.\n- ESM과 CJS 산출물이 명확히 분리되지 않으면 소비자 번들러가 어떤 진입점을 기준으로 최적화해야 하는지 헷갈릴 수 있었습니다.\n- 진입 파일에 컴포넌트 export 외의 실행 코드나 값 export가 섞이면, 번들러가 "이 파일은 실행 결과가 있을 수 있다"고 보고 사용하지 않은 코드까지 남겨둘 수 있었습니다.\n- Vanilla Extract가 만든 CSS는 실제로 필요한 스타일 파일입니다. 하지만 package.json에 "CSS 파일만 반드시 남기고, 사용하지 않는 JS 컴포넌트 코드는 제거해도 된다"는 정보를 주지 않으면, 번들러가 스타일 누락을 피하려고 관련 JS 코드까지 함께 남겨둘 수 있었습니다.',
-        '**선택지 1 — 번들 구성을 수동으로 통제하기**: 이 방식은 Button 번들, Modal 번들처럼 결과물을 미리 나눠 제공하므로 소비자 환경과 관계없이 결과를 통제하기 쉽습니다. 하지만 라이브러리가 소비자 번들러의 역할까지 대신하게 되고, 사용자가 원하는 번들 전략에 개입하게 됩니다. TDS는 최종 앱 번들링은 소비자 도구에 맡기는 방향이 더 적절하다고 판단해 선택하지 않았습니다.',
-        '**선택지 2 — CSS를 JS에 인라인하기**: CSS 파일이 별도로 존재하지 않으면 CSS side effect 표기를 고민할 필요가 줄어듭니다. 그러나 이 경우 Vanilla Extract를 선택한 이유였던 정적 CSS 파일 제공 장점이 약해지고, 런타임 JS 번들에 스타일 관련 코드가 섞일 수 있습니다. TDS의 방향은 런타임 스타일 엔진을 줄이고 정적 CSS를 제공하는 것이었기 때문에 선택하지 않았습니다.',
-        '**선택지 3 — 번들러에게 정확한 메타데이터 제공 (선택)**: 최종적으로는 라이브러리 쪽에서 “어떤 파일은 안전하게 제거해도 되고, 어떤 파일은 스타일 적용 때문에 남겨야 하는지”를 명확히 알려주는 방식을 선택했습니다. ESM과 CJS를 분리하고, 컴포넌트 단위 모듈 구조를 유지했습니다. 또한 CSS 파일만 부수효과가 있음을 명시하고, 진입 파일은 컴포넌트와 토큰 export 중심으로 단순화했습니다. 이렇게 하면 Vite나 webpack 같은 소비자 번들러가 사용하지 않는 JS 컴포넌트를 제거할 근거를 갖게 됩니다.',
+        '**진단 — 번들러가 "지워도 안전하다"고 판단할 근거가 없었음**: Button 하나만 사용하는 소비자 예제로 실측하니 30개 중 21개 컴포넌트가 포함된 45KB가 나왔습니다. barrel 진입점(`index.mjs`)으로 import하면 45KB, 컴포넌트 파일을 직접 import하면 4.3KB가 나오는 대조 실험으로 문제를 barrel로 좁혔고, 핵심 원인은 barrel의 `export const version = \'0.1.0\'` 한 줄이었습니다. 진입 파일에 re-export 외의 값 export가 있으면 Rollup은 "자체 실행 코드가 있는 모듈"로 판단해 side effect가 있는 것으로 취급하고, barrel이 import하는 모든 모듈을 지우지 않고 남깁니다. 즉 라이브러리가 번들러에게 "이 모듈들은 제거해도 안전하다"는 근거를 주지 못하고 있던 것이 문제였습니다.',
+        '**선택지 1 — 번들 구성을 수동으로 통제하기**: Button 번들, Modal 번들처럼 결과물을 미리 나눠 제공하면 소비자 환경과 관계없이 결과를 통제할 수 있습니다. 하지만 라이브러리가 소비자 번들러의 역할까지 대신하게 되고, 단일 진입점에서 named import로 가져다 쓰는 익숙한 사용 방식도 깨집니다. 최종 앱 번들링은 소비자 도구에 맡기는 것이 라이브러리 설계 관습에 맞다고 판단해 선택하지 않았습니다.',
+        '**선택지 2 — CSS를 JS에 인라인하기**: CSS 파일이 별도로 존재하지 않으면 side effect 표기를 고민할 필요 자체가 줄어듭니다. 그러나 정적 CSS 파일 제공이라는 Vanilla Extract 선택 이유가 무너지고, 런타임 JS 번들에 스타일 코드가 섞입니다. 런타임 스타일 엔진을 줄이는 것이 TDS의 방향이었기 때문에 선택하지 않았습니다.',
+        '**선택지 3 — 번들러에게 정확한 메타데이터 제공 (선택)**: 진단에서 확인한 문제는 결국 "번들러에게 주는 정보가 부정확하다"로 수렴합니다. barrel을 순수 re-export 전용으로 유지하고, ESM/CJS를 확장자로 구분하고, 컴포넌트별 모듈 구조를 보존하고, CSS만 side effect임을 선언하면 소비자 번들러가 사용하지 않는 컴포넌트를 제거할 근거를 갖게 됩니다. 원인과 직접 대응하는 유일한 방향이면서 소비자에게 아무 설정도 요구하지 않기 때문에 이 방식을 선택했습니다.',
       ],
       action: [
         'Button 하나만 import하는 예제를 만들고 `npm pack` + esbuild로 실제 배포 패키지 기준 번들 크기를 측정',
@@ -143,7 +143,7 @@ export const tds: Project = {
       result: [
         { label: '번들 크기', before: '45KB (컴포넌트 1개 import에 전체 포함)', after: '4.17KB (gzip 1.43KB) — 사용한 컴포넌트만 번들에 포함', delta: '-91%', measuredBy: 'npm pack + esbuild 예제 시뮬레이션' },
         { label: '회귀 방지', after: 'CI에서 dist 진입점 gzip 크기 상한을 검사하고, 컴포넌트 단위 소비자 번들 크기는 수동 실측으로 확인', measuredBy: 'GitHub Actions gzip size check + npm pack/esbuild 수동 실측' },
-        { label: '전체 테스트', after: '1,074 / 1,074 통과 — Tree-shaking 수정 후 기존 컴포넌트 동작 이상 없음 확인', measuredBy: 'pnpm test' },
+        { label: '전체 테스트', after: '1,068 / 1,068 통과 (당시 전체 테스트 수 기준) — Tree-shaking 수정 후 기존 컴포넌트 동작 이상 없음 확인', measuredBy: 'pnpm test' },
       ],
       tradeOffs: [
         '`preserveModules`를 적용하면 dist 파일 수가 140개 이상으로 늘어납니다. 다만 npm 배포 크기는 `files` 필드로 dev 산출물을 제외해 상쇄했고, 파일 수 자체는 소비자 번들러가 트리 쉐이킹 후 합치므로 런타임에는 영향이 없습니다.',
@@ -151,55 +151,31 @@ export const tds: Project = {
       ],
     },
     {
-      id: 'bottomsheet',
-      title: '2. BottomSheet 드래그 인터랙션',
-      image: '/projects/TDS/bottomsheet.webp',
+      id: 'recipe-build',
+      title: '2. recipe 도입과 소비자 빌드 호환성 확보',
+      image: '/projects/TDS/recipe-build.webp',
       problem:
-        'BottomSheet에 드래그로 닫기 기능을 추가했지만, 실제 사용감은 자연스럽지 않았습니다. 시트가 드래그 위치를 안정적으로 따라오지 못했고, 닫을 때 CSS 애니메이션과 JS로 넣은 transform이 충돌해 원위치로 튕기거나 한 프레임 깜빡이는 문제가 생겼습니다. 핵심은 "사용자가 끄는 동안에는 손가락을 따라오고, 손을 떼면 그 위치에서 자연스럽게 닫히거나 복귀해야 한다"는 요구를 React 상태 업데이트, 브라우저 이벤트, CSS 애니메이션 중 어디에 맡길지 정하는 문제였습니다.',
-
+        'Button·IconButton은 두 축의 스타일(buttonStyle: fill/weak × variant: primary/dark/danger/light)이 조합되는 컴포넌트인데, 한 축의 나열만 표현할 수 있는 styleVariants로는 조합을 담을 수 없어 fillVariants/weakVariants 같은 병렬 맵을 만들고 컴포넌트 코드의 삼항 연산자로 골라 쓰는 구조였습니다. Chip은 더 심각해서 variantStyles/colorStyles가 빈 객체로 죽어 있고 실제 값은 별도 맵과 헬퍼 함수에 흩어져 있었습니다. 조합 로직이 스타일 정의 밖(컴포넌트 코드)으로 새어 나와 새 variant 하나를 추가하려면 여러 맵과 분기를 동시에 고쳐야 했고, 이를 해결하기 위해 조합별 스타일을 스타일 정의 안에서 선언적으로 표현할 수 있는 `recipe()`(variants + compoundVariants)를 도입해 세 컴포넌트를 마이그레이션했습니다. 마이그레이션 후 core의 빌드·테스트는 모두 통과했지만, 전체 검증 단계에서 demo 앱의 프로덕션 빌드만 `[vanilla-extract] Invalid exports` 에러로 실패했습니다. demo는 core를 실제 npm 소비자와 같은 경로(package exports → dist)로 소비하는 유일한 워크스페이스였기 때문에, 이 실패는 내부 설정 문제가 아니라 자기 빌드에 vanilla-extract를 쓰는 모든 외부 소비자의 빌드가 깨진다는 신호였습니다.',
       analysis: [
-        '**진단 — 드래그 중 위치 제어권이 흩어져 있었음**: BottomSheet는 기본적으로 CSS 애니메이션으로 열리고 닫힙니다. 그런데 드래그 기능은 사용자가 움직이는 동안 매 프레임 `transform`을 바꿔야 합니다. 즉 같은 `transform` 값을 CSS 애니메이션과 JS 드래그 로직이 동시에 다루게 되었고, 드래그 종료 시점에는 React의 `open` 상태 변경과 DOM 스타일 정리까지 겹쳤습니다. 그래서 문제를 "좌표를 어디에 저장할 것인가", "드래그 종료 이벤트를 어디서 받을 것인가", "드래그 중에는 CSS와 JS 중 누가 transform을 제어할 것인가"라는 하나의 설계 문제로 정리했습니다.',
-
-        '**선택지 1 — React state로 드래그 위치를 렌더링하기**: 드래그 거리를 state에 저장하고, 그 값을 style에 반영하는 방식입니다. React 흐름 안에서 상태를 추적할 수 있어 이해하기 쉽고 DevTools로 확인하기 좋다는 장점이 있습니다. 하지만 드래그 중에는 `touchmove`나 `mousemove`가 매우 자주 발생하므로 매번 리렌더가 일어납니다. BottomSheet 위치는 입력 이벤트에 즉시 반응해야 하는 값이라, React 렌더 사이클에 태우면 움직임이 늦거나 불필요한 렌더 비용이 생길 수 있다고 판단해 선택하지 않았습니다.',
-
-        '**선택지 2 — 시트 내부 이벤트와 기존 CSS 애니메이션만 활용하기**: 드래그 시작·이동·종료 이벤트를 모두 BottomSheet 요소에만 등록하고, 닫힘은 기존 CSS exit 애니메이션에 맡기는 방식입니다. 구현 범위가 작고 기존 애니메이션 구조를 거의 유지할 수 있다는 장점이 있습니다. 하지만 마우스로 드래그하다가 시트 밖에서 버튼을 떼면 종료 이벤트를 놓칠 수 있고, 드래그 중 JS가 넣은 위치와 CSS exit 애니메이션의 시작 위치가 어긋나 원위치로 튕기는 문제가 남았습니다. 사용자가 놓은 위치에서 이어서 닫히는 경험을 만들기 어려워 선택하지 않았습니다.',
-
-        '**선택지 3 — 드래그 중에는 JS가 위치를 직접 제어하기 (선택)**: 드래그 중 위치는 React state가 아니라 ref와 인라인 `transform`으로 관리하고, 마우스 이동과 종료는 document에서 추적하는 방식입니다. 드래그가 시작되면 CSS 애니메이션을 끄고 JS가 transform을 단독으로 제어하게 하며, 일정 거리 이상 내려가면 현재 위치에서 `translateY(100%)`로 이어서 닫습니다. 전역 이벤트 cleanup과 인라인 스타일 정리 경로를 직접 관리해야 한다는 단점이 있지만, 드래그 위치 반영·시트 밖 종료 감지·닫힘 애니메이션 연결을 모두 해결할 수 있어 이 방식을 선택했습니다.',
+        '**진단 — 산출물이 소비자 도구의 감지 규칙과 충돌**: 에러 발생 지점이 core의 소스가 아니라 빌드 산출물(`dist/components/Button/Button.css.mjs`)이라는 점에서 출발해, 원인 사슬을 플러그인 소스 코드까지 내려가 확인했습니다.\n- `recipe()`는 컴파일되면 함수(`createRuntimeFn` 호출 결과)를 export합니다. 기존 `styleVariants()`의 컴파일 결과는 순수 문자열·객체라 이 문제가 없었습니다.\n- `@vanilla-extract/vite-plugin`의 transform 훅 소스를 직접 열어 확인한 결과, 처리 대상 판단이 `cssFileFilter` 정규식(`.css.js`/`.css.mjs`/`.css.ts` 등 매칭) 하나뿐이고 node_modules 제외 로직이 전혀 없었습니다.\n- core가 preserveModules로 `Button.css.ts`를 `Button.css.mjs`로 미러링하면서 이 정규식과 정확히 겹쳤고, demo의 vanilla-extract 플러그인이 남의 빌드 산출물을 "새로 컴파일할 소스"로 착각해 재처리하다 함수 export를 만나 실패한 것입니다.',
+        '**선택지 1 — alias로 src 직접 참조**: docs처럼 demo에도 core를 src로 잇는 alias를 걸면 빌드는 즉시 통과합니다. 하지만 이는 소스에 접근할 수 있는 워크스페이스 내부에서만 가능한 방법입니다. 진짜 npm 소비자는 dist만 받으므로 alias 자체가 불가능하고, 배포 결함은 그대로 남습니다 — 문제를 해결하는 게 아니라 안 보이게 만드는 방향입니다.',
+        '**선택지 2 — recipe 도입 회귀**: 가장 손쉬운 회피는 recipe 도입 자체를 되돌리는 것입니다. 함수 export가 사라지므로 충돌도 사라지지만, 죽은 placeholder 스타일과 삼항 분기 중복이라는 이번 마이그레이션이 해결하려던 원래 문제로 되돌아갑니다. 산출물 파일명이라는 표면적 충돌 때문에 스타일 아키텍처 결정을 뒤집는 것은 본말전도라고 판단했습니다.',
+        '**선택지 3 — 라이브러리 산출물 쪽에서 충돌 제거 (선택)**: 충돌의 구성 요소는 "함수 export"와 "감지 정규식에 걸리는 파일명" 두 가지인데, 함수 export는 recipe의 본질이므로 남는 변수는 파일명입니다. 산출물명이 `.css.mjs` 패턴만 벗어나면 소비자 플러그인의 재처리가 원천적으로 발생하지 않습니다. 문제의 소유자는 산출물을 만드는 라이브러리 쪽이고, 소비자에게 아무런 설정도 요구하지 않는 유일한 방향이라 이 방식을 선택했습니다.',
       ],
-
       action: [
-        '드래그 시작 위치와 진행 여부를 `startYRef`, `isDraggingRef`로 관리해 이동 중 리렌더 없이 좌표를 갱신',
-        '마우스 드래그의 `mousemove`와 `mouseup`을 document에 등록해 시트 밖에서 손을 떼도 종료를 감지하도록 수정',
-        '드래그 시작 시 `sheet.style.animation = "none"`을 설정해 CSS 애니메이션과 JS transform 제어가 충돌하지 않도록 처리',
-        '드래그 거리가 100px을 넘으면 `translateY(100%)`로 닫기 전환을 실행하고, `transitionend` 이후 `onClose`를 호출하도록 변경',
-        '`isClosingViaDragRef`를 추가해 드래그 닫기 중에는 일반 닫기 정리 로직이 transform을 먼저 지우지 않도록 분기',
-        '드래그 가능/불가능, 아래 방향 드래그, 위 방향 드래그에 대한 회귀 테스트를 추가',
+        '1차 대응으로 demo에 alias 우회를 적용해 전체 검증을 통과시켰으나, 외부에서 사용 시에는 가치 없는 내용임 — alias를 제거해 `Invalid exports` 실패를 baseline으로 재현한 뒤 근본 수정으로 전환',
+        '`build.lib.fileName`에서 `.css`로 끝나는 산출물명을 `.vanilla`로 교체 (`Button.css.mjs` → `Button.vanilla.mjs`) — 소비자 플러그인의 감지 정규식과 매칭 자체를 차단',
+        '수정 중 추가 결함 발견: `@vanilla-extract/recipes`가 external에 빠져 런타임 헬퍼가 번들에 포함되면서, 로컬 pnpm 스토어의 절대 경로 구조가 `dist/node_modules/.pnpm/...` 형태로 배포판에 그대로 유출되고 있었음 — `rollupOptions.external`을 함수형으로 바꿔 recipes 패키지를 외부화',
+        '`@vanilla-extract/recipes`의 package.json exports를 열어 `createRuntimeFn`이 메인 진입점이 아니라 `./createRuntimeFn` 서브패스에서만 export됨을 확인하고, `output.paths`를 이 정확한 서브패스로 재매핑 — 메인 진입점으로 매핑했다면 빌드는 성공해도 존재하지 않는 export를 참조하는 산출물이 됐을 것',
       ],
-
       result: [
-        {
-          label: '드래그 동작',
-          before: '드래그 중 시트가 입력 위치를 안정적으로 따라오지 않거나, 시트 밖에서 종료 이벤트를 놓칠 수 있음',
-          after: '마우스 드래그는 시트 밖에서도 종료를 감지하고, 드래그 거리에 따라 닫기/복귀가 분기됨',
-          measuredBy: '수동 재현 + BottomSheet 드래그 테스트',
-        },
-        {
-          label: '닫기 애니메이션',
-          before: '드래그 후 CSS 애니메이션과 JS transform이 충돌해 원위치로 튕기는 동작이 발생',
-          after: '드래그 중에는 JS가 transform을 제어하고, 닫기 전환이 끝난 뒤 onClose를 호출하도록 정리',
-          measuredBy: '수동 재현 + transitionend 테스트',
-        },
-        {
-          label: '회귀 안전망',
-          after: '드래그 가능/불가능, 위 방향 드래그, ESC, backdrop, 포커스, 스크롤 관련 BottomSheet 테스트로 주요 동작을 검증',
-          measuredBy: 'Vitest BottomSheet.test.tsx',
-        },
+        { label: '소비자 빌드 호환성', before: 'vanilla-extract 플러그인을 쓰는 소비자의 프로덕션 빌드가 Invalid exports로 실패 (alias 제거 baseline에서 재현 확인)', after: 'alias 없이 demo 프로덕션 빌드 성공 — 소비자와 동일한 dist 경로 소비로 검증', measuredBy: 'alias 제거 → 실패 재현 → 수정 → demo 빌드 성공의 전후 대조' },
+        { label: '배포 산출물 오염', before: '`dist/node_modules/.pnpm/...` 로컬 절대 경로 구조가 배포판에 포함', after: 'dist 내 node_modules 0건 — 산출물 import가 `@vanilla-extract/recipes/createRuntimeFn` 표준 서브패스로 정리', measuredBy: '빌드 산출물 디렉터리 확인 + ESM/CJS import문 grep 실측' },
+        { label: '회귀 안전망', after: '1,074/1,074 테스트 통과, 마이그레이션한 컴포넌트별 번들 1.3~2.2KB로 3KB 목표 유지', measuredBy: 'pnpm test + 컴포넌트별 번들 크기 실측' },
       ],
-
       tradeOffs: [
-        '`useRef`는 리렌더를 줄이는 대신 React DevTools에서 값 변화를 추적하기 어렵습니다. 드래그 좌표처럼 화면 상태라기보다 이벤트 처리 중 필요한 임시 값에는 적합하다고 판단했습니다.',
-        '현재 마우스 이동/종료는 document에서 추적하지만 터치 이동/종료는 시트 요소에 등록되어 있습니다. 모바일 드래그를 더 안정적으로 만들려면 Pointer Events로 통합하거나 touch 이벤트도 document 범위로 확장하는 개선 여지가 있습니다.',
-        '`isClosingViaDragRef`로 닫기 경로를 분기하면서 상태가 하나 늘었습니다. 닫기 경로가 더 늘어나면 boolean 플래그 대신 명시적인 상태 머신으로 바꾸는 편이 더 안전할 수 있습니다.',
+        '`.vanilla` 개명은 vanilla-extract 감지 정규식의 현재 형태에 의존하는 회피책입니다. 정공법은 플러그인이 node_modules 산출물을 제외하는 것이지만 라이브러리가 통제할 수 없는 영역이라, 통제 가능한 산출물 쪽에서 해결했습니다. 플러그인의 감지 규칙이 바뀌면 재검토가 필요한 의존입니다.',
+        '검증 범위는 워크스페이스 안(demo가 dist를 소비)까지입니다. 워크스페이스 소비와 실제 npm 설치는 심볼릭 링크 처리 등 미묘한 차이가 있어, npm pack 결과물을 설치하는 외부 최소 재현 프로젝트 검증을 배포 전 후속 과제로 남겼습니다.',
       ],
     },
     {
@@ -211,17 +187,18 @@ export const tds: Project = {
         '**진단 — props만으로는 레이아웃 자유도를 보장할 수 없음**: 제목·내용·버튼처럼 내부 구조가 고정된 컴포넌트는 props로 값을 받는 방식이 직관적입니다. 그런데 Modal 푸터에 버튼을 두 개 넣거나, Card 안에 커스텀 레이아웃을 구성하는 경우처럼, 내부 구조를 사용자가 결정해야 하는 상황에서는 props가 몇개가 될지, 어떤 props가 필요할지 미리 알기 어렵습니다. 굳이 구현한다면 JSX 조각을 props 값으로 전달하는 방법이 있었지만, 이는 컴포넌트 바깥에서 컴포넌트 내부 구조를 직접 밀어넣는 방식이라 가독성도 타입 안전성도 모두 나빠졌습니다.',
         '**선택지 1 — 모두 Compound 방식으로 바꾸기**: 서브 컴포넌트를 조합하는 방식으로 전환하면 내부 레이아웃을 사용자가 자유롭게 결정할 수 있습니다. 그런데 제목과 본문만 있는 단순한 카드를 쓰려고 해도 서브 컴포넌트를 항상 나열해야 합니다. 기존에 Flat으로 쓰던 단순한 컴포넌트들까지 전부 바꿔야 하는 비용도 있었고, 단순한 케이스에 불필요한 복잡도를 강요하는 방향이라 폐기했습니다.',
         '**선택지 2 — Flat 방식을 유지하되, 복잡한 컴포넌트에만 오버로드 추가**: 기존 API를 유지하면서 복잡한 케이스를 위한 props 경로를 추가로 만드는 방법입니다. 하지만 이 방법 역시 JSX를 객체로 묶어 받는 방식으로 기존 문제와 다를 게 없었고, props 수가 더 늘어나기만 하여 진단에서 발견한 문제가 해결되지 않았습니다.',
-        '**선택지 3 — 컴포넌트에 따라 제공 방식을 나누기(선택)**: 컴포넌트가 표현하는 것이 하나의 값이나 상태인지 아닌지를 기준으로 제공 방식을 나눴습니다. 예를 들어, Button은 하나의 행동, Badge는 하나의 상태, TextField는 하나의 입력값이라 내부 레이아웃이 달라질 이유가 없습니다 . 반면 Card·Modal처럼 이미지가 들어갈 수도 없을 수도 있고 푸터 버튼 구성이 상황마다 달라지는 컴포넌트는 내부 구조를 고정하는 순간 사용자가 원하는 조합을 표현할 수 없게 됩니다. 전자는 Flat 방식을 유지하고, 후자는 Compound 방식으로 전환했습니다. Compound로 전환한 컴포넌트에는 단순하게 쓸 수 있도록 제목·푸터 props가 있으면 자동으로 Flat 모드로 동작하는 자동 감지를 추가해, 단순한 경우는 props 하나로 끝나고 복잡한 경우는 Compound로 자유롭게 구성할 수 있도록 했습니다.',
+        '**선택지 3 — 컴포넌트의 성격에 따라 제공 방식을 나누기 (선택)**: 컴포넌트가 표현하는 것이 하나의 값·행동·상태인지를 기준으로 삼았습니다. Button은 하나의 행동, Badge는 하나의 상태, TextField는 하나의 입력값이라 내부 레이아웃이 달라질 이유가 없습니다. 반면 Card·Modal처럼 이미지가 들어갈 수도 안 들어갈 수도 있고 푸터 구성이 상황마다 달라지는 컴포넌트는 내부 구조를 고정하는 순간 사용자가 원하는 조합을 표현할 수 없게 됩니다. 전자는 Flat을 유지하고 후자만 Compound를 제공하되, 단순한 경우까지 서브 컴포넌트 나열을 강요하지 않으려면 "제목·푸터 같은 Flat props가 있으면 Flat 모드, 없으면 Compound 모드"로 동작하는 자동 감지가 필요하다고 판단했습니다.',
       ],
       action: [
         '단순 컴포넌트 (Button, TextField, Badge 등)에 Flat props 방식 적용',
         '레이아웃 조합 컴포넌트(Card, Modal, SideSheet, BottomSheet)에 `Card.Header` 형태의 네임스페이스 조합 API 적용',
         '레이아웃 조합 컴포넌트에 Hybrid 자동 감지 추가 — Card는 title/header/footer/image, Modal은 title/footer, SideSheet·BottomSheet는 title prop이 있으면 Flat 모드로 동작',
+        '`Object.assign(Root, { Header, Title, ... })`로 서브 컴포넌트를 네임스페이스로 묶고, 루트 내부의 isFlat 분기 하나로 Flat/Compound 모드를 전환하는 단일 파일 구조로 구현',
         '30개 컴포넌트 전체에 variant·size·disabled 네이밍 규칙 통일',
       ],
       result: [
-        { label: '컴포넌트 확장성 및 유지보수 편의성', after: '컴포넌트들이 역할에 맞는 API를 갖게 되어, 새로운 조합이 필요할 때 기존 컴포넌트를 수정하지 않고 Compound로 확장 가능', measuredBy: '데모 앱 제작 중 Modal·Card 실사용 확인' },
-        { label: '사용 방식 분리', after: '단일 값/행동을 표현하는 컴포넌트는 Flat API로 유지하고, 내부 구성이 달라지는 컴포넌트는 Compound API를 함께 제공해 단순 사용성과 확장성을 분리', measuredBy: 'core 컴포넌트 API와 demo 사용 예제 대조' },
+        { label: '컴포넌트 확장성 및 유지보수 편의성', after: '새로운 레이아웃 조합이 필요할 때 기존 컴포넌트(core)를 수정하지 않고 사용자 측 Compound 조합으로 해결', measuredBy: '데모 앱 제작 중 Modal·Card 실사용 확인' },
+        { label: '사용 방식 분리', after: '단일 값/행동을 표현하는 컴포넌트는 Flat API로 유지하고, 레이아웃 조합 4개(Card·Modal·SideSheet·BottomSheet)만 Compound API를 병행 제공해 단순 사용성과 확장성을 분리', measuredBy: 'core 컴포넌트 API와 demo 사용 예제 대조' },
         { label: '접근성 보강', after: 'Flat API에서 title이 있을 때 자동으로 aria-labelledby와 연결되도록 보강해 단순 사용 경로에서도 dialog 이름이 누락되지 않도록 개선', measuredBy: 'Modal/SideSheet/BottomSheet 접근성 테스트' },
       ],
       tradeOffs: [
