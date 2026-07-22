@@ -105,6 +105,7 @@ export const portfolio: Project = {
     {
       id: 'performance',
       title: '1. Lighthouse Desktop 80→99점, LCP 중앙값 5.5→1.3초',
+      image: '/projects/Portfolio/performance.webp',
       problem: '동일한 Desktop 환경에서 Lighthouse를 반복 측정한 결과 **성능 점수는 80점, LCP 중앙값은 5.5초**였습니다. Hero 부팅 애니메이션은 포트폴리오의 첫인상을 만드는 핵심 연출이지만, 연출이 끝날 때까지 브라우저가 주요 콘텐츠를 늦게 인식하고 초기 자원까지 경쟁하면 사용자는 의도한 경험보다 기다림을 먼저 느끼게 됩니다. 따라서 애니메이션을 유지하면서도 측정 대상과 실제 초기 다운로드 병목을 함께 분리해야 했습니다.',
       analysis: [
         '**진단 — 한 가지 느린 작업이 아니라 세 병목의 결합**: Performance trace와 Network 요청을 대조하니 Hero 제목이 초기 `opacity: 0` 상태라 LCP 후보에서 빠졌고, 터미널 타이핑이 끝난 뒤의 텍스트가 뒤늦게 후보가 되고 있었습니다. 동시에 Pretendard 5개 weight를 모두 preload해 약 1.3MB가 초기 요청에서 다운로드됐고, 대표 이미지 6장은 PNG 원본 합계 약 5.21MB였습니다. 즉 LCP 후보가 늦게 정해지는 측정 구조와 실제 전송량 문제가 함께 있었습니다.',
@@ -133,7 +134,8 @@ export const portfolio: Project = {
     },
     {
       id: 'ssr-modal',
-      title: '2. Hydration 경고 0건을 만든 SSR-safe 카드 원점 모달',
+      title: '2. Hydration 경고 0건을 만든 SSR-safe 모달',
+      image: '/projects/Portfolio/ssr-modal.webp',
       problem: '프로젝트 상세 모달에서 `createPortal`, `document.body`, `window`, 카드의 `DOMRect`를 렌더링 경로에 사용하면서 **서버가 만든 결과와 브라우저의 첫 렌더가 달라지는 Hydration 경고가 실제로 발생**했습니다. 프로젝트 상세 보기는 방문자가 구현 과정과 성과를 확인하는 핵심 경로이므로, 경고를 숨기는 것이 아니라 서버와 브라우저가 같은 첫 결과를 만들면서 카드 위치에서 확장되는 인터랙션도 유지해야 했습니다.',
       analysis: [
         '**진단 — Client Component 여부가 아니라 첫 렌더 시점의 문제**: 모달 파일이 Client Component여도 초기 렌더 결과는 서버에서 만들어질 수 있습니다. 이때 존재하지 않는 `document.body`와 viewport 좌표를 사용하면 서버는 같은 결과를 만들 수 없고, 브라우저 전용 계산이 첫 렌더에 섞인 것이 경고의 원인이었습니다.',
@@ -159,6 +161,7 @@ export const portfolio: Project = {
     },
     {
       id: 'hero-canvas-performance',
+      image: '/projects/Portfolio/hero-canvas-performance.webp',
       title: '3. Hero 부팅 애니메이션 아키텍처 리팩터링 — 끊김 제거와 렌더링 책임 분리',
       problem: 'Hero 부팅 애니메이션의 진행 상태를 12단계로 뚝뚝 끊어서 반영하다 보니 **눈에 보이는 움직임이 부자연스럽게 끊겨 보였**습니다. 그렇다고 이 단계를 없애려고 매 프레임마다 React state를 갱신하면, 값 하나가 바뀔 때마다 첫 화면의 렌더 트리 전체가 함께 다시 계산될 위험이 있습니다. 포트폴리오의 시작을 알리는 핵심 연출이므로, 시퀀스는 그대로 유지하면서 움직임은 끊김 없이 이어지게 하고 렌더링 책임은 필요한 범위로만 좁히는 아키텍처 정리가 필요했습니다.',
       analysis: [
