@@ -21,18 +21,18 @@ export const PERSONAL_INFO = {
   // Hero 완료 후 표시되는 섹션의 순서, navigation 정보, 등장 지연을 한곳에서 관리한다.
   export const HOME_SECTION_CONFIG = [
     { id: SECTION_IDS.ABOUT, label: 'About', href: `#${SECTION_IDS.ABOUT}`, revealDelay: 0.1 },
-    { id: SECTION_IDS.SKILLS, label: 'Skills', href: `#${SECTION_IDS.SKILLS}`, revealDelay: 0.22 },
-    { id: SECTION_IDS.PROJECTS, label: 'Projects', href: `#${SECTION_IDS.PROJECTS}`, revealDelay: 0.34 },
+    { id: SECTION_IDS.PROJECTS, label: 'Projects', href: `#${SECTION_IDS.PROJECTS}`, revealDelay: 0.22 },
+    {
+      id: SECTION_IDS.EXPERIENCE,
+      label: 'Experience',
+      href: `#${SECTION_IDS.EXPERIENCE}`,
+      revealDelay: 0.34,
+    },
+    { id: SECTION_IDS.SKILLS, label: 'Skills', href: `#${SECTION_IDS.SKILLS}`, revealDelay: 0.46 },
     {
       id: SECTION_IDS.AWARDS_CERTIFICATES,
       label: 'Awards',
       href: `#${SECTION_IDS.AWARDS_CERTIFICATES}`,
-      revealDelay: 0.46,
-    },
-    {
-      id: SECTION_IDS.EXPERIENCE,
-      label: 'Experiences',
-      href: `#${SECTION_IDS.EXPERIENCE}`,
       revealDelay: 0.58,
     },
   ] as const;

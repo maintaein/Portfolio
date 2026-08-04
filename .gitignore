@@ -42,3 +42,6 @@ next-env.d.ts
 
 # project documentation (local only)
 /.claude
+
+# superpowers SDD 스크래치 (커밋 대상 아님)
+.superpowers/
