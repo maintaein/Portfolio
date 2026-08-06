@@ -1,0 +1,34 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const css = readFileSync(path.resolve(process.cwd(), 'styles/design-tokens.css'), 'utf8');
+
+function ruleBody(selector: string): string | undefined {
+  return css.match(new RegExp(`\\${selector}\\s*\\{([^}]*)\\}`))?.[1];
+}
+
+describe('section visibility utilities', () => {
+  it('defines .section-hidden with searchable content visibility', () => {
+    const hidden = ruleBody('.section-hidden');
+
+    expect(hidden).toBeDefined();
+    expect(hidden).toMatch(/content-visibility\s*:\s*auto\s*;/);
+    expect(hidden).not.toMatch(/content-visibility\s*:\s*hidden\s*;/);
+  });
+
+  it('gives skipped sections an intrinsic size', () => {
+    expect(ruleBody('.section-hidden')).toMatch(/contain-intrinsic-size\s*:/);
+  });
+
+  it('defines .section-visible', () => {
+    expect(ruleBody('.section-visible')).toBeDefined();
+  });
+
+  it('uses the shared easing for both transitions', () => {
+    const easing = 'cubic-bezier(0.22, 1, 0.36, 1)';
+
+    expect(ruleBody('.section-hidden')).toContain(easing);
+    expect(ruleBody('.section-visible')).toContain(easing);
+  });
+});
