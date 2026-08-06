@@ -1,9 +1,10 @@
 
 import localFont from 'next/font/local';
 
-// Regular + Bold만 preload — 초기 렌더에 필요한 최소 weight (~538KB)
-// HeroSection 터미널은 font-mono(시스템 폰트)라 Pretendard 불필요
-// Pretendard 실제 필요 시점: 타이핑 완료 후 h1/본문 등장 (~3.2초 이후)
+// Regular + Bold + ExtraBold를 preload한다.
+// 부팅 시퀀스의 대형 이름이 첫 화면의 LCP 요소이고 ExtraBold(800)를 쓴다.
+// 이 굵기를 preload에서 빼면 시스템 폰트로 먼저 그려졌다 스왑되면서
+// 가장 큰 텍스트에서 CLS가 발생한다.
 export const pretendardCore = localFont({
   src: [
     {
@@ -14,6 +15,11 @@ export const pretendardCore = localFont({
     {
       path: '../public/fonts/Pretendard-Bold.subset.woff2',
       weight: '700',
+      style: 'normal',
+    },
+    {
+      path: '../public/fonts/Pretendard-ExtraBold.subset.woff2',
+      weight: '800',
       style: 'normal',
     },
   ],
@@ -35,7 +41,7 @@ export const pretendardCore = localFont({
   adjustFontFallback: 'Arial',
 });
 
-// Medium + SemiBold + ExtraBold — 필요 시 브라우저가 자동 요청 (preload 없음)
+// Medium + SemiBold — 첫 화면 밖에서 쓰인다. 브라우저가 필요할 때 요청한다.
 export const pretendardExtended = localFont({
   src: [
     {
@@ -48,14 +54,10 @@ export const pretendardExtended = localFont({
       weight: '600',
       style: 'normal',
     },
-    {
-      path: '../public/fonts/Pretendard-ExtraBold.subset.woff2',
-      weight: '800',
-      style: 'normal',
-    },
   ],
   display: 'swap',
   variable: '--font-pretendard-ext',
   preload: false,
   fallback: ['-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
+  adjustFontFallback: 'Arial',
 });
