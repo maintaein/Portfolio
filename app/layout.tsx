@@ -6,6 +6,7 @@ import '@/styles/design-tokens.css';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { siteConfig } from '@/lib/siteConfig';
+import { CRITICAL_CSS } from '@/lib/criticalCss';
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
@@ -115,13 +116,9 @@ export default function RootLayout({
   return (
     <html lang="ko" className={`${pretendardCore.variable} ${pretendardExtended.variable}`}>
       <head>
-        {/* Critical CSS 인라인 — CSS 파일 요청 이전에 HeroSection 배경/body 기본 스타일 즉시 적용
-            FCP 차단 요소를 줄여 첫 페인트를 앞당김 */}
-        <style dangerouslySetInnerHTML={{ __html: `
-          *,*::before,*::after{box-sizing:border-box}
-          body{margin:0;background:#f8faff;color:#191f28;-webkit-font-smoothing:antialiased;overflow-x:hidden}
-          #hero{min-height:100svh;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;overflow:hidden;background:linear-gradient(150deg,#eef4ff 0%,#f8faff 55%,#edf3ff 100%)}
-        ` }} />
+        {/* CSS 파일 요청 이전에 배경을 검정으로 확정한다.
+            흰 화면이 한 프레임이라도 보이면 부팅 시퀀스의 첫인상이 깨진다. */}
+        <style dangerouslySetInnerHTML={{ __html: CRITICAL_CSS }} />
         <meta name="naver-site-verification" content="125d5eedfefaa060cae94d8d07f62f7a9127b907" />
         <JsonLd />
       </head>
