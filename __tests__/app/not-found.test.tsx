@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import NotFound from '@/app/not-found';
+import { findTailwindPaletteColorUtilities } from '../helpers/tailwindPalette';
 
 describe('app/not-found.tsx', () => {
   it('404 라벨과 제목을 보여준다', () => {
@@ -15,11 +16,15 @@ describe('app/not-found.tsx', () => {
     expect(link).toHaveAttribute('href', '/');
   });
 
-  it('라이트 테마 클래스가 남아 있지 않다', () => {
+  it('Tailwind 팔레트 색상 유틸리티가 남아 있지 않다', () => {
     const { container } = render(<NotFound />);
-    const html = container.innerHTML;
-    for (const cls of ['bg-white', 'text-gray-900', 'text-gray-500', 'bg-blue-600', 'text-blue-500']) {
-      expect(html, `${cls}가 남아 있다`).not.toContain(cls);
-    }
+    expect(findTailwindPaletteColorUtilities(container.innerHTML)).toEqual([]);
+  });
+
+  it('링크가 채워진 박스가 아니라 헤어라인 테두리를 쓴다', () => {
+    const { container } = render(<NotFound />);
+    const link = screen.getByRole('link', { name: '홈으로 돌아가기' });
+    expect(link.className).toContain('border');
+    expect(container.innerHTML).not.toContain('rounded-lg');
   });
 });

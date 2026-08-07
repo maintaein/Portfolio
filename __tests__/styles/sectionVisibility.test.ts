@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest';
 const css = readFileSync(path.resolve(process.cwd(), 'styles/design-tokens.css'), 'utf8');
 
 function ruleBody(selector: string): string | undefined {
-  return css.match(new RegExp(`\\${selector}\\s*\\{([^}]*)\\}`))?.[1];
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return css.match(new RegExp(`^  ${escapedSelector}\\s*\\{([\\s\\S]*?)^  \\}`, 'm'))?.[1];
 }
 
 describe('section visibility utilities', () => {
@@ -18,11 +19,21 @@ describe('section visibility utilities', () => {
   });
 
   it('gives skipped sections an intrinsic size', () => {
-    expect(ruleBody('.section-hidden')).toMatch(/contain-intrinsic-size\s*:/);
+    expect(ruleBody('.section-hidden')).toMatch(/contain-intrinsic-size\s*:\s*auto 100svh\s*;/);
   });
 
-  it('defines .section-visible', () => {
-    expect(ruleBody('.section-visible')).toBeDefined();
+  it('extracts the standalone rule instead of the reduced-motion override', () => {
+    const hidden = ruleBody('.section-hidden');
+
+    expect(hidden).toMatch(/opacity\s*:\s*0\s*;/);
+    expect(hidden).not.toMatch(/transition\s*:\s*none\s*;/);
+  });
+
+  it('defines .section-visible with visible content', () => {
+    const visible = ruleBody('.section-visible');
+
+    expect(visible).toMatch(/content-visibility\s*:\s*visible\s*;/);
+    expect(visible).toMatch(/opacity\s*:\s*1\s*;/);
   });
 
   it('uses the shared easing for both transitions', () => {
