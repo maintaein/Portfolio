@@ -16,9 +16,10 @@ function blockOf(name: string): string {
 }
 
 describe('lib/fonts.ts', () => {
-  it('LCP 요소가 쓰는 ExtraBold가 preload되는 그룹에 있다', () => {
-    // 부팅 시퀀스의 대형 이름이 weight 800이다.
-    expect(blockOf('pretendardCore')).toContain('Pretendard-ExtraBold');
+  it('아직 쓰지 않는 ExtraBold를 의도적으로 preload하지 않는다', () => {
+    // 3단계에서 부팅 시퀀스의 큰 이름과 글리프 집합이 확정되면 되돌린다.
+    expect(blockOf('pretendardCore')).not.toContain('Pretendard-ExtraBold');
+    expect(blockOf('pretendardExtended')).toContain('Pretendard-ExtraBold');
   });
 
   it('core 그룹이 preload된다', () => {

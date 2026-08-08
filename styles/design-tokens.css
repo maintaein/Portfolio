@@ -71,11 +71,6 @@
   --color-elevation-near: rgb(3 179 195 / 0.6);
   --color-elevation-far: rgb(3 179 195 / 0.15);
 
-  /* 라이트 시절 별칭. 남은 컴포넌트가 참조 중이라 값만 다크로 돌린다.
-     계획 5의 마감 단계에서 참조가 0이 되면 제거한다. */
-  --color-background: #000000;
-  --color-grey-background: #000000;
-
   /* Typography */
   --font-family-pretendard: var(--font-pretendard), -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   
@@ -132,62 +127,62 @@
 /* ============================================ */
 /* Custom Utilities */
 /* ============================================ */
+@utility text-d1 {
+  font-size: var(--font-size-d1);
+  line-height: var(--line-height-d1);
+}
+
+@utility text-d2 {
+  font-size: var(--font-size-d2);
+  line-height: var(--line-height-d2);
+}
+
+@utility text-d3 {
+  font-size: var(--font-size-d3);
+  line-height: var(--line-height-d3);
+}
+
+@utility text-t1 {
+  font-size: var(--font-size-t1);
+  line-height: var(--line-height-t1);
+}
+
+@utility text-t2 {
+  font-size: var(--font-size-t2);
+  line-height: var(--line-height-t2);
+}
+
+@utility text-t3 {
+  font-size: var(--font-size-t3);
+  line-height: var(--line-height-t3);
+}
+
+@utility text-t4 {
+  font-size: var(--font-size-t4);
+  line-height: var(--line-height-t4);
+}
+
+@utility text-t5 {
+  font-size: var(--font-size-t5);
+  line-height: var(--line-height-t5);
+}
+
+@utility text-t6 {
+  font-size: var(--font-size-t6);
+  line-height: var(--line-height-t6);
+}
+
+@utility text-t7 {
+  font-size: var(--font-size-t7);
+  line-height: var(--line-height-t7);
+}
+
+@utility text-t8 {
+  font-size: var(--font-size-t8);
+  line-height: var(--line-height-t8);
+}
+
 @layer utilities {
-  .text-d1 {
-    font-size: var(--font-size-d1);
-    line-height: var(--line-height-d1);
-  }
-
-  .text-d2 {
-    font-size: var(--font-size-d2);
-    line-height: var(--line-height-d2);
-  }
-
-  .text-d3 {
-    font-size: var(--font-size-d3);
-    line-height: var(--line-height-d3);
-  }
-
-  .text-t1 {
-    font-size: var(--font-size-t1);
-    line-height: var(--line-height-t1);
-  }
-
-  .text-t2 {
-    font-size: var(--font-size-t2);
-    line-height: var(--line-height-t2);
-  }
-
-  .text-t3 {
-    font-size: var(--font-size-t3);
-    line-height: var(--line-height-t3);
-  }
-
-  .text-t4 {
-    font-size: var(--font-size-t4);
-    line-height: var(--line-height-t4);
-  }
-
-  .text-t5 {
-    font-size: var(--font-size-t5);
-    line-height: var(--line-height-t5);
-  }
-
-  .text-t6 {
-    font-size: var(--font-size-t6);
-    line-height: var(--line-height-t6);
-  }
-
-  .text-t7 {
-    font-size: var(--font-size-t7);
-    line-height: var(--line-height-t7);
-  }
-
-  .text-t8 {
-    font-size: var(--font-size-t8);
-    line-height: var(--line-height-t8);
-  }
-
   .font-regular {
     font-weight: 400 !important;
   }

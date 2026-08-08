@@ -1,10 +1,9 @@
 
 import localFont from 'next/font/local';
 
-// Regular + Bold + ExtraBold를 preload한다.
-// 부팅 시퀀스의 대형 이름이 첫 화면의 LCP 요소이고 ExtraBold(800)를 쓴다.
-// 이 굵기를 preload에서 빼면 시스템 폰트로 먼저 그려졌다 스왑되면서
-// 가장 큰 텍스트에서 CLS가 발생한다.
+// Regular와 Bold는 현재 화면에서 사용하므로 preload한다.
+// ExtraBold는 weight 800을 아직 사용하지 않아 preload하지 않는다.
+// 3단계에서 부팅 시퀀스의 큰 이름과 글리프 집합이 확정되면 다시 검토한다.
 export const pretendardCore = localFont({
   src: [
     {
@@ -15,11 +14,6 @@ export const pretendardCore = localFont({
     {
       path: '../public/fonts/Pretendard-Bold.subset.woff2',
       weight: '700',
-      style: 'normal',
-    },
-    {
-      path: '../public/fonts/Pretendard-ExtraBold.subset.woff2',
-      weight: '800',
       style: 'normal',
     },
   ],
@@ -52,6 +46,11 @@ export const pretendardExtended = localFont({
     {
       path: '../public/fonts/Pretendard-SemiBold.subset.woff2',
       weight: '600',
+      style: 'normal',
+    },
+    {
+      path: '../public/fonts/Pretendard-ExtraBold.subset.woff2',
+      weight: '800',
       style: 'normal',
     },
   ],

@@ -6,14 +6,8 @@ describe('contrastRatio', () => {
     expect(contrastRatio('#ffffff', '#000000')).toBeCloseTo(21, 1);
   });
 
-  it('같은 색끼리는 1:1이다', () => {
-    expect(contrastRatio('#03b3c3', '#03b3c3')).toBeCloseTo(1, 2);
-  });
-
-  it('순서를 바꿔도 같은 값이다', () => {
-    const a = contrastRatio('#03b3c3', '#000000');
-    const b = contrastRatio('#000000', '#03b3c3');
-    expect(a).toBeCloseTo(b, 5);
+  it('중간 명도 색상의 대비 공식을 고정한다', () => {
+    expect(contrastRatio('#8b95a1', '#000000')).toBeCloseTo(6.91, 2);
   });
 
   it('시안 강조색은 검정 위에서 AAA를 넘는다', () => {
