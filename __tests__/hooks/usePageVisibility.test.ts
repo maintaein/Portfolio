@@ -34,6 +34,13 @@ describe('usePageVisibility', () => {
     expect(result.current).toBe(false);
   });
 
+  it('hidden이 아닌 visibilityState면 초기값은 true다', () => {
+    mockVisibilityState('prerender' as DocumentVisibilityState);
+    const { result } = renderHook(() => usePageVisibility());
+
+    expect(result.current).toBe(true);
+  });
+
   it('visibilitychange의 visible → hidden → visible 전이를 모두 반영한다', () => {
     const visibility = mockVisibilityState('visible');
     const { result } = renderHook(() => usePageVisibility());

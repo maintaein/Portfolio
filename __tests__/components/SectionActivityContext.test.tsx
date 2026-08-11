@@ -65,7 +65,7 @@ describe('SectionActivityContext', () => {
     expect(probe).toHaveAttribute('data-route-resolved', 'true');
     expect(probe).toHaveAttribute('data-motion-ready', 'false');
     expect(probe).toHaveAttribute('data-reduced-motion', 'true');
-    expect(probe).toHaveTextContent(
+    expect(probe.textContent).toBe(
       'active,entryAnimationTarget,motionReady,pageVisible,reducedMotion,routeResolved'
     );
 
