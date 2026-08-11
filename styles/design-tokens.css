@@ -425,6 +425,10 @@
     animation: bob 3s ease-in-out infinite;
   }
 
+  .section-stage {
+    touch-action: pan-y;
+  }
+
   /* 섹션 은닉 — 전 섹션이 DOM에 상주하되(SEO) 비활성은 렌더를 건너뛴다.
      content-visibility는 반드시 auto를 쓴다. hidden으로 바꾸면 브라우저
      페이지 내 찾기(Ctrl+F)와 접근성 트리에서 사라져, 전 섹션을 SSR로
