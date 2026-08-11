@@ -140,6 +140,26 @@ describe('useSectionSwipe', () => {
     expect(onNext).toHaveBeenCalledOnce();
   });
 
+  it('축 우세 비율 1.25의 51px/52px 경계를 구분한다', () => {
+    const { onNext, stage } = renderHarness();
+
+    swipe(
+      stage,
+      stage,
+      { clientX: 200, clientY: 200, pointerId: 50 },
+      { clientX: 136, clientY: 251 }
+    );
+    expect(onNext).toHaveBeenCalledOnce();
+
+    swipe(
+      stage,
+      stage,
+      { clientX: 200, clientY: 200, pointerId: 51 },
+      { clientX: 136, clientY: 252 }
+    );
+    expect(onNext).toHaveBeenCalledOnce();
+  });
+
   it('64px 임계 거리 미만이면 no-op이고 경계값에서는 동작한다', () => {
     const { onNext, stage } = renderHarness();
 
@@ -261,5 +281,31 @@ describe('useSectionSwipe', () => {
       { clientX: 120, clientY: 200 }
     );
     expect(onNext).toHaveBeenCalledTimes(expectedPositiveCalls + 1);
+  });
+
+  it('pointerup 뒤 상태를 초기화해 같은 pointer id의 추가 pointerup을 무시한다', () => {
+    const { onNext, stage } = renderHarness();
+
+    firePointer(stage, 'pointerdown', {
+      clientX: 200,
+      clientY: 200,
+      pointerId: 52,
+      pointerType: 'touch',
+    });
+    firePointer(stage, 'pointerup', {
+      clientX: 120,
+      clientY: 200,
+      pointerId: 52,
+      pointerType: 'touch',
+    });
+    expect(onNext).toHaveBeenCalledOnce();
+
+    firePointer(stage, 'pointerup', {
+      clientX: 120,
+      clientY: 200,
+      pointerId: 52,
+      pointerType: 'touch',
+    });
+    expect(onNext).toHaveBeenCalledOnce();
   });
 });

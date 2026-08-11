@@ -42,4 +42,8 @@ describe('section visibility utilities', () => {
     expect(ruleBody('.section-hidden')).toContain(easing);
     expect(ruleBody('.section-visible')).toContain(easing);
   });
+
+  it('gives the section stage a vertical-only touch action', () => {
+    expect(ruleBody('.section-stage')).toMatch(/touch-action\s*:\s*pan-y\s*;/);
+  });
 });
