@@ -13,10 +13,10 @@ const originalScrollIntoViewDescriptor = Object.getOwnPropertyDescriptor(
   Element.prototype,
   'scrollIntoView'
 );
-// sm/md에서는 간격·글자만 조정할 수 있다. display·position·sizing과
-// flex/grid/columns 배치 부류는 Compact 구조 자체를 바꾸므로 lg 전에는 금지한다.
-const earlyBreakpointStructuralUtility =
-  /\b(?:sm|md):(?:(?:block|inline|inline-block|flex|inline-flex|grid|inline-grid|hidden|contents|flow-root|list-item|table(?:-[^\s"'<>]+)?)|(?:static|fixed|absolute|relative|sticky)|flex-(?:row|col)(?:-reverse)?|flex-(?:wrap|nowrap|wrap-reverse)|grid-(?:cols|rows|flow|auto-cols|auto-rows)-[^\s"'<>]+|(?:columns|basis|order|grow|shrink)(?:-[^\s"'<>]+)?|(?:min-|max-)?[wh]-[^\s"'<>]+|(?:inset|inset-x|inset-y|top|right|bottom|left|start|end)-[^\s"'<>]+)(?=[\s"'<>])/g;
+// sm/md에서는 간격·글자 유틸만 허용한다. 그 밖의 토큰은 모르는 유틸까지
+// 기본 차단해 Compact 구조가 lg 전에 바뀌지 않게 한다.
+const earlyBreakpointDisallowedUtility =
+  /\b(?:sm|md):(?!(?:!?-?(?:text|tracking|leading|font|gap(?:-[xy])?|p(?:[xytrblse])?|m(?:[xytrblse])?|space-[xy])-[^\s"'<>]+)(?=[\s"'<>]))[^\s"'<>]+(?=[\s"'<>])/g;
 
 beforeEach(() => {
   compactViewport = false;
@@ -185,7 +185,7 @@ describe('Navigation', () => {
     expect(findTailwindPaletteColorUtilities(container.innerHTML)).toEqual([]);
   });
 
-  it('sm 또는 md에서 구조 유틸을 렌더하지 않는다', () => {
+  it('sm 또는 md에서 간격·글자 외 유틸을 렌더하지 않는다', () => {
     const { container } = render(
       <Navigation
         items={NAV_ITEMS}
@@ -195,7 +195,7 @@ describe('Navigation', () => {
     );
 
     expect(
-      container.innerHTML.match(earlyBreakpointStructuralUtility) ?? []
+      container.innerHTML.match(earlyBreakpointDisallowedUtility) ?? []
     ).toEqual([]);
   });
 
