@@ -1,12 +1,26 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
 import { CoreValue } from '@/types';
 import { coreValues, contact } from '@/lib/data';
 import { useCopyToClipboard } from '@/hooks';
 import { GitHubIcon } from '@/components/atoms';
-import { TechParticleStorm, EmpathyRadar, CollaborationMesh } from '@/components/blocks';
+import WhenVisible from '@/components/common/WhenVisible';
 import { SECTION_IDS } from '@/lib/constants';
+
+const TechParticleStorm = dynamic(
+  () => import('@/components/blocks/TechParticleStorm'),
+  { ssr: false }
+);
+const EmpathyRadar = dynamic(
+  () => import('@/components/blocks/EmpathyRadar'),
+  { ssr: false }
+);
+const CollaborationMesh = dynamic(
+  () => import('@/components/blocks/CollaborationMesh'),
+  { ssr: false }
+);
 
 export default function AboutSection() {
   return (
@@ -133,9 +147,17 @@ function CoreValueCard({ value, index }: CoreValueCardProps) {
         transition={{ duration: 0.4, ease: 'easeOut' }}
       >
         <div className="relative aspect-square max-w-[500px] mx-auto">
-          {value.imagePlaceholder === 'tech-stack' && <TechParticleStorm />}
-          {value.imagePlaceholder === 'ux-focus' && <EmpathyRadar />}
-          {value.imagePlaceholder === 'collaboration' && <CollaborationMesh />}
+          <WhenVisible section={SECTION_IDS.ABOUT}>
+            {({ shouldLoad }) =>
+              shouldLoad ? (
+                <>
+                  {value.imagePlaceholder === 'tech-stack' && <TechParticleStorm />}
+                  {value.imagePlaceholder === 'ux-focus' && <EmpathyRadar />}
+                  {value.imagePlaceholder === 'collaboration' && <CollaborationMesh />}
+                </>
+              ) : null
+            }
+          </WhenVisible>
         </div>
       </motion.div>
 

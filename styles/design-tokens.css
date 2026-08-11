@@ -426,7 +426,20 @@
   }
 
   .section-stage {
+    position: fixed;
+    inset: 72px 0 calc(45px + env(safe-area-inset-bottom, 0px));
+    overflow: hidden;
     touch-action: pan-y;
+  }
+
+  .section-scroll {
+    position: absolute;
+    inset: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
   }
 
   /* 섹션 은닉 — 전 섹션이 DOM에 상주하되(SEO) 비활성은 렌더를 건너뛴다.

@@ -46,4 +46,25 @@ describe('section visibility utilities', () => {
   it('gives the section stage a vertical-only touch action', () => {
     expect(ruleBody('.section-stage')).toMatch(/touch-action\s*:\s*pan-y\s*;/);
   });
+
+  it('keeps the stage fixed between navigation and the contact rail', () => {
+    const stage = ruleBody('.section-stage');
+
+    expect(stage).toMatch(/position\s*:\s*fixed\s*;/);
+    expect(stage).toMatch(
+      /inset\s*:\s*72px 0 calc\(45px \+ env\(safe-area-inset-bottom, 0px\)\)\s*;/
+    );
+    expect(stage).toMatch(/overflow\s*:\s*hidden\s*;/);
+  });
+
+  it('defines each section as an independent vertical scroll container', () => {
+    const scroll = ruleBody('.section-scroll');
+
+    expect(scroll).toMatch(/position\s*:\s*absolute\s*;/);
+    expect(scroll).toMatch(/inset\s*:\s*0\s*;/);
+    expect(scroll).toMatch(/overflow-x\s*:\s*hidden\s*;/);
+    expect(scroll).toMatch(/overflow-y\s*:\s*auto\s*;/);
+    expect(scroll).toMatch(/overscroll-behavior\s*:\s*contain\s*;/);
+    expect(scroll).toMatch(/scrollbar-gutter\s*:\s*stable\s*;/);
+  });
 });

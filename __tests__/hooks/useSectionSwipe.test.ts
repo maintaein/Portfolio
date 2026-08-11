@@ -1,18 +1,15 @@
 import { createElement } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import {
+  firePointer,
+  type PointerCoordinates,
+} from '@/__tests__/helpers/pointerEvents';
 import { useSectionSwipe } from '@/hooks/useSectionSwipe';
 
 interface SwipeHarnessProps {
   onNext: () => void;
   onPrevious: () => void;
-}
-
-interface PointerCoordinates {
-  clientX: number;
-  clientY: number;
-  pointerId: number;
-  pointerType: string;
 }
 
 function SwipeHarness({ onNext, onPrevious }: SwipeHarnessProps) {
@@ -41,21 +38,6 @@ function SwipeHarness({ onNext, onPrevious }: SwipeHarnessProps) {
       createElement('span', { 'data-testid': 'ignored-child' }, 'Ignored child')
     )
   );
-}
-
-function firePointer(
-  target: Element,
-  type: 'pointerdown' | 'pointerup' | 'pointercancel',
-  coordinates: PointerCoordinates
-) {
-  const event = new Event(type, { bubbles: true, cancelable: true });
-  Object.defineProperties(event, {
-    clientX: { value: coordinates.clientX },
-    clientY: { value: coordinates.clientY },
-    pointerId: { value: coordinates.pointerId },
-    pointerType: { value: coordinates.pointerType },
-  });
-  fireEvent(target, event);
 }
 
 function swipe(

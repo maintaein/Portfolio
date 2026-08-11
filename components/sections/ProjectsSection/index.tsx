@@ -3,13 +3,18 @@
 import {
   useState, useRef, useCallback,
 } from 'react';
+import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
-import ProjectModal from '@/components/blocks/ProjectModal';
 import { SectionHeader } from '@/components/blocks';
 import { Project } from '@/types/index';
 import { SECTION_IDS } from '@/lib/constants';
 import { projects } from '@/lib/data';
+
+const ProjectModal = dynamic(
+  () => import('@/components/blocks/ProjectModal'),
+  { ssr: false }
+);
 
 const CARD_H          = 420;
 const CARD_W_DEFAULT  = 200;
