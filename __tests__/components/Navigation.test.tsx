@@ -13,7 +13,10 @@ const originalScrollIntoViewDescriptor = Object.getOwnPropertyDescriptor(
   Element.prototype,
   'scrollIntoView'
 );
-const earlyBreakpointUtility = /\b(?:sm|md):[^\s"'<>]+/g;
+// sm/md에서는 간격·글자만 조정할 수 있다. display·position·sizing과
+// flex/grid/columns 배치 부류는 Compact 구조 자체를 바꾸므로 lg 전에는 금지한다.
+const earlyBreakpointStructuralUtility =
+  /\b(?:sm|md):(?:(?:block|inline|inline-block|flex|inline-flex|grid|inline-grid|hidden|contents|flow-root|list-item|table(?:-[^\s"'<>]+)?)|(?:static|fixed|absolute|relative|sticky)|flex-(?:row|col)(?:-reverse)?|flex-(?:wrap|nowrap|wrap-reverse)|grid-(?:cols|rows|flow|auto-cols|auto-rows)-[^\s"'<>]+|(?:columns|basis|order|grow|shrink)(?:-[^\s"'<>]+)?|(?:min-|max-)?[wh]-[^\s"'<>]+|(?:inset|inset-x|inset-y|top|right|bottom|left|start|end)-[^\s"'<>]+)(?=[\s"'<>])/g;
 
 beforeEach(() => {
   compactViewport = false;
@@ -182,16 +185,18 @@ describe('Navigation', () => {
     expect(findTailwindPaletteColorUtilities(container.innerHTML)).toEqual([]);
   });
 
-  it('sm 또는 md 전환점 유틸을 렌더하지 않는다', () => {
+  it('sm 또는 md에서 구조 유틸을 렌더하지 않는다', () => {
     const { container } = render(
       <Navigation
         items={NAV_ITEMS}
-        active="overview"
+        active="projects"
         onNavigate={() => {}}
       />
     );
 
-    expect(container.innerHTML.match(earlyBreakpointUtility) ?? []).toEqual([]);
+    expect(
+      container.innerHTML.match(earlyBreakpointStructuralUtility) ?? []
+    ).toEqual([]);
   });
 
   it('워드마크가 PERSONAL_INFO 이름을 쓰는 단일 FLIP 노드다', () => {
