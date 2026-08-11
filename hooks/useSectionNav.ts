@@ -59,6 +59,7 @@ export function useSectionNav(): UseSectionNavReturn {
   const [entryAnimationTarget, setEntryAnimationTarget] = useState<NavId | null>(null);
   const activeRef = useRef(active);
   const seenRef = useRef<ReadonlySet<NavId>>(new Set<NavId>());
+  const didResolveInitialRouteRef = useRef(false);
   activeRef.current = active;
 
   const captureFirstEntry = useCallback((id: NavId) => {
@@ -76,6 +77,9 @@ export function useSectionNav(): UseSectionNavReturn {
   // 자식 layout effect가 Boot/FLIP/WebGL을 만들기 전에 최초 해시와 진입 대상을
   // 한 commit에서 확정한다. 이 단계 전에는 routeResolved 소비자가 모두 정지한다.
   useLayoutEffect(() => {
+    if (didResolveInitialRouteRef.current) return;
+    didResolveInitialRouteRef.current = true;
+
     const fromHash = readHash();
     activeRef.current = fromHash;
     setActiveState(fromHash);

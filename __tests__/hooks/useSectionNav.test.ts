@@ -1,4 +1,7 @@
+import { StrictMode, createElement } from 'react';
 import { act, renderHook } from '@testing-library/react';
+import { flushSync } from 'react-dom';
+import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSectionNav } from '@/hooks/useSectionNav';
 import { HOME_SECTION_CONFIG } from '@/lib/constants';
@@ -15,6 +18,58 @@ describe('useSectionNav', () => {
   it('초기 활성 섹션은 overview', () => {
     const { result } = renderHook(() => useSectionNav());
     expect(result.current.active).toBe('overview');
+  });
+
+  it('Strict Mode 루트 진입에서도 최초 진입 대상을 유지한다', () => {
+    const { result } = renderHook(() => useSectionNav(), { wrapper: StrictMode });
+    expect(result.current.entryAnimationTarget).toBe('overview');
+  });
+
+  it('Strict Mode 딥링크 진입에서도 최초 진입 대상을 유지한다', () => {
+    window.history.replaceState(null, '', '/#projects');
+    const { result } = renderHook(() => useSectionNav(), { wrapper: StrictMode });
+    expect(result.current.entryAnimationTarget).toBe('projects');
+  });
+
+  it('첫 렌더에서는 route를 미해석 상태로 둔다', () => {
+    const observed: boolean[] = [];
+    const { result } = renderHook(() => {
+      const nav = useSectionNav();
+      observed.push(nav.routeResolved);
+      return nav;
+    });
+
+    expect(observed[0]).toBe(false);
+    expect(result.current.routeResolved).toBe(true);
+  });
+
+  it('동기 커밋이 끝나기 전에 최초 route를 해석한다', () => {
+    window.history.replaceState(null, '', '/#projects');
+
+    function RouteProbe() {
+      const nav = useSectionNav();
+      return createElement('output', {
+        'data-active': nav.active,
+        'data-route-resolved': nav.routeResolved,
+      });
+    }
+
+    const reactTestEnvironment = globalThis as typeof globalThis & {
+      IS_REACT_ACT_ENVIRONMENT?: boolean;
+    };
+    const previousActEnvironment = reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT;
+    reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = false;
+
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    flushSync(() => root.render(createElement(RouteProbe)));
+    const probe = container.querySelector('output');
+    flushSync(() => root.unmount());
+
+    reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+
+    expect(probe).toHaveAttribute('data-active', 'projects');
+    expect(probe).toHaveAttribute('data-route-resolved', 'true');
   });
 
   it('setActive가 활성 섹션을 바꾼다', () => {
@@ -191,11 +246,15 @@ describe('useSectionNav', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('언마운트 시 popstate 리스너를 뗀다', () => {
+  it('언마운트 시 등록한 동일 popstate 리스너를 뗀다', () => {
+    const add = vi.spyOn(window, 'addEventListener');
     const remove = vi.spyOn(window, 'removeEventListener');
     const { unmount } = renderHook(() => useSectionNav());
+    const registered = add.mock.calls.find(([type]) => type === 'popstate')?.[1];
+
+    expect(registered).toEqual(expect.any(Function));
     unmount();
-    expect(remove).toHaveBeenCalledWith('popstate', expect.any(Function));
+    expect(remove).toHaveBeenCalledWith('popstate', registered);
   });
 
   it('NAV_SEQUENCE가 HOME_SECTION_CONFIG 순서에서 파생된다', async () => {
