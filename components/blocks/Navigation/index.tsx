@@ -45,7 +45,8 @@ export default function Navigation({
       className={cn('fixed top-0 left-0 right-0 z-50 px-6 py-4', className)}
     >
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 lg:gap-8">
-        {/* 이 버튼 하나가 부팅 대형 이름과 compact 네비 워드마크를 겸한다. */}
+        {/* 이 버튼 하나가 부팅 대형 이름과 compact 네비 워드마크를 겸한다.
+            BootSequence는 이름을 복제하지 않고 이 ref만 애니메이션한다. */}
         <button
           ref={wordmarkRef}
           data-testid="wordmark"

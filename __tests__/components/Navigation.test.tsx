@@ -9,6 +9,11 @@ import { NAV_ITEMS, PERSONAL_INFO } from '@/lib/constants';
 let compactViewport = false;
 let reducedMotion = false;
 const scrollIntoView = vi.fn();
+const originalScrollIntoViewDescriptor = Object.getOwnPropertyDescriptor(
+  Element.prototype,
+  'scrollIntoView'
+);
+const earlyBreakpointUtility = /\b(?:sm|md):[^\s"'<>]+/g;
 
 beforeEach(() => {
   compactViewport = false;
@@ -36,11 +41,36 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  if (originalScrollIntoViewDescriptor) {
+    Object.defineProperty(
+      Element.prototype,
+      'scrollIntoView',
+      originalScrollIntoViewDescriptor
+    );
+  } else {
+    Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+  }
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
 describe('Navigation', () => {
+  it('자체 scroll listener를 등록하지 않는다', () => {
+    const addEventListener = vi.spyOn(window, 'addEventListener');
+
+    render(
+      <Navigation
+        items={NAV_ITEMS}
+        active="overview"
+        onNavigate={() => {}}
+      />
+    );
+
+    expect(
+      addEventListener.mock.calls.some(([eventName]) => eventName === 'scroll')
+    ).toBe(false);
+  });
+
   it('모든 항목을 렌더한다', () => {
     render(
       <Navigation
@@ -103,6 +133,23 @@ describe('Navigation', () => {
     expect(onNavigate).toHaveBeenCalledWith('projects');
   });
 
+  it('워드마크를 클릭하면 overview로 이동한다', async () => {
+    const user = userEvent.setup();
+    const onNavigate = vi.fn();
+    render(
+      <Navigation
+        items={NAV_ITEMS}
+        active="projects"
+        onNavigate={onNavigate}
+      />
+    );
+
+    await user.click(screen.getByTestId('wordmark'));
+
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+    expect(onNavigate).toHaveBeenCalledWith('overview');
+  });
+
   it('Tab과 Enter로 이동할 수 있다', async () => {
     const user = userEvent.setup();
     const onNavigate = vi.fn();
@@ -123,25 +170,28 @@ describe('Navigation', () => {
     expect(onNavigate).toHaveBeenCalledWith('about');
   });
 
-  it('Tailwind 팔레트 색상 유틸을 렌더하지 않는다', async () => {
-    Object.defineProperty(window, 'scrollY', {
-      configurable: true,
-      value: 1,
-    });
+  it('Tailwind 팔레트 색상 유틸을 렌더하지 않는다', () => {
     const { container } = render(
-      <>
-        <div id="hero" />
-        <Navigation
-          items={NAV_ITEMS}
-          active="overview"
-          onNavigate={() => {}}
-        />
-      </>
+      <Navigation
+        items={NAV_ITEMS}
+        active="overview"
+        onNavigate={() => {}}
+      />
     );
 
-    await waitFor(() =>
-      expect(findTailwindPaletteColorUtilities(container.innerHTML)).toEqual([])
+    expect(findTailwindPaletteColorUtilities(container.innerHTML)).toEqual([]);
+  });
+
+  it('sm 또는 md 전환점 유틸을 렌더하지 않는다', () => {
+    const { container } = render(
+      <Navigation
+        items={NAV_ITEMS}
+        active="overview"
+        onNavigate={() => {}}
+      />
     );
+
+    expect(container.innerHTML.match(earlyBreakpointUtility) ?? []).toEqual([]);
   });
 
   it('워드마크가 PERSONAL_INFO 이름을 쓰는 단일 FLIP 노드다', () => {
@@ -185,6 +235,9 @@ describe('Navigation', () => {
     const item = screen.getByRole('button', { name: /projects/i });
     expect(item.className).toContain('text-t7');
     expect(item.className).toContain('min-h-11');
+    const inactiveItem = screen.getByRole('button', { name: /about/i });
+    expect(inactiveItem.className).toContain('text-t7');
+    expect(inactiveItem.className).toContain('min-h-11');
     expect(screen.getByTestId('nav-strip').className).toContain(
       'overflow-x-auto'
     );
@@ -195,6 +248,58 @@ describe('Navigation', () => {
       expect(fade.className).toContain('pointer-events-none');
       expect(fade.className).toContain('lg:hidden');
     }
+  });
+
+  it('활성 언더라인은 cyan 전체 폭이고 비활성 언더라인은 폭이 0이다', () => {
+    render(
+      <Navigation
+        items={NAV_ITEMS}
+        active="projects"
+        onNavigate={() => {}}
+      />
+    );
+
+    const activeUnderline = screen
+      .getByRole('button', { name: /projects/i })
+      .querySelector('span.absolute.bottom-0');
+    expect(activeUnderline).toBeInTheDocument();
+    expect(activeUnderline).toHaveClass(
+      'bg-[var(--color-cyan-core)]',
+      'w-full'
+    );
+
+    const inactiveUnderline = screen
+      .getByRole('button', { name: /about/i })
+      .querySelector('span.absolute.bottom-0');
+    expect(inactiveUnderline).toBeInTheDocument();
+    expect(inactiveUnderline).toHaveClass(
+      'bg-[var(--color-cyan-core)]',
+      'w-0'
+    );
+  });
+
+  it('desktop에서는 mount와 활성 변경과 focus를 중앙 정렬하지 않는다', () => {
+    const { rerender } = render(
+      <Navigation
+        items={NAV_ITEMS}
+        active="about"
+        onNavigate={() => {}}
+      />
+    );
+
+    expect(scrollIntoView).not.toHaveBeenCalled();
+
+    rerender(
+      <Navigation
+        items={NAV_ITEMS}
+        active="projects"
+        onNavigate={() => {}}
+      />
+    );
+    expect(scrollIntoView).not.toHaveBeenCalled();
+
+    fireEvent.focus(screen.getByRole('button', { name: /skills/i }));
+    expect(scrollIntoView).not.toHaveBeenCalled();
   });
 
   it('활성 변경과 keyboard focus를 중앙 정렬하고 reduced-motion은 auto를 쓴다', async () => {
