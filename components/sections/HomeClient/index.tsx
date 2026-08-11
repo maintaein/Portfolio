@@ -11,6 +11,7 @@ import {
   SECTION_IDS,
   type HomeSectionId,
 } from '@/lib/constants';
+import { useSectionNav } from '@/hooks';
 
 const AboutSection = dynamic(() => import('@/components/sections/AboutSection'), {
   loading: () => <div className="min-h-[600px]" />,
@@ -38,6 +39,7 @@ const SECTION_COMPONENTS = {
 } satisfies Record<HomeSectionId, ComponentType>;
 
 export default function HomeClient() {
+  const { active, setActive } = useSectionNav();
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [burstPhase, setBurstPhase] = useState<'idle' | 'burst' | 'done'>('idle');
 
@@ -58,7 +60,11 @@ export default function HomeClient() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.3 }}
           >
-            <Navigation items={NAV_ITEMS} />
+            <Navigation
+              items={NAV_ITEMS}
+              active={active}
+              onNavigate={setActive}
+            />
           </motion.div>
         )}
       </AnimatePresence>

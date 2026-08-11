@@ -1,0 +1,254 @@
+import { createRef } from 'react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import Navigation from '@/components/blocks/Navigation';
+import { findTailwindPaletteColorUtilities } from '@/__tests__/helpers/tailwindPalette';
+import { NAV_ITEMS, PERSONAL_INFO } from '@/lib/constants';
+
+let compactViewport = false;
+let reducedMotion = false;
+const scrollIntoView = vi.fn();
+
+beforeEach(() => {
+  compactViewport = false;
+  reducedMotion = false;
+  scrollIntoView.mockReset();
+
+  Object.defineProperty(Element.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: scrollIntoView,
+  });
+
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn((query: string) => ({
+      matches: query === '(max-width: 1023px)' ? compactViewport : reducedMotion,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }))
+  );
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+describe('Navigation', () => {
+  it('모든 항목을 렌더한다', () => {
+    render(
+      <Navigation
+        items={NAV_ITEMS}
+        active="overview"
+        onNavigate={() => {}}
+      />
+    );
+
+    for (const item of NAV_ITEMS) {
+      expect(
+        screen.getByRole('button', { name: new RegExp(item.label, 'i') })
+      ).toBeInTheDocument();
+    }
+  });
+
+  it('활성 항목에 aria-current를 준다', () => {
+    render(
+      <Navigation
+        items={NAV_ITEMS}
+        active="projects"
+        onNavigate={() => {}}
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: /projects/i })
+    ).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('비활성 항목에는 aria-current가 없다', () => {
+    render(
+      <Navigation
+        items={NAV_ITEMS}
+        active="projects"
+        onNavigate={() => {}}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: /about/i })).not.toHaveAttribute(
+      'aria-current'
+    );
+    expect(screen.getAllByRole('button', { current: 'page' })).toHaveLength(1);
+  });
+
+  it('클릭하면 onNavigate를 그 id로 호출한다', async () => {
+    const user = userEvent.setup();
+    const onNavigate = vi.fn();
+    render(
+      <Navigation
+        items={NAV_ITEMS}
+        active="overview"
+        onNavigate={onNavigate}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /projects/i }));
+
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+    expect(onNavigate).toHaveBeenCalledWith('projects');
+  });
+
+  it('Tab과 Enter로 이동할 수 있다', async () => {
+    const user = userEvent.setup();
+    const onNavigate = vi.fn();
+    render(
+      <Navigation
+        items={NAV_ITEMS}
+        active="overview"
+        onNavigate={onNavigate}
+      />
+    );
+
+    await user.tab();
+    await user.tab();
+    expect(screen.getByRole('button', { name: /about/i })).toHaveFocus();
+    await user.keyboard('{Enter}');
+
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+    expect(onNavigate).toHaveBeenCalledWith('about');
+  });
+
+  it('Tailwind 팔레트 색상 유틸을 렌더하지 않는다', async () => {
+    Object.defineProperty(window, 'scrollY', {
+      configurable: true,
+      value: 1,
+    });
+    const { container } = render(
+      <>
+        <div id="hero" />
+        <Navigation
+          items={NAV_ITEMS}
+          active="overview"
+          onNavigate={() => {}}
+        />
+      </>
+    );
+
+    await waitFor(() =>
+      expect(findTailwindPaletteColorUtilities(container.innerHTML)).toEqual([])
+    );
+  });
+
+  it('워드마크가 PERSONAL_INFO 이름을 쓰는 단일 FLIP 노드다', () => {
+    const wordmarkRef = createRef<HTMLButtonElement>();
+    const { rerender } = render(
+      <Navigation
+        items={NAV_ITEMS}
+        active="overview"
+        onNavigate={() => {}}
+        wordmarkRef={wordmarkRef}
+      />
+    );
+
+    const wordmark = screen.getByTestId('wordmark');
+    expect(screen.getAllByTestId('wordmark')).toHaveLength(1);
+    expect(wordmark).toHaveTextContent(PERSONAL_INFO.NAME_EN);
+    expect(wordmark).toHaveAttribute('data-flip-id', 'site-wordmark');
+    expect(wordmark).toHaveAttribute('data-wordmark-mode', 'hero');
+    expect(wordmarkRef.current).toBe(wordmark);
+
+    rerender(
+      <Navigation
+        items={NAV_ITEMS}
+        active="projects"
+        onNavigate={() => {}}
+        wordmarkRef={wordmarkRef}
+      />
+    );
+    expect(wordmark).toHaveAttribute('data-wordmark-mode', 'compact');
+  });
+
+  it('Compact 항목과 양 끝 fade가 터치·접근성 계약을 지킨다', () => {
+    const { container } = render(
+      <Navigation
+        items={NAV_ITEMS}
+        active="projects"
+        onNavigate={() => {}}
+      />
+    );
+
+    const item = screen.getByRole('button', { name: /projects/i });
+    expect(item.className).toContain('text-t7');
+    expect(item.className).toContain('min-h-11');
+    expect(screen.getByTestId('nav-strip').className).toContain(
+      'overflow-x-auto'
+    );
+
+    const fades = container.querySelectorAll('[aria-hidden="true"]');
+    expect(fades).toHaveLength(2);
+    for (const fade of fades) {
+      expect(fade.className).toContain('pointer-events-none');
+      expect(fade.className).toContain('lg:hidden');
+    }
+  });
+
+  it('활성 변경과 keyboard focus를 중앙 정렬하고 reduced-motion은 auto를 쓴다', async () => {
+    compactViewport = true;
+    const { rerender } = render(
+      <Navigation
+        items={NAV_ITEMS}
+        active="about"
+        onNavigate={() => {}}
+      />
+    );
+
+    const about = screen.getByRole('button', { name: /about/i });
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+    expect(scrollIntoView.mock.contexts[0]).toBe(about);
+    expect(scrollIntoView).toHaveBeenLastCalledWith({
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'center',
+    });
+
+    scrollIntoView.mockClear();
+    rerender(
+      <Navigation
+        items={NAV_ITEMS}
+        active="projects"
+        onNavigate={() => {}}
+      />
+    );
+    const projects = screen.getByRole('button', { name: /projects/i });
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+    expect(scrollIntoView.mock.contexts[0]).toBe(projects);
+
+    scrollIntoView.mockClear();
+    const skills = screen.getByRole('button', { name: /skills/i });
+    fireEvent.focus(skills);
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView.mock.contexts[0]).toBe(skills);
+    expect(scrollIntoView).toHaveBeenLastCalledWith({
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'center',
+    });
+
+    scrollIntoView.mockClear();
+    reducedMotion = true;
+    const awards = screen.getByRole('button', { name: /awards/i });
+    fireEvent.focus(awards);
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView.mock.contexts[0]).toBe(awards);
+    expect(scrollIntoView).toHaveBeenLastCalledWith({
+      behavior: 'auto',
+      block: 'nearest',
+      inline: 'center',
+    });
+  });
+});
