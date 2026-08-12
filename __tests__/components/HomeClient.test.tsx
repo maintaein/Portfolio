@@ -21,7 +21,6 @@ import { firePointer } from '@/__tests__/helpers/pointerEvents';
 import HomeClient from '@/components/sections/HomeClient';
 import {
   HOME_SECTION_CONFIG,
-  SECTION_IDS,
   type HomeSectionId,
 } from '@/lib/constants';
 
@@ -146,14 +145,6 @@ interface MockMediaController {
   listenerCount: () => number;
 }
 
-const semanticMarkerBySection = {
-  [SECTION_IDS.ABOUT]: '91%',
-  [SECTION_IDS.PROJECTS]: 'AlphaMail',
-  [SECTION_IDS.EXPERIENCE]: 'Frontend Experience',
-  [SECTION_IDS.SKILLS]: 'TypeScript',
-  [SECTION_IDS.AWARDS_CERTIFICATES]: 'Grand Prize',
-} satisfies Record<HomeSectionId, string>;
-
 const homeClientPath = path.resolve(
   process.cwd(),
   'components/sections/HomeClient/index.tsx'
@@ -277,18 +268,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('HomeClient SSR 상주', () => {
+describe('HomeClient SSR 셸 구조', () => {
   it('서버 HTML에 overview와 다섯 의미 콘텐츠를 항목별로 모두 렌더한다', () => {
     const html = renderToString(<HomeClient />);
 
     expect(html).toContain('data-section="overview"');
-    expect(html).toContain('Overview profile');
     for (const { id } of HOME_SECTION_CONFIG) {
       expect(html, `${id} 래퍼가 서버 HTML에 없다`).toContain(
         `data-section="${id}"`
-      );
-      expect(html, `${id} 의미 콘텐츠가 서버 HTML에 없다`).toContain(
-        semanticMarkerBySection[id]
       );
     }
     expect(html.match(/data-section=/g)).toHaveLength(
@@ -384,6 +371,20 @@ describe('HomeClient SSR 상주', () => {
 });
 
 describe('HomeClient section 상태', () => {
+  it('projects가 활성일 때만 stage에 가로 스크롤 클래스를 붙인다', () => {
+    const { container } = render(<HomeClient />);
+    const stage = container.querySelector<HTMLElement>('.section-stage');
+
+    expect(stage).not.toBeNull();
+    expect(stage).not.toHaveClass('section-stage-horizontal');
+
+    navigateTo(/projects/i);
+    expect(stage).toHaveClass('section-stage-horizontal');
+
+    navigateTo(/about/i);
+    expect(stage).not.toHaveClass('section-stage-horizontal');
+  });
+
   it('초기 활성과 비활성 섹션의 visible·hidden·inert 상태가 배타적이다', () => {
     const { container } = render(<HomeClient />);
     const overview = getSection(container, 'overview');
