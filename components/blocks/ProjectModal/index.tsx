@@ -2,9 +2,9 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Button, Icon, Skeleton } from '@/components/atoms';
+import Modal from '@/components/atoms/Modal';
 import Image from 'next/image';
 import { cn } from '@/lib/utils/cn';
 import { RichText } from '@/lib/utils';
@@ -433,11 +433,8 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
   const [activeReviewTab, setActiveReviewTab] = useState(0);
   const [imgLoading, setImgLoading]           = useState(true);
   const [imgError, setImgError]               = useState(false);
-  const [mounted, setMounted]                 = useState(false);
   const contentRef                            = useRef<HTMLDivElement>(null);
   const reviewSectionRef                      = useRef<HTMLDivElement>(null);
-
-  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -458,39 +455,24 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
     contentRef.current.scrollTo({ top: offset, behavior: 'smooth' });
   };
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const orig = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = orig; };
-  }, [isOpen]);
+  if (!project) return null;
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [isOpen, onClose]);
+  const scaleX = originRect
+    ? originRect.width / Math.min(window.innerWidth * 0.9, 896)
+    : 0.12;
+  const scaleY = originRect
+    ? originRect.height / Math.min(window.innerHeight * 0.9, 800)
+    : 0.08;
 
-  if (!mounted || !project) return null;
-
-  const scaleX = originRect ? originRect.width  / Math.min(window.innerWidth  * 0.9, 896) : 0.12;
-  const scaleY = originRect ? originRect.height / Math.min(window.innerHeight * 0.9, 800) : 0.08;
-
-  const modalContent = (
-    <AnimatePresence>
-      {isOpen && (
-        <div className="fixed inset-0 z-[1050] flex items-center justify-center p-4">
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      size="large"
+      showCloseButton={false}
+      className="max-w-none bg-transparent shadow-none max-h-none"
+    >
           {/* 백드롭 */}
-          <motion.div
-            className="absolute inset-0"
-            style={{ background: 'rgba(8,12,24,0.72)' }}
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
-            onClick={onClose}
-            aria-hidden="true"
-          />
-
           {/* 모달 패널 */}
           <motion.div
             className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[92vh] overflow-hidden"
@@ -502,7 +484,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
             animate={{ opacity: 1, scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, borderRadius: '16px' }}
             exit={{ opacity: 0, scale: 0.95, translateY: 12, borderRadius: '16px' }}
             transition={{ duration: 0.44, ease: [0.16, 1, 0.3, 1] }}
-            role="dialog" aria-modal="true" aria-labelledby="modal-title"
+            aria-labelledby="modal-title"
           >
             {/* 헤더 */}
             <motion.div
@@ -771,10 +753,6 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
               </div>
             </motion.div>
           </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
+    </Modal>
   );
-
-  return createPortal(modalContent, document.body);
 }

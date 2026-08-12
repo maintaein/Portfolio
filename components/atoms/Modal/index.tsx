@@ -18,6 +18,7 @@ interface ModalProps {
   closeOnBackdropClick?: boolean;
   closeOnEsc?: boolean;
   className?: string;
+  onRestoreFocusFallback?: () => void;
 }
 
 const sizeStyles: Record<ModalSize, string> = {
@@ -38,9 +39,14 @@ export default function Modal({
   closeOnBackdropClick = true,
   closeOnEsc = true,
   className,
+  onRestoreFocusFallback,
 }: ModalProps) {
   const [mounted, setMounted] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
+  const restoreRef = useRef<HTMLElement | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const restoreFallbackRef = useRef(onRestoreFocusFallback);
+  restoreFallbackRef.current = onRestoreFocusFallback;
 
   // SSR 대응: 클라이언트에서만 Portal 렌더링
   useEffect(() => {
@@ -78,6 +84,68 @@ export default function Modal({
     }
   }, [isOpen]);
 
+  // 모달이 열리기 직전의 포커스를 기억하고, 닫힐 때 안전하게 복귀한다.
+  useEffect(() => {
+    if (!isOpen || !mounted) return;
+
+    restoreRef.current = document.activeElement as HTMLElement | null;
+
+    const panel = panelRef.current;
+    if (!panel) return;
+
+    const selector =
+      'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
+
+    const focusables = () =>
+      Array.from(panel.querySelectorAll<HTMLElement>(selector)).filter((element) => {
+        const style = window.getComputedStyle(element);
+        return (
+          !element.hasAttribute('hidden') &&
+          !element.closest('[hidden], [inert], [aria-hidden="true"]') &&
+          style.display !== 'none' &&
+          style.visibility !== 'hidden'
+        );
+      });
+
+    const first = focusables()[0];
+    first?.focus({ preventScroll: true });
+
+    // D7의 유일한 키보드 경로인 Tab이 모달 뒤 콘텐츠로 빠져나가지 않게 한다.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+
+      const list = focusables();
+      if (list.length === 0) return;
+
+      const firstFocusable = list[0];
+      const lastFocusable = list[list.length - 1];
+
+      if (event.shiftKey && document.activeElement === firstFocusable) {
+        event.preventDefault();
+        lastFocusable.focus({ preventScroll: true });
+      } else if (!event.shiftKey && document.activeElement === lastFocusable) {
+        event.preventDefault();
+        firstFocusable.focus({ preventScroll: true });
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+
+      const target = restoreRef.current;
+      const unavailable =
+        !target?.isConnected ||
+        Boolean(target.closest('[inert], [aria-hidden="true"]'));
+
+      if (unavailable) {
+        restoreFallbackRef.current?.();
+      } else {
+        target.focus({ preventScroll: true });
+      }
+    };
+  }, [isOpen, mounted]);
+
   if (!mounted || !isOpen) return null;
 
   const modalContent = (
@@ -92,6 +160,7 @@ export default function Modal({
       />
 
       <div
+        ref={panelRef}
         className={cn(
           'relative bg-white rounded-xl shadow-xl w-full transition-all duration-base',
           'flex flex-col max-h-[90vh]', // 최대 높이 제한
