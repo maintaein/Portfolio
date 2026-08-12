@@ -92,7 +92,7 @@ export default function HomeClient() {
   >({});
   const wordmarkRef = useRef<HTMLButtonElement>(null);
   const lastFocusedActive = useRef<NavId>(OVERVIEW);
-  const runningTransition = useRef<NavId | null>(null);
+  const runningTransitions = useRef(new Set<NavId>());
 
   const activeLabel =
     active === OVERVIEW
@@ -104,11 +104,10 @@ export default function HomeClient() {
   useLayoutEffect(() => {
     if (!motionReady) return;
     if (!isTransitioning) {
-      runningTransition.current = null;
+      runningTransitions.current.clear();
       return;
     }
 
-    runningTransition.current = null;
     const destination = sectionRefs.current[active];
     if (reducedMotion || !destination || !hasOpacityTransition(destination)) {
       completeTransition(active);
@@ -159,7 +158,7 @@ export default function HomeClient() {
       id === active &&
       isOwnOpacityTransition(event)
     ) {
-      runningTransition.current = id;
+      runningTransitions.current.add(id);
     }
   };
 
@@ -168,9 +167,9 @@ export default function HomeClient() {
     event: TransitionEvent<HTMLDivElement>
   ) => {
     if (!isOwnOpacityTransition(event)) return;
-    if (id !== active || runningTransition.current !== id) return;
+    if (!runningTransitions.current.has(id)) return;
 
-    runningTransition.current = null;
+    runningTransitions.current.delete(id);
     completeTransition(id);
   };
 
@@ -191,7 +190,9 @@ export default function HomeClient() {
       />
 
       <main
-        className="section-stage"
+        className={`section-stage${
+          active === SECTION_IDS.PROJECTS ? ' section-stage-horizontal' : ''
+        }`}
         data-route-resolved={routeResolved}
         data-motion-ready={motionReady}
         data-reduced-motion={reducedMotion}

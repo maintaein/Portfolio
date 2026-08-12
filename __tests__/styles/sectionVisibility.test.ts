@@ -47,6 +47,15 @@ describe('section visibility utilities', () => {
     expect(ruleBody('.section-stage')).toMatch(/touch-action\s*:\s*pan-y\s*;/);
   });
 
+  it('restores horizontal touch panning for the Projects stage and track', () => {
+    expect(ruleBody('.section-stage-horizontal')).toMatch(
+      /touch-action\s*:\s*pan-x pan-y\s*;/
+    );
+    expect(ruleBody('.section-horizontal-scroll')).toMatch(
+      /touch-action\s*:\s*pan-x\s*;/
+    );
+  });
+
   it('keeps the stage fixed between navigation and the contact rail', () => {
     const stage = ruleBody('.section-stage');
 

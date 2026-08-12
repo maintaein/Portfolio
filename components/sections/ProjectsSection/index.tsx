@@ -154,7 +154,8 @@ export default function ProjectsSection() {
           <div
             ref={scrollRef}
             onMouseDown={onMouseDown}
-            className="flex overflow-x-auto pb-4 cursor-grab active:cursor-grabbing select-none"
+            data-section-swipe-ignore
+            className="section-horizontal-scroll flex overflow-x-auto pb-4 cursor-grab active:cursor-grabbing select-none"
             style={{
               gap: CARD_GAP,
               scrollbarWidth: 'none',

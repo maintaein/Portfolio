@@ -432,6 +432,14 @@
     touch-action: pan-y;
   }
 
+  .section-stage-horizontal {
+    touch-action: pan-x pan-y;
+  }
+
+  .section-horizontal-scroll {
+    touch-action: pan-x;
+  }
+
   .section-scroll {
     position: absolute;
     inset: 0;

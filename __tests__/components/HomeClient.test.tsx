@@ -32,6 +32,9 @@ const motionSpies = vi.hoisted(() => ({
 
 vi.mock('@/components/sections', async () => {
   const { useEffect, useRef } = await import('react');
+  const { default: ProjectsSection } = await import(
+    '@/components/sections/ProjectsSection'
+  );
   const { default: WhenVisible } = await import(
     '@/components/common/WhenVisible'
   );
@@ -131,9 +134,7 @@ vi.mock('@/components/sections', async () => {
         <MotionProbe label="preview" section="overview" />
       </section>
     ),
-    ProjectsSection: () => (
-      <SectionShell label="Projects" marker="AlphaMail" />
-    ),
+    ProjectsSection,
     SkillsSection: () => (
       <SectionShell label="Skills" marker="TypeScript" />
     ),
@@ -240,6 +241,15 @@ beforeEach(() => {
   motionSpies.gsapTimeline.mockReset();
 
   installMatchMedia(false);
+  vi.stubGlobal(
+    'IntersectionObserver',
+    vi.fn(() => ({
+      disconnect: vi.fn(),
+      observe: vi.fn(),
+      takeRecords: vi.fn(() => []),
+      unobserve: vi.fn(),
+    }))
+  );
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
   vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1));
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
@@ -408,16 +418,17 @@ describe('HomeClient section 상태', () => {
   });
 
   it('비활성 섹션의 모든 Tab 후보는 inert 경계 안에 격리된다', () => {
-    render(<HomeClient />);
+    const { container } = render(<HomeClient />);
 
-    for (const { label } of HOME_SECTION_CONFIG) {
-      const action = screen
-        .getByText(`${label} content action`)
-        .closest('button');
-      const inertBoundary = action?.closest('[inert]');
+    const inactiveCandidates = container.querySelectorAll<HTMLElement>(
+      '.section-hidden a, .section-hidden button, .section-hidden input, .section-hidden textarea, .section-hidden select, .section-hidden [tabindex]'
+    );
 
-      expect(action, `${label} Tab 후보가 없다`).not.toBeNull();
-      expect(inertBoundary, `${label} Tab 후보가 inert 밖에 있다`).not.toBeNull();
+    expect(inactiveCandidates.length).toBeGreaterThan(0);
+    for (const candidate of inactiveCandidates) {
+      const inertBoundary = candidate.closest('[inert]');
+
+      expect(inertBoundary, '비활성 Tab 후보가 inert 밖에 있다').not.toBeNull();
       expect(inertBoundary).toHaveClass('section-hidden');
     }
   });
@@ -441,6 +452,48 @@ describe('HomeClient section 상태', () => {
     });
 
     expect(getSection(container, 'about')).toHaveClass('section-visible');
+  });
+
+  it('Projects 가로 트랙에서 시작한 양방향 스와이프는 섹션을 이동하지 않는다', () => {
+    window.history.replaceState(null, '', '/#projects');
+    const { container } = render(<HomeClient />);
+    const stage = container.querySelector<HTMLElement>('.section-stage');
+    const projectsSection = getSection(container, 'projects');
+    const track = projectsSection.querySelector<HTMLElement>('.overflow-x-auto');
+    const card = track?.querySelector<HTMLElement>('.cursor-pointer');
+
+    expect(stage).not.toBeNull();
+    expect(projectsSection).toHaveClass('section-visible');
+    expect(track).not.toBeNull();
+    expect(card).not.toBeNull();
+
+    firePointer(card!, 'pointerdown', {
+      pointerId: 1,
+      pointerType: 'touch',
+      clientX: 240,
+      clientY: 200,
+    });
+    firePointer(stage!, 'pointerup', {
+      pointerId: 1,
+      pointerType: 'touch',
+      clientX: 160,
+      clientY: 205,
+    });
+    expect(projectsSection).toHaveClass('section-visible');
+
+    firePointer(card!, 'pointerdown', {
+      pointerId: 2,
+      pointerType: 'touch',
+      clientX: 160,
+      clientY: 200,
+    });
+    firePointer(stage!, 'pointerup', {
+      pointerId: 2,
+      pointerType: 'touch',
+      clientX: 240,
+      clientY: 205,
+    });
+    expect(projectsSection).toHaveClass('section-visible');
   });
 
   it('섹션 DOM과 내부 scrollTop을 떠남·재방문 뒤에도 보존한다', () => {
@@ -507,12 +560,12 @@ describe('HomeClient opacity 전환 생명주기', () => {
     navigateTo(/projects/i);
     const projects = getSection(container, 'projects');
     fireOpacityTransition(projects, 'transitionrun');
-    fireOpacityTransition(about, 'transitioncancel');
+    fireOpacityTransition(about, 'transitionend');
 
     expect(screen.getByRole('status')).toBeEmptyDOMElement();
     expect(projects).not.toHaveFocus();
 
-    fireOpacityTransition(projects, 'transitioncancel');
+    fireOpacityTransition(projects, 'transitionend');
     expect(screen.getByRole('status')).toHaveTextContent('Projects section');
     expect(projects).toHaveFocus();
   });
