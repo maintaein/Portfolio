@@ -46,11 +46,14 @@ function Harness({
 
 describe('Modal 포커스 관리', () => {
   it('열리면 내부 첫 포커스 가능 요소로 포커스가 간다', async () => {
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
     render(<Harness open />);
+    const first = screen.getByTestId('first');
 
     await vi.waitFor(() => {
-      expect(screen.getByTestId('first')).toHaveFocus();
+      expect(first).toHaveFocus();
     });
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
   });
 
   it('Tab이 모달 밖으로 새지 않는다', async () => {
@@ -60,16 +63,20 @@ describe('Modal 포커스 관리', () => {
     await userEvent.tab();
     expect(screen.getByTestId('last')).toHaveFocus();
 
+    const firstFocus = vi.spyOn(screen.getByTestId('first'), 'focus');
     await userEvent.tab();
     expect(screen.getByTestId('first')).toHaveFocus();
+    expect(firstFocus).toHaveBeenCalledWith({ preventScroll: true });
   });
 
   it('Shift+Tab이 첫 요소에서 마지막으로 순환한다', async () => {
     render(<Harness open />);
     await vi.waitFor(() => expect(screen.getByTestId('first')).toHaveFocus());
 
+    const lastFocus = vi.spyOn(screen.getByTestId('last'), 'focus');
     await userEvent.tab({ shift: true });
     expect(screen.getByTestId('last')).toHaveFocus();
+    expect(lastFocus).toHaveBeenCalledWith({ preventScroll: true });
   });
 
   it('닫히면 열기 전 요소로 포커스가 돌아온다', async () => {
@@ -80,8 +87,10 @@ describe('Modal 포커스 관리', () => {
     rerender(<Harness open />);
     await vi.waitFor(() => expect(screen.getByTestId('first')).toHaveFocus());
 
+    const openerFocus = vi.spyOn(opener, 'focus');
     rerender(<Harness open={false} />);
     await vi.waitFor(() => expect(opener).toHaveFocus());
+    expect(openerFocus).toHaveBeenCalledWith({ preventScroll: true });
   });
 
   it('열기 전 요소가 제거되면 안전한 포커스 fallback을 호출한다', async () => {
@@ -175,10 +184,15 @@ describe('Modal 포커스 관리', () => {
   });
 
   it('닫힌 상태에서는 Tab 트랩이 남지 않는다', async () => {
-    render(<Harness open={false} />);
+    const { rerender } = render(<Harness open={false} />);
     const opener = screen.getByTestId('opener');
     const outside = screen.getByTestId('outside');
     opener.focus();
+
+    rerender(<Harness open />);
+    await vi.waitFor(() => expect(screen.getByTestId('first')).toHaveFocus());
+    rerender(<Harness open={false} />);
+    await vi.waitFor(() => expect(opener).toHaveFocus());
 
     await userEvent.tab();
     expect(outside).toHaveFocus();

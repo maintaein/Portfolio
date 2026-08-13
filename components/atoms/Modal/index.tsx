@@ -19,6 +19,7 @@ interface ModalProps {
   closeOnEsc?: boolean;
   className?: string;
   onRestoreFocusFallback?: () => void;
+  ariaLabelledBy?: string;
 }
 
 const sizeStyles: Record<ModalSize, string> = {
@@ -40,6 +41,7 @@ export default function Modal({
   closeOnEsc = true,
   className,
   onRestoreFocusFallback,
+  ariaLabelledBy,
 }: ModalProps) {
   const [mounted, setMounted] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -169,7 +171,7 @@ export default function Modal({
         )}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={title ? 'modal-title' : undefined}
+        aria-labelledby={title ? 'modal-title' : ariaLabelledBy}
       >
         {(title || headerAction || showCloseButton) && (
           <div className="flex items-center justify-between p-6 border-b border-grey-200 flex-shrink-0">

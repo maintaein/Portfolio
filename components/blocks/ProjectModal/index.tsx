@@ -470,6 +470,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
       onClose={onClose}
       size="large"
       showCloseButton={false}
+      ariaLabelledBy="modal-title"
       className="max-w-none bg-transparent shadow-none max-h-none"
     >
           {/* 백드롭 */}
@@ -484,7 +485,6 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
             animate={{ opacity: 1, scaleX: 1, scaleY: 1, translateX: 0, translateY: 0, borderRadius: '16px' }}
             exit={{ opacity: 0, scale: 0.95, translateY: 12, borderRadius: '16px' }}
             transition={{ duration: 0.44, ease: [0.16, 1, 0.3, 1] }}
-            aria-labelledby="modal-title"
           >
             {/* 헤더 */}
             <motion.div
