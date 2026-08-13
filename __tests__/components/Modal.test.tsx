@@ -8,12 +8,14 @@ function Harness({
   inertOpener = false,
   ariaHiddenOpener = false,
   includeFocusableContent = true,
+  closeOnEsc = true,
   onRestoreFocusFallback,
 }: {
   open: boolean;
   inertOpener?: boolean;
   ariaHiddenOpener?: boolean;
   includeFocusableContent?: boolean;
+  closeOnEsc?: boolean;
   onRestoreFocusFallback?: () => void;
 }) {
   return (
@@ -29,6 +31,7 @@ function Harness({
         isOpen={open}
         onClose={() => {}}
         showCloseButton={false}
+        closeOnEsc={closeOnEsc}
         onRestoreFocusFallback={onRestoreFocusFallback}
       >
         {includeFocusableContent ? (
@@ -170,32 +173,72 @@ describe('Modal 포커스 관리', () => {
     expect(only).toHaveFocus();
   });
 
-  it('포커스 가능한 요소가 없어도 예외 없이 열리고 닫힌다', async () => {
-    const { rerender } = render(
-      <Harness open={false} includeFocusableContent={false} />
-    );
+  it('포커스 가능한 요소가 없어도 Tab 리스너에서 예외가 발생하지 않는다', async () => {
+    const errors: ErrorEvent[] = [];
+    const onError = (event: ErrorEvent) => {
+      errors.push(event);
+      event.preventDefault();
+    };
+    window.addEventListener('error', onError);
 
-    rerender(<Harness open includeFocusableContent={false} />);
-    await vi.waitFor(() => {
-      expect(screen.getByText('포커스 가능한 요소 없음')).toBeInTheDocument();
-    });
-    await userEvent.tab();
-    rerender(<Harness open={false} includeFocusableContent={false} />);
+    try {
+      const { rerender } = render(
+        <Harness open={false} includeFocusableContent={false} />
+      );
+      const outside = screen.getByTestId('outside');
+      outside.focus();
+
+      rerender(<Harness open includeFocusableContent={false} />);
+      await vi.waitFor(() => {
+        expect(screen.getByText('포커스 가능한 요소 없음')).toBeInTheDocument();
+      });
+
+      const event = new KeyboardEvent('keydown', {
+        key: 'Tab',
+        bubbles: true,
+        cancelable: true,
+      });
+      document.dispatchEvent(event);
+
+      expect(errors).toHaveLength(0);
+      expect(event.defaultPrevented).toBe(false);
+      expect(document.activeElement).toBe(outside);
+    } finally {
+      window.removeEventListener('error', onError);
+    }
   });
 
-  it('닫힌 상태에서는 Tab 트랩이 남지 않는다', async () => {
-    const { rerender } = render(<Harness open={false} />);
-    const opener = screen.getByTestId('opener');
-    const outside = screen.getByTestId('outside');
-    opener.focus();
+  it('닫힌 뒤에는 Tab 트랩 리스너가 남지 않고 포커스가 연결된 요소에 머문다', async () => {
+    const removeEventListener = vi.spyOn(document, 'removeEventListener');
 
-    rerender(<Harness open />);
-    await vi.waitFor(() => expect(screen.getByTestId('first')).toHaveFocus());
-    rerender(<Harness open={false} />);
-    await vi.waitFor(() => expect(opener).toHaveFocus());
+    try {
+      const { rerender } = render(<Harness open={false} closeOnEsc={false} />);
+      const opener = screen.getByTestId('opener');
+      const outside = screen.getByTestId('outside');
+      opener.focus();
 
-    await userEvent.tab();
-    expect(outside).toHaveFocus();
+      rerender(<Harness open closeOnEsc={false} />);
+      await vi.waitFor(() => expect(screen.getByTestId('first')).toHaveFocus());
+      rerender(<Harness open={false} closeOnEsc={false} />);
+      await vi.waitFor(() => expect(opener).toHaveFocus());
+
+      outside.focus();
+      const event = new KeyboardEvent('keydown', {
+        key: 'Tab',
+        bubbles: true,
+        cancelable: true,
+      });
+      document.dispatchEvent(event);
+
+      expect(event.defaultPrevented).toBe(false);
+      expect(document.activeElement).toBe(outside);
+      expect(document.activeElement?.isConnected).toBe(true);
+      expect(
+        removeEventListener.mock.calls.filter(([type]) => type === 'keydown')
+      ).toHaveLength(1);
+    } finally {
+      removeEventListener.mockRestore();
+    }
   });
 
   it('ESC로 onClose가 불린다', async () => {
