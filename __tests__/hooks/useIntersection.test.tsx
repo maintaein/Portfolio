@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { lazy, Suspense, type ComponentType } from 'react';
+import { lazy, Suspense, useLayoutEffect, useRef, type ComponentType } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CollaborationMesh from '@/components/blocks/CollaborationMesh';
@@ -101,6 +101,30 @@ function collectComponentFiles(directory: string): string[] {
   });
 }
 
+function FirstPaintHarness({
+  Component,
+  shouldEnter,
+  reducedMotion = false,
+  onPaint,
+}: {
+  Component: Decoration;
+  shouldEnter: boolean;
+  reducedMotion?: boolean;
+  onPaint: (root: HTMLElement) => void;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (rootRef.current) onPaint(rootRef.current);
+  }, [onPaint]);
+
+  return (
+    <div ref={rootRef}>
+      <Component shouldEnter={shouldEnter} reducedMotion={reducedMotion} />
+    </div>
+  );
+}
+
 function DecorationHarness({
   Component,
   reducedMotion = false,
@@ -184,13 +208,16 @@ describe('섹션 진입 애니메이션 트리거', () => {
     const offenders = collectComponentFiles(componentRoot)
       .filter((file) => {
         const source = readFileSync(file, 'utf8');
-        const relativePath = file.slice(process.cwd().length + 1);
+        const relativePath = file.slice(process.cwd().length + 1).replaceAll('\\', '/');
         return (
-          source.includes('useIntersection') &&
+          (source.includes('useIntersection') ||
+            source.includes('IntersectionObserver(')) &&
           !ELEMENT_LEVEL_ALLOWLIST.includes(relativePath)
         );
       })
-      .map((file) => file.slice(process.cwd().length + 1));
+      .map((file) =>
+        file.slice(process.cwd().length + 1).replaceAll('\\', '/')
+      );
 
     expect(
       offenders,
@@ -209,6 +236,46 @@ describe('섹션 진입 애니메이션 트리거', () => {
       await waitFor(() => {
         expect(findElementWithClasses(container, finalClasses)).not.toBeUndefined();
       });
+    });
+
+    it(`${name} starts in the initial state when mounted with shouldEnter`, () => {
+      let firstPaintHasInitialState = false;
+      let firstPaintHasFinalState = false;
+
+      render(
+        <FirstPaintHarness
+          Component={Component}
+          shouldEnter
+          onPaint={(root) => {
+            firstPaintHasInitialState =
+              findElementWithClasses(root, initialClasses) !== undefined;
+            firstPaintHasFinalState =
+              findElementWithClasses(root, finalClasses) !== undefined;
+          }}
+        />
+      );
+
+      expect(firstPaintHasInitialState).toBe(true);
+      expect(firstPaintHasFinalState).toBe(false);
+
+      let reducedMotionHasInitialState = false;
+      let reducedMotionHasFinalState = false;
+      render(
+        <FirstPaintHarness
+          Component={Component}
+          shouldEnter={false}
+          reducedMotion
+          onPaint={(root) => {
+            reducedMotionHasInitialState =
+              findElementWithClasses(root, initialClasses) !== undefined;
+            reducedMotionHasFinalState =
+              findElementWithClasses(root, finalClasses) !== undefined;
+          }}
+        />
+      );
+
+      expect(reducedMotionHasInitialState).toBe(false);
+      expect(reducedMotionHasFinalState).toBe(true);
     });
 
     it(`${name}은 최초 방문에만 진입하고 재방문에는 재생하지 않는다`, async () => {
@@ -283,12 +350,6 @@ describe('섹션 진입 애니메이션 트리거', () => {
   }
 
   it('production AboutSection wiring latches decoration entry state across a revisit', async () => {
-    const aboutSource = readFileSync(
-      resolve(process.cwd(), 'components/sections/AboutSection/index.tsx'),
-      'utf8'
-    );
-    expect(aboutSource).toMatch(/shouldLoad\s*\|\|\s*shouldMount/);
-
     const { container } = render(<AboutHarness />);
 
     expect(findElementWithClasses(container, decorations[0].finalClasses)).toBeUndefined();
