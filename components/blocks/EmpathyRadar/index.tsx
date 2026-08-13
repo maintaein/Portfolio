@@ -23,11 +23,12 @@ interface UXCard {
 }
 
 interface EmpathyRadarProps {
+  paused?: boolean;
   shouldEnter: boolean;
   reducedMotion?: boolean;
 }
 
-export default function EmpathyRadar({ shouldEnter, reducedMotion = false }: EmpathyRadarProps) {
+export default function EmpathyRadar({ paused = false, shouldEnter, reducedMotion = false }: EmpathyRadarProps) {
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [entered, setEntered] = useState(reducedMotion);
 
@@ -54,26 +55,26 @@ export default function EmpathyRadar({ shouldEnter, reducedMotion = false }: Emp
           <div className="relative w-full h-full aspect-square">
             <div
               className={`absolute inset-0 rounded-full border-2 border-blue-200/40 ${
-                entered ? 'animate-radar-slow' : ''
+                entered && !paused ? 'animate-radar-slow' : ''
               }`}
               style={{ margin: '10%' }}
             />
 
             <div
               className={`absolute inset-0 rounded-full border-2 border-blue-300/50 ${
-                entered ? 'animate-radar-medium' : ''
+                entered && !paused ? 'animate-radar-medium' : ''
               }`}
               style={{ margin: '20%' }}
             />
 
             <div
               className={`absolute inset-0 rounded-full border-2 border-blue-400/60 ${
-                entered ? 'animate-radar-fast' : ''
+                entered && !paused ? 'animate-radar-fast' : ''
               }`}
               style={{ margin: '30%' }}
             />
 
-            {entered && (
+            {entered && !paused && (
               <div className="absolute inset-0 opacity-20">
                 <div
                   className="absolute inset-0 rounded-full"
@@ -93,7 +94,7 @@ export default function EmpathyRadar({ shouldEnter, reducedMotion = false }: Emp
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-auto">
             <div
               className={`w-16 h-16 md:w-20 md:h-20 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white text-2xl md:text-3xl ${
-                entered ? 'animate-[pulse-glow_2s_ease-in-out_infinite]' : ''
+                entered && !paused ? 'animate-[pulse-glow_2s_ease-in-out_infinite]' : ''
               } transition-all duration-700`}
             >
               👤
@@ -105,13 +106,14 @@ export default function EmpathyRadar({ shouldEnter, reducedMotion = false }: Emp
               key={card.id}
               card={card}
               isActive={entered}
+              isPaused={paused}
               isHovered={hoveredCard === card.id}
               onHover={() => setHoveredCard(card.id)}
               onLeave={() => setHoveredCard(null)}
             />
           ))}
 
-          {hoveredCard && uxCards.find((c) => c.id === hoveredCard) && (
+          {hoveredCard && uxCards.find((c) => c.id === hoveredCard) && !paused && (
             <ConnectionBeam card={uxCards.find((c) => c.id === hoveredCard)!} />
           )}
         </div>
@@ -123,12 +125,13 @@ export default function EmpathyRadar({ shouldEnter, reducedMotion = false }: Emp
 interface UXCardElementProps {
   card: UXCard;
   isActive: boolean;
+  isPaused: boolean;
   isHovered: boolean;
   onHover: () => void;
   onLeave: () => void;
 }
 
-function UXCardElement({ card, isActive, isHovered, onHover, onLeave }: UXCardElementProps) {
+function UXCardElement({ card, isActive, isPaused, isHovered, onHover, onLeave }: UXCardElementProps) {
   const Icon = card.Icon;
 
   const x = 50 + card.distance * Math.cos((card.angle * Math.PI) / 180);
@@ -151,7 +154,7 @@ function UXCardElement({ card, isActive, isHovered, onHover, onLeave }: UXCardEl
     >
       <div
         className={`relative w-12 h-12 md:w-14 md:h-14 bg-white rounded-xl shadow-md flex items-center justify-center cursor-pointer transition-all duration-300 ${
-          isActive ? 'animate-float' : ''
+          isActive && !isPaused ? 'animate-float' : ''
         } ${
           isHovered ? 'scale-110 shadow-xl' : ''
         }`}

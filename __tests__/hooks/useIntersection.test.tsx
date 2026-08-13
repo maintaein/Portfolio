@@ -13,7 +13,7 @@ import {
 import WhenVisible from '@/components/common/WhenVisible';
 import { useSectionNav } from '@/hooks/useSectionNav';
 
-type DecorationProps = { shouldEnter: boolean; reducedMotion?: boolean };
+type DecorationProps = { shouldEnter: boolean; paused?: boolean; reducedMotion?: boolean };
 type Decoration = ComponentType<DecorationProps>;
 
 vi.mock('next/dynamic', () => ({
@@ -58,7 +58,14 @@ const decorations = [
   finalClasses: string[];
 }>;
 
-const ELEMENT_LEVEL_ALLOWLIST: readonly string[] = [];
+const WHILE_IN_VIEW_DEBT = {
+  'components/sections/HeroSection/index.tsx': { plan: 3, count: 1 },
+  'components/sections/AboutSection/index.tsx': { plan: 4, count: 2 },
+  'components/blocks/SectionHeader/index.tsx': { plan: 5, count: 1 },
+  'components/sections/SkillsSection/index.tsx': { plan: 5, count: 1 },
+  'components/sections/ExperienceSection/index.tsx': { plan: 5, count: 3 },
+  'components/sections/AwardAndCertificatesSection/index.tsx': { plan: 5, count: 1 },
+} as const;
 const intersectionCallbacks = new Set<IntersectionObserverCallback>();
 
 beforeEach(() => {
@@ -103,11 +110,13 @@ function collectComponentFiles(directory: string): string[] {
 
 function FirstPaintHarness({
   Component,
+  paused = false,
   shouldEnter,
   reducedMotion = false,
   onPaint,
 }: {
   Component: Decoration;
+  paused?: boolean;
   shouldEnter: boolean;
   reducedMotion?: boolean;
   onPaint: (root: HTMLElement) => void;
@@ -120,7 +129,7 @@ function FirstPaintHarness({
 
   return (
     <div ref={rootRef}>
-      <Component shouldEnter={shouldEnter} reducedMotion={reducedMotion} />
+      <Component paused={paused} shouldEnter={shouldEnter} reducedMotion={reducedMotion} />
     </div>
   );
 }
@@ -146,12 +155,12 @@ function DecorationHarness({
       <button onClick={() => nav.setActive('about')}>About</button>
       <button onClick={() => nav.setActive('projects')}>Projects</button>
       <WhenVisible section="about">
-        {({ shouldEnter }) => (
+        {({ paused, shouldEnter }) => (
           <div
             data-testid="decoration"
             data-should-enter={shouldEnter}
           >
-            <Component shouldEnter={shouldEnter} reducedMotion={reducedMotion} />
+            <Component paused={paused} shouldEnter={shouldEnter} reducedMotion={reducedMotion} />
           </div>
         )}
       </WhenVisible>
@@ -189,12 +198,12 @@ function BlockedDecorationHarness({ Component }: { Component: Decoration }) {
       reducedMotion={false}
     >
       <WhenVisible section="about">
-        {({ shouldEnter }) => (
+        {({ paused, shouldEnter }) => (
           <div
             data-testid="decoration"
             data-should-enter={shouldEnter}
           >
-            <Component shouldEnter={shouldEnter} />
+            <Component paused={paused} shouldEnter={shouldEnter} />
           </div>
         )}
       </WhenVisible>
@@ -205,27 +214,56 @@ function BlockedDecorationHarness({ Component }: { Component: Decoration }) {
 describe('섹션 진입 애니메이션 트리거', () => {
   it('useIntersection을 사용하는 컴포넌트의 IntersectionObserver 진입 판정을 차단한다', () => {
     const componentRoot = resolve(process.cwd(), 'components');
-    const offenders = collectComponentFiles(componentRoot)
-      .filter((file) => {
-        const source = readFileSync(file, 'utf8');
-        const relativePath = file.slice(process.cwd().length + 1).replaceAll('\\', '/');
-        return (
-          (source.includes('useIntersection') ||
-            source.includes('IntersectionObserver(')) &&
-          !ELEMENT_LEVEL_ALLOWLIST.includes(relativePath)
-        );
-      })
-      .map((file) =>
-        file.slice(process.cwd().length + 1).replaceAll('\\', '/')
-      );
+    const sources = collectComponentFiles(componentRoot).map((file) => {
+      const source = readFileSync(file, 'utf8');
+      const relativePath = file.slice(process.cwd().length + 1).replaceAll('\\', '/');
+      return { relativePath, source };
+    });
+    const ioOffenders = sources
+      .filter(({ source }) =>
+        source.includes('useIntersection') ||
+        source.includes('IntersectionObserver(') ||
+        /\b(?:const|let)\s+\w+\s*=\s*window\.IntersectionObserver/.test(source)
+      )
+      .map(({ relativePath }) => relativePath);
+    const whileInViewOffenders = sources
+      .filter(({ source }) => source.includes('whileInView'))
+      .map(({ relativePath, source }) => ({
+        relativePath,
+        count: source.match(/whileInView/g)?.length ?? 0,
+      }));
+    const debtPaths = Object.keys(WHILE_IN_VIEW_DEBT);
+
+    const offenders = ioOffenders;
 
     expect(
       offenders,
       `섹션 진입 판정에 IntersectionObserver를 사용하는 파일: ${offenders.join(', ')}`
     ).toEqual([]);
+    expect(whileInViewOffenders.map(({ relativePath }) => relativePath).sort()).toEqual(
+      debtPaths.sort()
+    );
+    for (const offender of whileInViewOffenders) {
+      expect(offender.count).toBe(
+        WHILE_IN_VIEW_DEBT[offender.relativePath as keyof typeof WHILE_IN_VIEW_DEBT].count
+      );
+    }
   });
 
   for (const { name, Component, initialClasses, finalClasses } of decorations) {
+    it(`${name} pauses every infinite animation and resumes it when active`, () => {
+      const { container, rerender } = render(<Component shouldEnter paused />);
+      const hasInfiniteAnimation = () =>
+        Array.from(container.querySelectorAll<HTMLElement>('*')).some((element) =>
+          /infinite|radar-sweep/.test(element.getAttribute('class') ?? '') ||
+          /infinite|radar-sweep/.test(element.style.animation)
+        );
+
+      expect(hasInfiniteAnimation()).toBe(false);
+      rerender(<Component shouldEnter paused={false} />);
+      expect(hasInfiniteAnimation()).toBe(true);
+    });
+
     it(`${name} starts in the transition's initial state and latches its final state`, async () => {
       const { container, rerender } = render(<Component shouldEnter={false} />);
 
@@ -363,6 +401,38 @@ describe('섹션 진입 애니메이션 트리거', () => {
     fireEvent.click(screen.getByRole('button', { name: 'About' }));
     await waitFor(() => {
       expect(findElementWithClasses(container, decorations[0].finalClasses)).not.toBeUndefined();
+    });
+  });
+
+  it('production AboutSection wiring pauses all decorations while inactive and resumes them', async () => {
+    const { container } = render(<AboutHarness />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'About' }));
+    await waitFor(() => {
+      expect(
+        Array.from(container.querySelectorAll<HTMLElement>('*')).some((element) =>
+          /infinite|radar-sweep/.test(element.getAttribute('class') ?? '') ||
+          /infinite|radar-sweep/.test(element.style.animation)
+        )
+      ).toBe(true);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Projects' }));
+    expect(
+      Array.from(container.querySelectorAll<HTMLElement>('*')).some((element) =>
+        /infinite|radar-sweep/.test(element.getAttribute('class') ?? '') ||
+        /infinite|radar-sweep/.test(element.style.animation)
+      )
+    ).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'About' }));
+    await waitFor(() => {
+      expect(
+        Array.from(container.querySelectorAll<HTMLElement>('*')).some((element) =>
+          /infinite|radar-sweep/.test(element.getAttribute('class') ?? '') ||
+          /infinite|radar-sweep/.test(element.style.animation)
+        )
+      ).toBe(true);
     });
   });
 

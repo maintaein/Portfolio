@@ -13,11 +13,12 @@ interface TechIcon {
 }
 
 interface TechParticleStormProps {
+  paused?: boolean;
   shouldEnter: boolean;
   reducedMotion?: boolean;
 }
 
-export default function TechParticleStorm({ shouldEnter, reducedMotion = false }: TechParticleStormProps) {
+export default function TechParticleStorm({ paused = false, shouldEnter, reducedMotion = false }: TechParticleStormProps) {
   const [hoveredIcon, setHoveredIcon] = useState<string | null>(null);
   const [entered, setEntered] = useState(reducedMotion);
 
@@ -57,7 +58,7 @@ export default function TechParticleStorm({ shouldEnter, reducedMotion = false }
             <div
               key={i}
               className={`rounded-sm ${
-                entered ? 'animate-[grid-pulse_4s_ease-in-out_infinite]' : 'bg-purple-200/30'
+                entered && !paused ? 'animate-[grid-pulse_4s_ease-in-out_infinite]' : 'bg-purple-200/30'
               }`}
               style={{
                 animationDelay: `${(i * 0.02) % 3}s`,
@@ -75,6 +76,7 @@ export default function TechParticleStorm({ shouldEnter, reducedMotion = false }
               icon={icon}
               index={index}
               isActive={entered}
+              isPaused={paused}
               isHovered={hoveredIcon === icon.name}
               onHover={() => setHoveredIcon(icon.name)}
               onLeave={() => setHoveredIcon(null)}
@@ -90,12 +92,13 @@ interface TechIconElementProps {
   icon: TechIcon;
   index: number;
   isActive: boolean;
+  isPaused: boolean;
   isHovered: boolean;
   onHover: () => void;
   onLeave: () => void;
 }
 
-function TechIconElement({ icon, index, isActive, isHovered, onHover, onLeave }: TechIconElementProps) {
+function TechIconElement({ icon, index, isActive, isPaused, isHovered, onHover, onLeave }: TechIconElementProps) {
   const spacing = 25; 
   const offsetX = 12.5; 
   const offsetY = 12.5;
@@ -172,7 +175,7 @@ function TechIconElement({ icon, index, isActive, isHovered, onHover, onLeave }:
 
         <div
           className={`relative w-full h-full rounded-lg bg-white shadow-md flex items-center justify-center p-2 transition-all duration-300 ${
-            isActive ? 'animate-float' : ''
+            isActive && !isPaused ? 'animate-float' : ''
           } ${
             isHovered ? 'scale-110 shadow-xl' : ''
           }`}

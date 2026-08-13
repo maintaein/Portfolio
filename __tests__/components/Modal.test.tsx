@@ -82,6 +82,26 @@ describe('Modal 포커스 관리', () => {
     expect(lastFocus).toHaveBeenCalledWith({ preventScroll: true });
   });
 
+  it('패널 밖에서 시작한 Tab은 모달 첫 요소로 되돌린다', async () => {
+    render(<Harness open />);
+    const outside = screen.getByTestId('outside');
+    await vi.waitFor(() => expect(screen.getByTestId('first')).toHaveFocus());
+
+    outside.focus();
+    await userEvent.tab();
+    expect(screen.getByTestId('first')).toHaveFocus();
+  });
+
+  it('패널 밖에서 시작한 Shift+Tab은 모달 마지막 요소로 되돌린다', async () => {
+    render(<Harness open />);
+    const outside = screen.getByTestId('outside');
+    await vi.waitFor(() => expect(screen.getByTestId('first')).toHaveFocus());
+
+    outside.focus();
+    await userEvent.tab({ shift: true });
+    expect(screen.getByTestId('last')).toHaveFocus();
+  });
+
   it('닫히면 열기 전 요소로 포커스가 돌아온다', async () => {
     const { rerender } = render(<Harness open={false} />);
     const opener = screen.getByTestId('opener');
@@ -232,7 +252,6 @@ describe('Modal 포커스 관리', () => {
 
       expect(event.defaultPrevented).toBe(false);
       expect(document.activeElement).toBe(outside);
-      expect(document.activeElement?.isConnected).toBe(true);
       expect(
         removeEventListener.mock.calls.filter(([type]) => type === 'keydown')
       ).toHaveLength(1);

@@ -66,10 +66,12 @@ describe('useSectionNav', () => {
     const probe = container.querySelector('output');
     flushSync(() => root.unmount());
 
-    reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
-
-    expect(probe).toHaveAttribute('data-active', 'projects');
-    expect(probe).toHaveAttribute('data-route-resolved', 'true');
+    try {
+      expect(probe).toHaveAttribute('data-active', 'projects');
+      expect(probe).toHaveAttribute('data-route-resolved', 'true');
+    } finally {
+      reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+    }
   });
 
   it('setActive가 활성 섹션을 바꾼다', () => {

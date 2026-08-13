@@ -269,7 +269,7 @@ afterEach(() => {
 });
 
 describe('HomeClient SSR 셸 구조', () => {
-  it('서버 HTML에 overview와 다섯 의미 콘텐츠를 항목별로 모두 렌더한다', () => {
+  it('서버 HTML에 overview와 다섯 섹션 래퍼를 항목별로 모두 렌더한다', () => {
     const html = renderToString(<HomeClient />);
 
     expect(html).toContain('data-section="overview"');

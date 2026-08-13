@@ -20,11 +20,12 @@ interface Connection {
 }
 
 interface CollaborationMeshProps {
+  paused?: boolean;
   shouldEnter: boolean;
   reducedMotion?: boolean;
 }
 
-export default function CollaborationMesh({ shouldEnter, reducedMotion = false }: CollaborationMeshProps) {
+export default function CollaborationMesh({ paused = false, shouldEnter, reducedMotion = false }: CollaborationMeshProps) {
   const [hoveredTool, setHoveredTool] = useState<string | null>(null);
   const [entered, setEntered] = useState(reducedMotion);
 
@@ -58,7 +59,7 @@ export default function CollaborationMesh({ shouldEnter, reducedMotion = false }
           {Array.from({ length: 96 }).map((_, index) => (
             <div
               key={index}
-              className={`rounded-sm ${entered ? 'animate-[grid-pulse_4s_ease-in-out_infinite]' : 'bg-green-200/30'}`}
+              className={`rounded-sm ${entered && !paused ? 'animate-[grid-pulse_4s_ease-in-out_infinite]' : 'bg-green-200/30'}`}
               style={{
                 animationDelay: `${(index * 0.03) % 3}s`,
               }}
@@ -105,6 +106,7 @@ export default function CollaborationMesh({ shouldEnter, reducedMotion = false }
               key={tool.id}
               tool={tool}
               isActive={entered}
+              isPaused={paused}
               isHovered={hoveredTool === tool.id}
               onHover={() => setHoveredTool(tool.id)}
               onLeave={() => setHoveredTool(null)}
@@ -119,12 +121,13 @@ export default function CollaborationMesh({ shouldEnter, reducedMotion = false }
 interface CollabToolCardProps {
   tool: CollabTool;
   isActive: boolean;
+  isPaused: boolean;
   isHovered: boolean;
   onHover: () => void;
   onLeave: () => void;
 }
 
-function CollabToolCard({ tool, isActive, isHovered, onHover, onLeave }: CollabToolCardProps) {
+function CollabToolCard({ tool, isActive, isPaused, isHovered, onHover, onLeave }: CollabToolCardProps) {
   return (
     <div
       className={`absolute transition-all duration-700 ${
@@ -141,7 +144,7 @@ function CollabToolCard({ tool, isActive, isHovered, onHover, onLeave }: CollabT
     >
       <div
         className={`relative w-20 h-20 md:w-24 md:h-24 bg-white rounded-2xl shadow-lg flex flex-col items-center justify-center cursor-pointer transition-all duration-300 ${
-          isActive ? 'animate-bob' : ''
+          isActive && !isPaused ? 'animate-bob' : ''
         } ${
           isHovered ? 'scale-110 shadow-2xl' : ''
         }`}

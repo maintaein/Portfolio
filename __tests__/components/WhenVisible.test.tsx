@@ -26,10 +26,14 @@ function GateProbe({
   paused,
   shouldEnter,
   shouldLoad,
+  shouldMount,
+  reducedMotion,
 }: {
   paused: boolean;
   shouldEnter: boolean;
   shouldLoad: boolean;
+  shouldMount: boolean;
+  reducedMotion: boolean;
 }) {
   return (
     <output
@@ -37,6 +41,8 @@ function GateProbe({
       data-paused={paused}
       data-should-enter={shouldEnter}
       data-should-load={shouldLoad}
+      data-should-mount={shouldMount}
+      data-reduced-motion={reducedMotion}
     />
   );
 }
@@ -64,6 +70,8 @@ function expectGate(expected: {
   paused: boolean;
   shouldEnter: boolean;
   shouldLoad: boolean;
+  shouldMount?: boolean;
+  reducedMotion?: boolean;
 }) {
   const gate = screen.getByTestId('gate');
   expect(gate).toHaveAttribute('data-paused', String(expected.paused));
@@ -72,6 +80,12 @@ function expectGate(expected: {
     String(expected.shouldEnter)
   );
   expect(gate).toHaveAttribute('data-should-load', String(expected.shouldLoad));
+  if (expected.shouldMount !== undefined) {
+    expect(gate).toHaveAttribute('data-should-mount', String(expected.shouldMount));
+  }
+  if (expected.reducedMotion !== undefined) {
+    expect(gate).toHaveAttribute('data-reduced-motion', String(expected.reducedMotion));
+  }
 }
 
 beforeEach(() => {
@@ -79,6 +93,18 @@ beforeEach(() => {
 });
 
 describe('WhenVisible', () => {
+  it('render prop exposes shouldMount and reducedMotion alongside paused', () => {
+    render(<GateHarness activity={DEFAULT_ACTIVITY} />);
+
+    expectGate({
+      paused: false,
+      shouldEnter: true,
+      shouldLoad: true,
+      shouldMount: true,
+      reducedMotion: false,
+    });
+  });
+
   it('active 게이트는 비활성 → 활성 → 비활성으로 왕복하고 load만 래치한다', async () => {
     const inactive = { ...DEFAULT_ACTIVITY, active: 'projects' as const };
     const { rerender } = render(<GateHarness activity={inactive} />);

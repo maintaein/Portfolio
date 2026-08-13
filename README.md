@@ -52,7 +52,7 @@ portfolio/
 │   ├── blocks/             # 조합 컴포넌트 (Navigation, ProjectModal 등)
 │   ├── sections/           # 페이지 섹션 (Hero, About, Skills 등)
 │   └── seo/                # SEO 컴포넌트 (JSON-LD)
-├── hooks/                  # 커스텀 Hooks (useModal, useScroll, useIntersection)
+├── hooks/                  # 커스텀 Hooks (useModal, useIntersection)
 ├── lib/
 │   ├── data/               # 정적 데이터 (프로필, 프로젝트, 스킬 등)
 │   ├── utils/              # 유틸리티 함수 (cn, format, scroll)
@@ -105,4 +105,4 @@ npm run lint
 - **Atomic Design** — Atoms(Button, Badge) → Blocks(Navigation, ProjectModal) → Sections(HeroSection, SkillsSection) 계층 구조
 - **SRP** — 각 컴포넌트는 단일 책임 원칙을 준수
 - **타입 안정성** — 모든 데이터 모델에 TypeScript 인터페이스 정의
-- **커스텀 Hooks** — `useModal`, `useScroll`, `useIntersection`으로 로직 재사용
+- **커스텀 Hooks** — `useModal`, `useIntersection`으로 로직 재사용

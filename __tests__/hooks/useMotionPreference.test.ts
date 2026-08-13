@@ -89,10 +89,12 @@ describe('useMotionPreference', () => {
     const probe = container.querySelector('output');
     flushSync(() => root.unmount());
 
-    reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
-
-    expect(probe).toHaveAttribute('data-ready', 'true');
-    expect(probe).toHaveAttribute('data-reduced', 'false');
+    try {
+      expect(probe).toHaveAttribute('data-ready', 'true');
+      expect(probe).toHaveAttribute('data-reduced', 'false');
+    } finally {
+      reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+    }
   });
 
   it('설정이 켜져 있으면 준비 완료 뒤 reduced=true', () => {

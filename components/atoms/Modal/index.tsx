@@ -121,11 +121,12 @@ export default function Modal({
 
       const firstFocusable = list[0];
       const lastFocusable = list[list.length - 1];
+      const focusOutsidePanel = !panel.contains(document.activeElement);
 
-      if (event.shiftKey && document.activeElement === firstFocusable) {
+      if (event.shiftKey && (document.activeElement === firstFocusable || focusOutsidePanel)) {
         event.preventDefault();
         lastFocusable.focus({ preventScroll: true });
-      } else if (!event.shiftKey && document.activeElement === lastFocusable) {
+      } else if (!event.shiftKey && (document.activeElement === lastFocusable || focusOutsidePanel)) {
         event.preventDefault();
         firstFocusable.focus({ preventScroll: true });
       }

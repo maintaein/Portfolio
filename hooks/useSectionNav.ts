@@ -77,6 +77,8 @@ export function useSectionNav(): UseSectionNavReturn {
   // 자식 layout effect가 Boot/FLIP/WebGL을 만들기 전에 최초 해시와 진입 대상을
   // 한 commit에서 확정한다. 이 단계 전에는 routeResolved 소비자가 모두 정지한다.
   useLayoutEffect(() => {
+    // StrictMode cleanup으로 이 1회성 초기 진입 안무가 다시 실행되지 않도록 가드한다.
+    // cleanup을 추가하면 최초 안무가 0회가 되는 회귀가 조용히 재발한다.
     if (didResolveInitialRouteRef.current) return;
     didResolveInitialRouteRef.current = true;
 
