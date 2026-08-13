@@ -12,6 +12,8 @@ export interface WhenVisibleProps {
     paused: boolean;
     shouldEnter: boolean;
     shouldLoad: boolean;
+    shouldMount: boolean;
+    reducedMotion: boolean;
   }) => ReactNode;
 }
 
@@ -43,6 +45,12 @@ export default function WhenVisible({
     pageVisible &&
     sectionActive &&
     indexActive;
+  const eligibleToMount =
+    routeResolved &&
+    motionReady &&
+    pageVisible &&
+    sectionActive &&
+    indexActive;
   const [shouldLoad, setShouldLoad] = useState(eligibleToLoad);
 
   useEffect(() => {
@@ -63,6 +71,7 @@ export default function WhenVisible({
     pageVisible &&
     sectionActive &&
     entryAnimationTarget === section;
+  const shouldMount = shouldLoad || (reducedMotion && eligibleToMount);
 
-  return <>{children({ paused, shouldEnter, shouldLoad })}</>;
+  return <>{children({ paused, shouldEnter, shouldLoad, shouldMount, reducedMotion })}</>;
 }

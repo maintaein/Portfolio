@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   EyeIcon,
   HeartIcon,
@@ -24,10 +24,16 @@ interface UXCard {
 
 interface EmpathyRadarProps {
   shouldEnter: boolean;
+  reducedMotion?: boolean;
 }
 
-export default function EmpathyRadar({ shouldEnter }: EmpathyRadarProps) {
+export default function EmpathyRadar({ shouldEnter, reducedMotion = false }: EmpathyRadarProps) {
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
+  const [entered, setEntered] = useState(reducedMotion);
+
+  useEffect(() => {
+    if (shouldEnter || reducedMotion) setEntered(true);
+  }, [reducedMotion, shouldEnter]);
   const uxCards: UXCard[] = [
     { id: 'eye', Icon: EyeIcon, label: '👁️', tooltip: '사용자 관점', angle: 0, distance: 38, delay: 0 },
     { id: 'heart', Icon: HeartIcon, label: '❤️', tooltip: '공감 능력', angle: 45, distance: 38, delay: 0.1 },
@@ -48,26 +54,26 @@ export default function EmpathyRadar({ shouldEnter }: EmpathyRadarProps) {
           <div className="relative w-full h-full aspect-square">
             <div
               className={`absolute inset-0 rounded-full border-2 border-blue-200/40 ${
-                shouldEnter ? 'animate-radar-slow' : ''
+                entered ? 'animate-radar-slow' : ''
               }`}
               style={{ margin: '10%' }}
             />
 
             <div
               className={`absolute inset-0 rounded-full border-2 border-blue-300/50 ${
-                shouldEnter ? 'animate-radar-medium' : ''
+                entered ? 'animate-radar-medium' : ''
               }`}
               style={{ margin: '20%' }}
             />
 
             <div
               className={`absolute inset-0 rounded-full border-2 border-blue-400/60 ${
-                shouldEnter ? 'animate-radar-fast' : ''
+                entered ? 'animate-radar-fast' : ''
               }`}
               style={{ margin: '30%' }}
             />
 
-            {shouldEnter && (
+            {entered && (
               <div className="absolute inset-0 opacity-20">
                 <div
                   className="absolute inset-0 rounded-full"
@@ -87,7 +93,7 @@ export default function EmpathyRadar({ shouldEnter }: EmpathyRadarProps) {
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-auto">
             <div
               className={`w-16 h-16 md:w-20 md:h-20 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white text-2xl md:text-3xl ${
-                shouldEnter ? 'animate-[pulse-glow_2s_ease-in-out_infinite]' : ''
+                entered ? 'animate-[pulse-glow_2s_ease-in-out_infinite]' : ''
               } transition-all duration-700`}
             >
               👤
@@ -98,7 +104,7 @@ export default function EmpathyRadar({ shouldEnter }: EmpathyRadarProps) {
             <UXCardElement
               key={card.id}
               card={card}
-              isActive={shouldEnter}
+              isActive={entered}
               isHovered={hoveredCard === card.id}
               onHover={() => setHoveredCard(card.id)}
               onLeave={() => setHoveredCard(null)}

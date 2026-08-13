@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 
 interface TechIcon {
@@ -14,10 +14,16 @@ interface TechIcon {
 
 interface TechParticleStormProps {
   shouldEnter: boolean;
+  reducedMotion?: boolean;
 }
 
-export default function TechParticleStorm({ shouldEnter }: TechParticleStormProps) {
+export default function TechParticleStorm({ shouldEnter, reducedMotion = false }: TechParticleStormProps) {
   const [hoveredIcon, setHoveredIcon] = useState<string | null>(null);
+  const [entered, setEntered] = useState(reducedMotion);
+
+  useEffect(() => {
+    if (shouldEnter || reducedMotion) setEntered(true);
+  }, [reducedMotion, shouldEnter]);
 
   const techIcons: TechIcon[] = [
 
@@ -51,7 +57,7 @@ export default function TechParticleStorm({ shouldEnter }: TechParticleStormProp
             <div
               key={i}
               className={`rounded-sm ${
-                shouldEnter ? 'animate-[grid-pulse_4s_ease-in-out_infinite]' : 'bg-purple-200/30'
+                entered ? 'animate-[grid-pulse_4s_ease-in-out_infinite]' : 'bg-purple-200/30'
               }`}
               style={{
                 animationDelay: `${(i * 0.02) % 3}s`,
@@ -68,7 +74,7 @@ export default function TechParticleStorm({ shouldEnter }: TechParticleStormProp
               key={icon.name}
               icon={icon}
               index={index}
-              isActive={shouldEnter}
+              isActive={entered}
               isHovered={hoveredIcon === icon.name}
               onHover={() => setHoveredIcon(icon.name)}
               onLeave={() => setHoveredIcon(null)}

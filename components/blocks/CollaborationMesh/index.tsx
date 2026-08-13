@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 
 interface CollabTool {
@@ -21,10 +21,16 @@ interface Connection {
 
 interface CollaborationMeshProps {
   shouldEnter: boolean;
+  reducedMotion?: boolean;
 }
 
-export default function CollaborationMesh({ shouldEnter }: CollaborationMeshProps) {
+export default function CollaborationMesh({ shouldEnter, reducedMotion = false }: CollaborationMeshProps) {
   const [hoveredTool, setHoveredTool] = useState<string | null>(null);
+  const [entered, setEntered] = useState(reducedMotion);
+
+  useEffect(() => {
+    if (shouldEnter || reducedMotion) setEntered(true);
+  }, [reducedMotion, shouldEnter]);
 
 
   const tools: CollabTool[] = [
@@ -52,7 +58,7 @@ export default function CollaborationMesh({ shouldEnter }: CollaborationMeshProp
           {Array.from({ length: 96 }).map((_, index) => (
             <div
               key={index}
-              className={`rounded-sm ${shouldEnter ? 'animate-[grid-pulse_4s_ease-in-out_infinite]' : 'bg-green-200/30'}`}
+              className={`rounded-sm ${entered ? 'animate-[grid-pulse_4s_ease-in-out_infinite]' : 'bg-green-200/30'}`}
               style={{
                 animationDelay: `${(index * 0.03) % 3}s`,
               }}
@@ -84,7 +90,7 @@ export default function CollaborationMesh({ shouldEnter }: CollaborationMeshProp
                 key={`${conn.from}-${conn.to}`}
                 from={fromTool}
                 to={toTool}
-                isActive={shouldEnter}
+                isActive={entered}
                 isHighlighted={isHighlighted}
               />
             );
@@ -98,7 +104,7 @@ export default function CollaborationMesh({ shouldEnter }: CollaborationMeshProp
             <CollabToolCard
               key={tool.id}
               tool={tool}
-              isActive={shouldEnter}
+              isActive={entered}
               isHovered={hoveredTool === tool.id}
               onHover={() => setHoveredTool(tool.id)}
               onLeave={() => setHoveredTool(null)}
