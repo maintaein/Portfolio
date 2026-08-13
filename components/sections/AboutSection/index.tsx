@@ -148,12 +148,12 @@ function CoreValueCard({ value, index }: CoreValueCardProps) {
       >
         <div className="relative aspect-square max-w-[500px] mx-auto">
           <WhenVisible section={SECTION_IDS.ABOUT}>
-            {({ shouldLoad }) =>
+            {({ shouldEnter, shouldLoad }) =>
               shouldLoad ? (
                 <>
-                  {value.imagePlaceholder === 'tech-stack' && <TechParticleStorm />}
-                  {value.imagePlaceholder === 'ux-focus' && <EmpathyRadar />}
-                  {value.imagePlaceholder === 'collaboration' && <CollaborationMesh />}
+                  {value.imagePlaceholder === 'tech-stack' && <TechParticleStorm shouldEnter={shouldEnter} />}
+                  {value.imagePlaceholder === 'ux-focus' && <EmpathyRadar shouldEnter={shouldEnter} />}
+                  {value.imagePlaceholder === 'collaboration' && <CollaborationMesh shouldEnter={shouldEnter} />}
                 </>
               ) : null
             }

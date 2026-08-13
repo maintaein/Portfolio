@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
-import { useIntersection } from '@/hooks';
 
 interface CollabTool {
   id: string;
@@ -20,9 +19,12 @@ interface Connection {
   pulseDelay: number;
 }
 
-export default function CollaborationMesh() {
+interface CollaborationMeshProps {
+  shouldEnter: boolean;
+}
+
+export default function CollaborationMesh({ shouldEnter }: CollaborationMeshProps) {
   const [hoveredTool, setHoveredTool] = useState<string | null>(null);
-  const { ref, isIntersecting } = useIntersection({ threshold: 0.2, freezeOnceVisible: true });
 
 
   const tools: CollabTool[] = [
@@ -43,7 +45,6 @@ export default function CollaborationMesh() {
 
   return (
     <div
-      ref={ref}
       className="relative w-full h-full min-h-[400px] md:min-h-[500px] bg-gradient-to-br from-green-100 via-green-50 to-blue-50 rounded-2xl overflow-hidden"
     >
       <div className="absolute inset-0 opacity-20">
@@ -51,7 +52,7 @@ export default function CollaborationMesh() {
           {Array.from({ length: 96 }).map((_, index) => (
             <div
               key={index}
-              className={`rounded-sm ${isIntersecting ? 'animate-[grid-pulse_4s_ease-in-out_infinite]' : 'bg-green-200/30'}`}
+              className={`rounded-sm ${shouldEnter ? 'animate-[grid-pulse_4s_ease-in-out_infinite]' : 'bg-green-200/30'}`}
               style={{
                 animationDelay: `${(index * 0.03) % 3}s`,
               }}
@@ -83,7 +84,7 @@ export default function CollaborationMesh() {
                 key={`${conn.from}-${conn.to}`}
                 from={fromTool}
                 to={toTool}
-                isActive={isIntersecting}
+                isActive={shouldEnter}
                 isHighlighted={isHighlighted}
               />
             );
@@ -97,7 +98,7 @@ export default function CollaborationMesh() {
             <CollabToolCard
               key={tool.id}
               tool={tool}
-              isActive={isIntersecting}
+              isActive={shouldEnter}
               isHovered={hoveredTool === tool.id}
               onHover={() => setHoveredTool(tool.id)}
               onLeave={() => setHoveredTool(null)}

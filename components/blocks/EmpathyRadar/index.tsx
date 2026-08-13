@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useIntersection } from '@/hooks';
 import {
   EyeIcon,
   HeartIcon,
@@ -23,10 +22,12 @@ interface UXCard {
   delay: number; 
 }
 
-export default function EmpathyRadar() {
-  const [hoveredCard, setHoveredCard] = useState<string | null>(null);
-  const { ref, isIntersecting } = useIntersection({ threshold: 0.2, freezeOnceVisible: true });
+interface EmpathyRadarProps {
+  shouldEnter: boolean;
+}
 
+export default function EmpathyRadar({ shouldEnter }: EmpathyRadarProps) {
+  const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const uxCards: UXCard[] = [
     { id: 'eye', Icon: EyeIcon, label: '👁️', tooltip: '사용자 관점', angle: 0, distance: 38, delay: 0 },
     { id: 'heart', Icon: HeartIcon, label: '❤️', tooltip: '공감 능력', angle: 45, distance: 38, delay: 0.1 },
@@ -40,7 +41,6 @@ export default function EmpathyRadar() {
 
   return (
     <div
-      ref={ref}
       className="relative w-full aspect-square max-w-[500px] max-h-[500px] mx-auto"
     >
       <div className="absolute inset-0 bg-gradient-to-br from-blue-100 via-blue-50 to-purple-50 rounded-2xl overflow-hidden aspect-square">
@@ -48,26 +48,26 @@ export default function EmpathyRadar() {
           <div className="relative w-full h-full aspect-square">
             <div
               className={`absolute inset-0 rounded-full border-2 border-blue-200/40 ${
-                isIntersecting ? 'animate-radar-slow' : ''
+                shouldEnter ? 'animate-radar-slow' : ''
               }`}
               style={{ margin: '10%' }}
             />
 
             <div
               className={`absolute inset-0 rounded-full border-2 border-blue-300/50 ${
-                isIntersecting ? 'animate-radar-medium' : ''
+                shouldEnter ? 'animate-radar-medium' : ''
               }`}
               style={{ margin: '20%' }}
             />
 
             <div
               className={`absolute inset-0 rounded-full border-2 border-blue-400/60 ${
-                isIntersecting ? 'animate-radar-fast' : ''
+                shouldEnter ? 'animate-radar-fast' : ''
               }`}
               style={{ margin: '30%' }}
             />
 
-            {isIntersecting && (
+            {shouldEnter && (
               <div className="absolute inset-0 opacity-20">
                 <div
                   className="absolute inset-0 rounded-full"
@@ -87,7 +87,7 @@ export default function EmpathyRadar() {
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-auto">
             <div
               className={`w-16 h-16 md:w-20 md:h-20 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white text-2xl md:text-3xl ${
-                isIntersecting ? 'animate-[pulse-glow_2s_ease-in-out_infinite]' : ''
+                shouldEnter ? 'animate-[pulse-glow_2s_ease-in-out_infinite]' : ''
               } transition-all duration-700`}
             >
               👤
@@ -98,7 +98,7 @@ export default function EmpathyRadar() {
             <UXCardElement
               key={card.id}
               card={card}
-              isActive={isIntersecting}
+              isActive={shouldEnter}
               isHovered={hoveredCard === card.id}
               onHover={() => setHoveredCard(card.id)}
               onLeave={() => setHoveredCard(null)}

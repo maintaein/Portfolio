@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
-import { useIntersection } from '@/hooks';
 
 interface TechIcon {
   name: string;
@@ -13,8 +12,11 @@ interface TechIcon {
   distance: number; 
 }
 
-export default function TechParticleStorm() {
-  const { ref, isIntersecting } = useIntersection({ threshold: 0.2, freezeOnceVisible: true });
+interface TechParticleStormProps {
+  shouldEnter: boolean;
+}
+
+export default function TechParticleStorm({ shouldEnter }: TechParticleStormProps) {
   const [hoveredIcon, setHoveredIcon] = useState<string | null>(null);
 
   const techIcons: TechIcon[] = [
@@ -41,7 +43,6 @@ export default function TechParticleStorm() {
 
   return (
     <div
-      ref={ref}
       className="relative w-full h-full min-h-[400px] md:min-h-[500px] bg-gradient-to-br from-purple-100 via-purple-50 to-blue-50 rounded-2xl overflow-hidden"
     >
       <div className="absolute inset-0 opacity-10">
@@ -50,7 +51,7 @@ export default function TechParticleStorm() {
             <div
               key={i}
               className={`rounded-sm ${
-                isIntersecting ? 'animate-[grid-pulse_4s_ease-in-out_infinite]' : 'bg-purple-200/30'
+                shouldEnter ? 'animate-[grid-pulse_4s_ease-in-out_infinite]' : 'bg-purple-200/30'
               }`}
               style={{
                 animationDelay: `${(i * 0.02) % 3}s`,
@@ -67,7 +68,7 @@ export default function TechParticleStorm() {
               key={icon.name}
               icon={icon}
               index={index}
-              isActive={isIntersecting}
+              isActive={shouldEnter}
               isHovered={hoveredIcon === icon.name}
               onHover={() => setHoveredIcon(icon.name)}
               onLeave={() => setHoveredIcon(null)}
