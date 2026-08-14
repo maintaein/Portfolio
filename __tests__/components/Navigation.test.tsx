@@ -351,6 +351,15 @@ describe('Navigation', () => {
 
     scrollIntoView.mockClear();
     reducedMotion = true;
+    rerender(
+      <Navigation
+        items={NAV_ITEMS}
+        active="projects"
+        onNavigate={() => {}}
+        reducedMotion={reducedMotion}
+      />
+    );
+    scrollIntoView.mockClear();
     const awards = screen.getByRole('button', { name: /awards/i });
     fireEvent.focus(awards);
     expect(scrollIntoView).toHaveBeenCalledTimes(1);

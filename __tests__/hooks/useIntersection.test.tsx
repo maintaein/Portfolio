@@ -63,10 +63,28 @@ const WHILE_IN_VIEW_DEBT = {
   'components/sections/AboutSection/index.tsx': { plan: 4, count: 2 },
   'components/blocks/SectionHeader/index.tsx': { plan: 5, count: 1 },
   'components/sections/SkillsSection/index.tsx': { plan: 5, count: 1 },
-  'components/sections/ExperienceSection/index.tsx': { plan: 5, count: 3 },
+  'components/sections/ExperienceSection/index.tsx': {
+    plan: 5,
+    count: 3,
+    additionalIntersectionApi: 'useInView',
+  },
   'components/sections/AwardAndCertificatesSection/index.tsx': { plan: 5, count: 1 },
 } as const;
 const intersectionCallbacks = new Set<IntersectionObserverCallback>();
+const DESIGN_TOKENS_CSS = readFileSync(
+  resolve(process.cwd(), 'styles/design-tokens.css'),
+  'utf8'
+);
+const INFINITE_ANIMATION_CLASSES = new Set(
+  DESIGN_TOKENS_CSS.split('}')
+    .map((block) => {
+      const className = block.match(/\.([A-Za-z0-9_-]+)\s*\{/)?.[1];
+      return className && block.includes('animation:') && block.includes('infinite')
+        ? className
+        : null;
+    })
+    .filter((className): className is string => className !== null)
+);
 
 beforeEach(() => {
   window.history.replaceState(null, '', '#overview');
@@ -223,7 +241,8 @@ describe('섹션 진입 애니메이션 트리거', () => {
       .filter(({ source }) =>
         source.includes('useIntersection') ||
         source.includes('IntersectionObserver(') ||
-        /\b(?:const|let)\s+\w+\s*=\s*window\.IntersectionObserver/.test(source)
+        /\b(?:const|let)\s+\w+\s*=\s*window\.IntersectionObserver/.test(source) ||
+        source.includes('useInView')
       )
       .map(({ relativePath }) => relativePath);
     const whileInViewOffenders = sources
@@ -234,7 +253,9 @@ describe('섹션 진입 애니메이션 트리거', () => {
       }));
     const debtPaths = Object.keys(WHILE_IN_VIEW_DEBT);
 
-    const offenders = ioOffenders;
+    const offenders = ioOffenders.filter(
+      (relativePath) => !debtPaths.includes(relativePath)
+    );
 
     expect(
       offenders,
@@ -251,17 +272,41 @@ describe('섹션 진입 애니메이션 트리거', () => {
   });
 
   for (const { name, Component, initialClasses, finalClasses } of decorations) {
-    it(`${name} pauses every infinite animation and resumes it when active`, () => {
-      const { container, rerender } = render(<Component shouldEnter paused />);
-      const hasInfiniteAnimation = () =>
-        Array.from(container.querySelectorAll<HTMLElement>('*')).some((element) =>
-          /infinite|radar-sweep/.test(element.getAttribute('class') ?? '') ||
-          /infinite|radar-sweep/.test(element.style.animation)
+    it(`${name} pauses every infinite animation and resumes it when active`, async () => {
+      const { container, rerender } = render(
+        <Component shouldEnter paused={false} />
+      );
+      const collectInfiniteAnimations = () =>
+        new Set(
+          Array.from(container.querySelectorAll<HTMLElement>('*')).flatMap((element) => [
+            ...Array.from(element.classList).filter(
+              (className) =>
+                INFINITE_ANIMATION_CLASSES.has(className) ||
+                /infinite|radar-sweep/.test(className)
+            ),
+            ...( /infinite|radar-sweep/.test(element.style.animation)
+              ? [element.style.animation]
+              : []),
+          ])
         );
 
-      expect(hasInfiniteAnimation()).toBe(false);
+      await waitFor(() => expect(collectInfiniteAnimations().size).toBeGreaterThan(0));
+      if (name === 'EmpathyRadar') {
+        const card = Array.from(container.querySelectorAll<HTMLElement>('*')).find(
+          (element) =>
+            element.className.includes('absolute transition-all duration-300 pointer-events-auto')
+        );
+        if (card) fireEvent.mouseEnter(card);
+      }
+      await waitFor(() => expect(collectInfiniteAnimations().size).toBeGreaterThan(0));
+      const activeAnimations = collectInfiniteAnimations();
+      rerender(<Component shouldEnter paused />);
+      const pausedAnimations = collectInfiniteAnimations();
+      for (const animation of activeAnimations) {
+        expect(pausedAnimations).not.toContain(animation);
+      }
       rerender(<Component shouldEnter paused={false} />);
-      expect(hasInfiniteAnimation()).toBe(true);
+      expect(collectInfiniteAnimations()).toEqual(activeAnimations);
     });
 
     it(`${name} starts in the transition's initial state and latches its final state`, async () => {

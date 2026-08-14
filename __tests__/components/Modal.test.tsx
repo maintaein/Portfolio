@@ -27,6 +27,7 @@ function Harness({
         <button data-testid="opener">열기</button>
       </div>
       <button data-testid="outside">바깥 버튼</button>
+      <button data-testid="after-outside">바깥 다음 버튼</button>
       <Modal
         isOpen={open}
         onClose={() => {}}

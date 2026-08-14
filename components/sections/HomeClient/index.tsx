@@ -186,6 +186,7 @@ export default function HomeClient() {
         items={NAV_ITEMS}
         active={active}
         onNavigate={setActive}
+        reducedMotion={reducedMotion}
         wordmarkRef={wordmarkRef}
       />
 

@@ -55,7 +55,7 @@ portfolio/
 ├── hooks/                  # 커스텀 Hooks (useModal, useIntersection)
 ├── lib/
 │   ├── data/               # 정적 데이터 (프로필, 프로젝트, 스킬 등)
-│   ├── utils/              # 유틸리티 함수 (cn, format, scroll)
+│   ├── utils/              # 유틸리티 함수 (cn, format)
 │   ├── constants.ts        # 상수 정의
 │   └── fonts.ts            # 폰트 설정 (Pretendard)
 ├── styles/

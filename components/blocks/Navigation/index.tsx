@@ -10,6 +10,7 @@ interface NavigationProps {
   items: readonly NavigationItem[];
   active: NavId;
   onNavigate: (id: NavId) => void;
+  reducedMotion?: boolean;
   wordmarkRef?: Ref<HTMLButtonElement>;
   className?: string;
 }
@@ -18,6 +19,7 @@ export default function Navigation({
   items,
   active,
   onNavigate,
+  reducedMotion = false,
   wordmarkRef,
   className,
 }: NavigationProps) {
@@ -27,13 +29,11 @@ export default function Navigation({
     if (!window.matchMedia('(max-width: 1023px)').matches) return;
 
     itemRefs.current.get(id)?.scrollIntoView({
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
-        ? 'auto'
-        : 'smooth',
+      behavior: reducedMotion ? 'auto' : 'smooth',
       block: 'nearest',
       inline: 'center',
     });
-  }, []);
+  }, [reducedMotion]);
 
   useEffect(() => {
     centerCompactItem(active);
