@@ -1,7 +1,7 @@
 
 export const PERSONAL_INFO = {
     NAME: '김태인',
-    NAME_EN: 'Taein Kim',
+    NAME_EN: 'KIM TAEIN',
     ROLE: '프론트엔드 개발자',
     DESCRIPTION: '항상 사용자의 눈과 마음을 고려하는 프론트엔드 개발자',
     EMAIL: 'vostmfvostmf@naver.com',

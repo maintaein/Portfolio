@@ -212,6 +212,7 @@ describe('Navigation', () => {
 
     const wordmark = screen.getByTestId('wordmark');
     expect(screen.getAllByTestId('wordmark')).toHaveLength(1);
+    expect(PERSONAL_INFO.NAME_EN).toBe('KIM TAEIN');
     expect(wordmark).toHaveTextContent(PERSONAL_INFO.NAME_EN);
     expect(wordmark).toHaveAttribute('data-flip-id', 'site-wordmark');
     expect(wordmark).toHaveAttribute('data-wordmark-mode', 'hero');

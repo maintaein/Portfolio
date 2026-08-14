@@ -1,0 +1,14 @@
+{
+  "pages": {
+    "/page": [
+      "static/chunks/shared.js",
+      "static/chunks/page-abc123.js",
+      "static/css/page.css"
+    ],
+    "/layout": [
+      "static/chunks/shared.js",
+      "static/chunks/layout-def456.js",
+      "static/css/layout.css"
+    ]
+  }
+}

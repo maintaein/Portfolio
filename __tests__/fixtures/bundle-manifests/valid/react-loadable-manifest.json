@@ -1,0 +1,10 @@
+{
+  "components\\blocks\\HyperspeedBackground.tsx -> @/components/blocks/Hyperspeed": {
+    "id": 1001,
+    "files": [
+      "static/chunks/shared.js",
+      "static/chunks/hyperspeed-789abc.js",
+      "static/css/hyperspeed.css"
+    ]
+  }
+}
