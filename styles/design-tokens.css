@@ -425,17 +425,19 @@
     animation: bob 3s ease-in-out infinite;
   }
 
-  /* touch-action: pan-y만 주면 실제 손가락 스와이프의 미세한 수직 성분만으로
-     Android Chrome이 세로 팬으로 조기 커밋해 pointercancel을 보낸다 —
-     useSectionSwipe는 정상 초기화될 뿐 pointerup 델타 계산까지 못 간다.
-     두 축을 다 열어야 Chrome이 실제 우세 방향으로 판정한다. 제목 영역엔
-     가로로 스크롤 가능한 요소가 없어(overflow-x: hidden) 네이티브가 가져갈
-     대상이 없고, 이벤트는 그대로 JS(useSectionSwipe)로 흘러간다. */
+  /* 실기기(Galaxy S25/Chrome) 계측: pan-x pan-y로 넓혔더니 가로 제스처까지
+     브라우저가 스크롤 후보로 잡아 취소율이 30/30 = 100%가 됐다. 가로는
+     브라우저에 주면 안 된다 — useSectionSwipe가 가로 스와이프를 처리한다.
+     세로(pan-y)는 줘야 한다 — 섹션 내부 세로 스크롤은 브라우저 몫이다.
+     pan-y만으로도 여전히 취소는 온다(터치의 미세한 수직 성분 때문). 그래서
+     판정을 pointermove로 앞당겨 취소 전에 끝내는 쪽으로 고쳤다
+     (useSectionSwipe.ts 참고) — touch-action만으로는 취소 자체를 막을 수
+     없다. */
   .section-stage {
     position: fixed;
     inset: 72px 0 calc(45px + env(safe-area-inset-bottom, 0px));
     overflow: hidden;
-    touch-action: pan-x pan-y;
+    touch-action: pan-y;
   }
 
   .section-stage-horizontal {

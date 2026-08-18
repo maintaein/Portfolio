@@ -290,4 +290,122 @@ describe('useSectionSwipe', () => {
     });
     expect(onNext).toHaveBeenCalledOnce();
   });
+
+  // 실기기 계측(Galaxy S25/Chrome): 제스처 30/30이 pointercancel로 끝났고
+  // pointerup은 0번이었다. pointerup만 기다리는 판정은 구조적으로 실기기에서
+  // 작동하지 않는다 — 아래 테스트들은 pointermove가 취소 전에 판정을
+  // 끝내는 경로를 검증한다.
+
+  it('pointermove가 임계를 넘는 순간 즉시 onNext를 호출하고, 뒤따르는 pointercancel은 이를 무효화하지 않는다', () => {
+    const { onNext, stage } = renderHarness();
+
+    firePointer(stage, 'pointerdown', {
+      clientX: 200,
+      clientY: 200,
+      pointerId: 60,
+      pointerType: 'touch',
+    });
+    // pointerup은 한 번도 오지 않는다 — 실기기 계측이 보여준 실제 형태.
+    firePointer(stage, 'pointermove', {
+      clientX: 120,
+      clientY: 205,
+      pointerId: 60,
+      pointerType: 'touch',
+    });
+    expect(onNext).toHaveBeenCalledOnce();
+
+    firePointer(stage, 'pointercancel', {
+      clientX: 120,
+      clientY: 205,
+      pointerId: 60,
+      pointerType: 'touch',
+    });
+    expect(onNext).toHaveBeenCalledOnce();
+  });
+
+  it('pointermove로 판정한 뒤 같은 제스처의 추가 pointermove·pointerup은 다시 호출하지 않는다', () => {
+    const { onNext, stage } = renderHarness();
+
+    firePointer(stage, 'pointerdown', {
+      clientX: 200,
+      clientY: 200,
+      pointerId: 61,
+      pointerType: 'touch',
+    });
+    firePointer(stage, 'pointermove', {
+      clientX: 120,
+      clientY: 205,
+      pointerId: 61,
+      pointerType: 'touch',
+    });
+    expect(onNext).toHaveBeenCalledOnce();
+
+    firePointer(stage, 'pointermove', {
+      clientX: 50,
+      clientY: 210,
+      pointerId: 61,
+      pointerType: 'touch',
+    });
+    expect(onNext).toHaveBeenCalledOnce();
+
+    firePointer(stage, 'pointerup', {
+      clientX: 50,
+      clientY: 210,
+      pointerId: 61,
+      pointerType: 'touch',
+    });
+    expect(onNext).toHaveBeenCalledOnce();
+  });
+
+  it('임계를 넘기 전 pointermove는 no-op이고, 넘는 pointermove에서만 호출한다', () => {
+    const { onNext, stage } = renderHarness();
+
+    firePointer(stage, 'pointerdown', {
+      clientX: 200,
+      clientY: 200,
+      pointerId: 62,
+      pointerType: 'touch',
+    });
+    firePointer(stage, 'pointermove', {
+      clientX: 180,
+      clientY: 200,
+      pointerId: 62,
+      pointerType: 'touch',
+    });
+    expect(onNext).not.toHaveBeenCalled();
+
+    firePointer(stage, 'pointermove', {
+      clientX: 130,
+      clientY: 200,
+      pointerId: 62,
+      pointerType: 'touch',
+    });
+    expect(onNext).toHaveBeenCalledOnce();
+  });
+
+  it('시작 pointer id와 다른 pointermove는 no-op이고, 올바른 id는 그대로 판정한다', () => {
+    const { onNext, stage } = renderHarness();
+
+    firePointer(stage, 'pointerdown', {
+      clientX: 200,
+      clientY: 200,
+      pointerId: 63,
+      pointerType: 'touch',
+    });
+    firePointer(stage, 'pointermove', {
+      clientX: 50,
+      clientY: 200,
+      pointerId: 999,
+      pointerType: 'touch',
+    });
+    expect(onNext).not.toHaveBeenCalled();
+
+    firePointer(stage, 'pointermove', {
+      clientX: 120,
+      clientY: 200,
+      pointerId: 63,
+      pointerType: 'touch',
+    });
+    expect(onNext).toHaveBeenCalledOnce();
+  });
 });

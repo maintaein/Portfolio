@@ -9,7 +9,7 @@ export interface PointerCoordinates {
 
 export function firePointer(
   target: Element,
-  type: 'pointerdown' | 'pointerup' | 'pointercancel',
+  type: 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel',
   coordinates: PointerCoordinates
 ) {
   const event = new Event(type, { bubbles: true, cancelable: true });

@@ -85,13 +85,34 @@ export default function SwipeProbe() {
       log('CANCEL (브라우저가 제스처를 가져감)');
     };
 
+    // 훅(useSectionSwipe)이 pointerup 대신 pointermove에서 조기 판정하도록
+    // 고쳤으므로, 계측기도 같은 경로를 재현해야 실기기에서 판정 카운트가
+    // 의미를 가진다. pointerup은 30/30 취소 세션에서 단 한 번도 오지
+    // 않았으므로 이 리스너 없이는 '판정'이 항상 0으로 보인다.
+    const onMove = (event: PointerEvent) => {
+      const start = startRef.current;
+      if (!start || event.pointerId !== start.pointerId) return;
+
+      const dx = event.clientX - start.x;
+      const dy = event.clientY - start.y;
+      const judged =
+        Math.abs(dx) >= MIN_SWIPE_DISTANCE_PX &&
+        Math.abs(dx) > Math.abs(dy) * HORIZONTAL_DOMINANCE_RATIO;
+
+      if (judged) {
+        startRef.current = null;
+        setCounts((prev) => ({ ...prev, judged: prev.judged + 1 }));
+        log(`MOVE dx=${dx.toFixed(0)} dy=${dy.toFixed(0)} 판정=true (조기)`);
+      }
+    };
+
     const onUp = (event: PointerEvent) => {
       const start = startRef.current;
       startRef.current = null;
       setCounts((prev) => ({ ...prev, up: prev.up + 1 }));
 
       if (!start || event.pointerId !== start.pointerId) {
-        log('UP (시작점 없음, 추적 대상 아님)');
+        log('UP (시작점 없음, 추적 대상 아님 — 조기 판정됐거나 무시된 제스처)');
         return;
       }
 
@@ -111,6 +132,9 @@ export default function SwipeProbe() {
       capture: true,
     });
     stage.addEventListener('pointercancel', onCancel, { capture: true });
+    stage.addEventListener('pointermove', onMove as EventListener, {
+      capture: true,
+    });
     stage.addEventListener('pointerup', onUp as EventListener, {
       capture: true,
     });
@@ -135,6 +159,9 @@ export default function SwipeProbe() {
         capture: true,
       });
       stage.removeEventListener('pointercancel', onCancel, { capture: true });
+      stage.removeEventListener('pointermove', onMove as EventListener, {
+        capture: true,
+      });
       stage.removeEventListener('pointerup', onUp as EventListener, {
         capture: true,
       });
