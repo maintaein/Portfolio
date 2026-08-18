@@ -9,6 +9,19 @@ function ruleBody(selector: string): string | undefined {
   return css.match(new RegExp(`^  ${escapedSelector}\\s*\\{([\\s\\S]*?)^  \\}`, 'm'))?.[1];
 }
 
+// touch-action은 값을 나열로 비교하지 않고 허용 토큰의 집합으로 판정한다.
+// 순서가 바뀌거나 모르는 값이 추가돼도 fail-closed가 되게 하기 위함이다.
+function allowedTouchActions(selector: string): string[] {
+  const declaration = /touch-action\s*:\s*([^;]+);/.exec(
+    ruleBody(selector) ?? ''
+  )?.[1];
+  if (!declaration) {
+    throw new Error(`${selector}에 touch-action 선언이 없다`);
+  }
+
+  return declaration.trim().split(/\s+/);
+}
+
 describe('section visibility utilities', () => {
   it('defines .section-hidden with searchable content visibility', () => {
     const hidden = ruleBody('.section-hidden');
@@ -44,19 +57,34 @@ describe('section visibility utilities', () => {
   });
 
   it('keeps horizontal panning off the section stage so the browser cannot claim swipe gestures', () => {
-    const stage = ruleBody('.section-stage');
+    const allowed = allowedTouchActions('.section-stage');
 
-    expect(stage).toMatch(/touch-action\s*:\s*pan-y\s*;/);
-    expect(stage).not.toMatch(/touch-action\s*:\s*pan-x pan-y\s*;/);
+    expect(allowed).toContain('pan-y');
+    expect(allowed).not.toContain('pan-x');
   });
 
   it('restores horizontal touch panning for the Projects stage and track', () => {
-    expect(ruleBody('.section-stage-horizontal')).toMatch(
-      /touch-action\s*:\s*pan-x pan-y\s*;/
+    expect(allowedTouchActions('.section-stage-horizontal')).toEqual(
+      expect.arrayContaining(['pan-x', 'pan-y'])
     );
-    expect(ruleBody('.section-horizontal-scroll')).toMatch(
-      /touch-action\s*:\s*pan-x pan-y\s*;/
+    expect(allowedTouchActions('.section-horizontal-scroll')).toEqual(
+      expect.arrayContaining(['pan-x', 'pan-y'])
     );
+  });
+
+  // 페이지 확대는 스크롤 컨테이너에서 멈추지 않고 문서 루트까지 올라가며
+  // 판정된다. 그래서 체인 위의 어느 한 규칙이라도 pinch-zoom을 빼면 확대가
+  // 통째로 죽는다 — .section-scroll에만 넣었을 때 실기기에서 실제로 그랬다.
+  // WCAG 1.4.4를 지키려면 네 규칙 전부에 있어야 하므로 한자리에서 검사한다.
+  it('lets the page zoom through every rule on the touch-action chain', () => {
+    for (const selector of [
+      '.section-stage',
+      '.section-stage-horizontal',
+      '.section-horizontal-scroll',
+      '.section-scroll',
+    ]) {
+      expect(allowedTouchActions(selector)).toContain('pinch-zoom');
+    }
   });
 
   it('keeps the stage fixed between navigation and the contact rail', () => {
@@ -80,24 +108,15 @@ describe('section visibility utilities', () => {
     expect(scroll).toMatch(/scrollbar-gutter\s*:\s*stable\s*;/);
   });
 
-  // 이 파일에서 가장 중요한 계약이다. 브라우저는 touch-action 교집합을
-  // 스크롤 컨테이너에서 멈추므로, 실제 제스처 소유권을 결정하는 것은
+  // 이 파일에서 가장 중요한 계약이다. 브라우저는 가로·세로 팬의 touch-action
+  // 교집합을 스크롤 컨테이너에서 멈추므로, 실제 제스처 소유권을 결정하는 것은
   // .section-stage가 아니라 .section-scroll이다. 실기기에서 여기가 auto였을 때
   // 제스처 30/30이 슬롭(약 8px) 직후 pointercancel로 끝나 판정 임계 64px에
-  // 도달조차 못 했다. 값을 나열로 비교하지 않고 토큰 부류로 판정해, 모르는
-  // 값이 들어와도 fail-closed가 되게 한다.
+  // 도달조차 못 했다.
   it('takes horizontal panning back from the browser on the real scroll container', () => {
-    const declaration = /touch-action\s*:\s*([^;]+);/.exec(
-      ruleBody('.section-scroll') ?? ''
-    )?.[1];
-    if (!declaration) {
-      throw new Error('.section-scroll에 touch-action 선언이 없다');
-    }
-
-    const allowed = declaration.trim().split(/\s+/);
+    const allowed = allowedTouchActions('.section-scroll');
 
     expect(allowed).toContain('pan-y'); // 세로 스크롤은 브라우저 몫
-    expect(allowed).toContain('pinch-zoom'); // 확대를 죽이면 접근성 회귀
     expect(allowed).not.toContain('pan-x'); // 가로는 useSectionSwipe 몫
     expect(allowed).not.toContain('auto'); // auto면 브라우저가 전부 가져간다
   });

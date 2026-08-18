@@ -450,15 +450,15 @@
     position: fixed;
     inset: 72px 0 calc(45px + env(safe-area-inset-bottom, 0px));
     overflow: hidden;
-    touch-action: pan-y;
+    touch-action: pan-y pinch-zoom;
   }
 
   .section-stage-horizontal {
-    touch-action: pan-x pan-y;
+    touch-action: pan-x pan-y pinch-zoom;
   }
 
   .section-horizontal-scroll {
-    touch-action: pan-x pan-y;
+    touch-action: pan-x pan-y pinch-zoom;
   }
 
   .section-scroll {
