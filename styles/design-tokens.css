@@ -425,11 +425,17 @@
     animation: bob 3s ease-in-out infinite;
   }
 
+  /* touch-action: pan-y만 주면 실제 손가락 스와이프의 미세한 수직 성분만으로
+     Android Chrome이 세로 팬으로 조기 커밋해 pointercancel을 보낸다 —
+     useSectionSwipe는 정상 초기화될 뿐 pointerup 델타 계산까지 못 간다.
+     두 축을 다 열어야 Chrome이 실제 우세 방향으로 판정한다. 제목 영역엔
+     가로로 스크롤 가능한 요소가 없어(overflow-x: hidden) 네이티브가 가져갈
+     대상이 없고, 이벤트는 그대로 JS(useSectionSwipe)로 흘러간다. */
   .section-stage {
     position: fixed;
     inset: 72px 0 calc(45px + env(safe-area-inset-bottom, 0px));
     overflow: hidden;
-    touch-action: pan-y;
+    touch-action: pan-x pan-y;
   }
 
   .section-stage-horizontal {
@@ -437,7 +443,7 @@
   }
 
   .section-horizontal-scroll {
-    touch-action: pan-x;
+    touch-action: pan-x pan-y;
   }
 
   .section-scroll {
@@ -450,10 +456,15 @@
     -webkit-overflow-scrolling: touch;
   }
 
-  /* 섹션 은닉 — 전 섹션이 DOM에 상주하되(SEO) 비활성은 렌더를 건너뛴다.
-     content-visibility는 반드시 auto를 쓴다. hidden으로 바꾸면 브라우저
-     페이지 내 찾기(Ctrl+F)와 접근성 트리에서 사라져, 전 섹션을 SSR로
-     살려둔 이유가 통째로 무효가 된다.
+  /* 섹션 은닉 — 전 섹션이 DOM에 상주한다. 진짜 이유는 SEO다(크롤러는
+     HTML을 읽지 Ctrl+F를 쓰지 않는다). content-visibility는 반드시 auto를
+     쓴다 — 비활성 섹션의 렌더(레이아웃·페인트)를 건너뛰는 성능 이득이
+     있고, hidden과 달리 접근성 트리에서 사라지지 않는다.
+     주의: 비활성 섹션엔 inert도 걸려 있다(HomeClient 참고, Tab이 보이지
+     않는 섹션으로 새는 것을 막기 위함). content-visibility 값과 무관하게
+     inert가 걸린 서브트리는 브라우저 페이지 내 찾기(Ctrl+F)에서 제외된다
+     — HTML 명세가 그렇게 정의한다. auto로 바꿔도 Ctrl+F는 여전히 안 된다.
+     실기기 검증 후 접근성(Tab 격리)을 Ctrl+F보다 우선하기로 판정했다.
      contain-intrinsic-size가 없으면 스킵된 섹션의 높이가 0으로 잡혀
      스크롤바가 튄다. */
   /* Safari 17 이하는 content-visibility를 무시한다. 최적화만 빠지고

@@ -239,7 +239,7 @@ function ProjectCard({ project, isFeatured }: ProjectCardProps) {
           draggable={false}
         />
         <div
-          className="absolute inset-0 transition-all duration-500"
+          className="absolute inset-0 transition-[background] duration-500"
           style={{
             background: isFeatured
               ? 'linear-gradient(90deg, rgba(8,12,24,0.88) 0%, rgba(8,12,24,0.82) 36%, rgba(8,12,24,0.28) 62%, rgba(8,12,24,0.06) 100%)'

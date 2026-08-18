@@ -43,8 +43,8 @@ describe('section visibility utilities', () => {
     expect(ruleBody('.section-visible')).toContain(easing);
   });
 
-  it('gives the section stage a vertical-only touch action', () => {
-    expect(ruleBody('.section-stage')).toMatch(/touch-action\s*:\s*pan-y\s*;/);
+  it('gives the section stage both pan axes so Chrome does not pre-commit to a vertical scroll on ambiguous horizontal swipes', () => {
+    expect(ruleBody('.section-stage')).toMatch(/touch-action\s*:\s*pan-x pan-y\s*;/);
   });
 
   it('restores horizontal touch panning for the Projects stage and track', () => {
@@ -52,7 +52,7 @@ describe('section visibility utilities', () => {
       /touch-action\s*:\s*pan-x pan-y\s*;/
     );
     expect(ruleBody('.section-horizontal-scroll')).toMatch(
-      /touch-action\s*:\s*pan-x\s*;/
+      /touch-action\s*:\s*pan-x pan-y\s*;/
     );
   });
 
