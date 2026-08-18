@@ -9,9 +9,6 @@ import {
 } from 'react';
 import Navigation from '@/components/blocks/Navigation';
 import { SectionActivityProvider } from '@/components/common/SectionActivityContext';
-// 임시 현장 계측기 게이트 — plan2-state-machine-navigation/debug-probe-brief.md.
-// 원인 확정 후 이 import와 아래 <DebugGate />, components/debug/를 삭제한다.
-import DebugGate from '@/components/debug/DebugGate';
 import {
   AboutSection,
   AwardAndCertificateSection,
@@ -274,7 +271,6 @@ export default function HomeClient() {
       </div>
 
       <Footer />
-      <DebugGate />
     </SectionActivityProvider>
   );
 }
