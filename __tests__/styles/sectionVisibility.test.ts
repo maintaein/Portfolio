@@ -79,4 +79,26 @@ describe('section visibility utilities', () => {
     expect(scroll).toMatch(/overscroll-behavior\s*:\s*contain\s*;/);
     expect(scroll).toMatch(/scrollbar-gutter\s*:\s*stable\s*;/);
   });
+
+  // 이 파일에서 가장 중요한 계약이다. 브라우저는 touch-action 교집합을
+  // 스크롤 컨테이너에서 멈추므로, 실제 제스처 소유권을 결정하는 것은
+  // .section-stage가 아니라 .section-scroll이다. 실기기에서 여기가 auto였을 때
+  // 제스처 30/30이 슬롭(약 8px) 직후 pointercancel로 끝나 판정 임계 64px에
+  // 도달조차 못 했다. 값을 나열로 비교하지 않고 토큰 부류로 판정해, 모르는
+  // 값이 들어와도 fail-closed가 되게 한다.
+  it('takes horizontal panning back from the browser on the real scroll container', () => {
+    const declaration = /touch-action\s*:\s*([^;]+);/.exec(
+      ruleBody('.section-scroll') ?? ''
+    )?.[1];
+    if (!declaration) {
+      throw new Error('.section-scroll에 touch-action 선언이 없다');
+    }
+
+    const allowed = declaration.trim().split(/\s+/);
+
+    expect(allowed).toContain('pan-y'); // 세로 스크롤은 브라우저 몫
+    expect(allowed).toContain('pinch-zoom'); // 확대를 죽이면 접근성 회귀
+    expect(allowed).not.toContain('pan-x'); // 가로는 useSectionSwipe 몫
+    expect(allowed).not.toContain('auto'); // auto면 브라우저가 전부 가져간다
+  });
 });
