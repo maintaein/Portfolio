@@ -1,9 +1,9 @@
 import { useCallback, useRef, type PointerEventHandler } from 'react';
 
-const EDGE_GUARD_PX = 24;
-const MIN_SWIPE_DISTANCE_PX = 64;
-const HORIZONTAL_DOMINANCE_RATIO = 1.25;
-const IGNORE_SELECTOR =
+export const EDGE_GUARD_PX = 24;
+export const MIN_SWIPE_DISTANCE_PX = 64;
+export const HORIZONTAL_DOMINANCE_RATIO = 1.25;
+export const IGNORE_SELECTOR =
   'a, button, input, textarea, select, [role="dialog"], [data-section-swipe-ignore]';
 
 interface SwipeStart {
