@@ -27,6 +27,7 @@ interface Knobs {
   bloom: boolean;
   bloomScale: number;
   fov: number;
+  overlay: boolean;
 }
 
 // useSearchParams는 Suspense 경계를 요구해 정적 렌더를 깬다. 임시 페이지에
@@ -47,6 +48,8 @@ function readKnobs(): Knobs {
     bloom: params.get('bloom') !== 'off',
     bloomScale: num('bloomScale', 1),
     fov: num('fov', DEFAULT_FOV),
+    // 폴백 이미지용 깨끗한 프레임을 캡처하려면 오버레이를 꺼야 한다.
+    overlay: params.get('overlay') !== 'off',
   };
 }
 
@@ -162,6 +165,7 @@ export default function SpikeClient() {
     <div style={{ position: 'fixed', inset: 0, background: '#000' }}>
       <HyperspeedSpike effectOptions={effectOptions} />
 
+      {knobs.overlay ? (
       <div
         style={{
           position: 'fixed',
@@ -220,6 +224,7 @@ export default function SpikeClient() {
           </>
         )}
       </div>
+      ) : null}
     </div>
   );
 }
