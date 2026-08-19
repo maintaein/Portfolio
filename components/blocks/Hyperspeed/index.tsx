@@ -79,11 +79,11 @@ export interface HyperspeedHandle {
 // 체류 중 기본 흐름 배율. 원본은 time = timer.getElapsed() + timeOffset이라
 // 기본 흐름이 항상 1배로 흘렀고 speedUp으로는 줄일 수 없었다. 배경은
 // 반응자이므로 체류 중에는 거의 멈춘 듯 흘러야 한다.
-const IDLE_TIME_SCALE = 0.22;
+const IDLE_TIME_SCALE = 0.3;
 
 // boost가 더하는 시간 배속의 목표치. 원본 2에서 낮춘다 — 최고 속도가 너무
 // 빨라 전환이 튀었다.
-const BOOST_TIME_SCALE = 0.85;
+const BOOST_TIME_SCALE = 1.15;
 
 // speedUp이 목표로 수렴하는 시간 상수의 역수(1/초). 원본은
 // Math.exp(-k*delta)를 그대로 비율로 써서 60fps에서 한 프레임에 간극의 86%를
