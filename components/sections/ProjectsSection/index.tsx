@@ -114,7 +114,7 @@ export default function ProjectsSection() {
   return (
     <section
       id={SECTION_IDS.PROJECTS}
-      className="py-12 sm:py-16 lg:py-20 overflow-hidden bg-white relative"
+      className="py-12 sm:py-16 lg:py-20 overflow-hidden relative"
       onClick={handleSectionClick}
     >
       <div className="pointer-events-none absolute inset-0" aria-hidden style={{

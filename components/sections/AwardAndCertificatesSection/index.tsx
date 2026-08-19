@@ -37,7 +37,7 @@ export default function AwardsAndCertificatesSection() {
   const currentItems = activeTab === 'awards' ? awards : certificates;
 
   return (
-    <section id={SECTION_IDS.AWARDS_CERTIFICATES} className="py-12 sm:py-16 lg:py-20 bg-grey-50">
+    <section id={SECTION_IDS.AWARDS_CERTIFICATES} className="py-12 sm:py-16 lg:py-20">
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
         <SectionHeader
           title="AWARDS & CERTIFICATES"

@@ -761,7 +761,6 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
       aria-labelledby="hero-title"
       role="banner"
       className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden"
-      style={{ background: 'linear-gradient(150deg, #eef4ff 0%, #f8faff 55%, #edf3ff 100%)' }}
     >
       {/* LCP 앵커 h1 — SSR HTML에 즉시 존재, Chrome이 LCP 후보로 채택
           color: rgba(...,0.01) → opacity:0이 아니므로 LCP 계산 포함되지만 시각적으로 배경과 동일 */}
@@ -785,15 +784,6 @@ export default function HeroSection({ onUnlock, burstPhase = 'idle' }: HeroSecti
         프론트엔드 개발자 김태인
       </h1>
 
-      {/* dot grid 배경 */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage: 'radial-gradient(circle, #b8ccee 1px, transparent 1px)',
-          backgroundSize: '28px 28px',
-          opacity: 0.45,
-        }}
-      />
       <div className="absolute -top-40 -left-40 w-[480px] h-[480px] rounded-full pointer-events-none"
         style={{ background: 'radial-gradient(circle, rgba(49,130,246,0.08) 0%, transparent 65%)' }} />
       <div className="absolute -bottom-40 -right-40 w-[480px] h-[480px] rounded-full pointer-events-none"

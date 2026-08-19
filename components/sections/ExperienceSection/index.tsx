@@ -18,7 +18,7 @@ const typeColors: Record<Experience['type'], { dot: string; ring: string; badge:
 
 export default function ExperienceSection() {
   return (
-    <section id={SECTION_IDS.EXPERIENCE} className="py-12 sm:py-16 lg:py-20 bg-white">
+    <section id={SECTION_IDS.EXPERIENCE} className="py-12 sm:py-16 lg:py-20">
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
         <SectionHeader
           title="EXPERIENCES"

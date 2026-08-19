@@ -30,7 +30,7 @@ export default function SkillsSection() {
   };
 
   return (
-    <section id={SECTION_IDS.SKILLS} className="py-12 sm:py-16 lg:py-20 bg-gradient-to-br from-grey-50 to-grey-100">
+    <section id={SECTION_IDS.SKILLS} className="py-12 sm:py-16 lg:py-20">
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
 
         <SectionHeader

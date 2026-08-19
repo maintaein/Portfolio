@@ -24,7 +24,7 @@ const CollaborationMesh = dynamic(
 
 export default function AboutSection() {
   return (
-    <section id={SECTION_IDS.ABOUT} aria-labelledby="about-heading" className="py-16 sm:py-20 lg:py-24 bg-white">
+    <section id={SECTION_IDS.ABOUT} aria-labelledby="about-heading" className="py-16 sm:py-20 lg:py-24">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
         <HeaderSection />
