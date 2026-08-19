@@ -14,12 +14,19 @@ import HyperspeedSpike from '@/components/spike/HyperspeedSpike';
 const FRAME_BUDGET_MS = 33.3;
 const MEASURE_SECONDS = 30;
 
+// 벤더 기본값. fov는 three.js에서 세로 화각이라 세로 화면의 폰에서는 가로
+// 화각이 크게 좁아진다 — 같은 도로를 절반 폭으로 보게 된다. 실기기에서 값을
+// 골라야 하므로 노브로 뺀다.
+const DEFAULT_FOV = 90;
+const DEFAULT_FOV_SPEED_UP = 150;
+
 interface Knobs {
   rays: number;
   sticks: number;
   maxDpr: number;
   bloom: boolean;
   bloomScale: number;
+  fov: number;
 }
 
 // useSearchParams는 Suspense 경계를 요구해 정적 렌더를 깬다. 임시 페이지에
@@ -39,6 +46,7 @@ function readKnobs(): Knobs {
     maxDpr: num('dpr', 0),
     bloom: params.get('bloom') !== 'off',
     bloomScale: num('bloomScale', 1),
+    fov: num('fov', DEFAULT_FOV),
   };
 }
 
@@ -118,12 +126,23 @@ export default function SpikeClient() {
 
   if (!knobs) return null;
 
+  // three.js PerspectiveCamera의 fov는 세로 화각이다. 실제로 프레이밍을
+  // 결정하는 가로 화각은 화면 비율에 끌려간다 — 폰 세로 화면에서 도로가
+  // 좁게 보이는 원인이라, 재는 사람이 바로 볼 수 있게 함께 찍는다.
+  const viewport = { width: window.innerWidth, height: window.innerHeight };
+  const aspect = viewport.width / viewport.height;
+  const horizontalFov =
+    (2 * Math.atan(Math.tan((knobs.fov * Math.PI) / 360) * aspect) * 180) / Math.PI;
+
   const effectOptions = {
     lightPairsPerRoadWay: knobs.rays,
     totalSideLightSticks: knobs.sticks,
     maxDpr: knobs.maxDpr,
     bloomEnabled: knobs.bloom,
     bloomResolutionScale: knobs.bloomScale,
+    fov: knobs.fov,
+    // 가속 시 화각도 같은 비율로 벌어져야 원본의 연출이 유지된다.
+    fovSpeedUp: (knobs.fov / DEFAULT_FOV) * DEFAULT_FOV_SPEED_UP,
   };
 
   return (
@@ -151,6 +170,10 @@ export default function SpikeClient() {
           광선 {knobs.rays} | 스틱 {knobs.sticks} | DPR{' '}
           {knobs.maxDpr === 0 ? '네이티브' : knobs.maxDpr} | bloom{' '}
           {knobs.bloom ? `켬 x${knobs.bloomScale}` : '끔'}
+        </div>
+        <div style={{ color: '#0ff' }}>
+          세로 fov {knobs.fov}° → 실제 가로 {horizontalFov.toFixed(0)}° (화면{' '}
+          {viewport.width}x{viewport.height}, DPR {devicePixelRatio.toFixed(1)})
         </div>
 
         {result === null ? (
