@@ -19,6 +19,28 @@ async function readBattery(): Promise<BatteryLike | null> {
 }
 
 /**
+ * 코어 수는 화면이 폰인지 알려주지 않는다.
+ *
+ * Galaxy S25는 hardwareConcurrency 8, deviceMemory 8이라 아래 규칙만으로는
+ * high가 되고 네이티브 DPR 3.0을 받는다. 그런데 실기기 측정에서 DPR 3.0은
+ * 거부됐고 DPR 1.0이 화질·성능 모두 최선이었다(2026-08-04-spike-verdict.md의
+ * 2026-08-19 절). 셰이딩할 픽셀 수가 DPR의 제곱으로 늘기 때문이다.
+ *
+ * 두 조건을 함께 요구한다. 고밀도만 보면 레티나 데스크톱이 걸리는데 그쪽은
+ * GPU가 충분하고 실측에서 네이티브가 양호했다. 거친 포인터만 보면 저밀도
+ * 태블릿까지 내려가는데 그건 DPR 비용 문제가 아니다.
+ */
+function isHighDensityTouch(): boolean {
+  if (typeof window === 'undefined') return false;
+
+  // matchMedia가 없는 환경에서는 하드웨어 기준으로 폴백한다 — 던지지 않는다.
+  const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+  const highDensity = (window.devicePixelRatio ?? 1) >= 2;
+
+  return coarsePointer && highDensity;
+}
+
+/**
  * 기기 등급을 판정한다.
  *
  * C1 회귀 주의: 원 코드는 getBattery()가 반환한 Promise를 그대로 truthy
@@ -38,6 +60,9 @@ export async function detectQuality(): Promise<QualityTier> {
   if (batterySaver) return 'low';
   if (cores <= 2 || memory <= 2) return 'low';
   if (cores <= 4 || memory <= 4) return 'medium';
+  // 상한을 medium으로 내리기만 한다. 위 규칙이 이미 low로 판정한 기기를
+  // 여기서 되올리지 않는다 — 이 함수는 최초 품질의 상한만 정한다.
+  if (isHighDensityTouch()) return 'medium';
   return 'high';
 }
 

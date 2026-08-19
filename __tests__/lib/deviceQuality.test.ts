@@ -10,6 +10,22 @@ function stubNavigator(props: Record<string, unknown>) {
   vi.stubGlobal('navigator', { ...props });
 }
 
+// 화면 신호. jsdom의 matchMedia는 항상 matches: false를 주므로 기본 상태는
+// "마우스 · 저밀도"이고, 그래서 기존 하드웨어 기준 테스트들은 영향받지 않는다.
+function stubScreen({
+  coarsePointer,
+  devicePixelRatio,
+}: {
+  coarsePointer: boolean;
+  devicePixelRatio: number;
+}) {
+  vi.stubGlobal('devicePixelRatio', devicePixelRatio);
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query.includes('pointer: coarse') ? coarsePointer : false,
+    media: query,
+  }));
+}
+
 describe('detectQuality', () => {
   it('배터리 100%면 low로 떨어지지 않는다 (C1 회귀)', async () => {
     // 원 버그: getBattery()가 Promise를 반환하는데 그걸 그대로 truthy 검사해서
@@ -66,6 +82,65 @@ describe('detectQuality', () => {
   it('고사양이면 high', async () => {
     stubNavigator({ hardwareConcurrency: 12, deviceMemory: 8 });
     await expect(detectQuality()).resolves.toBe('high');
+  });
+
+  // --- 고밀도 터치 기기 강등. Galaxy S25는 코어 8 · 메모리 8이라 하드웨어
+  // 기준만으로는 high가 되고 네이티브 DPR 3.0을 받는데, 실기기 측정에서 그
+  // 설정은 거부됐고 DPR 1.0이 최선이었다. 코어 수는 화면이 폰인지 모른다.
+  // 두 신호를 모두 요구하므로 각각을 단독으로 뒤집어 양방향을 고정한다.
+  describe('고밀도 터치 기기 상한 강등', () => {
+    it('거친 포인터 + 고밀도면 high 대신 medium', async () => {
+      stubNavigator({ hardwareConcurrency: 8, deviceMemory: 8 });
+      stubScreen({ coarsePointer: true, devicePixelRatio: 3 });
+      await expect(detectQuality()).resolves.toBe('medium');
+    });
+
+    it('거친 포인터라도 저밀도면 high를 유지한다', async () => {
+      stubNavigator({ hardwareConcurrency: 8, deviceMemory: 8 });
+      stubScreen({ coarsePointer: true, devicePixelRatio: 1 });
+      await expect(detectQuality()).resolves.toBe('high');
+    });
+
+    it('고밀도라도 정밀 포인터면 high를 유지한다 (레티나 데스크톱)', async () => {
+      stubNavigator({ hardwareConcurrency: 8, deviceMemory: 8 });
+      stubScreen({ coarsePointer: false, devicePixelRatio: 2 });
+      await expect(detectQuality()).resolves.toBe('high');
+    });
+
+    it('밀도 경계 2를 못박는다 — 1.9는 유지, 2.0은 강등', async () => {
+      stubNavigator({ hardwareConcurrency: 8, deviceMemory: 8 });
+
+      stubScreen({ coarsePointer: true, devicePixelRatio: 1.9 });
+      await expect(detectQuality()).resolves.toBe('high');
+
+      stubScreen({ coarsePointer: true, devicePixelRatio: 2 });
+      await expect(detectQuality()).resolves.toBe('medium');
+    });
+
+    it('이미 low인 기기를 medium으로 되올리지 않는다', async () => {
+      // 이 함수는 상한만 내린다. 강등 규칙이 승급을 만들면 저사양 기기가
+      // 화면이 고밀도라는 이유로 더 무거운 설정을 받게 된다.
+      stubNavigator({ hardwareConcurrency: 2, deviceMemory: 2 });
+      stubScreen({ coarsePointer: true, devicePixelRatio: 3 });
+      await expect(detectQuality()).resolves.toBe('low');
+    });
+
+    it('배터리 절약 상태를 고밀도 터치가 덮어쓰지 않는다', async () => {
+      stubNavigator({
+        getBattery: () => Promise.resolve({ level: 0.1, charging: false }),
+        hardwareConcurrency: 8,
+        deviceMemory: 8,
+      });
+      stubScreen({ coarsePointer: true, devicePixelRatio: 3 });
+      await expect(detectQuality()).resolves.toBe('low');
+    });
+
+    it('matchMedia가 없어도 던지지 않고 하드웨어 기준으로 폴백한다', async () => {
+      stubNavigator({ hardwareConcurrency: 8, deviceMemory: 8 });
+      vi.stubGlobal('devicePixelRatio', 3);
+      vi.stubGlobal('matchMedia', undefined);
+      await expect(detectQuality()).resolves.toBe('high');
+    });
   });
 
   // --- 구멍2: 등급 경계가 하나도 고정되지 않았던 지점. cores<=2/memory<=2(low)와
