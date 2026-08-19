@@ -7,6 +7,7 @@ import {
   type ComponentType,
   type TransitionEvent,
 } from 'react';
+import HyperspeedBackground from '@/components/blocks/HyperspeedBackground';
 import Navigation from '@/components/blocks/Navigation';
 import { SectionActivityProvider } from '@/components/common/SectionActivityContext';
 import {
@@ -20,6 +21,7 @@ import {
 } from '@/components/sections';
 import { useMotionPreference } from '@/hooks/useMotionPreference';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
+import { useProjectModalObscured } from '@/hooks/useProjectModalObscured';
 import { useSectionSwipe } from '@/hooks/useSectionSwipe';
 import {
   OVERVIEW,
@@ -87,6 +89,7 @@ export default function HomeClient() {
     useMotionPreference();
   const pageVisible = usePageVisibility();
   const motionReady = routeResolved && preferenceReady;
+  const isProjectModalOpen = useProjectModalObscured();
   const sectionRefs = useRef<
     Partial<Record<NavId, HTMLDivElement | null>>
   >({});
@@ -182,6 +185,16 @@ export default function HomeClient() {
       motionReady={motionReady}
       reducedMotion={reducedMotion}
     >
+      <HyperspeedBackground
+        active={active}
+        isTransitioning={isTransitioning}
+        obscured={isProjectModalOpen}
+        pageVisible={pageVisible}
+        routeResolved={routeResolved}
+        motionReady={motionReady}
+        reducedMotion={reducedMotion}
+      />
+
       <Navigation
         items={NAV_ITEMS}
         active={active}

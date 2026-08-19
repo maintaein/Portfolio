@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  useState, useRef, useCallback,
+  useState, useRef, useCallback, useEffect,
 } from 'react';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
@@ -10,6 +10,7 @@ import { SectionHeader } from '@/components/blocks';
 import { Project } from '@/types/index';
 import { SECTION_IDS } from '@/lib/constants';
 import { projects } from '@/lib/data';
+import { setProjectModalObscured } from '@/hooks/useProjectModalObscured';
 
 const ProjectModal = dynamic(
   () => import('@/components/blocks/ProjectModal'),
@@ -32,6 +33,12 @@ export default function ProjectsSection() {
   const dragScrollL = useRef(0);
   const didDrag     = useRef(false);   // mouseup 시점에 드래그 여부 기록
   const [showHint, setShowHint] = useState(true);
+
+  // Hyperspeed 배경(HomeClient)에 모달 열림을 알린다 — obscured=true면 배경
+  // 밝기만 추가로 낮춘다(components/blocks/HyperspeedBackground.tsx 참고).
+  useEffect(() => {
+    setProjectModalObscured(modalOpen);
+  }, [modalOpen]);
 
   const scrollToCenter = useCallback((idx: number) => {
     const card = cardRefs.current[idx];

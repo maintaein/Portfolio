@@ -29,6 +29,46 @@ const motionSpies = vi.hoisted(() => ({
   gsapTimeline: vi.fn(),
 }));
 
+// HyperspeedBackground는 Task 5의 산출물이다. 실제 WebGL 씬은 여기서
+// 검증하지 않는다(components/blocks/HyperspeedBackground.tsx 자체 테스트가
+// 맡는다) — 여기서는 HomeClient가 단일 useSectionNav·usePageVisibility·
+// useMotionPreference에서 파생한 값을 그대로 넘기는지, 그리고 재마운트하지
+// 않는지만 probe로 관측한다.
+const hyperspeedBackgroundSpies = vi.hoisted(() => ({
+  mountCount: 0,
+}));
+
+vi.mock('@/components/blocks/HyperspeedBackground', async () => {
+  const { useEffect } = await import('react');
+  return {
+    default: function HyperspeedBackgroundProbe(props: {
+      active: string;
+      isTransitioning: boolean;
+      obscured: boolean;
+      pageVisible: boolean;
+      routeResolved: boolean;
+      motionReady: boolean;
+      reducedMotion: boolean;
+    }) {
+      useEffect(() => {
+        hyperspeedBackgroundSpies.mountCount += 1;
+      }, []);
+      return (
+        <div
+          data-testid="hyperspeed-background-probe"
+          data-active={props.active}
+          data-is-transitioning={props.isTransitioning}
+          data-obscured={props.obscured}
+          data-page-visible={props.pageVisible}
+          data-route-resolved={props.routeResolved}
+          data-motion-ready={props.motionReady}
+          data-reduced-motion={props.reducedMotion}
+        />
+      );
+    },
+  };
+});
+
 vi.mock('@/components/sections', async () => {
   const { useEffect, useRef } = await import('react');
   const { default: ProjectsSection } = await import(
@@ -230,6 +270,7 @@ beforeEach(() => {
   transitionDelay = '0ms';
   motionSpies.dynamicLoader.mockReset();
   motionSpies.gsapTimeline.mockReset();
+  hyperspeedBackgroundSpies.mountCount = 0;
 
   installMatchMedia(false);
   vi.stubGlobal(
@@ -681,5 +722,84 @@ describe('HomeClient motion 구독 통합', () => {
     expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(
       callsBeforeReduction.play
     );
+  });
+});
+
+describe('HomeClient → HyperspeedBackground 배선', () => {
+  it('단일 useSectionNav·usePageVisibility·useMotionPreference의 값이 일곱 prop으로 그대로 전달된다', () => {
+    render(<HomeClient />);
+    const probe = screen.getByTestId('hyperspeed-background-probe');
+
+    expect(probe).toHaveAttribute('data-active', 'overview');
+    expect(probe).toHaveAttribute('data-is-transitioning', 'false');
+    expect(probe).toHaveAttribute('data-obscured', 'false');
+    expect(probe).toHaveAttribute('data-page-visible', 'true');
+    expect(probe).toHaveAttribute('data-route-resolved', 'true');
+    expect(probe).toHaveAttribute('data-motion-ready', 'true');
+    expect(probe).toHaveAttribute('data-reduced-motion', 'false');
+
+    navigateTo(/about/i);
+    expect(probe).toHaveAttribute('data-active', 'about');
+    expect(probe).toHaveAttribute('data-is-transitioning', 'true');
+  });
+
+  it('pageVisible과 routeResolved는 서로 다른 값으로 각각 정확한 prop에 꽂힌다', () => {
+    // 마운트 직후엔 둘 다 true라 자리가 뒤바뀌어도 겉보기 결과가 같다 —
+    // 실제로 self-mutation(HomeClient에서 pageVisible↔routeResolved를
+    // swap)을 주입했더니 위 테스트가 통과해버려서 찾은 구멍이다. 문서에서
+    // visibilitychange만 쏴서 pageVisible을 false로 갈라놓아야 routeResolved
+    // (계속 true)와 실제로 구별된다.
+    render(<HomeClient />);
+    const probe = screen.getByTestId('hyperspeed-background-probe');
+    expect(probe).toHaveAttribute('data-page-visible', 'true');
+    expect(probe).toHaveAttribute('data-route-resolved', 'true');
+
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    expect(probe).toHaveAttribute('data-page-visible', 'false');
+    expect(probe).toHaveAttribute('data-route-resolved', 'true');
+  });
+
+  it('ProjectModal이 열리면 obscured가 true, 닫히면 다시 false다', async () => {
+    window.history.replaceState(null, '', '/#projects');
+    const { container } = render(<HomeClient />);
+    const probe = screen.getByTestId('hyperspeed-background-probe');
+    expect(probe).toHaveAttribute('data-obscured', 'false');
+
+    const projectsSection = getSection(container, 'projects');
+    const track = projectsSection.querySelector<HTMLElement>('.overflow-x-auto');
+    const card = track?.querySelector<HTMLElement>('.cursor-pointer');
+    expect(card).not.toBeNull();
+    // jsdom엔 Element.scrollTo가 없다. 첫 클릭이 featured로 만들며 예약하는
+    // scrollToCenter의 setTimeout(30ms) 콜백이 이걸 부르므로 스텁해 둔다 —
+    // 이 테스트의 관심사는 모달 열림→obscured 전파고 스크롤 자체가 아니다.
+    track!.scrollTo = vi.fn();
+
+    // 첫 클릭은 featured로만 만들고, 같은 카드를 다시 클릭해야 모달이 열린다
+    // (components/sections/ProjectsSection/index.tsx의 handleCardClick).
+    fireEvent.click(card!);
+    fireEvent.click(card!);
+    expect(probe).toHaveAttribute('data-obscured', 'true');
+
+    // 되돌아오는 방향까지 확인한다. 이 어서션이 없으면 obscured를 한 번
+    // true로 만들고 영원히 두는 구현도 통과한다 — 모달을 닫은 뒤 배경이
+    // 어두운 채로 남는 것이 정확히 그 결함이다.
+    // ProjectModal은 next/dynamic이라 클릭 직후에는 아직 DOM에 없다.
+    fireEvent.click(await screen.findByRole('button', { name: '닫기' }));
+    expect(probe).toHaveAttribute('data-obscured', 'false');
+  });
+
+  it('섹션을 연속 전환해도 HyperspeedBackground는 재마운트되지 않는다', () => {
+    render(<HomeClient />);
+    expect(hyperspeedBackgroundSpies.mountCount).toBe(1);
+
+    navigateTo(/about/i);
+    navigateTo(/projects/i);
+    navigateTo(/skills/i);
+
+    expect(hyperspeedBackgroundSpies.mountCount).toBe(1);
   });
 });
