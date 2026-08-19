@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HyperspeedBackground, {
   type HyperspeedBackgroundProps,
@@ -379,5 +379,66 @@ describe('HyperspeedBackground — 구멍 4: 컨텍스트 손실 복구 정책',
       'context-lost'
     );
     expect(screen.queryByTestId('hyperspeed-canvas')).not.toBeInTheDocument();
+  });
+
+  // 실기기 회귀. "한 번 잃으면 폴백 고정"이 곧 "탭을 한 번 전환하면 배경이
+  // 새로고침 전까지 영영 안 돌아옴"으로 나타났다. showScene은 ready와
+  // reducedMotion과 contextLost의 곱인데 앞의 둘은 한 번 정해지면 안 바뀌므로
+  // 세션 중간에 배경을 끄는 경로는 contextLost 하나뿐이다.
+  it('손실 뒤 일정 시간이 지나면 씬을 다시 세운다', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      await renderReady();
+      fireEvent(screen.getByTestId('hyperspeed-canvas'), new Event('webglcontextlost'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('hyperspeed-fallback')).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('hyperspeed-canvas')).toBeInTheDocument();
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // 반대 방향. 무한 재생성을 막는 한도가 실제로 있는지 — 없으면 손실이
+  // 반복되는 기기에서 씬을 계속 다시 만든다.
+  it('재시도 한도를 넘으면 폴백에 고정된다', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      await renderReady();
+
+      // 한도(3)보다 한 번 더 잃는다.
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        fireEvent(screen.getByTestId('hyperspeed-canvas'), new Event('webglcontextlost'));
+        await waitFor(() => {
+          expect(screen.getByTestId('hyperspeed-fallback')).toBeInTheDocument();
+        });
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(5_000);
+        });
+
+        if (attempt < 3) {
+          await waitFor(() => {
+            expect(screen.getByTestId('hyperspeed-canvas')).toBeInTheDocument();
+          });
+        }
+      }
+
+      expect(screen.getByTestId('hyperspeed-fallback')).toHaveAttribute(
+        'data-fallback-reason',
+        'context-lost'
+      );
+      expect(screen.queryByTestId('hyperspeed-canvas')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

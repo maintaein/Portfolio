@@ -157,7 +157,7 @@ export default function Modal({
       style={{ zIndex: 1050 }}
     >
       <div
-        className="absolute inset-0 bg-grey-opacity-800 transition-opacity duration-base"
+        className="absolute inset-0 bg-black/20 backdrop-blur-md transition-opacity duration-base"
         onClick={closeOnBackdropClick ? onClose : undefined}
         aria-hidden="true"
       />

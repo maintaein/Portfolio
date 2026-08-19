@@ -100,6 +100,21 @@ const BASE_OPACITY_SECTION = 0.3;
 // 모달 여닫기가 무거우면 이 값을 낮추거나 감광으로 되돌린다.
 const OBSCURED_BLUR_PX = 8;
 
+// 컨텍스트 손실 뒤 씬을 다시 세워보는 횟수와 간격.
+//
+// 계획은 "한 번 잃으면 폴백 고정"을 정했고 그 근거는 "되살리면 또 잃을
+// 가능성이 높다"였다. 실기기에서 그 정책이 곧 "한 번 사라지면 새로고침
+// 전까지 영영 안 돌아옴"으로 나타났다. showScene은 ready와 reducedMotion과
+// contextLost의 곱인데 앞의 둘은 한 번 정해지면 안 바뀌므로, 세션 중간에
+// 배경을 끄는 경로는 contextLost 하나뿐이다.
+//
+// webglcontextrestored를 기다릴 수는 없다 — 손실 시 씬을 언마운트하므로
+// 그 canvas는 이미 사라졌고 이벤트가 도착할 곳이 없다. 그래서 시간을 두고
+// 새 씬을 세운다. 횟수를 제한해 손실이 반복되는 기기에서 무한 재생성을 막고,
+// 한도를 넘으면 원래 정책대로 폴백에 고정된다.
+const CONTEXT_RETRY_LIMIT = 3;
+const CONTEXT_RETRY_DELAY_MS = 2000;
+
 export default function HyperspeedBackground({
   active,
   isTransitioning,
@@ -121,6 +136,7 @@ export default function HyperspeedBackground({
   const isTransitioningRef = useRef(isTransitioning);
   isTransitioningRef.current = isTransitioning;
   const [contextLost, setContextLost] = useState(false);
+  const contextRetriesRef = useRef(0);
 
   const ready = routeResolved && motionReady;
   const showScene = ready && !reducedMotion && !contextLost;
@@ -144,6 +160,21 @@ export default function HyperspeedBackground({
     el.addEventListener('webglcontextlost', onContextLost, true);
     return () => el.removeEventListener('webglcontextlost', onContextLost, true);
   }, []);
+
+  // 손실 뒤 한도 안에서 씬을 다시 세운다. 탭이 뒤로 가 있는 동안에는 타이머가
+  // 스로틀되므로 사용자가 돌아온 뒤에 시도되고, 화면을 보고 있는 중에 잃은
+  // 경우도 같은 경로로 복구된다.
+  useEffect(() => {
+    if (!contextLost) return;
+    if (contextRetriesRef.current >= CONTEXT_RETRY_LIMIT) return;
+
+    const timer = setTimeout(() => {
+      contextRetriesRef.current += 1;
+      setContextLost(false);
+    }, CONTEXT_RETRY_DELAY_MS);
+
+    return () => clearTimeout(timer);
+  }, [contextLost]);
 
   // isTransitioning의 실제 edge(false→true / true→false)에서만 boost/settle을
   // 부른다. active만 바뀌고 isTransitioning이 계속 true면 이 effect의
