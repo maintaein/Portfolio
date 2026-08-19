@@ -27,7 +27,11 @@ function independentGzipSize(bytes: Buffer) {
   return gzipSync(bytes, { level: 9 }).byteLength;
 }
 
-describe('check-bundle resolver', () => {
+// 이 파일의 테스트는 임시 디렉터리에 fixture를 통째로 복사하고 node 서브프로세스를
+// 띄운다. 기본 5초는 전체 스위트가 병렬로 도는 상황에서 부족하다 — 계획 3 Task 4가
+// vi.mock('three')를 쓰는 무거운 테스트 파일 둘을 더하자 4건이 타임아웃했다.
+// 실제 수행 시간이 아니라 다른 파일과의 CPU 경합 대기가 원인이므로 넉넉히 준다.
+describe('check-bundle resolver', { timeout: 30_000 }, () => {
   it('root page와 layout의 JS 합집합을 gzip level 9로 계산한다', async () => {
     const root = await copyFixture();
 
