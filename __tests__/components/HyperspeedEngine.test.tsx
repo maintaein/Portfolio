@@ -98,6 +98,7 @@ const {
     domElement = document.createElement('canvas');
     setSize = vi.fn();
     setPixelRatio = vi.fn();
+    getPixelRatio = vi.fn(() => 1);
     dispose = vi.fn();
     forceContextLoss = vi.fn();
     constructor() {
@@ -677,6 +678,24 @@ describe('구멍 3 — FrameQualityGovernor 통합', () => {
 });
 
 describe('구멍 4 — isLost()가 컨텍스트 손실 전후로 실제로 갈린다', () => {
+  // 실기기 회귀. canvas에 CSS 크기가 없으면 canvas는 자기 width/height
+  // 속성(= CSS 크기 x DPR)만큼 레이아웃된다. DPR 1.3 데스크톱에서 1536px
+  // 컨테이너의 canvas가 1996px로 깔려 좌상단만 보였고(도로가 우측 하단으로
+  // 밀린 것처럼 보임), DPR 3 폰에서는 1080px가 360px 화면에 깔려 빈 하늘만
+  // 보였다. clientWidth도 레이아웃 박스가 아니라 드로잉 버퍼를 되돌려
+  // resizeRendererToDisplaySize가 자기 자신을 재고 있었다.
+  it('canvas에 컨테이너를 채우는 CSS 크기를 준다', () => {
+    const container = createContainer();
+    new App(container, buildOptions());
+
+    const canvas = mockRendererInstances[0].domElement;
+    expect(canvas.style.width).toBe('100%');
+    expect(canvas.style.height).toBe('100%');
+    // display:block이 없으면 inline 요소의 baseline 여백이 생겨 컨테이너보다
+    // 몇 px 커진다 — 부모가 overflow:hidden이 아니면 스크롤이 생긴다.
+    expect(canvas.style.display).toBe('block');
+  });
+
   it('webglcontextlost 뒤 true, webglcontextrestored 뒤 다시 false', () => {
     const container = createContainer();
     const app = new App(container, buildOptions());

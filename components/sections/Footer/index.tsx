@@ -50,7 +50,7 @@ export default function Footer() {
   const copied = copiedKey === 'email';
 
   return (
-    <footer className="bg-gray-900 text-white">
+    <footer className="text-white">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-14 sm:py-20">
         {/* CTA 영역 */}
         <div className="mb-10 sm:mb-12">

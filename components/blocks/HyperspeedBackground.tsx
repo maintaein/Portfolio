@@ -90,11 +90,15 @@ const DynamicHyperspeed = dynamic(
 
 const BASE_OPACITY_OVERVIEW = 1;
 const BASE_OPACITY_SECTION = 0.3;
-// obscured(ProjectModal 열림) 동안 모달 텍스트 대비를 확보하기 위한 추가
-// 감광 배수. 정확한 값은 실기기 디자인 검수 대상 — 여기서는 "obscured가
-// 밝기만 낮추고 boost()·settle()은 건드리지 않는다"는 계약을 만족하는
-// 유효값(0~1 사이, 기존 밝기보다 항상 어두움)이다.
-const OBSCURED_DIM_MULTIPLIER = 0.4;
+// obscured(ProjectModal 열림) 동안 배경에서 초점을 빼는 블러 반경.
+// 감광(0.4배)에서 블러로 바꿨다 — 어둡게 하면 배경이 남색 덩어리로 죽는데,
+// 블러는 밝기를 유지한 채 시선만 모달로 보낸다. 대비는 모달 자신의 불투명
+// 패널이 담당한다.
+//
+// 주의: 전체화면 블러는 모바일 GPU에서 비싸다. 다만 모달이 열려 있는 동안만
+// 걸리고 그때는 배경 애니메이션을 볼 이유가 없으므로 감수한다. 실기기에서
+// 모달 여닫기가 무거우면 이 값을 낮추거나 감광으로 되돌린다.
+const OBSCURED_BLUR_PX = 8;
 
 export default function HyperspeedBackground({
   active,
@@ -197,8 +201,9 @@ export default function HyperspeedBackground({
     }
   }, []);
 
-  const baseOpacity = active === OVERVIEW ? BASE_OPACITY_OVERVIEW : BASE_OPACITY_SECTION;
-  const opacity = obscured ? baseOpacity * OBSCURED_DIM_MULTIPLIER : baseOpacity;
+  const opacity = active === OVERVIEW ? BASE_OPACITY_OVERVIEW : BASE_OPACITY_SECTION;
+  // obscured는 밝기가 아니라 초점만 건드린다. boost()·settle()도 그대로다.
+  const filter = obscured ? `blur(${OBSCURED_BLUR_PX}px)` : 'none';
 
   return (
     <div
@@ -206,7 +211,7 @@ export default function HyperspeedBackground({
       data-testid="hyperspeed-background"
       aria-hidden="true"
       className="fixed inset-0 -z-10 pointer-events-none"
-      style={{ opacity }}
+      style={{ opacity, filter }}
     >
       {showScene ? <DynamicHyperspeed onHandle={setHandle} /> : <HyperspeedFallback reason={outerFallbackReason} />}
     </div>

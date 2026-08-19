@@ -621,8 +621,16 @@ function resizeRendererToDisplaySize(
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
   if (width <= 0 || height <= 0) return false;
-  const needResize = canvas.width !== width || canvas.height !== height;
+
+  // 드로잉 버퍼는 CSS 크기 x pixelRatio다. CSS 크기와 직접 비교하면 DPR이 1이
+  // 아닌 기기에서 매 프레임 불일치로 판정돼 composer의 렌더 타깃을 계속 다시
+  // 만든다.
+  const pixelRatio = renderer.getPixelRatio();
+  const needResize =
+    canvas.width !== Math.floor(width * pixelRatio) ||
+    canvas.height !== Math.floor(height * pixelRatio);
   if (needResize) {
+    renderer.setSize(width, height, false);
     setSize(width, height, false);
   }
   return needResize;
@@ -694,7 +702,20 @@ class App {
     this.renderer.setSize(initW, initH, false);
 
     this.composer = new EffectComposer(this.renderer);
-    container.appendChild(this.renderer.domElement);
+
+    // canvas는 컨테이너를 채우도록 CSS로 고정한다. three.js의 setSize(..., false)는
+    // 드로잉 버퍼만 바꾸고 style을 건드리지 않는데, style이 없으면 canvas는 자기
+    // width/height 속성(= CSS 크기 x DPR)만큼 레이아웃된다. DPR 1.3인 데스크톱에서
+    // 1536px 컨테이너의 canvas가 1996px로 깔려 좌상단만 보이고, DPR 3인 폰에서는
+    // 1080px가 360px 화면에 깔려 빈 하늘만 보였다. clientWidth도 레이아웃 박스가
+    // 아니라 드로잉 버퍼를 되돌려 resizeRendererToDisplaySize가 자기 자신을 재고
+    // 있었다 — 그래서 영원히 교정되지 않았다.
+    const canvasElement = this.renderer.domElement;
+    canvasElement.style.display = 'block';
+    canvasElement.style.width = '100%';
+    canvasElement.style.height = '100%';
+
+    container.appendChild(canvasElement);
 
     this.camera = new THREE.PerspectiveCamera(options.fov, initW / initH, 0.1, 10000);
     this.camera.position.z = options.cameraZ;

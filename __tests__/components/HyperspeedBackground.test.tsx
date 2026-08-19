@@ -194,20 +194,26 @@ describe('HyperspeedBackground — 밝기(overview 100% / 섹션 30%) · obscure
     expect(root.style.opacity).toBe('0.3');
   });
 
-  it('obscured=false→true→false는 밝기만 바꾸고 boost·settle은 각각 0회다', async () => {
+  // obscured는 감광이 아니라 블러다. 어둡게 하면 배경이 남색 덩어리로 죽는데
+  // 블러는 밝기를 유지한 채 시선만 모달로 보낸다. 그래서 opacity가 "변하지
+  // 않는 것"까지 함께 못박는다 — 감광으로 되돌아가면 이 어서션이 잡는다.
+  it('obscured=false→true→false는 초점만 바꾸고 밝기·boost·settle은 그대로다', async () => {
     const { rerender } = await renderReady({ active: OVERVIEW, obscured: false });
     const root = screen.getByTestId('hyperspeed-background');
-    const baseline = root.style.opacity;
+    const baselineOpacity = root.style.opacity;
+    expect(root.style.filter).toBe('none');
     hyperspeedSpies.boost.mockClear();
     hyperspeedSpies.settle.mockClear();
 
     rerender(<HyperspeedBackground {...readyProps} active={OVERVIEW} obscured />);
-    expect(root.style.opacity).not.toBe(baseline);
+    expect(root.style.filter).toMatch(/^blur\((\d|\.)+px\)$/);
+    expect(root.style.opacity).toBe(baselineOpacity);
     expect(hyperspeedSpies.boost).not.toHaveBeenCalled();
     expect(hyperspeedSpies.settle).not.toHaveBeenCalled();
 
     rerender(<HyperspeedBackground {...readyProps} active={OVERVIEW} obscured={false} />);
-    expect(root.style.opacity).toBe(baseline);
+    expect(root.style.filter).toBe('none');
+    expect(root.style.opacity).toBe(baselineOpacity);
     expect(hyperspeedSpies.boost).not.toHaveBeenCalled();
     expect(hyperspeedSpies.settle).not.toHaveBeenCalled();
   });
