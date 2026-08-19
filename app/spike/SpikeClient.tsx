@@ -50,6 +50,13 @@ function readKnobs(): Knobs {
   };
 }
 
+// 이보다 긴 간격은 프레임 지연이 아니다 — 화면이 꺼졌거나 탭이 백그라운드로
+// 간 것이다. 실측에서 66,675ms(66.7초) 간격이 한 번 나와 표본 수와 평균
+// fps를 통째로 오염시켰고, 알림 하나가 원인이었다. deviceQuality.ts의
+// FrameQualityGovernor에는 이를 위한 resetWindow()가 있는데 이 계측기에는
+// 없어서 조용히 잘못된 숫자를 냈다. 감추지 않고 측정을 무효로 표시한다.
+const SUSPEND_THRESHOLD_MS = 1000;
+
 interface Result {
   samples: number;
   p50: number;
@@ -58,6 +65,8 @@ interface Result {
   over: number;
   overRatio: number;
   averageFps: number;
+  suspensions: number;
+  longestSuspensionMs: number;
 }
 
 function summarize(intervals: number[]): Result {
@@ -68,6 +77,8 @@ function summarize(intervals: number[]): Result {
   const over = intervals.filter((interval) => interval > FRAME_BUDGET_MS).length;
   const total = intervals.reduce((sum, interval) => sum + interval, 0);
 
+  const suspensions = intervals.filter((interval) => interval > SUSPEND_THRESHOLD_MS);
+
   return {
     samples: intervals.length,
     p50: rank(0.5),
@@ -76,6 +87,8 @@ function summarize(intervals: number[]): Result {
     over,
     overRatio: intervals.length ? (over / intervals.length) * 100 : 0,
     averageFps: total ? (intervals.length / total) * 1000 : 0,
+    suspensions: suspensions.length,
+    longestSuspensionMs: suspensions.length ? Math.max(...suspensions) : 0,
   };
 }
 
@@ -178,6 +191,14 @@ export default function SpikeClient() {
 
         {result === null ? (
           <div>측정 중… {remaining}초 남음 (화면을 그대로 두세요)</div>
+        ) : result.suspensions > 0 ? (
+          // 중단이 섞인 측정은 p95도 표본 수도 평균도 전부 못 믿는다.
+          // 부분적으로 보정해 내보내면 그 숫자가 그대로 표에 들어간다.
+          <div style={{ color: '#f66' }}>
+            측정 무효 — 중단 {result.suspensions}회 (최장{' '}
+            {(result.longestSuspensionMs / 1000).toFixed(1)}초).{'\n'}
+            알림·화면 꺼짐·탭 전환 때문입니다. 방해 금지로 두고 다시 재세요.
+          </div>
         ) : (
           <>
             <div style={{ color: result.p95 <= FRAME_BUDGET_MS ? '#0f0' : '#f66' }}>
