@@ -160,6 +160,9 @@ vi.mock('@/components/sections', async () => {
     AwardAndCertificateSection: () => (
       <SectionShell label="Awards" marker="Grand Prize" />
     ),
+    ContactSection: () => (
+      <SectionShell label="Contact" marker="Say hello" />
+    ),
     ExperienceSection: () => (
       <SectionShell label="Experience" marker="Frontend Experience" />
     ),
@@ -404,6 +407,7 @@ describe('HomeClient SSR 셸 구조', () => {
         'AboutSection',
         'AwardAndCertificateSection',
         'BootSequence',
+        'ContactSection',
         'ExperienceSection',
         'Footer',
         'ProjectsSection',
@@ -815,5 +819,52 @@ describe('HomeClient → HyperspeedBackground 배선', () => {
     navigateTo(/skills/i);
 
     expect(hyperspeedBackgroundSpies.mountCount).toBe(1);
+  });
+});
+
+describe('HomeClient Footer — 표제 계약', () => {
+  // "Footer가 더 이상 문서 흐름에서 섹션 뒤로 비치지 않는다"의 구조적 절반이다.
+  // 나머지 절반(Footer 자체가 position:fixed인지)은 Footer.test.tsx가 격리된
+  // 컴포넌트로 고정한다 — 여기서는 이 mock으로도 관측 가능한 두 가지만 본다:
+  // (1) Footer가 .section-stage 안으로 흡수되지 않았는가(=CONTACT의 위장
+  // 일곱 번째 섹션이 되지 않았는가), (2) active와 무관하게 항상 렌더되는가.
+  it('Footer는 .section-stage의 자손이 아니며 active가 바뀌어도 항상 렌더된다', () => {
+    const { container } = render(<HomeClient />);
+    const stage = container.querySelector('.section-stage');
+
+    expect(stage).not.toBeNull();
+    const footerLink = screen.getByText('Contact footer');
+    // main(.section-stage) 밖 형제여야 한다 — main 안으로 들어가면 다른
+    // 비활성 섹션과 함께 inert·hidden 처리되어 "항상 보인다"는 계약이
+    // 구조적으로 깨진다.
+    expect(stage!.contains(footerLink)).toBe(false);
+
+    navigateTo(/^about$/i);
+    expect(screen.getByText('Contact footer')).toBeInTheDocument();
+
+    navigateTo(/^contact$/i);
+    // overview에서만 렌더하도록 되돌리면(뮤테이션 g) 이 시점엔 이미 overview를
+    // 벗어났으므로 이 어서션이 FAIL해야 한다.
+    expect(screen.getByText('Contact footer')).toBeInTheDocument();
+  });
+});
+
+describe('HomeClient CONTACT 섹션 등록', () => {
+  it('CONTACT가 다른 다섯 섹션과 같은 경로(nav·해시·data-section)로 등록된다', () => {
+    // 리터럴 'contact'를 직접 어서션한다 — HOME_SECTION_CONFIG를 순회하는
+    // 검사는 CONTACT가 배열에서 통째로 빠져도(뮤테이션 b) 순회 범위 자체가
+    // 줄어들 뿐이라 못 잡는다. 존재를 하드코딩해야 그 구멍이 막힌다.
+    const { container } = render(<HomeClient />);
+
+    expect(
+      screen.getByRole('button', { name: /^contact$/i })
+    ).toBeInTheDocument();
+
+    navigateTo(/^contact$/i);
+
+    expect(window.location.hash).toBe('#contact');
+    const contact = getSection(container, 'contact');
+    expect(contact).toHaveClass('section-visible');
+    expect(contact).toHaveTextContent('Say hello');
   });
 });

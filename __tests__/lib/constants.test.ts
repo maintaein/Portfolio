@@ -4,13 +4,15 @@ import { HOME_SECTION_CONFIG, NAV_ITEMS } from '@/lib/constants';
 describe('HOME_SECTION_CONFIG', () => {
   it('디자인 리뷰가 확정한 순서를 따른다', () => {
     // overview는 Hero 상태이므로 이 배열에 없다.
-    // 확정 순서: overview → about → projects → experience → skills → awards-certificates
+    // 확정 순서: overview → about → projects → experience → skills →
+    // awards-certificates → contact(여섯 번째 섹션으로 승격)
     expect(HOME_SECTION_CONFIG.map((s) => s.id)).toEqual([
       'about',
       'projects',
       'experience',
       'skills',
       'awards-certificates',
+      'contact',
     ]);
   });
 

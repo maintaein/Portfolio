@@ -241,10 +241,10 @@ describe('useSectionNav', () => {
   it('마지막 섹션의 goNext는 history를 추가하지 않는다', () => {
     const spy = vi.spyOn(window.history, 'pushState');
     const { result } = renderHook(() => useSectionNav());
-    act(() => result.current.setActive('awards-certificates'));
+    act(() => result.current.setActive('contact'));
     spy.mockClear();
     act(() => result.current.goNext());
-    expect(result.current.active).toBe('awards-certificates');
+    expect(result.current.active).toBe('contact');
     expect(spy).not.toHaveBeenCalled();
   });
 

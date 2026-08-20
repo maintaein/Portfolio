@@ -15,6 +15,7 @@ import {
   AboutSection,
   AwardAndCertificateSection,
   BootSequence,
+  ContactSection,
   ExperienceSection,
   Footer,
   ProjectsSection,
@@ -43,6 +44,7 @@ const SECTION_COMPONENTS = {
   [SECTION_IDS.PROJECTS]: ProjectsSection,
   [SECTION_IDS.AWARDS_CERTIFICATES]: AwardAndCertificateSection,
   [SECTION_IDS.EXPERIENCE]: ExperienceSection,
+  [SECTION_IDS.CONTACT]: ContactSection,
 } satisfies Record<HomeSectionId, ComponentType>;
 
 function parseTransitionTime(value: string | undefined) {

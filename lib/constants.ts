@@ -16,6 +16,7 @@ export const PERSONAL_INFO = {
     PROJECTS: 'projects',
     AWARDS_CERTIFICATES: 'awards-certificates',
     EXPERIENCE: 'experience',
+    CONTACT: 'contact',
   } as const;
 
   // Hero 완료 후 표시되는 섹션의 순서, navigation 정보, 등장 지연을 한곳에서 관리한다.
@@ -35,6 +36,7 @@ export const PERSONAL_INFO = {
       href: `#${SECTION_IDS.AWARDS_CERTIFICATES}`,
       revealDelay: 0.58,
     },
+    { id: SECTION_IDS.CONTACT, label: 'Contact', href: `#${SECTION_IDS.CONTACT}`, revealDelay: 0.7 },
   ] as const;
 
   export type HomeSectionConfig = (typeof HOME_SECTION_CONFIG)[number];
