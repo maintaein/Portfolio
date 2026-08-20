@@ -107,6 +107,15 @@
   --animate-duration-fast: 150ms;
   --animate-duration-base: 300ms;
   --animate-duration-slow: 500ms;
+
+  /* 부팅 화면 중앙 정렬 — 이름(Navigation 워드마크)과 캡션(BootSequence
+     역할·START)은 서로 다른 컴포넌트라 DOM은 합칠 수 없지만, 뷰포트 50%
+     지점을 공유 기준점으로 삼는다. 이름은 top:50%에서 -translate-y-full로
+     자기 높이만큼 위로 올라가 바닥이 항상 50% 선에 닿고, 캡션은 top:50%에서
+     이 간격만큼 margin-top으로 내려가 시작한다 — 겹침이 폰트 크기·
+     브레이크포인트와 무관하게 구조적으로 불가능해진다(계획 3 boot-composition
+     브리프, "구멍 3"). */
+  --boot-caption-gap: 1.75rem;
 }
 
 /* ============================================ */
@@ -506,6 +515,36 @@
     }
   }
 
+  /* overview에서는 nav-strip(섹션 링크 목록)을 숨긴다 — 워드마크는 절대
+     숨기지 않는다(LCP 요소). display가 아니라 opacity+visibility로 숨겨
+     레이아웃을 흔들지 않는다(CLS 0). visibility:hidden은 opacity와 달리
+     탭 순서·접근성 트리에서도 제외한다 — 그래서 별도 aria-hidden/inert
+     없이도 부팅 중 키보드 포커스가 보이지 않는 링크로 새지 않는다.
+     visibility 전환에 지연을 줘서 사라질 때는 페이드가 끝난 뒤에,
+     나타날 때는 즉시 상호작용 가능해지게 한다. START를 누르면(active가
+     overview를 벗어나면) 나타난다. */
+  .nav-strip-hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity var(--animate-duration-base) cubic-bezier(0.22, 1, 0.36, 1),
+      visibility 0s linear var(--animate-duration-base);
+  }
+
+  .nav-strip-visible {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity var(--animate-duration-base) cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .nav-strip-hidden,
+    .nav-strip-visible {
+      transition: none;
+    }
+  }
+
   /* BootSequence의 역할 라벨·START pre-boot 상태 — JS의 낙관적 boolean이
      아니라 이 미디어쿼리가 소유한다(계획 3 Task 6, "구멍 6"). 기본 규칙은
      최종 상태(보임)다. 모션을 허용하는 사용자에게만 미디어쿼리가 pre-boot
@@ -523,6 +562,16 @@
     transform: translateY(0);
   }
 
+  /* 워드마크(이름)의 pre-boot blur도 같은 원칙 — 이전에는 동적 import가
+     끝난 뒤에야 JS(tl.set)가 blur(5px)를 걸어서 선명 → 흐림 → 선명으로
+     역주행했다(boot-composition 브리프 "구멍 5"). data-wordmark-mode는
+     Navigation이 이미 붙이는 속성이라 별도 클래스·matchMedia 없이
+     재사용한다. 기본 규칙(모션 비허용 포함)은 항상 선명하다 — 이름은
+     opacity를 건드리지 않는 LCP 요소이므로 filter만 쓴다. */
+  [data-wordmark-mode='hero'] {
+    filter: blur(0px);
+  }
+
   @media (prefers-reduced-motion: no-preference) {
     .boot-role {
       opacity: 0;
@@ -532,6 +581,10 @@
     .boot-start {
       opacity: 0;
       transform: translateY(8px);
+    }
+
+    [data-wordmark-mode='hero'] {
+      filter: blur(5px);
     }
   }
 

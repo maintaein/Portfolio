@@ -15,9 +15,11 @@ export interface BootSequenceProps {
 
 // 부팅 안무 타이밍(초) — 계획 D6/D7이 확정한 2초 부팅.
 // 이름은 이 파일이 렌더하지 않는다(Navigation 소유). wordmarkRef로
-// blur만 연출한다 — LCP 계약이 transform·filter만 허용하기 때문이다.
+// blur와 시안 스윕 오버레이만 연출한다 — LCP 계약이 이름 자신의
+// transform·filter만 허용하고 opacity는 건드릴 수 없기 때문이다.
 const SWEEP_AT = 1.4;
 const SWEEP_DURATION = 0.3; // blur(5px) → blur(0) 완료 시각: 1.7초
+const SWEEP_HALF = SWEEP_DURATION / 2; // 시안 스윕이 지나가는 절반 지점 — 페이드 인/아웃 경계
 const ROLE_REVEAL_DURATION = 0.15; // 역할 라벨 완료 시각: 1.85초
 const START_REVEAL_DURATION = 0.15; // START 완료 시각: 2.0초
 const BOOT_DURATION = 2; // 부팅 총 길이
@@ -65,7 +67,15 @@ export default function BootSequence({
         startEl.style.opacity = '1';
         startEl.style.transform = 'translateY(0)';
       }
-      if (wordmarkEl) wordmarkEl.style.filter = 'blur(0px)';
+      if (wordmarkEl) {
+        wordmarkEl.style.filter = 'blur(0px)';
+        // 시안 스윕도 같은 노드(Navigation) 안에 산다 — 실패·중단 경로에서
+        // 중간 프레임(반쯤 보이는 스윕)이 남지 않도록 투명으로 되돌린다.
+        const sweepEl = wordmarkEl.querySelector<HTMLElement>(
+          '[data-testid="wordmark-sweep"]'
+        );
+        if (sweepEl) sweepEl.style.opacity = '0';
+      }
     }
 
     import('@/lib/gsap')
@@ -77,12 +87,40 @@ export default function BootSequence({
         timeline = tl;
 
         if (wordmarkEl) {
-          tl.set(wordmarkEl, { filter: 'blur(5px)' }, 0);
-          tl.to(
+          // pre-boot blur는 이제 CSS([data-wordmark-mode='hero'], design-tokens.css)가
+          // 소유한다. 여기서 다시 blur(5px)를 set하지 않는다 — 그러면 SSR
+          // 첫 프레임엔 선명하다가 GSAP 로드 뒤에야 갑자기 흐려지는 역방향
+          // 플래시가 재발한다. fromTo의 "from" 값은 CSS가 이미 그린 값과
+          // 같아서(immediateRender) 핸드오프에 시각적 점프가 없다 — 역할
+          // 라벨·START와 동일한 패턴이다.
+          tl.fromTo(
             wordmarkEl,
+            { filter: 'blur(5px)' },
             { filter: 'blur(0px)', duration: SWEEP_DURATION, ease: SITE_EASE },
             SWEEP_AT
           );
+
+          // 시안 스윕 — 부팅 안무의 시그니처(계획 D6/D7 2단계). 이름 자신의
+          // opacity는 LCP 요소라 건드리지 않고, Navigation이 워드마크 버튼
+          // 안에 함께 그려 둔 별도 오버레이(wordmark-sweep)만 transform·
+          // opacity로 지나가게 한다. 전반부는 화면 왼쪽에서 들어오며
+          // 페이드인, 후반부는 오른쪽으로 빠지며 페이드아웃 — 광선 하나가
+          // 이름을 스치고 지나가는 모양이다.
+          const sweepEl = wordmarkEl.querySelector<HTMLElement>(
+            '[data-testid="wordmark-sweep"]'
+          );
+          if (sweepEl) {
+            tl.fromTo(
+              sweepEl,
+              { xPercent: -140, opacity: 0 },
+              { xPercent: 0, opacity: 1, duration: SWEEP_HALF, ease: SITE_EASE },
+              SWEEP_AT
+            ).to(
+              sweepEl,
+              { xPercent: 140, opacity: 0, duration: SWEEP_HALF, ease: SITE_EASE },
+              SWEEP_AT + SWEEP_HALF
+            );
+          }
         }
 
         if (roleEl) {
@@ -128,25 +166,37 @@ export default function BootSequence({
   }, [active, motionReady, reducedMotion, routeResolved]);
 
   return (
+    // 워드마크(Navigation)와 같은 뷰포트 50% 기준점을 쓴다 — margin-top의
+    // --boot-caption-gap 하나가 간격의 유일한 출처다(design-tokens.css).
+    // bottom 값을 여기서 미세조정하지 않는다.
     <div
       data-testid="boot-sequence"
-      className="fixed left-6 bottom-4 z-40 flex flex-col items-start gap-2 sm:left-10 sm:bottom-6"
+      className="fixed top-1/2 left-1/2 z-40 mt-[var(--boot-caption-gap)] flex -translate-x-1/2 flex-col items-center gap-2"
     >
+      {/* 역할 라벨 — 정체성 진술. 보조 정보라 START보다 작고 흐리다. */}
       <span
         ref={roleRef}
         data-testid="boot-role"
-        className="boot-role block text-t7 uppercase tracking-[0.2em] text-[var(--color-cyan-hi)]"
+        className="boot-role block text-t8 uppercase tracking-[0.1em] text-[var(--color-text-secondary)]"
       >
         FRONTEND DEVELOPER
       </span>
+      {/* START — 행동 유도. 시안 밑줄 + hover 화살표로 클릭 가능함을
+          정지 상태에서도 드러낸다(모바일엔 hover가 없다). */}
       <button
         ref={startRef}
         data-testid="boot-start"
         type="button"
         onClick={onStart}
-        className="boot-start min-h-11 text-t7 uppercase tracking-[0.2em] text-[var(--color-text-primary)]"
+        className="boot-start group inline-flex min-h-11 items-center gap-2 border-b border-[var(--color-cyan-core)] pb-1 text-t6 uppercase tracking-[0.2em] text-[var(--color-text-primary)] transition-colors duration-300 hover:text-[var(--color-cyan-hi)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)]"
       >
-        START — ABOUT →
+        START — ABOUT
+        <span
+          aria-hidden="true"
+          className="transition-transform duration-300 group-hover:translate-x-1"
+        >
+          →
+        </span>
       </button>
     </div>
   );

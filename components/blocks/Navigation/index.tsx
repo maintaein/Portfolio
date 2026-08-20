@@ -59,8 +59,12 @@ export default function Navigation({
           aria-label="개요로 이동"
           className={cn(
             'min-h-11 text-left leading-tight',
+            // 뷰포트 50% 지점을 캡션(BootSequence)과 공유하는 유일한
+            // 기준점으로 쓴다 — -translate-y-full이 이름 자신의 렌더 높이
+            // 만큼 끌어올려 바닥이 항상 50% 선에 닿으므로, 브레이크포인트별
+            // 폰트 크기가 달라져도 겹침 걱정 없이 한 값으로 정렬된다.
             active === 'overview'
-              ? 'fixed left-6 bottom-10 z-40 sm:left-10 sm:bottom-14'
+              ? 'fixed top-1/2 left-1/2 z-40 -translate-x-1/2 -translate-y-full'
               : 'shrink-0'
           )}
         >
@@ -72,6 +76,16 @@ export default function Navigation({
           >
             {PERSONAL_INFO.NAME_EN}
           </span>
+          {/* 시안 스윕 — 부팅 안무의 시그니처(계획 D6/D7 2단계). 이름 자신의
+              opacity는 LCP 계약상 건드릴 수 없으므로 별개 오버레이로 그린다.
+              워드마크 버튼 안에 두면 hero/compact FLIP에 자연히 함께
+              움직인다. 정지 상태는 항상 투명하고, BootSequence의 GSAP
+              타임라인만 1.4초 지점에서 transform·opacity로 지나가게 한다. */}
+          <span
+            data-testid="wordmark-sweep"
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-[var(--color-cyan-hi)] to-transparent opacity-0"
+          />
         </button>
 
         {/* 모바일 무hover 환경에서도 길찾기가 되도록 아이콘 대신 단어를 유지한다. */}
@@ -86,7 +100,17 @@ export default function Navigation({
           />
           <div
             data-testid="nav-strip"
-            className="flex items-center gap-2 overflow-x-auto px-5 lg:gap-6 lg:px-0"
+            // overview는 포스터다 — 부팅 중에는 길찾기 스트립을 숨긴다(사용자
+            // 지시). START를 누르면(active가 overview를 벗어나면) 나타난다.
+            // 워드마크는 이 조건과 무관하게 항상 보인다 — LCP 요소라 절대
+            // 숨기지 않는다. 숨김·복귀는 design-tokens.css의 nav-strip-hidden/
+            // visible이 visibility:hidden으로 처리한다 — 그래서 aria-hidden·
+            // inert를 여기서 따로 붙이지 않아도 탭 순서·접근성 트리에서
+            // 자연히 제외된다.
+            className={cn(
+              'flex items-center gap-2 overflow-x-auto px-5 lg:gap-6 lg:px-0',
+              active === 'overview' ? 'nav-strip-hidden' : 'nav-strip-visible'
+            )}
           >
             {items.map((item) => {
               const isActive = active === item.id;
