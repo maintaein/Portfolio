@@ -431,43 +431,57 @@ describe('Navigation — overview 부팅 구도', () => {
     }
   });
 
-  it('hero 모드 워드마크는 뷰포트 중앙(top/left 50%)에 자기 높이만큼 끌어올려 정렬된다', () => {
-    // 뮤테이션 (c) — 좌측 하단(left-*, bottom-*)으로 되돌리면 이 클래스들이
-    // 사라지므로 FAIL한다.
+  it('hero 모드 워드마크는 transform 없는 wrapper가 뷰포트 중앙 하단(50%)에 정렬하고, compact에서는 그 wrapper가 사라진다', () => {
+    // 3라운드 회귀 — 워드마크(FLIP 대상) 자신에 CSS position:fixed·transform이
+    // 실려 있으면 GSAP Flip의 inline transform·absolute:true와 충돌해
+    // 실기기에서 비행 뒤 워드마크가 사라졌다. 위치는 이제 감싸는 wrapper
+    // div가 담당하고, 워드마크 버튼 자신은 position·transform이 전혀 없다.
     const { rerender } = render(
       <Navigation items={NAV_ITEMS} active="overview" onNavigate={() => {}} />
     );
     const wordmark = screen.getByTestId('wordmark');
-    expect(wordmark.className).toContain('top-1/2');
-    expect(wordmark.className).toContain('left-1/2');
-    expect(wordmark.className).toContain('-translate-x-1/2');
-    expect(wordmark.className).toContain('-translate-y-full');
-    expect(wordmark.className).not.toMatch(/\bbottom-\d|\bleft-6\b/);
+    const wrapper = wordmark.parentElement!;
+
+    // 뮤테이션 (a) — 워드마크 자신에 position:fixed·translate를 되돌리면
+    // 아래 두 줄이 FAIL한다.
+    expect(wordmark.className).not.toMatch(/\bfixed\b|\babsolute\b|translate/);
+    expect(wrapper.className).not.toMatch(/translate/);
+
+    // wrapper가 transform 없이 같은 "바닥이 50%에 닿는다" 정렬을 얻는다 —
+    // bottom-1/2(뷰포트 50% 선에 자기 바닥을 붙임) + inset-x-0 + flex
+    // justify-center(수평 중앙, transform 없이).
+    expect(wrapper.className).toContain('fixed');
+    expect(wrapper.className).toContain('bottom-1/2');
+    expect(wrapper.className).toContain('inset-x-0');
+    expect(wrapper.className).toContain('justify-center');
 
     rerender(
       <Navigation items={NAV_ITEMS} active="about" onNavigate={() => {}} />
     );
-    // compact 모드는 flex 흐름 안 shrink-0이지 fixed 중앙 정렬이 아니다.
-    expect(screen.getByTestId('wordmark').className).not.toContain('fixed');
+    // compact 모드는 flex 흐름 안 shrink-0이지 fixed 중앙 정렬이 아니다 —
+    // wrapper는 display:contents로 스스로 사라져 워드마크를 nav 행의 평범한
+    // flex 자식으로 되돌린다.
+    const compactWordmark = screen.getByTestId('wordmark');
+    expect(compactWordmark.className).not.toContain('fixed');
+    expect(compactWordmark.className).toContain('shrink-0');
+    expect(compactWordmark.parentElement!.className).toContain('contents');
   });
 
-  it('워드마크 버튼 안에 시안 스윕 오버레이가 하나 있고, 정지 상태는 투명·비상호작용이다', () => {
-    // 뮤테이션 (h) 대응 구조 검사 — 스윕 요소 자체가 없으면 이 테스트가
-    // FAIL한다. 실제 애니메이션(transform·opacity 진행)은
-    // BootSequence.test.tsx가 gsap timeline을 seek()해서 검증한다.
-    render(
-      <Navigation items={NAV_ITEMS} active="overview" onNavigate={() => {}} />
+  it('워드마크가 흐름에서 빠져도(Flip absolute:true) 네비 항목이 움직이지 않도록 ml-auto로 스스로 오른쪽 끝을 지킨다', () => {
+    // 3라운드 회귀 — nav 행이 justify-between인 채로 워드마크만
+    // position:absolute로 흐름에서 빠지면(GSAP Flip의 absolute:true) 남은
+    // 자식(nav-strip wrapper) 하나가 flex-start(왼쪽)로 쏠렸다. ml-auto는
+    // 형제가 몇 개 남든 스스로 오른쪽 끝을 지키므로 워드마크의 흐름 이탈과
+    // 무관하다. 뮤테이션 (b) — justify-between을 되돌리고 ml-auto를
+    // 지우면 이 테스트가 FAIL한다.
+    const { container } = render(
+      <Navigation items={NAV_ITEMS} active="about" onNavigate={() => {}} />
     );
 
-    const wordmark = screen.getByTestId('wordmark');
-    const sweep = screen.getByTestId('wordmark-sweep');
+    const navRow = container.querySelector('nav > div')!;
+    expect(navRow.className).not.toContain('justify-between');
 
-    expect(wordmark).toContainElement(sweep);
-    expect(sweep).toHaveAttribute('aria-hidden', 'true');
-    expect(sweep.className).toContain('pointer-events-none');
-    expect(sweep.className).toContain('opacity-0');
-    // 이름 자신의 opacity를 건드리지 않는다는 계약(LCP)의 절반은 구조로도
-    // 확인할 수 있다 — 스윕은 이름 span과 다른, 별개의 노드다.
-    expect(sweep).not.toHaveTextContent(PERSONAL_INFO.NAME_EN);
+    const navStripWrapper = screen.getByTestId('nav-strip').parentElement!;
+    expect(navStripWrapper.className).toContain('ml-auto');
   });
 });

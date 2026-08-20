@@ -44,52 +44,64 @@ export default function Navigation({
       aria-label="메인 네비게이션"
       className={cn('fixed top-0 left-0 right-0 z-50 px-6 py-4', className)}
     >
-      <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 lg:gap-8">
+      <div className="max-w-7xl mx-auto flex items-center gap-2 lg:gap-8">
         {/* 이 버튼 하나가 부팅 대형 이름과 compact 네비 워드마크를 겸한다.
             BootSequence는 이름을 복제하지 않고 이 ref만 애니메이션한다.
             hero/compact 사이의 실제 이동은 HomeClient의 FLIP 브리지가
             Flip.from()으로 담당하므로, 여기서는 최종 위치만 Tailwind
-            클래스로 정의한다 — 애니메이션 자체를 여기 넣지 않는다. */}
-        <button
-          ref={wordmarkRef}
-          data-testid="wordmark"
-          data-flip-id="site-wordmark"
-          data-wordmark-mode={active === 'overview' ? 'hero' : 'compact'}
-          onClick={() => onNavigate('overview')}
-          aria-label="개요로 이동"
-          className={cn(
-            'min-h-11 text-left leading-tight',
-            // 뷰포트 50% 지점을 캡션(BootSequence)과 공유하는 유일한
-            // 기준점으로 쓴다 — -translate-y-full이 이름 자신의 렌더 높이
-            // 만큼 끌어올려 바닥이 항상 50% 선에 닿으므로, 브레이크포인트별
-            // 폰트 크기가 달라져도 겹침 걱정 없이 한 값으로 정렬된다.
+            클래스로 정의한다 — 애니메이션 자체를 여기 넣지 않는다.
+            워드마크(FLIP 대상) 자신은 position이나 transform을 갖지 않는다
+            — GSAP Flip이 이 노드에 inline transform을 걸고 absolute:true로
+            잠깐 position:absolute까지 주는데, 여기 CSS로 position:fixed나
+            transform 유틸까지 얹으면 실기기에서 비행 뒤 워드마크가 화면
+            밖에 남는 버그가 났다(3라운드 — GSAP Flip 소스도 "fixed 포지션 +
+            Flip" 버그를 알려진 문제로 캐시 무효화 워크어라운드까지 둘
+            정도다). 대신 바깥 wrapper 하나가 hero에서만 fixed로 위치를
+            잡고(bottom-1/2 = 뷰포트 50% 선에 이름 자신의 바닥을 붙임,
+            inset-x-0 + flex justify-center = 수평 중앙), compact에서는
+            display:contents로 스스로 사라져 워드마크를 nav 행의 평범한 flex
+            자식으로 되돌린다 — transform 없이도 -translate-y-full과 같은
+            "브레이크포인트별 폰트 크기가 달라져도 바닥이 항상 50%에
+            닿는다"는 겹침 방지 계약을 유지한다. */}
+        <div
+          className={
             active === 'overview'
-              ? 'fixed top-1/2 left-1/2 z-40 -translate-x-1/2 -translate-y-full'
-              : 'shrink-0'
-          )}
+              ? 'fixed inset-x-0 bottom-1/2 z-40 flex justify-center'
+              : 'contents'
+          }
         >
-          <span
+          <button
+            ref={wordmarkRef}
+            data-testid="wordmark"
+            data-flip-id="site-wordmark"
+            data-wordmark-mode={active === 'overview' ? 'hero' : 'compact'}
+            onClick={() => onNavigate('overview')}
+            aria-label="개요로 이동"
             className={cn(
-              'block font-bold tracking-widest text-[var(--color-text-primary)]',
-              active === 'overview' ? 'text-5xl sm:text-7xl md:text-8xl' : 'text-t6'
+              'min-h-11 text-left leading-tight',
+              active !== 'overview' && 'shrink-0'
             )}
           >
-            {PERSONAL_INFO.NAME_EN}
-          </span>
-          {/* 시안 스윕 — 부팅 안무의 시그니처(계획 D6/D7 2단계). 이름 자신의
-              opacity는 LCP 계약상 건드릴 수 없으므로 별개 오버레이로 그린다.
-              워드마크 버튼 안에 두면 hero/compact FLIP에 자연히 함께
-              움직인다. 정지 상태는 항상 투명하고, BootSequence의 GSAP
-              타임라인만 1.4초 지점에서 transform·opacity로 지나가게 한다. */}
-          <span
-            data-testid="wordmark-sweep"
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-[var(--color-cyan-hi)] to-transparent opacity-0"
-          />
-        </button>
+            <span
+              className={cn(
+                'block font-bold tracking-widest text-[var(--color-text-primary)]',
+                active === 'overview' ? 'text-5xl sm:text-7xl md:text-8xl' : 'text-t6'
+              )}
+            >
+              {PERSONAL_INFO.NAME_EN}
+            </span>
+          </button>
+        </div>
 
-        {/* 모바일 무hover 환경에서도 길찾기가 되도록 아이콘 대신 단어를 유지한다. */}
-        <div className="relative min-w-0">
+        {/* 모바일 무hover 환경에서도 길찾기가 되도록 아이콘 대신 단어를 유지한다.
+            justify-between 대신 ml-auto로 오른쪽에 붙인다 — GSAP Flip의
+            absolute:true가 hero↔compact 전환 0.5초 동안 워드마크를 문서
+            흐름에서 빼내는데, justify-between인 채로 워드마크만 사라지면
+            남은 자식(이 div) 하나가 flex-start(왼쪽)로 쏠린다(3라운드
+            실기기 버그 — 워드마크가 없어져도 네비 항목이 왼쪽으로
+            붙었다). ml-auto는 형제가 몇 개 남든 스스로 오른쪽 끝까지
+            밀어내므로 워드마크의 흐름 이탈과 무관하게 자리를 지킨다. */}
+        <div className="relative ml-auto min-w-0">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-y-0 left-0 z-10 w-5 bg-gradient-to-r from-[var(--color-ink)] to-transparent lg:hidden"

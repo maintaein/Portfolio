@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { useRef } from 'react';
 import { renderToString } from 'react-dom/server';
-import { act, render, screen, within } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import {
   afterEach,
   beforeEach,
@@ -100,10 +100,10 @@ function SsrHarness() {
   );
 }
 
-// boot-composition 브리프의 항목 6(시안 스윕)은 Navigation이 워드마크 버튼
-// 안에 그려 둔 오버레이(wordmark-sweep)를 BootSequence가 wordmarkRef를 통해
-// 찾아 애니메이션한다. 위 Harness의 가짜 <button>에는 그 오버레이도
-// data-wordmark-mode도 없으므로, 이 결합을 검증하려면 실제 Navigation을
+// BootSequence는 wordmarkRef가 가리키는 노드에 blur만 애니메이션한다(시안
+// 스윕은 3라운드에서 제거했다). 위 Harness의 가짜 <button>에는
+// data-wordmark-mode가 없어 CSS의 pre-boot blur 오버라이드가 걸리지 않으므로,
+// 그 결합(data-wordmark-mode='hero' ↔ blur)을 검증하려면 실제 Navigation을
 // 함께 렌더해야 한다.
 function CompositionHarness({
   active = 'overview',
@@ -445,13 +445,22 @@ describe('BootSequence 구도 — 중앙 정렬·간격·CTA 위계', () => {
     expect(role.className).toContain('text-secondary');
   });
 
-  it('START는 시안 밑줄 + hover 화살표를 가진 텍스트 버튼이다 — 박스·필이 아니다', () => {
+  it('START는 화살표·목적지 표기 없는 시안 밑줄 텍스트 버튼이다 — 박스·필이 아니다', () => {
+    // 3라운드 사용자 판단 — "START — ABOUT →"에서 화살표·목적지 표기를
+    // 뺀다. 밑줄·hover·focus-visible이라는 CTA 신호 자체는 화살표 없이도
+    // 유지한다.
     render(<Harness />);
     const start = screen.getByTestId('boot-start');
+
+    // 뮤테이션 (d) — "START — ABOUT →"로 되돌리면 정확히 일치하지 않아 FAIL한다.
+    expect(start.textContent).toBe('START');
 
     // 뮤테이션 (e) — 밑줄을 지우면 FAIL한다.
     expect(start.className).toMatch(/\bborder-b\b/);
     expect(start.className).toContain('border-[var(--color-cyan-core)]');
+    // hover·focus-visible 신호 — 화살표가 빠진 자리를 대신한다.
+    expect(start.className).toContain('hover:text-[var(--color-cyan-hi)]');
+    expect(start.className).toMatch(/focus-visible:/);
     for (const banned of [
       'rounded-lg',
       'rounded-full',
@@ -460,19 +469,14 @@ describe('BootSequence 구도 — 중앙 정렬·간격·CTA 위계', () => {
     ]) {
       expect(start.className, `${banned}가 있다`).not.toContain(banned);
     }
-    expect(start.className).toMatch(/focus-visible:/);
-
-    const arrow = within(start).getByText('→');
-    expect(arrow).toHaveAttribute('aria-hidden', 'true');
-    expect(arrow.className).toContain('group-hover:translate-x-1');
   });
 });
 
-// 시안 스윕(항목 6) — Navigation의 wordmark-sweep 오버레이를 BootSequence의
-// 실제 GSAP timeline이 어떻게 움직이는지 seek()로 검증한다. 실제 색상·
-// 흐림 정도의 시각적 결과(합성 렌더)는 jsdom이 증명할 수 없다 — transform·
-// opacity 값의 진행만 구조로 고정한다.
-describe('BootSequence 시안 스윕 — Navigation과 결합해 seek()로 검증', () => {
+// 워드마크 blur 안무 — Navigation과 결합해 seek()로 검증한다. 시안
+// 스윕(계획 D6/D7 2단계)은 3라운드에서 사용자 판단으로 제거했다(정상
+// 동작이나 보기에 이상하다는 판정). blur 초점(blur(5px)→blur(0))은
+// 안무 2단계의 다른 절반이라 남긴다.
+describe('BootSequence — 워드마크 blur 안무 (Navigation 결합)', () => {
   // 실제 Navigation은 compact 뷰포트 판정에 matchMedia를 쓴다
   // (centerCompactItem). 이 파일의 다른 describe는 가짜 <button>만 쓰므로
   // 필요 없었지만, CompositionHarness는 실제 Navigation을 마운트한다.
@@ -492,54 +496,13 @@ describe('BootSequence 시안 스윕 — Navigation과 결합해 seek()로 검�
     vi.unstubAllGlobals();
   });
 
-  it('1.4~1.7초 구간에서 스윕이 페이드 인·아웃하며 이름 자신의 opacity는 건드리지 않는다', async () => {
+  it('시안 스윕 오버레이가 더 이상 렌더되지 않는다 — 뮤테이션 (f)', () => {
+    // 사용자 판단으로 제거한 기능이 되살아나면 이 테스트가 FAIL해야 한다.
     render(<CompositionHarness />);
-    await flushGsapImport();
-    const tl = capturedTimeline();
-    const wordmark = screen.getByTestId('wordmark');
-    const sweep = screen.getByTestId('wordmark-sweep');
-
-    // fromTo의 immediateRender가 생성 즉시 "from" 값을 렌더한다 — CSS
-    // 기본값(opacity-0, 투명)과 같은 값이라 핸드오프에 점프가 없다.
-    expect(sweep.style.opacity).toBe('0');
-
-    act(() => {
-      tl.seek(1.4); // SWEEP_AT — 스윕 시작
-    });
-    expect(parseFloat(sweep.style.opacity)).toBeCloseTo(0, 5);
-
-    act(() => {
-      tl.seek(1.55); // SWEEP_AT + SWEEP_HALF — 페이드인 종료/페이드아웃 시작
-    });
-    expect(parseFloat(sweep.style.opacity)).toBeGreaterThan(0.9);
-
-    act(() => {
-      tl.seek(1.7); // SWEEP_AT + SWEEP_DURATION — 스윕 종료
-    });
-    expect(parseFloat(sweep.style.opacity)).toBeCloseTo(0, 1);
-
-    // LCP 계약 — 스윕은 별개 오버레이 노드고, 이름 자신의 opacity는 어떤
-    // seek 지점에서도 건드려선 안 된다. 뮤테이션 (l).
-    expect(wordmark.style.opacity).toBe('');
+    expect(screen.queryByTestId('wordmark-sweep')).not.toBeInTheDocument();
   });
 
-  it('스윕은 transform(xPercent)으로만 이동한다 — 레이아웃 속성을 쓰지 않는다', async () => {
-    render(<CompositionHarness />);
-    await flushGsapImport();
-    const tl = capturedTimeline();
-    const sweep = screen.getByTestId('wordmark-sweep');
-
-    act(() => {
-      tl.seek(1.55);
-    });
-    // GSAP은 xPercent를 matrix/translate 기반 transform으로 렌더한다.
-    expect(sweep.style.transform).toMatch(/matrix|translate/);
-    expect(sweep.style.left).toBe('');
-    expect(sweep.style.top).toBe('');
-    expect(sweep.style.width).toBe('');
-  });
-
-  it('reduced-motion에서는 워드마크·스윕 어느 것도 인라인 스타일을 건드리지 않는다 — 뮤테이션 (j)', async () => {
+  it('reduced-motion에서는 워드마크가 인라인 스타일을 건드리지 않는다 — 뮤테이션 (j)', async () => {
     // 렌더 직후 곧바로 검사하면(flush 없이) eligible 게이트가 깨져 있어도
     // import('@/lib/gsap') 콜백이 아직 도착하지 않았을 뿐이라 우연히
     // 통과해버린다 — 반드시 flush한 뒤 timelineSpy 호출 수까지 함께
@@ -550,11 +513,7 @@ describe('BootSequence 시안 스윕 — Navigation과 결합해 seek()로 검�
     expect(timelineSpy).not.toHaveBeenCalled();
 
     const wordmark = screen.getByTestId('wordmark');
-    const sweep = screen.getByTestId('wordmark-sweep');
-
     expect(wordmark.style.filter).toBe('');
-    expect(sweep.style.opacity).toBe('');
-    expect(sweep.style.transform).toBe('');
   });
 
   // 컨트롤러 추가. pre-boot blur를 CSS가 [data-wordmark-mode='hero']로 소유하게

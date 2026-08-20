@@ -183,6 +183,12 @@ describe('WordmarkFlip — 단일 워드마크 노드의 hero/compact 전환', (
     act(() => {
       fireEvent.click(screen.getByTestId('wordmark')); // wordmark 클릭 = overview로 복귀
     });
+    // hasStartedRef 없이 이 시점의 상태만 보면(flush 없이) 새 timeline을
+    // 만드는 import('@/lib/gsap') promise가 아직 도착하지 않았을 뿐이라
+    // 우연히 통과해버린다 — 반드시 flush까지 해야 "재생 안 함"이 실제
+    // 값으로 증명된다. 뮤테이션 (c)가 이 flush 없이는 잡히지 않음을 실측
+    // 확인했다.
+    await flushGsapImport();
 
     expect(screen.getByTestId('wordmark')).toHaveAttribute(
       'data-wordmark-mode',
