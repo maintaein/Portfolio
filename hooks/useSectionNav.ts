@@ -35,6 +35,8 @@ export interface UseSectionNavReturn {
   entryAnimationTarget: NavId | null;
 }
 
+export type OnBeforeActiveChange = (from: NavId, to: NavId) => void;
+
 /**
  * 활성 섹션을 소유하는 단일 진실 공급원.
  *
@@ -50,8 +52,17 @@ export interface UseSectionNavReturn {
  * 스크롤이 없으므로 IntersectionObserver를 쓰지 않는다.
  * 전 섹션이 항상 DOM에 있고 opacity로만 감춰지는데, IO는 opacity를 무시해
  * 로드 순간 전부 "보인다"고 판정하기 때문이다.
+ *
+ * @param onBeforeActiveChange 실제 active가 바뀌기 직전에 호출되는 선택적
+ *   observer. 훅은 DOM을 모르고 이 값을 그대로 알려줄 뿐이다 — HomeClient가
+ *   여기서 워드마크의 Flip.getState()를 찍는다. 동일 id로의 변경(no-op)과
+ *   modal-only popstate에는 호출되지 않는다. 최초 해시 hydration도 이 경로를
+ *   타지 않으므로 호출되지 않는다. 불안정한 함수 identity가 popstate
+ *   리스너를 재등록하지 않도록 최신 값은 ref에만 보관한다.
  */
-export function useSectionNav(): UseSectionNavReturn {
+export function useSectionNav(
+  onBeforeActiveChange?: OnBeforeActiveChange
+): UseSectionNavReturn {
   const [active, setActiveState] = useState<NavId>(OVERVIEW);
   const [routeResolved, setRouteResolved] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -60,7 +71,9 @@ export function useSectionNav(): UseSectionNavReturn {
   const activeRef = useRef(active);
   const seenRef = useRef<ReadonlySet<NavId>>(new Set<NavId>());
   const didResolveInitialRouteRef = useRef(false);
+  const onBeforeActiveChangeRef = useRef(onBeforeActiveChange);
   activeRef.current = active;
+  onBeforeActiveChangeRef.current = onBeforeActiveChange;
 
   const captureFirstEntry = useCallback((id: NavId) => {
     if (seenRef.current.has(id)) {
@@ -92,6 +105,7 @@ export function useSectionNav(): UseSectionNavReturn {
   const setActive = useCallback((id: NavId) => {
     if (activeRef.current === id) return;
 
+    onBeforeActiveChangeRef.current?.(activeRef.current, id);
     activeRef.current = id;
     setActiveState(id);
     setIsTransitioning(true);
@@ -124,6 +138,7 @@ export function useSectionNav(): UseSectionNavReturn {
       // 같은 해시는 섹션 이동이 아니므로 전환·Hyperspeed를 다시 열지 않는다.
       if (activeRef.current === next) return;
 
+      onBeforeActiveChangeRef.current?.(activeRef.current, next);
       activeRef.current = next;
       setActiveState(next);
       setIsTransitioning(true);

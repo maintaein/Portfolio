@@ -102,7 +102,7 @@ npm run lint
 
 ## 디자인 원칙
 
-- **Atomic Design** — Atoms(Button, Badge) → Blocks(Navigation, ProjectModal) → Sections(HeroSection, SkillsSection) 계층 구조
+- **Atomic Design** — Atoms(Button, Badge) → Blocks(Navigation, ProjectModal) → Sections(BootSequence, SkillsSection) 계층 구조
 - **SRP** — 각 컴포넌트는 단일 책임 원칙을 준수
 - **타입 안정성** — 모든 데이터 모델에 TypeScript 인터페이스 정의
 - **커스텀 Hooks** — `useModal`, `useIntersection`으로 로직 재사용

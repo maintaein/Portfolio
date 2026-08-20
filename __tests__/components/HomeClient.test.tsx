@@ -164,7 +164,12 @@ vi.mock('@/components/sections', async () => {
       <SectionShell label="Experience" marker="Frontend Experience" />
     ),
     Footer: () => <a href="mailto:test@example.com">Contact footer</a>,
-    HeroSection: () => (
+    // 실제 BootSequence는 wordmarkRef 등 여러 prop을 받지만, 이 mock의
+    // 관심사는 HomeClient가 단일 matchMedia listener로 motion 소비자
+    // 여럿(WhenVisible 3개)을 함께 정지·재개시키는지이지 BootSequence 자체
+    // 구현이 아니다(그건 BootSequence.test.tsx·WordmarkFlip.test.tsx가 실제
+    // 컴포넌트로 직접 검증한다). props는 무시해도 안전하다.
+    BootSequence: () => (
       <section>
         <h1>Overview profile</h1>
         <button>Overview content action</button>
@@ -398,9 +403,9 @@ describe('HomeClient SSR 셸 구조', () => {
       [
         'AboutSection',
         'AwardAndCertificateSection',
+        'BootSequence',
         'ExperienceSection',
         'Footer',
-        'HeroSection',
         'ProjectsSection',
         'SkillsSection',
       ].sort()

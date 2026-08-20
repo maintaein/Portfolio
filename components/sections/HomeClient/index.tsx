@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -13,9 +14,9 @@ import { SectionActivityProvider } from '@/components/common/SectionActivityCont
 import {
   AboutSection,
   AwardAndCertificateSection,
+  BootSequence,
   ExperienceSection,
   Footer,
-  HeroSection,
   ProjectsSection,
   SkillsSection,
 } from '@/components/sections';
@@ -34,6 +35,7 @@ import {
   SECTION_IDS,
   type HomeSectionId,
 } from '@/lib/constants';
+import { Flip, registerGsap, SITE_EASE } from '@/lib/gsap';
 
 const SECTION_COMPONENTS = {
   [SECTION_IDS.ABOUT]: AboutSection,
@@ -71,6 +73,43 @@ function hasOpacityTransition(element: HTMLElement) {
 }
 
 export default function HomeClient() {
+  const wordmarkRef = useRef<HTMLButtonElement>(null);
+  // 워드마크 FLIP 브리지 — hero/compact 경계를 넘는 실제 active 변경 직전에
+  // useSectionNav가 onBeforeActiveChange로 알려주면 Flip.getState()를 여기
+  // 담아 둔다. 값이 있으면 React가 hero/compact 클래스를 반영한 다음 커밋의
+  // useLayoutEffect([active])에서 꺼내 Flip.from()을 부른다(GSAP React FLIP
+  // 지침). motionReady·reducedMotion·routeResolved는 이 콜백이 정의되는
+  // 시점엔 아직 useSectionNav의 반환값이 없어 순환 참조가 생기므로, 매
+  // 렌더 갱신되는 ref로 최신값을 읽는다(이 파일의 activeRef와 동일 패턴).
+  const pendingWordmarkStateRef = useRef<ReturnType<typeof Flip.getState> | null>(
+    null
+  );
+  const motionReadyRef = useRef(false);
+  const reducedMotionRef = useRef(true);
+  const routeResolvedRef = useRef(false);
+
+  const handleBeforeActiveChange = useCallback(
+    (from: NavId, to: NavId) => {
+      if (
+        !routeResolvedRef.current ||
+        !motionReadyRef.current ||
+        reducedMotionRef.current
+      ) {
+        return;
+      }
+      const crossesOverviewBoundary = from === OVERVIEW || to === OVERVIEW;
+      if (!crossesOverviewBoundary || !wordmarkRef.current) return;
+
+      // BootSequence는 active === overview일 때만 registerGsap()을 부른다.
+      // /#projects처럼 overview를 거치지 않고 다른 섹션에서 시작한 뒤 최초로
+      // overview 경계를 넘는 경우 그 등록이 아직 없었을 수 있으므로 여기서도
+      // 멱등하게 보장한다.
+      registerGsap();
+      pendingWordmarkStateRef.current = Flip.getState(wordmarkRef.current);
+    },
+    []
+  );
+
   const {
     active,
     setActive,
@@ -80,7 +119,7 @@ export default function HomeClient() {
     completeTransition,
     entryAnimationTarget,
     routeResolved,
-  } = useSectionNav();
+  } = useSectionNav(handleBeforeActiveChange);
   const swipeHandlers = useSectionSwipe({
     onNext: goNext,
     onPrevious: goPrevious,
@@ -89,13 +128,33 @@ export default function HomeClient() {
     useMotionPreference();
   const pageVisible = usePageVisibility();
   const motionReady = routeResolved && preferenceReady;
+  motionReadyRef.current = motionReady;
+  reducedMotionRef.current = reducedMotion;
+  routeResolvedRef.current = routeResolved;
   const isProjectModalOpen = useProjectModalObscured();
   const sectionRefs = useRef<
     Partial<Record<NavId, HTMLDivElement | null>>
   >({});
-  const wordmarkRef = useRef<HTMLButtonElement>(null);
   const lastFocusedActive = useRef<NavId>(OVERVIEW);
   const runningTransitions = useRef(new Set<NavId>());
+
+  // React가 hero/compact 클래스를 커밋한 직후 pending Flip 상태를 소비한다.
+  // 최초 마운트에는 pendingWordmarkStateRef가 비어 있으므로 Flip이 실행되지
+  // 않는다(구멍 없이 구조적으로 보장). Overview 경계를 넘지 않은 전환(예:
+  // about → projects)도 관찰자가 상태를 담지 않으므로 여기서 no-op한다.
+  useLayoutEffect(() => {
+    const state = pendingWordmarkStateRef.current;
+    if (!state) return;
+    pendingWordmarkStateRef.current = null;
+    if (!wordmarkRef.current) return;
+
+    Flip.from(state, {
+      duration: 0.5,
+      ease: SITE_EASE,
+      scale: true,
+      absolute: true,
+    });
+  }, [active]);
 
   const activeLabel =
     active === OVERVIEW
@@ -235,7 +294,14 @@ export default function HomeClient() {
             handleSectionTransitionDone(OVERVIEW, event)
           }
         >
-          <HeroSection />
+          <BootSequence
+            active={active}
+            routeResolved={routeResolved}
+            motionReady={motionReady}
+            reducedMotion={reducedMotion}
+            wordmarkRef={wordmarkRef}
+            onStart={() => setActive(SECTION_IDS.ABOUT)}
+          />
         </div>
 
         {HOME_SECTION_CONFIG.map(({ id, label }) => {

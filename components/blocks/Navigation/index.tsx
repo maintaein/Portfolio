@@ -46,7 +46,10 @@ export default function Navigation({
     >
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 lg:gap-8">
         {/* 이 버튼 하나가 부팅 대형 이름과 compact 네비 워드마크를 겸한다.
-            BootSequence는 이름을 복제하지 않고 이 ref만 애니메이션한다. */}
+            BootSequence는 이름을 복제하지 않고 이 ref만 애니메이션한다.
+            hero/compact 사이의 실제 이동은 HomeClient의 FLIP 브리지가
+            Flip.from()으로 담당하므로, 여기서는 최종 위치만 Tailwind
+            클래스로 정의한다 — 애니메이션 자체를 여기 넣지 않는다. */}
         <button
           ref={wordmarkRef}
           data-testid="wordmark"
@@ -54,9 +57,19 @@ export default function Navigation({
           data-wordmark-mode={active === 'overview' ? 'hero' : 'compact'}
           onClick={() => onNavigate('overview')}
           aria-label="개요로 이동"
-          className="min-h-11 shrink-0 text-left leading-tight"
+          className={cn(
+            'min-h-11 text-left leading-tight',
+            active === 'overview'
+              ? 'fixed left-6 bottom-10 z-40 sm:left-10 sm:bottom-14'
+              : 'shrink-0'
+          )}
         >
-          <span className="block text-t6 font-bold tracking-widest text-[var(--color-text-primary)]">
+          <span
+            className={cn(
+              'block font-bold tracking-widest text-[var(--color-text-primary)]',
+              active === 'overview' ? 'text-5xl sm:text-7xl md:text-8xl' : 'text-t6'
+            )}
+          >
             {PERSONAL_INFO.NAME_EN}
           </span>
         </button>

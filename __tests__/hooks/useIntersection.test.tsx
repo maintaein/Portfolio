@@ -59,7 +59,6 @@ const decorations = [
 }>;
 
 const WHILE_IN_VIEW_DEBT = {
-  'components/sections/HeroSection/index.tsx': { plan: 3, count: 1 },
   'components/sections/AboutSection/index.tsx': { plan: 4, count: 2 },
   'components/blocks/SectionHeader/index.tsx': { plan: 5, count: 1 },
   'components/sections/SkillsSection/index.tsx': { plan: 5, count: 1 },

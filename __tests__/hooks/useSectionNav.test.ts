@@ -259,6 +259,108 @@ describe('useSectionNav', () => {
     expect(remove).toHaveBeenCalledWith('popstate', registered);
   });
 
+  it('onBeforeActiveChange가 실제 active 변경 직전에 from·to와 함께 정확히 한 번 호출된다', () => {
+    const onBeforeActiveChange = vi.fn();
+    const { result } = renderHook(() => useSectionNav(onBeforeActiveChange));
+
+    act(() => result.current.setActive('about'));
+
+    expect(onBeforeActiveChange).toHaveBeenCalledTimes(1);
+    expect(onBeforeActiveChange).toHaveBeenCalledWith('overview', 'about');
+    // 호출 시점에 아직 active가 바뀌지 않은 옛 값이어야 "직전" 계약이 성립한다.
+    expect(result.current.active).toBe('about');
+  });
+
+  it('동일 id로의 변경에는 onBeforeActiveChange를 호출하지 않는다', () => {
+    const onBeforeActiveChange = vi.fn();
+    const { result } = renderHook(() => useSectionNav(onBeforeActiveChange));
+
+    act(() => result.current.setActive('overview'));
+
+    expect(onBeforeActiveChange).not.toHaveBeenCalled();
+  });
+
+  it('modal-only popstate에는 onBeforeActiveChange를 호출하지 않는다', () => {
+    const onBeforeActiveChange = vi.fn();
+    const { result } = renderHook(() => useSectionNav(onBeforeActiveChange));
+    act(() => result.current.setActive('projects'));
+    onBeforeActiveChange.mockClear();
+
+    act(() => {
+      window.history.replaceState({ projectModalId: 'alpha-mail' }, '', '#projects');
+      window.dispatchEvent(new PopStateEvent('popstate', { state: { projectModalId: 'alpha-mail' } }));
+    });
+
+    expect(onBeforeActiveChange).not.toHaveBeenCalled();
+  });
+
+  it('실제 섹션 변경 popstate에는 onBeforeActiveChange를 from·to와 함께 호출한다', () => {
+    const onBeforeActiveChange = vi.fn();
+    const { result } = renderHook(() => useSectionNav(onBeforeActiveChange));
+    act(() => result.current.setActive('about'));
+    onBeforeActiveChange.mockClear();
+
+    act(() => {
+      window.history.replaceState(null, '', '/');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+
+    expect(onBeforeActiveChange).toHaveBeenCalledTimes(1);
+    expect(onBeforeActiveChange).toHaveBeenCalledWith('about', 'overview');
+  });
+
+  it('최초 해시 hydration에는 onBeforeActiveChange를 호출하지 않는다', () => {
+    window.history.replaceState(null, '', '/#projects');
+    const onBeforeActiveChange = vi.fn();
+    const { result } = renderHook(() => useSectionNav(onBeforeActiveChange));
+
+    expect(result.current.active).toBe('projects');
+    expect(onBeforeActiveChange).not.toHaveBeenCalled();
+  });
+
+  it('불안정한 onBeforeActiveChange identity가 popstate 리스너를 재등록하지 않고, 재등록 없이도 항상 최신 콜백이 불린다', () => {
+    const add = vi.spyOn(window, 'addEventListener');
+    const remove = vi.spyOn(window, 'removeEventListener');
+    const firstObserver = vi.fn();
+    const secondObserver = vi.fn();
+
+    const { result, rerender } = renderHook(
+      ({ onBeforeActiveChange }) => useSectionNav(onBeforeActiveChange),
+      { initialProps: { onBeforeActiveChange: firstObserver } }
+    );
+    act(() => result.current.setActive('about'));
+    expect(firstObserver).toHaveBeenCalledTimes(1);
+
+    const popstateAddCallsBefore = add.mock.calls.filter(
+      ([type]) => type === 'popstate'
+    ).length;
+    const popstateRemoveCallsBefore = remove.mock.calls.filter(
+      ([type]) => type === 'popstate'
+    ).length;
+
+    // 매 렌더 새 함수 identity를 넘긴다 — 불안정한 함수 prop 시나리오.
+    const throwawayObserver = vi.fn();
+    rerender({ onBeforeActiveChange: secondObserver });
+    rerender({ onBeforeActiveChange: throwawayObserver });
+    rerender({ onBeforeActiveChange: secondObserver });
+
+    expect(
+      add.mock.calls.filter(([type]) => type === 'popstate').length
+    ).toBe(popstateAddCallsBefore);
+    expect(
+      remove.mock.calls.filter(([type]) => type === 'popstate').length
+    ).toBe(popstateRemoveCallsBefore);
+
+    act(() => {
+      window.history.replaceState(null, '', '/');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+
+    expect(firstObserver).toHaveBeenCalledTimes(1); // 더 이상 불리지 않는다(옛 클로저)
+    expect(secondObserver).toHaveBeenCalledTimes(1);
+    expect(secondObserver).toHaveBeenCalledWith('about', 'overview');
+  });
+
   it('NAV_SEQUENCE가 HOME_SECTION_CONFIG 순서에서 파생된다', async () => {
     const reversedConfig = [...HOME_SECTION_CONFIG].reverse();
     const expected = ['overview', ...reversedConfig.map(({ id }) => id)];
