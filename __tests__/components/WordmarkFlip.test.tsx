@@ -109,6 +109,18 @@ function renderHome() {
   return render(<HomeClient /> as ReactElement);
 }
 
+// HomeClient는 마운트 직후 useEffect에서 import('@/lib/gsap')을 동적으로
+// 시작해 gsapModuleRef에 담아 둔다(gsap-lazy-brief.md). handleBeforeActiveChange는
+// 이 ref를 동기적으로만 읽으므로, renderHome() 직후 곧바로 경계 전환을
+// 일으키면 이 promise가 아직 도착하지 않아 FLIP이 조용히 스킵된다. fake
+// timer가 걸려 있어(BootSequence의 rAF 오염 방지와 같은 이유) real timer로
+// 바꾸지 않고 pending microtask만 흘려보낸다 — 시간을 진행시키지 않는다.
+async function flushGsapImport() {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0);
+  });
+}
+
 describe('WordmarkFlip — 단일 워드마크 노드의 hero/compact 전환', () => {
   it('최초 Overview 마운트에는 Flip이 호출되지 않는다', () => {
     const getStateSpy = vi.spyOn(Flip, 'getState');
@@ -120,12 +132,13 @@ describe('WordmarkFlip — 단일 워드마크 노드의 hero/compact 전환', (
     expect(fromSpy).not.toHaveBeenCalled();
   });
 
-  it('overview → about에서 같은 워드마크 노드가 500ms hero→compact FLIP을 실행한다', () => {
+  it('overview → about에서 같은 워드마크 노드가 500ms hero→compact FLIP을 실행한다', async () => {
     const getStateSpy = vi.spyOn(Flip, 'getState');
     const fromSpy = vi.spyOn(Flip, 'from');
     renderHome();
     const wordmark = screen.getByTestId('wordmark');
     expect(wordmark).toHaveAttribute('data-wordmark-mode', 'hero');
+    await flushGsapImport();
 
     act(() => {
       fireEvent.click(screen.getByRole('button', { name: /^about$/i }));
@@ -148,7 +161,7 @@ describe('WordmarkFlip — 단일 워드마크 노드의 hero/compact 전환', (
     expect(wordmark).toHaveAttribute('data-wordmark-mode', 'compact');
   });
 
-  it('about → overview에서 같은 노드가 compact→hero로 돌아오며 BootSequence는 재생하지 않는다', () => {
+  it('about → overview에서 같은 노드가 compact→hero로 돌아오며 BootSequence는 재생하지 않는다', async () => {
     // gsap.timeline() 호출 수는 여기서 못 쓴다 — Flip.from()도 자기
     // 애니메이션을 위해 내부적으로 gsap.timeline()을 부른다(node_modules/
     // gsap/Flip.js:540,1222 확인). 대신 관찰 가능한 행동으로 고정한다:
@@ -159,6 +172,7 @@ describe('WordmarkFlip — 단일 워드마크 노드의 hero/compact 전환', (
     renderHome();
     const role = screen.getByTestId('boot-role');
     const start = screen.getByTestId('boot-start');
+    await flushGsapImport();
 
     act(() => {
       fireEvent.click(screen.getByRole('button', { name: /^about$/i }));
@@ -217,10 +231,11 @@ describe('WordmarkFlip — 단일 워드마크 노드의 hero/compact 전환', (
 
   it.each(overviewBoundaryTriggers)(
     '%s도 active 기반 단일 bridge를 통해 정확히 한 번의 Flip만 만든다',
-    (_label, trigger) => {
+    async (_label, trigger) => {
       const getStateSpy = vi.spyOn(Flip, 'getState');
       const fromSpy = vi.spyOn(Flip, 'from');
       const { container } = renderHome();
+      await flushGsapImport();
 
       act(() => trigger(container));
 
@@ -228,6 +243,49 @@ describe('WordmarkFlip — 단일 워드마크 노드의 hero/compact 전환', (
       expect(fromSpy).toHaveBeenCalledTimes(1);
     }
   );
+
+  it('overview를 거치지 않는 전환(about → projects)은 Flip을 만들지 않는다', async () => {
+    // 위 it.each는 매번 overview를 지나는 경계만 검증한다 — 이 테스트가
+    // 없으면 crossesOverviewBoundary 게이트 자체를 지워도(양쪽 다 overview가
+    // 아닌 전환에서도 Flip을 시도하는 회귀) 기존 테스트가 하나도 못 잡는다.
+    const getStateSpy = vi.spyOn(Flip, 'getState');
+    const fromSpy = vi.spyOn(Flip, 'from');
+    renderHome();
+    await flushGsapImport();
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /^about$/i }));
+    });
+    getStateSpy.mockClear();
+    fromSpy.mockClear();
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /^projects$/i }));
+    });
+
+    expect(getStateSpy).not.toHaveBeenCalled();
+    expect(fromSpy).not.toHaveBeenCalled();
+  });
+
+  it('GSAP 모듈이 아직 로드되지 않았으면 FLIP 없이 넘어간다(위 테스트들과 달리 flushGsapImport를 부르지 않는다)', () => {
+    const getStateSpy = vi.spyOn(Flip, 'getState');
+    const fromSpy = vi.spyOn(Flip, 'from');
+    renderHome();
+    // 마운트 직후 import('@/lib/gsap')이 아직 pending인 바로 그 순간을
+    // 재현한다 — gsapModuleRef가 비어 있을 때도 Flip을 시도하면(구멍) 여기서
+    // 잡힌다. hero/compact 전환 자체는 CSS·data 속성이 담당하므로 FLIP 없이도
+    // 깨지지 않아야 한다.
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /^about$/i }));
+    });
+
+    expect(getStateSpy).not.toHaveBeenCalled();
+    expect(fromSpy).not.toHaveBeenCalled();
+    expect(screen.getByTestId('wordmark')).toHaveAttribute(
+      'data-wordmark-mode',
+      'compact'
+    );
+  });
 
   it('reduced-motion은 Flip.from() 없이 최종 위치를 즉시 적용한다', () => {
     installMatchMedia(true);

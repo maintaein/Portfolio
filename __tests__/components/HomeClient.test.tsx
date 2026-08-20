@@ -411,7 +411,10 @@ describe('HomeClient SSR 셸 구조', () => {
       ].sort()
     );
     expect(importsNextDynamic).toBe(false);
-    expect(dynamicImports).toEqual([]);
+    // GSAP은 First Load JS 예산 때문에 동적 경계로 뺐다(gsap-lazy-brief.md).
+    // HomeClient가 만드는 동적 import는 정확히 이 하나뿐이어야 한다 — 다른
+    // 지연 로딩이 몰래 추가되지 않았는지도 함께 고정한다.
+    expect(dynamicImports).toEqual(['@/lib/gsap']);
     expect(timeoutCalls).toEqual([]);
   });
 });
@@ -792,8 +795,14 @@ describe('HomeClient → HyperspeedBackground 배선', () => {
     // 되돌아오는 방향까지 확인한다. 이 어서션이 없으면 obscured를 한 번
     // true로 만들고 영원히 두는 구현도 통과한다 — 모달을 닫은 뒤 배경이
     // 어두운 채로 남는 것이 정확히 그 결함이다.
-    // ProjectModal은 next/dynamic이라 클릭 직후에는 아직 DOM에 없다.
-    fireEvent.click(await screen.findByRole('button', { name: '닫기' }));
+    // ProjectModal은 next/dynamic이라 클릭 직후에는 아직 DOM에 없다. 이 파일은
+    // '@/lib/gsap'을 mock하지 않으므로 HomeClient의 마운트 effect가 실제
+    // gsap 패키지를 처음으로 동적 import하면서 겪는 실 transform·평가 비용이
+    // ProjectModal 자체의 청크 로드와 겹쳐 기본 1000ms 예산을 종종 넘는다
+    // (실측: 최대 ~1.7초) — 로직 문제가 아니라 타이밍 여유를 넉넉히 준다.
+    fireEvent.click(
+      await screen.findByRole('button', { name: '닫기' }, { timeout: 5000 })
+    );
     expect(probe).toHaveAttribute('data-obscured', 'false');
   });
 

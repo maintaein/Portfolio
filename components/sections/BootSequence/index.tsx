@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useRef, type RefObject } from 'react';
 import { OVERVIEW, type NavId } from '@/hooks/useSectionNav';
-import { gsap, registerGsap, SITE_EASE } from '@/lib/gsap';
+import type { gsap } from '@/lib/gsap';
 
 export interface BootSequenceProps {
   active: NavId;
@@ -41,55 +41,88 @@ export default function BootSequence({
     if (!eligible || hasStartedRef.current) return;
     hasStartedRef.current = true;
 
-    registerGsap();
-
     // cleanup 시점엔 ref.current가 이미 바뀌어 있을 수 있으므로(린트가 경고하는
     // 그대로) 이 effect가 실제로 다룰 노드를 지금 스냅샷으로 고정해 둔다.
     const wordmarkEl = wordmarkRef.current;
     const roleEl = roleRef.current;
     const startEl = startRef.current;
 
-    const tl = gsap.timeline();
+    // 이 effect가 아직 살아있는지 — 언마운트·조건 변화로 정리된 뒤에 동적
+    // import promise가 늦게 도착해도 죽은 노드에 timeline을 걸지 않는다.
+    let cancelled = false;
+    let timeline: gsap.core.Timeline | null = null;
 
-    if (wordmarkEl) {
-      tl.set(wordmarkEl, { filter: 'blur(5px)' }, 0);
-      tl.to(
-        wordmarkEl,
-        { filter: 'blur(0px)', duration: SWEEP_DURATION, ease: SITE_EASE },
-        SWEEP_AT
-      );
+    // GSAP 없이도(청크 로드 실패·언마운트 뒤 도착 등) 항상 쓸 수 있는 최종
+    // 상태 노출. 역할 라벨·START의 pre-boot 은닉은 CSS가 소유하므로
+    // (styles/design-tokens.css의 no-preference 오버라이드) 인라인 스타일로
+    // 그것을 덮어써야 드러난다 — gsap.set()과 동일한 값을 직접 대입한다.
+    function revealFinalState() {
+      if (roleEl) {
+        roleEl.style.opacity = '1';
+        roleEl.style.transform = 'translateY(0)';
+      }
+      if (startEl) {
+        startEl.style.opacity = '1';
+        startEl.style.transform = 'translateY(0)';
+      }
+      if (wordmarkEl) wordmarkEl.style.filter = 'blur(0px)';
     }
 
-    if (roleEl) {
-      tl.fromTo(
-        roleEl,
-        { opacity: 0, y: 8 },
-        { opacity: 1, y: 0, duration: ROLE_REVEAL_DURATION, ease: SITE_EASE },
-        SWEEP_AT + SWEEP_DURATION
-      );
-    }
+    import('@/lib/gsap')
+      .then(({ gsap, registerGsap, SITE_EASE }) => {
+        if (cancelled) return;
+        registerGsap();
 
-    if (startEl) {
-      tl.fromTo(
-        startEl,
-        { opacity: 0, y: 8 },
-        { opacity: 1, y: 0, duration: START_REVEAL_DURATION, ease: SITE_EASE },
-        SWEEP_AT + SWEEP_DURATION + ROLE_REVEAL_DURATION
-      );
-    }
+        const tl = gsap.timeline();
+        timeline = tl;
 
-    // 2초 지점을 타임라인 길이로 고정한다 — "2초 안에 완료" 계약의 경계.
-    tl.set({}, {}, BOOT_DURATION);
+        if (wordmarkEl) {
+          tl.set(wordmarkEl, { filter: 'blur(5px)' }, 0);
+          tl.to(
+            wordmarkEl,
+            { filter: 'blur(0px)', duration: SWEEP_DURATION, ease: SITE_EASE },
+            SWEEP_AT
+          );
+        }
+
+        if (roleEl) {
+          tl.fromTo(
+            roleEl,
+            { opacity: 0, y: 8 },
+            { opacity: 1, y: 0, duration: ROLE_REVEAL_DURATION, ease: SITE_EASE },
+            SWEEP_AT + SWEEP_DURATION
+          );
+        }
+
+        if (startEl) {
+          tl.fromTo(
+            startEl,
+            { opacity: 0, y: 8 },
+            { opacity: 1, y: 0, duration: START_REVEAL_DURATION, ease: SITE_EASE },
+            SWEEP_AT + SWEEP_DURATION + ROLE_REVEAL_DURATION
+          );
+        }
+
+        // 2초 지점을 타임라인 길이로 고정한다 — "2초 안에 완료" 계약의 경계.
+        tl.set({}, {}, BOOT_DURATION);
+      })
+      .catch(() => {
+        // GSAP 청크 로드 실패 — 역할 라벨·START의 pre-boot 은닉은 CSS가
+        // 소유하므로 아무것도 하지 않으면 영원히 안 보인다. 최종 상태로
+        // 강제로 드러낸다(이번 변경이 새로 만드는 위험).
+        if (cancelled) return;
+        revealFinalState();
+      });
 
     return () => {
-      tl.kill();
+      cancelled = true;
       // 부팅 도중 이탈(active가 overview를 벗어남·reducedMotion으로 전환 등) —
       // 역할 라벨·START·워드마크를 중간 프레임이 아니라 최종 안정 상태로
       // 맞춘다. 재방문 시 이 최종 상태가 그대로 유지되고 타임라인은 다시
-      // 만들어지지 않는다(hasStartedRef가 이미 true).
-      if (roleEl) gsap.set(roleEl, { opacity: 1, y: 0 });
-      if (startEl) gsap.set(startEl, { opacity: 1, y: 0 });
-      if (wordmarkEl) gsap.set(wordmarkEl, { filter: 'blur(0px)' });
+      // 만들어지지 않는다(hasStartedRef가 이미 true). timeline이 아직 없으면
+      // (로드 대기 중 이탈) 곧바로 최종 상태로 둔다.
+      timeline?.kill();
+      revealFinalState();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, motionReady, reducedMotion, routeResolved]);

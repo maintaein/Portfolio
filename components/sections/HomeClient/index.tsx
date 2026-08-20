@@ -35,7 +35,7 @@ import {
   SECTION_IDS,
   type HomeSectionId,
 } from '@/lib/constants';
-import { Flip, registerGsap, SITE_EASE } from '@/lib/gsap';
+import type { Flip } from '@/lib/gsap';
 
 const SECTION_COMPONENTS = {
   [SECTION_IDS.ABOUT]: AboutSection,
@@ -74,6 +74,21 @@ function hasOpacityTransition(element: HTMLElement) {
 
 export default function HomeClient() {
   const wordmarkRef = useRef<HTMLButtonElement>(null);
+  // GSAP은 정적 import에서 뺐다(First Load JS 예산 — gsap-lazy-brief.md).
+  // 마운트 직후 미리 요청해 ref에 담아 두고, 아래 handleBeforeActiveChange는
+  // 이 ref를 동기적으로만 읽는다 — Flip.getState()는 DOM이 바뀌기 직전에
+  // 동기 호출돼야 해서 await을 넣을 수 있는 자리가 아니기 때문이다. 아직
+  // 로드되지 않았으면(사용자가 첫 섹션 이동을 하기까지 보통 수백 ms가
+  // 걸리므로 드물다) FLIP 없이 넘어간다 — 위치는 CSS가 바꾸므로 애니메이션만
+  // 없을 뿐 깨지지 않는다.
+  const gsapModuleRef = useRef<typeof import('@/lib/gsap') | null>(null);
+
+  useEffect(() => {
+    import('@/lib/gsap').then((mod) => {
+      gsapModuleRef.current = mod;
+    });
+  }, []);
+
   // 워드마크 FLIP 브리지 — hero/compact 경계를 넘는 실제 active 변경 직전에
   // useSectionNav가 onBeforeActiveChange로 알려주면 Flip.getState()를 여기
   // 담아 둔다. 값이 있으면 React가 hero/compact 클래스를 반영한 다음 커밋의
@@ -81,9 +96,7 @@ export default function HomeClient() {
   // 지침). motionReady·reducedMotion·routeResolved는 이 콜백이 정의되는
   // 시점엔 아직 useSectionNav의 반환값이 없어 순환 참조가 생기므로, 매
   // 렌더 갱신되는 ref로 최신값을 읽는다(이 파일의 activeRef와 동일 패턴).
-  const pendingWordmarkStateRef = useRef<ReturnType<typeof Flip.getState> | null>(
-    null
-  );
+  const pendingWordmarkStateRef = useRef<Flip.FlipState | null>(null);
   const motionReadyRef = useRef(false);
   const reducedMotionRef = useRef(true);
   const routeResolvedRef = useRef(false);
@@ -100,12 +113,18 @@ export default function HomeClient() {
       const crossesOverviewBoundary = from === OVERVIEW || to === OVERVIEW;
       if (!crossesOverviewBoundary || !wordmarkRef.current) return;
 
+      // 아직 GSAP 모듈이 로드되지 않았으면 FLIP 없이 넘어간다 — 구조적으로
+      // 강제된다: pendingWordmarkStateRef가 비어 있으므로 아래
+      // useLayoutEffect([active])의 Flip.from()도 실행되지 않는다.
+      const mod = gsapModuleRef.current;
+      if (!mod) return;
+
       // BootSequence는 active === overview일 때만 registerGsap()을 부른다.
       // /#projects처럼 overview를 거치지 않고 다른 섹션에서 시작한 뒤 최초로
       // overview 경계를 넘는 경우 그 등록이 아직 없었을 수 있으므로 여기서도
       // 멱등하게 보장한다.
-      registerGsap();
-      pendingWordmarkStateRef.current = Flip.getState(wordmarkRef.current);
+      mod.registerGsap();
+      pendingWordmarkStateRef.current = mod.Flip.getState(wordmarkRef.current);
     },
     []
   );
@@ -148,9 +167,15 @@ export default function HomeClient() {
     pendingWordmarkStateRef.current = null;
     if (!wordmarkRef.current) return;
 
-    Flip.from(state, {
+    // state가 있다는 것은 handleBeforeActiveChange가 그 시점에 이미
+    // gsapModuleRef를 채워 뒀다는 뜻이므로(같은 조건에서만 둘 다 세팅) 여기
+    // 도달했을 때 모듈이 없는 경우는 없다.
+    const mod = gsapModuleRef.current;
+    if (!mod) return;
+
+    mod.Flip.from(state, {
       duration: 0.5,
-      ease: SITE_EASE,
+      ease: mod.SITE_EASE,
       scale: true,
       absolute: true,
     });

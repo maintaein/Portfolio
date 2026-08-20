@@ -129,6 +129,19 @@ function capturedTimeline(): gsap.core.Timeline {
   return result.value as gsap.core.Timeline;
 }
 
+// BootSequence는 이제 useLayoutEffect 안에서 import('@/lib/gsap')을 동적으로
+// 부른 뒤 그 결과로 timeline을 만든다(gsap-lazy-brief.md). render() 직후
+// gsap.timeline()이 이미 호출돼 있다고 가정할 수 없으므로, 이 promise가
+// 만드는 마이크로태스크 체인만 흘려보낸다. vi.advanceTimersByTimeAsync(0)은
+// 시간을 진행시키지 않는다 — 위 주석이 금지한 "vi.advanceTimersByTime()으로
+// 부팅 안무 자체를 진행시키는 것"과는 다르다. 안무를 진행시키는 수단은
+// 여전히 tl.seek()뿐이다.
+async function flushGsapImport() {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0);
+  });
+}
+
 describe('BootSequence LCP 계약', () => {
   it('이름이 SSR HTML에 존재한다', () => {
     const html = renderToString(<SsrHarness />);
@@ -217,9 +230,10 @@ describe('BootSequence LCP 계약', () => {
 });
 
 describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨다', () => {
-  it('1.4초 스윕 뒤 역할과 START가 순서대로 안정된다', () => {
+  it('1.4초 스윕 뒤 역할과 START가 순서대로 안정된다', async () => {
     const onStart = vi.fn();
     render(<Harness onStart={onStart} />);
+    await flushGsapImport();
     const tl = capturedTimeline();
     const role = screen.getByTestId('boot-role');
     const start = screen.getByTestId('boot-start');
@@ -247,8 +261,9 @@ describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨
     expect(start.style.opacity).toBe('1');
   });
 
-  it('2초 안에 완료되고 Overview 대형 모드로 잔류한다', () => {
+  it('2초 안에 완료되고 Overview 대형 모드로 잔류한다', async () => {
     render(<Harness />);
+    await flushGsapImport();
     const tl = capturedTimeline();
     const wordmark = screen.getByTestId('wordmark');
     const role = screen.getByTestId('boot-role');
@@ -272,8 +287,9 @@ describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨
     expect(onStart).toHaveBeenCalledTimes(1);
   });
 
-  it('unmount 뒤 timeline을 kill한다', () => {
+  it('unmount 뒤 timeline을 kill한다', async () => {
     const { unmount } = render(<Harness />);
+    await flushGsapImport();
     const tl = capturedTimeline();
     const killSpy = vi.spyOn(tl, 'kill');
 
