@@ -12,6 +12,13 @@ interface NavigationProps {
   onNavigate: (id: NavId) => void;
   reducedMotion?: boolean;
   wordmarkRef?: Ref<HTMLButtonElement>;
+  // 부팅 안무(BootSequence)가 이름의 "멀리서 도착하는" scale을 여는 wrapper.
+  // 워드마크 버튼(FLIP 대상) 자신에는 절대 걸지 않는다 — GSAP Flip의
+  // _makeAbsolute()와 워드마크 자신의 transform이 충돌해 "START 직후
+  // 워드마크 소실" 버그가 재발한다(직전 라운드). 이 ref는 hero 포지셔닝을
+  // 이미 담당하는 fixed wrapper 그 자신을 가리킨다 — 새 중간 div를 끼워
+  // FLIP 타깃의 containing block 체인을 바꾸지 않기 위해서다.
+  wordmarkScaleRef?: Ref<HTMLDivElement>;
   className?: string;
 }
 
@@ -21,6 +28,7 @@ export default function Navigation({
   onNavigate,
   reducedMotion = false,
   wordmarkRef,
+  wordmarkScaleRef,
   className,
 }: NavigationProps) {
   const itemRefs = useRef(new Map<NavId, HTMLButtonElement>());
@@ -62,11 +70,18 @@ export default function Navigation({
             display:contents로 스스로 사라져 워드마크를 nav 행의 평범한 flex
             자식으로 되돌린다 — transform 없이도 -translate-y-full과 같은
             "브레이크포인트별 폰트 크기가 달라져도 바닥이 항상 50%에
-            닿는다"는 겹침 방지 계약을 유지한다. */}
+            닿는다"는 겹침 방지 계약을 유지한다.
+
+            이 노드 자신이 부팅 안무의 scale wrapper이기도 하다(wordmarkScaleRef)
+            — 워드마크 버튼이 아니라 여기에 scale을 건다. 이미 hero에서
+            position:fixed인 노드라 transform을 얹어도 워드마크의 containing
+            block 체인이 새로 바뀌지 않는다(새 중간 div를 끼웠다면 그 자체가
+            더 가까운 containing block이 되어 문제였을 것이다). */}
         <div
+          ref={wordmarkScaleRef}
           className={
             active === 'overview'
-              ? 'fixed inset-x-0 bottom-1/2 z-40 flex justify-center'
+              ? 'wordmark-scale-wrapper fixed inset-x-0 bottom-1/2 z-40 flex justify-center'
               : 'contents'
           }
         >

@@ -130,3 +130,9 @@ export const PERSONAL_INFO = {
     LIGHT: 'light',
     DARK: 'dark',
   } as const;
+
+  // 부팅 안무(BootSequence)와 배경(HyperspeedBackground)이 각자 소유한 두
+  // GSAP 타임라인/카메라 애니메이션이 같은 총 길이를 참조해야 "하나의
+  // 제스처"로 읽힌다(부팅 안무 브리프 1절). 값을 두 파일에 따로 하드코딩하면
+  // 나중에 한쪽만 바뀌어 어긋나기 쉬우므로 여기 하나로 둔다.
+  export const BOOT_DURATION_SECONDS = 2;

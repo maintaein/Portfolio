@@ -55,23 +55,29 @@ function Harness({
   routeResolved = true,
   motionReady = true,
   reducedMotion = false,
+  sceneReady = true,
   onStart = vi.fn(),
 }: Partial<BootSequenceProps>) {
   const wordmarkRef = useRef<HTMLButtonElement>(null);
+  const wordmarkScaleRef = useRef<HTMLDivElement>(null);
   return (
     <>
       {/* 실제 Navigation을 쓰지 않고 최소한의 wordmark 자리만 재현한다 —
           hero/compact 스타일은 Navigation 자신의 관심사고, 여기 관심사는
           BootSequence가 이 노드를 어떻게 애니메이션하는지다. */}
-      <button ref={wordmarkRef} data-testid="wordmark">
-        KIM TAEIN
-      </button>
+      <div ref={wordmarkScaleRef}>
+        <button ref={wordmarkRef} data-testid="wordmark">
+          KIM TAEIN
+        </button>
+      </div>
       <BootSequence
         active={active}
         routeResolved={routeResolved}
         motionReady={motionReady}
         reducedMotion={reducedMotion}
+        sceneReady={sceneReady}
         wordmarkRef={wordmarkRef}
+        wordmarkScaleRef={wordmarkScaleRef}
         onStart={onStart}
       />
     </>
@@ -80,6 +86,7 @@ function Harness({
 
 function SsrHarness() {
   const wordmarkRef = useRef<HTMLButtonElement>(null);
+  const wordmarkScaleRef = useRef<HTMLDivElement>(null);
   return (
     <>
       <Navigation
@@ -87,13 +94,16 @@ function SsrHarness() {
         active="overview"
         onNavigate={() => {}}
         wordmarkRef={wordmarkRef}
+        wordmarkScaleRef={wordmarkScaleRef}
       />
       <BootSequence
         active="overview"
         routeResolved={false}
         motionReady={false}
         reducedMotion={false}
+        sceneReady={false}
         wordmarkRef={wordmarkRef}
+        wordmarkScaleRef={wordmarkScaleRef}
         onStart={() => {}}
       />
     </>
@@ -110,9 +120,11 @@ function CompositionHarness({
   routeResolved = true,
   motionReady = true,
   reducedMotion = false,
+  sceneReady = true,
   onStart = vi.fn(),
 }: Partial<BootSequenceProps>) {
   const wordmarkRef = useRef<HTMLButtonElement>(null);
+  const wordmarkScaleRef = useRef<HTMLDivElement>(null);
   return (
     <>
       <Navigation
@@ -120,13 +132,16 @@ function CompositionHarness({
         active={active}
         onNavigate={() => {}}
         wordmarkRef={wordmarkRef}
+        wordmarkScaleRef={wordmarkScaleRef}
       />
       <BootSequence
         active={active}
         routeResolved={routeResolved}
         motionReady={motionReady}
         reducedMotion={reducedMotion}
+        sceneReady={sceneReady}
         wordmarkRef={wordmarkRef}
+        wordmarkScaleRef={wordmarkScaleRef}
         onStart={onStart}
       />
     </>
@@ -263,7 +278,12 @@ describe('BootSequence LCP 계약', () => {
 });
 
 describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨다', () => {
-  it('1.4초 스윕 뒤 역할과 START가 순서대로 안정된다', async () => {
+  // 확정 안무: 이름 0.15~1.05초, 역할 라벨 1.30~1.55초, START 1.55~1.80초.
+  // 광선이 0.90~1.30초에 감속하며 "도착"하고 그 뒤에 캡션이 순서대로 붙는다.
+  // 경계마다 양옆을 짚어 순서가 뒤집히거나 겹치면 잡히게 한다.
+  // 숫자는 일부러 리터럴이다 — 이 일정 자체가 사용자가 승인한 계약이므로
+  // 구현 상수를 import하면 일정이 바뀌어도 테스트가 조용히 따라가 버린다.
+  it('이름이 정착한 뒤 역할과 START가 순서대로 등장한다', async () => {
     const onStart = vi.fn();
     render(<Harness onStart={onStart} />);
     await flushGsapImport();
@@ -271,24 +291,24 @@ describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨
     const role = screen.getByTestId('boot-role');
     const start = screen.getByTestId('boot-start');
 
+    // 역할 라벨 시작 직전. fromTo 트윈은 GSAP 기본값(immediateRender: true)에
+    // 따라 생성 즉시 "from" 값(opacity 0)을 렌더하므로 CSS의 pre-boot 은닉과
+    // 같은 값이고, 핸드오프에 시각적 점프가 없다.
     act(() => {
-      tl.seek(1.4);
+      tl.seek(1.29);
     });
-    // fromTo 트윈은 GSAP 기본값(immediateRender: true)에 따라 생성 즉시
-    // "from" 값(opacity 0)을 렌더한다 — CSS의 pre-boot 은닉 상태(opacity 0)와
-    // 정확히 같은 값이라 핸드오프에 시각적 점프가 없다. 아직 각 트윈의
-    // 시작 지점(1.7초·1.85초)에 닿지 않았으므로 두 값 다 0으로 남아 있다.
     expect(role.style.opacity).toBe('0');
     expect(start.style.opacity).toBe('0');
 
+    // 역할 라벨 완료 = START 시작 지점. 둘이 겹치지 않는다.
     act(() => {
-      tl.seek(1.85);
+      tl.seek(1.55);
     });
     expect(role.style.opacity).toBe('1');
     expect(start.style.opacity).toBe('0');
 
     act(() => {
-      tl.seek(2);
+      tl.seek(1.8);
     });
     expect(role.style.opacity).toBe('1');
     expect(start.style.opacity).toBe('1');
@@ -371,15 +391,17 @@ describe('BootSequence 게이트 — reduced-motion·routeResolved·motionReady'
 // 픽셀 정렬은 증명할 수 없다 — 여기서는 "어떤 클래스·변수가 어디서
 // 오는가"라는 구조만 고정한다.
 describe('BootSequence 구도 — 중앙 정렬·간격·CTA 위계', () => {
-  it('워드마크 pre-boot blur도 CSS가 소유한다 — data-wordmark-mode=hero가 no-preference에서만 blur(5px)', () => {
+  it('워드마크 pre-boot blur도 CSS가 소유한다 — data-wordmark-mode=hero가 no-preference에서만 blur(8px)', () => {
     const selector = "[data-wordmark-mode='hero']";
     const base = unconditionalRuleBody(selector);
     expect(base, `${selector} 기본 규칙이 없다`).toBeDefined();
     expect(base).toMatch(/filter\s*:\s*blur\(0px\)\s*;/);
 
+    // 8px — 부팅 안무 브리프 LCP 절이 정한 상한(≤8px, 글자를 글자로 알아볼
+    // 수 있는 한계). 이전 라운드의 5px에서 올랐다.
     const override = noPreferenceOverrideBody(selector);
     expect(override, `${selector}의 no-preference 오버라이드가 없다`).toBeDefined();
-    expect(override).toMatch(/filter\s*:\s*blur\(5px\)\s*;/);
+    expect(override).toMatch(/filter\s*:\s*blur\(8px\)\s*;/);
 
     // reduce 미디어쿼리 블록 어디에도 이 선택자로 다시 블러를 거는 규칙이
     // 없어야 한다 — role/start와 같은 이유(역방향 플래시 방지).
@@ -415,11 +437,22 @@ describe('BootSequence 구도 — 중앙 정렬·간격·CTA 위계', () => {
     // 뮤테이션 (d) — 간격의 출처를 참조하지 않으면(클래스 제거) 이름의
     // 바닥(50%)과 캡션의 시작(50%)이 같은 선에 붙어 겹침이 다시 가능해진다.
     expect(container.className).toContain('mt-[var(--boot-caption-gap)]');
+
+    // 뮤테이션 (n) — 96px 이름 아래에서 고정값은 붙어 보인다(부팅 안무
+    // 브리프). clamp()로 이름과 함께 자라야 한다: 최솟값 > 0, 뷰포트 비례
+    // 항(vh)을 포함, 최댓값 > 최솟값. 고정값(예: 1.75rem)으로 되돌리면 이
+    // clamp() 패턴 자체가 안 잡혀 FAIL한다.
     const gapDecl = DESIGN_TOKENS_CSS.match(
-      /--boot-caption-gap:\s*([\d.]+)\s*\w*\s*;/
+      /--boot-caption-gap:\s*clamp\(([^,]+),\s*([^,]+),\s*([^)]+)\)\s*;/
     );
-    expect(gapDecl, '--boot-caption-gap 선언을 design-tokens.css에서 찾지 못했다').not.toBeNull();
-    expect(Number(gapDecl![1])).toBeGreaterThan(0);
+    expect(
+      gapDecl,
+      '--boot-caption-gap이 clamp()로 정의되어 있지 않다'
+    ).not.toBeNull();
+    const [, min, preferred, max] = gapDecl!;
+    expect(parseFloat(min)).toBeGreaterThan(0);
+    expect(preferred).toMatch(/vh/);
+    expect(parseFloat(max)).toBeGreaterThan(parseFloat(min));
   });
 
   it('역할 라벨은 START보다 작고 흐리다 — 크기·자간 토큰이 서로 다르다', () => {
@@ -455,9 +488,6 @@ describe('BootSequence 구도 — 중앙 정렬·간격·CTA 위계', () => {
     // 뮤테이션 (d) — "START — ABOUT →"로 되돌리면 정확히 일치하지 않아 FAIL한다.
     expect(start.textContent).toBe('START');
 
-    // 뮤테이션 (e) — 밑줄을 지우면 FAIL한다.
-    expect(start.className).toMatch(/\bborder-b\b/);
-    expect(start.className).toContain('border-[var(--color-cyan-core)]');
     // hover·focus-visible 신호 — 화살표가 빠진 자리를 대신한다.
     expect(start.className).toContain('hover:text-[var(--color-cyan-hi)]');
     expect(start.className).toMatch(/focus-visible:/);
@@ -466,9 +496,95 @@ describe('BootSequence 구도 — 중앙 정렬·간격·CTA 위계', () => {
       'rounded-full',
       'rounded-2xl',
       'bg-[var(--color-cyan-core)]',
+      'border-b',
     ]) {
       expect(start.className, `${banned}가 있다`).not.toContain(banned);
     }
+  });
+
+  it('START 크기는 모바일 t5 / 태블릿 t3 / 데스크톱 t2이고 역할 라벨(t8)과 항상 2배 가까이 벌어진다 — 뮤테이션 (h)', () => {
+    render(<Harness />);
+    const start = screen.getByTestId('boot-start');
+    const role = screen.getByTestId('boot-role');
+
+    // 뮤테이션 (h) — t6(반응형 없는 고정 크기)으로 되돌리면 이 세 토큰이
+    // 사라져 FAIL한다.
+    expect(start.className).toContain('text-t5');
+    expect(start.className).toContain('sm:text-t3');
+    expect(start.className).toContain('md:text-t2');
+    expect(role.className).toContain('text-t8');
+
+    // 실제 px 값으로도 위계를 재확인한다 — 이전 라운드는 15/11=1.36배였다.
+    const PX_BY_TOKEN: Record<string, number> = {
+      t8: 11,
+      t5: 17,
+      t3: 22,
+      t2: 26,
+    };
+    for (const startToken of ['t5', 't3', 't2']) {
+      expect(PX_BY_TOKEN[startToken] / PX_BY_TOKEN.t8).toBeGreaterThan(1.36);
+    }
+  });
+
+  it('밑줄은 START 버튼 안의 별도 span이다 — CSS border가 아니라 GSAP이 scaleX로 그을 수 있어야 한다', () => {
+    // 뮤테이션 (i) — 이 span 자체를 지우면 밑줄 draw 자체가 불가능해진다.
+    render(<Harness />);
+    const start = screen.getByTestId('boot-start');
+    const underline = screen.getByTestId('boot-start-underline');
+
+    expect(start).toContainElement(underline);
+    expect(underline.className).toContain('bg-[var(--color-cyan-core)]');
+    expect(underline.className).toContain('origin-left');
+    expect(underline).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('아이들 광휘 span이 START 뒤에 존재한다', () => {
+    render(<Harness />);
+    const start = screen.getByTestId('boot-start');
+    const glow = screen.getByTestId('boot-start-glow');
+
+    expect(start).toContainElement(glow);
+    expect(glow).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('글자("START") 자신에는 어떤 CSS 애니메이션·keyframe도 걸리지 않는다 — 뮤테이션 (j)', () => {
+    // .boot-start(버튼 자신) 규칙 블록에 animation 선언이 없어야 한다 —
+    // 맥동은 밑줄(.boot-start-underline)·광휘(.boot-start-glow)만의 몫이다.
+    const bootStartBlock = DESIGN_TOKENS_CSS.match(
+      /\n {2}\.boot-start\s*\{([\s\S]*?)\n {2}\}/
+    )?.[1];
+    expect(bootStartBlock, '.boot-start 규칙을 찾지 못했다').toBeDefined();
+    expect(bootStartBlock).not.toMatch(/animation\s*:/);
+  });
+});
+
+// 캡션 컨테인먼트 점프(감사 H — 부팅 안무 브리프 3절). BootSequence는 이제
+// HomeClient에서 overview 섹션 밖(셸 레벨)에 렌더되므로, 자기 자신이 active를
+// 보고 보임/숨김·inert를 직접 소유해야 한다(예전엔 섹션 wrapper의 inert를
+// 상속받았다). jsdom은 paint containment도 점프도 계산할 수 없으므로 여기서는
+// "active가 아닐 때 이 컴포넌트가 스스로 격리되는가"라는 구조만 고정한다 —
+// 실제 점프 소멸 여부는 실기기 확인 사항이다(리포트 참고).
+describe('BootSequence — 캡션 컨테인먼트 점프 회피(active 기반 자가 은닉)', () => {
+  it('active=overview에서는 inert가 없고 aria-hidden=false, boot-caption-visible이다', () => {
+    render(<Harness active="overview" />);
+    const container = screen.getByTestId('boot-sequence');
+
+    expect(container).not.toHaveAttribute('inert');
+    expect(container).toHaveAttribute('aria-hidden', 'false');
+    expect(container.className).toContain('boot-caption-visible');
+    expect(container.className).not.toContain('boot-caption-hidden');
+  });
+
+  // 뮤테이션 — active !== overview에서 inert/aria-hidden을 안 걸면 START·
+  // 역할 라벨이 다른 섹션 위에서도 Tab·스크린리더에 남아 FAIL해야 한다.
+  it('active가 overview를 벗어나면 inert=true, aria-hidden=true, boot-caption-hidden이다', () => {
+    render(<Harness active="about" />);
+    const container = screen.getByTestId('boot-sequence');
+
+    expect(container).toHaveAttribute('inert');
+    expect(container).toHaveAttribute('aria-hidden', 'true');
+    expect(container.className).toContain('boot-caption-hidden');
+    expect(container.className).not.toContain('boot-caption-visible');
   });
 });
 

@@ -10,9 +10,27 @@ import { Flip, SITE_EASE } from '@/lib/gsap';
 // 섹션(About·Skills·Projects·Awards·Experience·Footer)과 WebGL 배경은 이
 // 파일의 관심사가 아니므로 가볍게 대체하되, BootSequence와 Navigation은
 // 실제 구현을 그대로 쓴다 — 이 둘 사이의 워드마크 공유가 검증 대상이다.
-vi.mock('@/components/blocks/HyperspeedBackground', () => ({
-  default: () => <div data-testid="hyperspeed-background-probe" />,
-}));
+// onSceneReady를 마운트 즉시 불러준다 — 실제 HyperspeedBackground가 씬을
+// 붙이는 순간과 같은 신호다. 이걸 안 부르면 BootSequence는 부팅 안무 브리프의
+// "씬 준비 신호 또는 타임아웃" 경합에서 타임아웃(600ms)까지 기다려야 하는데,
+// 이 파일은 실제 타이머를 그만큼 진행시키지 않으므로(fake timer, seek()만
+// 진행 수단) 신호를 즉시 보내는 편이 이 파일의 관심사(워드마크 FLIP)와
+// 무관한 타이밍 우연에 기대지 않는다.
+vi.mock('@/components/blocks/HyperspeedBackground', async () => {
+  const { useEffect } = await import('react');
+  return {
+    default: function HyperspeedBackgroundProbe({
+      onSceneReady,
+    }: {
+      onSceneReady?: () => void;
+    }) {
+      useEffect(() => {
+        onSceneReady?.();
+      }, [onSceneReady]);
+      return <div data-testid="hyperspeed-background-probe" />;
+    },
+  };
+});
 
 vi.mock('@/components/sections', async (importOriginal) => {
   const actual =
@@ -399,4 +417,33 @@ describe('WordmarkFlip — 단일 워드마크 노드의 hero/compact 전환', (
   // 만들어지지 않는다 — jsdom 이전에 React 자체의 생명주기가 그 경로를
   // 막는다. 이 게이트(BootSequence의 동명 prop과 동일한 값)는
   // BootSequence.test.tsx가 prop을 직접 주입해 고정한다.
+});
+
+// 캡션 컨테인먼트 점프(부팅 안무 브리프 3절) — 이 파일은 실제 HomeClient +
+// 실제 BootSequence + 실제 Navigation을 함께 마운트하는 유일한 스위트라
+// "BootSequence가 실제로 overview 섹션 밖에 사는가"라는 구조를 여기서만
+// 증명할 수 있다(HomeClient.test.tsx는 BootSequence 자체를 mock으로
+// 대체한다). jsdom은 paint containment도 실제 점프도 계산하지 못한다 — 여기
+// 고정하는 것은 "캡션이 overview data-section의 자손이 아니다"라는 DOM
+// 구조뿐이고, 컨테인먼트가 실제로 사라졌는지는 실기기 확인 사항이다.
+describe('WordmarkFlip — 부팅 캡션은 overview 섹션 컨테인먼트 밖에 산다', () => {
+  it('boot-sequence는 data-section="overview"의 자손이 아니다 — 뮤테이션 (m)', () => {
+    const { container } = renderHome();
+    const overviewSection = container.querySelector('[data-section="overview"]');
+    const bootSequence = screen.getByTestId('boot-sequence');
+
+    expect(overviewSection, 'overview 섹션 wrapper를 찾지 못했다').not.toBeNull();
+    // 뮤테이션 (m) — 캡션을 다시 섹션 안으로 되돌리면 이 contains()가 true가
+    // 되어 FAIL한다. 워드마크와 정확히 같은 방식으로 검증한다(HomeClient.test.tsx
+    // 의 "Footer는 .section-stage의 자손이 아니며" 패턴과 동일).
+    expect(overviewSection!.contains(bootSequence)).toBe(false);
+  });
+
+  it('워드마크와 boot-sequence가 같은 셸 레벨(overview data-section 밖)에 나란히 산다', () => {
+    const { container } = renderHome();
+    const overviewSection = container.querySelector('[data-section="overview"]');
+    const wordmark = screen.getByTestId('wordmark');
+
+    expect(overviewSection!.contains(wordmark)).toBe(false);
+  });
 });

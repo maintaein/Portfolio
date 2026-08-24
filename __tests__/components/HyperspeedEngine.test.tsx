@@ -495,6 +495,103 @@ describe('given 8 — tier 변경이 boost/settle 속도 상태를 덮어쓰지 
   });
 });
 
+// bootIn — 부팅 안무(boot-choreography-brief.md 1절). App은 자기 자신의
+// setTimeout으로 감속 시점을 예약하므로 real timer로는 테스트가 느려진다 —
+// 이 describe만 fake timer를 쓴다(governor 관련 테스트들의 rAF 큐와는
+// 독립적인 타이머 채널이라 서로 간섭하지 않는다).
+describe('(다) bootIn — 부팅 안무 fov 펀치·감속', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('호출 즉시 boost()와 같은 목표로 fov 펀치를 시작한다', () => {
+    const container = createContainer();
+    const app = new App(container, buildOptions());
+    app.init();
+
+    app.bootIn(2);
+
+    expect(app.fovTarget).toBe(app.options.fovSpeedUp);
+    expect(app.speedUpTarget).toBe(app.options.speedUp);
+  });
+
+  it('2초 부팅 기준 0.90초 지점(duration의 45%)에서 settle()로 감속을 시작한다', () => {
+    const container = createContainer();
+    const app = new App(container, buildOptions());
+    app.init();
+
+    app.bootIn(2);
+    vi.advanceTimersByTime(899);
+    expect(app.fovTarget, '아직 감속 시점 전이다').toBe(app.options.fovSpeedUp);
+
+    vi.advanceTimersByTime(2);
+    expect(app.fovTarget).toBe(app.options.fov);
+    expect(app.speedUpTarget).toBe(0);
+  });
+
+  it('duration이 다르면 감속 시점도 같은 비율로 비례한다', () => {
+    const container = createContainer();
+    const app = new App(container, buildOptions());
+    app.init();
+
+    app.bootIn(4); // 0.45 * 4 = 1.8s
+    vi.advanceTimersByTime(1799);
+    expect(app.fovTarget).toBe(app.options.fovSpeedUp);
+
+    vi.advanceTimersByTime(2);
+    expect(app.fovTarget).toBe(app.options.fov);
+  });
+
+  it('연속 호출은 이전 감속 예약을 취소하고 새로 시작한다', () => {
+    const container = createContainer();
+    const app = new App(container, buildOptions());
+    app.init();
+
+    app.bootIn(2);
+    vi.advanceTimersByTime(500);
+    app.bootIn(2); // 재시작 — 새 900ms 카운트다운이어야 한다
+
+    vi.advanceTimersByTime(899);
+    expect(
+      app.fovTarget,
+      '이전 예약이 취소되지 않았다면 500+899=1399ms 지점이라 이미 감속했을 것이다'
+    ).toBe(app.options.fovSpeedUp);
+
+    vi.advanceTimersByTime(2);
+    expect(app.fovTarget).toBe(app.options.fov);
+  });
+
+  it('dispose()는 예약된 감속을 취소한다 — 죽은 인스턴스에 뒤늦은 부작용이 없다', () => {
+    const container = createContainer();
+    const app = new App(container, buildOptions());
+    app.init();
+
+    app.bootIn(2);
+    app.dispose();
+
+    expect(() => vi.advanceTimersByTime(2000)).not.toThrow();
+    expect(app.fovTarget).toBe(app.options.fovSpeedUp);
+  });
+
+  it('dispose 이후 bootIn을 호출해도 예약된 settle이 disposed 가드로 no-op한다', () => {
+    const container = createContainer();
+    const app = new App(container, buildOptions());
+    app.init();
+    app.dispose();
+
+    app.bootIn(2);
+    expect(app.fovTarget).toBe(app.options.fovSpeedUp); // boost() 자체는 동기 실행된다
+
+    vi.advanceTimersByTime(2000);
+    // disposed 가드가 없으면 여기서 settle()이 실행돼 options.fov로 바뀐다.
+    expect(app.fovTarget).toBe(app.options.fovSpeedUp);
+  });
+});
+
 describe('구멍 3 — FrameQualityGovernor 통합', () => {
   it('tick 끝에서 governor.record(timestamp)를 호출한다', () => {
     const recordSpy = vi.spyOn(FrameQualityGovernor.prototype, 'record');

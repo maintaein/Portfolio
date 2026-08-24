@@ -69,20 +69,26 @@ function Harness({
   routeResolved = true,
   motionReady = true,
   reducedMotion = false,
+  sceneReady = true,
   onStart = vi.fn(),
 }: Partial<BootSequenceProps>) {
   const wordmarkRef = useRef<HTMLButtonElement>(null);
+  const wordmarkScaleRef = useRef<HTMLDivElement>(null);
   return (
     <>
-      <button ref={wordmarkRef} data-testid="wordmark">
-        KIM TAEIN
-      </button>
+      <div ref={wordmarkScaleRef}>
+        <button ref={wordmarkRef} data-testid="wordmark">
+          KIM TAEIN
+        </button>
+      </div>
       <BootSequence
         active={active}
         routeResolved={routeResolved}
         motionReady={motionReady}
         reducedMotion={reducedMotion}
+        sceneReady={sceneReady}
         wordmarkRef={wordmarkRef}
+        wordmarkScaleRef={wordmarkScaleRef}
         onStart={onStart}
       />
     </>

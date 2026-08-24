@@ -20,6 +20,7 @@ const hyperspeedSpies = vi.hoisted(() => ({
   resume: vi.fn(),
   setQuality: vi.fn(),
   isLost: vi.fn(() => false),
+  bootIn: vi.fn(),
   mountCount: 0,
 }));
 
@@ -43,6 +44,7 @@ vi.mock('@/components/blocks/Hyperspeed', async () => {
         resume: hyperspeedSpies.resume,
         setQuality: hyperspeedSpies.setQuality,
         isLost: hyperspeedSpies.isLost,
+        bootIn: hyperspeedSpies.bootIn,
       }),
       []
     );
@@ -333,6 +335,53 @@ describe('HyperspeedBackground — detectQuality 초기 적용', () => {
     rerender(<HyperspeedBackground {...readyProps} active="about" isTransitioning />);
     rerender(<HyperspeedBackground {...readyProps} active="about" isTransitioning={false} />);
     expect(hyperspeedSpies.setQuality).toHaveBeenCalledTimes(1);
+  });
+});
+
+// 부팅 안무 브리프 1절 — 씬이 처음 살아나는 순간 onSceneReady로 부모에
+// 알리고, active===overview일 때만 배경 자신의 bootIn()을 부른다. 기존
+// detectQuality 초기 적용과 같은 "핸들이 처음 생긴 시점 1회" 패턴이다.
+describe('HyperspeedBackground — 씬 준비 신호(onSceneReady)와 bootIn() 게이팅', () => {
+  it('scene이 처음 mount되면 onSceneReady를 정확히 한 번 부른다', async () => {
+    const onSceneReady = vi.fn();
+    const { rerender } = await renderReady({ onSceneReady });
+
+    expect(onSceneReady).toHaveBeenCalledTimes(1);
+
+    rerender(<HyperspeedBackground {...readyProps} onSceneReady={onSceneReady} active="about" isTransitioning />);
+    rerender(<HyperspeedBackground {...readyProps} onSceneReady={onSceneReady} active="about" isTransitioning={false} />);
+    expect(onSceneReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('onSceneReady 없이도(옵션) 렌더가 깨지지 않는다', async () => {
+    await expect(renderReady()).resolves.toBeDefined();
+  });
+
+  it('active===overview에서 첫 마운트 시 bootIn(2)를 정확히 한 번 부른다', async () => {
+    await renderReady({ active: OVERVIEW });
+
+    expect(hyperspeedSpies.bootIn).toHaveBeenCalledTimes(1);
+    expect(hyperspeedSpies.bootIn).toHaveBeenCalledWith(2);
+  });
+
+  // 뮤테이션 (b) — 이름 타임라인이 씬 준비를 기다리지 않고 즉시 출발하는
+  // 회귀와 짝을 이루는 배경 쪽 계약: overview가 아닌 곳(예: /#projects
+  // 딥링크)에서 씬이 처음 뜰 때는 광선 fov 펀치를 만들지 않는다 — 안
+  // 보이는 부팅 연출이 불필요한 카메라 요동을 만들지 않는다.
+  it('active가 overview가 아니면 첫 마운트에도 bootIn을 부르지 않는다', async () => {
+    await renderReady({ active: 'about' });
+
+    expect(hyperspeedSpies.bootIn).not.toHaveBeenCalled();
+  });
+
+  it('재마운트 없이 섹션을 연속 전환해도 bootIn은 처음 한 번뿐이다', async () => {
+    const { rerender } = await renderReady({ active: OVERVIEW });
+    expect(hyperspeedSpies.bootIn).toHaveBeenCalledTimes(1);
+
+    rerender(<HyperspeedBackground {...readyProps} active="about" isTransitioning />);
+    rerender(<HyperspeedBackground {...readyProps} active="about" isTransitioning={false} />);
+
+    expect(hyperspeedSpies.bootIn).toHaveBeenCalledTimes(1);
   });
 });
 

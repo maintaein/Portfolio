@@ -74,6 +74,7 @@ export interface HyperspeedHandle {
   boost(): void;
   settle(): void;
   isLost(): boolean;
+  bootIn(duration: number): void;
 }
 
 // 체류 중 기본 흐름 배율. 원본은 time = timer.getElapsed() + timeOffset이라
@@ -90,6 +91,11 @@ const BOOST_TIME_SCALE = 1.15;
 // 메웠다 — 사실상 즉시 도달이라 가속도 감속도 보이지 않았다. 프레임률과
 // 무관한 1 - exp(-rate*delta) 형태로 바로잡는다. 값이 작을수록 완만하다.
 const SPEED_SMOOTHING_RATE = 1.6;
+
+// bootIn()이 감속(settle)을 시작하는 시점 — 부팅 안무 브리프가 확정한 표
+// 기준(2초 부팅에서 0.90초)의 비율이다. duration이 2가 아니어도 같은
+// 비율(전체의 45%)로 "광선이 감속하며 도착"하는 지점을 잡는다.
+const BOOT_DECEL_RATIO = 0.9 / 2;
 
 const defaultOptions: HyperspeedOptions = {
   onSpeedUp: () => {},
@@ -683,6 +689,10 @@ class App {
   baseTime: number;
   timeOffset: number;
   hasValidSize: boolean;
+  // bootIn()이 예약한 감속(settle) 타이머. dispose 시 정리한다 — 정리하지
+  // 않아도 콜백은 disposed 플래그를 보고 안전하게 no-op하지만, 명시적으로
+  // 취소하는 편이 깔끔하다.
+  bootTimer: ReturnType<typeof setTimeout> | null;
 
   constructor(container: HTMLElement, options: HyperspeedOptions) {
     this.options = options;
@@ -779,6 +789,7 @@ class App {
     this.speedUp = 0;
     this.baseTime = 0;
     this.timeOffset = 0;
+    this.bootTimer = null;
 
     this.tick = this.tick.bind(this);
     this.init = this.init.bind(this);
@@ -979,6 +990,25 @@ class App {
     this.speedUpTarget = 0;
   }
 
+  // 부팅 안무 — boost()/settle()이 이미 쓰는 fovTarget·speedUpTarget 두
+  // 필드만 건드리므로 새 비용이 없다. duration(초) 안에서 fov 펀치로 즉시
+  // 고속 유지를 시작하고, BOOT_DECEL_RATIO 지점(2초 기준 0.90초)에서
+  // settle()로 감속을 시작한다 — 감속이 "도착"으로 읽히는 지점이다.
+  bootIn(duration: number) {
+    if (this.bootTimer !== null) {
+      clearTimeout(this.bootTimer);
+      this.bootTimer = null;
+    }
+
+    this.boost();
+
+    this.bootTimer = setTimeout(() => {
+      this.bootTimer = null;
+      if (this.disposed) return;
+      this.settle();
+    }, duration * BOOT_DECEL_RATIO * 1000);
+  }
+
   onMouseDown(ev: MouseEvent) {
     if (this.options.onSpeedUp) this.options.onSpeedUp(ev);
     this.boost();
@@ -1076,6 +1106,11 @@ class App {
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
+    }
+
+    if (this.bootTimer !== null) {
+      clearTimeout(this.bootTimer);
+      this.bootTimer = null;
     }
 
     this.timer.dispose();
@@ -1237,7 +1272,8 @@ const Hyperspeed = forwardRef<HyperspeedHandle, HyperspeedProps>(function Hypers
       resume: () => appRef.current?.resume(),
       boost: () => appRef.current?.boost(),
       settle: () => appRef.current?.settle(),
-      isLost: () => appRef.current?.isLost() ?? false
+      isLost: () => appRef.current?.isLost() ?? false,
+      bootIn: (duration: number) => appRef.current?.bootIn(duration)
     }),
     []
   );

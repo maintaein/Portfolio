@@ -28,10 +28,10 @@ describe('Hyperspeed ref API — WebGL 부재 시 안전성', () => {
     expect(() => render(<Hyperspeed ref={ref} />)).not.toThrow();
   });
 
-  it('ref로 6개 메서드를 노출한다', () => {
+  it('ref로 7개 메서드를 노출한다', () => {
     const ref = createRef<HyperspeedHandle>();
     render(<Hyperspeed ref={ref} />);
-    for (const m of ['setQuality', 'pause', 'resume', 'boost', 'settle', 'isLost'] as const) {
+    for (const m of ['setQuality', 'pause', 'resume', 'boost', 'settle', 'isLost', 'bootIn'] as const) {
       expect(typeof ref.current?.[m], m).toBe('function');
     }
   });
@@ -45,6 +45,7 @@ describe('Hyperspeed ref API — WebGL 부재 시 안전성', () => {
       ref.current?.boost();
       ref.current?.settle();
       ref.current?.setQuality('low');
+      ref.current?.bootIn(2);
     }).not.toThrow();
   });
 

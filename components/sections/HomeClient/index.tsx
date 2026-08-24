@@ -5,6 +5,7 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useState,
   type ComponentType,
   type TransitionEvent,
 } from 'react';
@@ -76,6 +77,15 @@ function hasOpacityTransition(element: HTMLElement) {
 
 export default function HomeClient() {
   const wordmarkRef = useRef<HTMLButtonElement>(null);
+  // 이름이 "멀리서 도착"하는 scale을 여는 wrapper(Navigation 소유 DOM,
+  // 워드마크 버튼 자신이 아니다). BootSequence의 GSAP 타임라인이 이 노드에만
+  // scale을 건다 — 부팅 안무 브리프 1절의 FLIP 불변식.
+  const wordmarkScaleRef = useRef<HTMLDivElement>(null);
+  // HyperspeedBackground의 씬(핸들)이 처음 살아난 순간 true가 된다.
+  // BootSequence가 이 값을 기다렸다가(또는 타임아웃) 이름 타임라인을
+  // 광선과 같은 순간에 출발시킨다(부팅 안무 브리프 1절).
+  const [sceneReady, setSceneReady] = useState(false);
+  const handleSceneReady = useCallback(() => setSceneReady(true), []);
   // GSAP은 정적 import에서 뺐다(First Load JS 예산 — gsap-lazy-brief.md).
   // 마운트 직후 미리 요청해 ref에 담아 두고, 아래 handleBeforeActiveChange는
   // 이 ref를 동기적으로만 읽는다 — Flip.getState()는 DOM이 바뀌기 직전에
@@ -279,6 +289,7 @@ export default function HomeClient() {
         routeResolved={routeResolved}
         motionReady={motionReady}
         reducedMotion={reducedMotion}
+        onSceneReady={handleSceneReady}
       />
 
       <Navigation
@@ -287,6 +298,26 @@ export default function HomeClient() {
         onNavigate={setActive}
         reducedMotion={reducedMotion}
         wordmarkRef={wordmarkRef}
+        wordmarkScaleRef={wordmarkScaleRef}
+      />
+
+      {/* 워드마크와 같은 셸 레벨 — overview 섹션(.section-hidden의
+          content-visibility) 밖에 둔다. 섹션 안에 있으면 paint containment가
+          이 fixed 캡션을 뷰포트가 아니라 섹션 컨테이닝 박스 기준으로
+          재배치해 START를 누르는 순간 아래로 튀었다(부팅 안무 브리프 3절).
+          BootSequence는 항상 마운트 상태를 유지한다(active로 조건부 렌더하지
+          않는다) — 그래야 hasStartedRef가 살아남아 재방문 시 재생되지 않는다는
+          계약을 지킨다. 보이기/숨기기·inert는 BootSequence 자신이 active를
+          보고 소유한다. */}
+      <BootSequence
+        active={active}
+        routeResolved={routeResolved}
+        motionReady={motionReady}
+        reducedMotion={reducedMotion}
+        sceneReady={sceneReady}
+        wordmarkRef={wordmarkRef}
+        wordmarkScaleRef={wordmarkScaleRef}
+        onStart={() => setActive(SECTION_IDS.ABOUT)}
       />
 
       <main
@@ -320,16 +351,10 @@ export default function HomeClient() {
           onTransitionCancel={(event) =>
             handleSectionTransitionDone(OVERVIEW, event)
           }
-        >
-          <BootSequence
-            active={active}
-            routeResolved={routeResolved}
-            motionReady={motionReady}
-            reducedMotion={reducedMotion}
-            wordmarkRef={wordmarkRef}
-            onStart={() => setActive(SECTION_IDS.ABOUT)}
-          />
-        </div>
+        />
+        {/* overview는 이제 셸 레벨의 BootSequence만 보여준다(위 참고) — 이
+            wrapper는 section 상태(visible/hidden·inert)와 SEO용 region
+            상주만을 위해 빈 채로 남는다. */}
 
         {HOME_SECTION_CONFIG.map(({ id, label }) => {
           const Section = SECTION_COMPONENTS[id];

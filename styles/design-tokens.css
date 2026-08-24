@@ -115,7 +115,11 @@
      이 간격만큼 margin-top으로 내려가 시작한다 — 겹침이 폰트 크기·
      브레이크포인트와 무관하게 구조적으로 불가능해진다(계획 3 boot-composition
      브리프, "구멍 3"). */
-  --boot-caption-gap: 1.75rem;
+  /* 96px 이름 아래에선 고정값이 붙어 보인다(부팅 안무 브리프) — 이름과 함께
+     자라도록 clamp로 바꾼다. 겹침 방지 계약(위 주석)은 유지된다: 이름의
+     바닥은 여전히 정확히 50%에 붙고, 캡션은 이 gap만큼 그 아래에서
+     시작하므로 값이 얼마든 겹침은 구조적으로 불가능하다. */
+  --boot-caption-gap: clamp(1.25rem, 4vh, 2.75rem);
 }
 
 /* ============================================ */
@@ -545,6 +549,38 @@
     }
   }
 
+  /* 부팅 캡션(역할·START) 은닉 — 워드마크와 마찬가지로 셸 레벨(overview
+     섹션 밖)에 산다(부팅 안무 브리프 3절). overview의 `.section-hidden`은
+     `content-visibility: auto`를 쓰는데, 콘텐츠가 스킵되는 순간 그 서브트리가
+     paint containment를 얻어 `position: fixed` 자손을 뷰포트가 아니라 그
+     컨테이닝 박스 기준으로 재배치한다 — opacity 페이드(500ms)보다 containment
+     전환이 훨씬 빨라 START를 누르는 순간 캡션이 `.section-stage`의 inset만큼
+     아래로 튀는 버그였다. 이 클래스 쌍은 content-visibility를 아예 쓰지
+     않아 그 버그가 구조적으로 재발할 수 없다 — nav-strip과 같은 opacity+
+     visibility 은닉이지만, 이전에 caption이 section-hidden을 통해 상속받던
+     500ms 페이드와 시각 차이를 최소화하도록 같은 duration을 쓴다. */
+  .boot-caption-hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity var(--animate-duration-slow) cubic-bezier(0.22, 1, 0.36, 1),
+      visibility 0s linear var(--animate-duration-slow);
+  }
+
+  .boot-caption-visible {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity var(--animate-duration-slow) cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .boot-caption-hidden,
+    .boot-caption-visible {
+      transition: none;
+    }
+  }
+
   /* BootSequence의 역할 라벨·START pre-boot 상태 — JS의 낙관적 boolean이
      아니라 이 미디어쿼리가 소유한다(계획 3 Task 6, "구멍 6"). 기본 규칙은
      최종 상태(보임)다. 모션을 허용하는 사용자에게만 미디어쿼리가 pre-boot
@@ -562,6 +598,42 @@
     transform: translateY(0);
   }
 
+  /* START 밑줄 — 기본 규칙은 다 그려진 최종 상태(scaleX 1). no-preference만
+     0에서 시작해 GSAP이 좌→우로 그린다(scaleX, origin-left는 Tailwind
+     origin-left 유틸이 건다). 정지 상태의 호흡(opacity 0.55↔1)은 순수 CSS
+     루프이고 reduce에서는 재생되지 않는다 — mutation (o). */
+  .boot-start-underline {
+    transform: scaleX(1);
+  }
+
+  @keyframes boot-start-underline-breathe {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.55;
+    }
+  }
+
+  @keyframes boot-start-glow-pulse {
+    0%,
+    100% {
+      opacity: 0.25;
+      transform: translate(-50%, -50%) scale(0.92);
+    }
+    50% {
+      opacity: 0.55;
+      transform: translate(-50%, -50%) scale(1.08);
+    }
+  }
+
+  /* 아이들 광휘 — 모션을 허용하지 않으면 아예 안 보인다(장식이라 최종
+     상태가 필요 없다). */
+  .boot-start-glow {
+    opacity: 0;
+  }
+
   /* 워드마크(이름)의 pre-boot blur도 같은 원칙 — 이전에는 동적 import가
      끝난 뒤에야 JS(tl.set)가 blur(5px)를 걸어서 선명 → 흐림 → 선명으로
      역주행했다(boot-composition 브리프 "구멍 5"). data-wordmark-mode는
@@ -570,6 +642,17 @@
      opacity를 건드리지 않는 LCP 요소이므로 filter만 쓴다. */
   [data-wordmark-mode='hero'] {
     filter: blur(0px);
+  }
+
+  /* 이름이 "광선을 따라 저 멀리서 도착한다" — scale은 워드마크 버튼이 아니라
+     이 wrapper(Navigation의 hero 포지셔닝 div)에 건다(부팅 안무 브리프
+     1절, FLIP 불변식). 기본 규칙은 최종 상태(scale 없음)이고, BootSequence의
+     GSAP 타임라인이 완료·중단 어느 경로든 이 wrapper의 transform을 인라인
+     'none'으로 명시적으로 정착시킨다 — CSS가 아무리 no-preference로 계속
+     매칭돼도 인라인이 항상 이긴다(blur·opacity와 같은 영구 오버라이드
+     패턴). */
+  .wordmark-scale-wrapper {
+    transform: none;
   }
 
   @media (prefers-reduced-motion: no-preference) {
@@ -584,7 +667,23 @@
     }
 
     [data-wordmark-mode='hero'] {
-      filter: blur(5px);
+      /* 8px — 부팅 안무 브리프 LCP 절이 정한 상한(글자가 글자로 알아볼 수
+         있는 한계). 광선의 fov 펀치와 짝을 이루는 "멀리서 도착" 느낌을
+         5px보다 또렷하게 낸다. */
+      filter: blur(8px);
+    }
+
+    .wordmark-scale-wrapper {
+      transform: scale(0.65);
+    }
+
+    .boot-start-underline {
+      transform: scaleX(0);
+      animation: boot-start-underline-breathe 3.6s ease-in-out infinite;
+    }
+
+    .boot-start-glow {
+      animation: boot-start-glow-pulse 3.6s ease-in-out infinite;
     }
   }
 

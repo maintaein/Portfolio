@@ -19,6 +19,7 @@ import {
 } from 'react';
 import type { HyperspeedHandle } from '@/components/blocks/Hyperspeed';
 import { OVERVIEW, type NavId } from '@/hooks/useSectionNav';
+import { BOOT_DURATION_SECONDS } from '@/lib/constants';
 import { detectQuality } from '@/lib/deviceQuality';
 
 export interface HyperspeedBackgroundProps {
@@ -29,6 +30,12 @@ export interface HyperspeedBackgroundProps {
   routeResolved: boolean; // 최초 해시 해석 전에는 WebGL import·rAF를 시작하지 않음
   motionReady: boolean; // route + motion preference가 모두 확정됨
   reducedMotion: boolean;
+  // 씬(핸들)이 처음 살아나는 순간을 부모(HomeClient)에 알린다 — BootSequence의
+  // 이름 타임라인이 같은 순간에 출발해야 광선과 이름이 하나의 제스처로
+  // 읽힌다(부팅 안무 브리프 1절). 기존 7 prop 계약은 그대로 두고 8번째로
+  // 얹은 선택적 콜백이다 — 안 넘기면(다른 호출부·과거 테스트) 동작이
+  // 전혀 달라지지 않는다.
+  onSceneReady?: () => void;
 }
 
 type FallbackReason = 'pending' | 'reduced-motion' | 'load-error' | 'context-lost';
@@ -123,10 +130,16 @@ export default function HyperspeedBackground({
   routeResolved,
   motionReady,
   reducedMotion,
+  onSceneReady,
 }: HyperspeedBackgroundProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const handleRef = useRef<HyperspeedHandle | null>(null);
   const appliedInitialQualityRef = useRef(false);
+  // bootIn()·onSceneReady 콜백을 정확히 한 번만 적용하기 위한 가드 —
+  // appliedInitialQualityRef와 같은 패턴. 컨텍스트 손실 뒤 씬이 다시
+  // 세워져도(설계 문서 "손실 뒤 씬 재시도") 부팅 안무는 다시 재생하지
+  // 않는다 — 처음 살아난 그 순간에만 의미가 있는 일회성 신호다.
+  const bootInAppliedRef = useRef(false);
   const prevTransitioningRef = useRef(isTransitioning);
   const prevPageVisibleRef = useRef(pageVisible);
   // effect 의존성에 isTransitioning을 넣지 않고도(넣으면 resume과 무관한
@@ -135,6 +148,13 @@ export default function HyperspeedBackground({
   // 같은 패턴.
   const isTransitioningRef = useRef(isTransitioning);
   isTransitioningRef.current = isTransitioning;
+  // setHandle은 ref 콜백이라 안정적인 identity를 유지해야 한다(아래 주석) —
+  // 그래서 active·onSceneReady를 직접 의존성으로 넣지 못하고 매 렌더 갱신되는
+  // ref로 최신값을 읽는다.
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  const onSceneReadyRef = useRef(onSceneReady);
+  onSceneReadyRef.current = onSceneReady;
   const [contextLost, setContextLost] = useState(false);
   const contextRetriesRef = useRef(0);
 
@@ -229,6 +249,19 @@ export default function HyperspeedBackground({
       void detectQuality().then((tier) => {
         handleRef.current?.setQuality(tier);
       });
+    }
+    // 씬이 "처음" 살아난 이 순간이 부팅 안무의 출발점이다(브리프 1절).
+    // onSceneReady는 active와 무관하게 항상 알린다 — BootSequence 자신이
+    // active === overview 게이트를 이미 갖고 있으므로 여기서 중복 판단하지
+    // 않는다. 반면 광선의 fov 펀치(bootIn)는 이 배경 자신의 시각 효과라
+    // overview가 아닐 때(예: /#projects 딥링크로 처음 씬이 뜨는 경우) 불필요한
+    // 펀치를 만들지 않도록 여기서 직접 게이트한다.
+    if (handle && !bootInAppliedRef.current) {
+      bootInAppliedRef.current = true;
+      onSceneReadyRef.current?.();
+      if (activeRef.current === OVERVIEW) {
+        handle.bootIn(BOOT_DURATION_SECONDS);
+      }
     }
   }, []);
 
