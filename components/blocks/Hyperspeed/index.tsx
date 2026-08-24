@@ -97,6 +97,18 @@ const SPEED_SMOOTHING_RATE = 1.6;
 // 비율(전체의 45%)로 "광선이 감속하며 도착"하는 지점을 잡는다.
 const BOOT_DECEL_RATIO = 0.9 / 2;
 
+// 부팅 개수 램프(instanceCount)가 목표치에 도달해 idle과 완전히 이어지는
+// 시점 — 감속이 시작(BOOT_DECEL_RATIO)해서 실제로 "도착"으로 읽히는
+// 지점까지의 비율이다(2초 부팅 기준 1.30초 = 전체의 65%). 광선 개수와
+// 속도가 같은 순간에 idle로 정착해야 "자연스러운 전환"으로 읽힌다(부팅
+// 안무 브리프 1절).
+const BOOT_LIGHT_RAMP_RATIO = 1.3 / 2;
+
+// 램프 시작 시점에 그리는 쌍의 비율. 0으로 하면 "광선이 전혀 없다가
+// 갑자기 나타난다"가 되어 오히려 부자연스럽다 — "적은 양이 멀리서부터"를
+// 표현하는 최소치다.
+const BOOT_LIGHT_RAMP_START_RATIO = 0.15;
+
 const defaultOptions: HyperspeedOptions = {
   onSpeedUp: () => {},
   onSlowDown: () => {},
@@ -204,11 +216,19 @@ class CarLights {
 
     const laneWidth = options.roadWidth / options.lanesPerRoad;
 
-    const aOffset: number[] = [];
-    const aMetrics: number[] = [];
-    const aColor: number[] = [];
-
     const colorArray = toColorArray(this.colors);
+
+    // 부팅 개수 램프(App.bootIn)가 instanceCount를 늘릴 때 "먼 쌍부터"
+    // 드러나야 한다(부팅 안무 브리프 1절). t=0 기준 셰이더 위치는
+    // z ≈ myLength - mod(aOffset.z, uTravelLength)이고, offsetZ(=aOffset.z,
+    // -random(length) 범위 (-length, 0])가 0에 가까울수록 mod가
+    // uTravelLength에 가까워져 z가 더 깊이 음수(카메라에서 먼 쪽)로 나온다.
+    // 반대로 offsetZ가 -length에 가까울수록 z가 0 근방(카메라 앞, 가까운
+    // 쪽)이 된다(판정 근거는 index.tsx 상단 BOOT_LIGHT_RAMP_RATIO 주석
+    // 참고). 그래서 배열에 쏟기 전에 쌍 단위 레코드를 모아 offsetZ
+    // 내림차순(0에 가까운 값 먼저 = 먼 쌍 먼저)으로 정렬한다 — instanceCount가
+    // 낮을 때 앞쪽 인덱스(먼 쌍)만 그려지고, 늘어날수록 가까운 쌍이 채워진다.
+    const records: { offsetZ: number; offset: number[]; metrics: number[]; color: number[] }[] = [];
 
     for (let i = 0; i < options.lightPairsPerRoadWay; i++) {
       const radius = random(options.carLightsRadius, rng);
@@ -225,30 +245,25 @@ class CarLights {
       const offsetY = random(options.carFloorSeparation, rng) + radius * 1.3;
       const offsetZ = -random(options.length, rng);
 
-      aOffset.push(laneX - carWidth / 2);
-      aOffset.push(offsetY);
-      aOffset.push(offsetZ);
-
-      aOffset.push(laneX + carWidth / 2);
-      aOffset.push(offsetY);
-      aOffset.push(offsetZ);
-
-      aMetrics.push(radius);
-      aMetrics.push(length);
-      aMetrics.push(spd);
-
-      aMetrics.push(radius);
-      aMetrics.push(length);
-      aMetrics.push(spd);
-
       const color = pickRandom<THREE.Color>(colorArray, rng);
-      aColor.push(color.r);
-      aColor.push(color.g);
-      aColor.push(color.b);
 
-      aColor.push(color.r);
-      aColor.push(color.g);
-      aColor.push(color.b);
+      records.push({
+        offsetZ,
+        offset: [laneX - carWidth / 2, offsetY, offsetZ, laneX + carWidth / 2, offsetY, offsetZ],
+        metrics: [radius, length, spd, radius, length, spd],
+        color: [color.r, color.g, color.b, color.r, color.g, color.b]
+      });
+    }
+
+    records.sort((a, b) => b.offsetZ - a.offsetZ);
+
+    const aOffset: number[] = [];
+    const aMetrics: number[] = [];
+    const aColor: number[] = [];
+    for (const record of records) {
+      aOffset.push(...record.offset);
+      aMetrics.push(...record.metrics);
+      aColor.push(...record.color);
     }
 
     instanced.setAttribute('aOffset', new THREE.InstancedBufferAttribute(new Float32Array(aOffset), 3, false));
@@ -693,6 +708,16 @@ class App {
   // 않아도 콜백은 disposed 플래그를 보고 안전하게 no-op하지만, 명시적으로
   // 취소하는 편이 깔끔하다.
   bootTimer: ReturnType<typeof setTimeout> | null;
+  // 부팅 개수 램프 상태 — bootIn()이 켠다. update()가 매 프레임 실제 경과초
+  // (IDLE_TIME_SCALE과 무관, delta 그대로)로 진행시킨다.
+  lightRampActive: boolean;
+  lightRampElapsed: number;
+  lightRampDuration: number;
+  // 마지막으로 적용한 진행도(0..1). setQuality()가 부팅 도중 목표 개수를
+  // 바꿔도(런타임 강등·초기 tier 적용) rebuildLights()가 되돌린 instanceCount를
+  // 이 값으로 즉시 재적용해, 다음 프레임까지 한 프레임짜리 "풀 카운트 플래시"가
+  // 나지 않게 한다.
+  lightRampProgress: number;
 
   constructor(container: HTMLElement, options: HyperspeedOptions) {
     this.options = options;
@@ -790,6 +815,10 @@ class App {
     this.baseTime = 0;
     this.timeOffset = 0;
     this.bootTimer = null;
+    this.lightRampActive = false;
+    this.lightRampElapsed = 0;
+    this.lightRampDuration = 0;
+    this.lightRampProgress = 0;
 
     this.tick = this.tick.bind(this);
     this.init = this.init.bind(this);
@@ -907,6 +936,27 @@ class App {
     this.leftSticks.mesh?.position.setX(-(this.options.roadWidth + this.options.islandWidth / 2));
   }
 
+  // progress(0..1)에 해당하는 쌍 개수를 좌/우 CarLights mesh에 직접
+  // 적용한다. instanceCount는 드로우 파라미터일 뿐이라 geometry 재생성이
+  // 없다. 목표(target)는 매 호출마다 현재 qualityProfile에서 다시 읽는다 —
+  // 부팅 도중 setQuality()가 목표를 바꿔도(런타임 강등) 그 변화를 따라간다.
+  // 라이트스틱(totalSideLightSticks)은 램프 대상이 아니다 — 판단 근거는
+  // 리포트 참고(부팅 안무 브리프 1절, "함께 램프할지 판단하라").
+  private applyLightRampProgress(progress: number) {
+    this.lightRampProgress = progress;
+
+    const target = this.qualityProfile.lightPairsPerRoadWay;
+    const start = Math.max(1, Math.round(target * BOOT_LIGHT_RAMP_START_RATIO));
+    const pairs = Math.min(target, Math.max(start, Math.round(start + (target - start) * progress)));
+
+    if (this.leftCarLights.mesh) {
+      this.leftCarLights.mesh.geometry.instanceCount = pairs * 2;
+    }
+    if (this.rightCarLights.mesh) {
+      this.rightCarLights.mesh.geometry.instanceCount = pairs * 2;
+    }
+  }
+
   // 여섯 노브를 전부 이 App 인스턴스에 직접 적용한다 — dispose()도 새 App()도,
   // WebGL 컨텍스트도 canvas도 다시 만들지 않는다.
   private applyQualityProfile(profile: QualityProfile) {
@@ -915,6 +965,15 @@ class App {
     this.options.lightPairsPerRoadWay = profile.lightPairsPerRoadWay;
     this.options.totalSideLightSticks = profile.totalSideLightSticks;
     this.rebuildLights();
+
+    // rebuildLights()가 방금 만든 mesh는 항상 profile의 전체 개수로
+    // instanceCount를 초기화한다(CarLights.init 참고) — 부팅 개수 램프가
+    // 아직 진행 중이면 그 초기화를 즉시 덮어써 "풀 카운트가 한 프레임
+    // 번쩍였다 다시 줄어드는" 역행을 막는다(브리프 "setQuality()와 충돌하지
+    // 않게 하라").
+    if (this.lightRampActive) {
+      this.applyLightRampProgress(this.lightRampProgress);
+    }
 
     this.renderer.setPixelRatio(this.effectivePixelRatio());
     if (this.hasValidSize) {
@@ -994,6 +1053,8 @@ class App {
   // 필드만 건드리므로 새 비용이 없다. duration(초) 안에서 fov 펀치로 즉시
   // 고속 유지를 시작하고, BOOT_DECEL_RATIO 지점(2초 기준 0.90초)에서
   // settle()로 감속을 시작한다 — 감속이 "도착"으로 읽히는 지점이다.
+  // 개수 램프도 같은 호출에서 시작한다 — 적은 개수로 즉시 스냅한 뒤
+  // update()가 매 프레임 진행시킨다(진행 자체는 그쪽 주석 참고).
   bootIn(duration: number) {
     if (this.bootTimer !== null) {
       clearTimeout(this.bootTimer);
@@ -1001,6 +1062,11 @@ class App {
     }
 
     this.boost();
+
+    this.lightRampActive = true;
+    this.lightRampElapsed = 0;
+    this.lightRampDuration = duration * BOOT_LIGHT_RAMP_RATIO;
+    this.applyLightRampProgress(0);
 
     this.bootTimer = setTimeout(() => {
       this.bootTimer = null;
@@ -1044,6 +1110,20 @@ class App {
     this.baseTime += delta * IDLE_TIME_SCALE;
     this.timeOffset += this.speedUp * delta;
     const time = this.baseTime + this.timeOffset;
+
+    // 부팅 개수 램프 진행 — IDLE_TIME_SCALE·speedUp과 무관하게 실제 경과초
+    // (delta 그대로)로 진행한다. 개수는 "광선의 발생 밀도"이지 흐름 속도가
+    // 아니므로 시간 배율에 영향받지 않아야 한다.
+    if (this.lightRampActive) {
+      this.lightRampElapsed += delta;
+      const raw = this.lightRampDuration > 0 ? Math.min(1, this.lightRampElapsed / this.lightRampDuration) : 1;
+      // 이차 ease-out — 초반에 빠르게 늘다가 목표치 근처에서 완만해진다.
+      const eased = 1 - (1 - raw) * (1 - raw);
+      this.applyLightRampProgress(eased);
+      if (raw >= 1) {
+        this.lightRampActive = false;
+      }
+    }
 
     this.rightCarLights.update(time);
     this.leftCarLights.update(time);

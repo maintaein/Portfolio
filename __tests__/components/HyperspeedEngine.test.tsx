@@ -915,3 +915,117 @@ describe('(나) 시드 — 같은 시드는 같은 광선 배치를 낸다', () 
     expect(after).toEqual(before);
   });
 });
+
+// 부팅 안무 브리프 1절 — 광선이 깊이에서 밀려온다. t=0에 aOffset이 "먼
+// 쌍부터" 정렬돼 있어야 bootIn()의 개수 램프가 instanceCount를 늘릴 때
+// 먼 것부터 드러난다. THREE.Timer가 실제 performance.now() 기준으로
+// _startTime을 잡으므로, fireNextFrame에 임의의 절대 timestamp를 그대로
+// 넣으면 첫 프레임의 delta가 (내 t값 - 실제 performance.now())라는 쓰레기
+// 값이 된다(이후 프레임은 서로 상대적이라 정상). 그래서 각 테스트는 ramp를
+// 시작하기 전에 프레임을 한 번 "흡수"시켜 이후 delta가 내가 넣는 t 증분과
+// 정확히 같아지도록 만든다.
+describe('부팅 안무 — 개수 램프(instanceCount)와 깊이 정렬', () => {
+  it('t=0 aOffset은 쌍별로 먼 것부터(offsetZ 내림차순) 정렬돼 있다', () => {
+    const container = createContainer();
+    const app = new App(container, buildOptions());
+    app.init();
+
+    const offsets = Array.from(app.leftCarLights.mesh?.geometry.getAttribute('aOffset').array as Float32Array);
+    const pairCount = app.options.lightPairsPerRoadWay;
+    const offsetZByPair: number[] = [];
+    for (let i = 0; i < pairCount; i++) {
+      // 각 쌍은 6개 실수(두 인스턴스의 x,y,z) — 두 인스턴스 모두 같은
+      // offsetZ를 쓰므로 첫 인스턴스의 z(인덱스 2)만 읽으면 된다.
+      offsetZByPair.push(offsets[i * 6 + 2]);
+    }
+
+    // 뮤테이션 (b)(정렬 제거)·(c)(오름차순으로 뒤집기) 모두 이 단조성이
+    // 깨져 FAIL한다.
+    for (let i = 1; i < offsetZByPair.length; i++) {
+      expect(offsetZByPair[i - 1]).toBeGreaterThanOrEqual(offsetZByPair[i]);
+    }
+  });
+
+  it('bootIn() 직후에는 목표 개수의 일부만 그린다 — t=0에 이미 꽉 차 있지 않다', () => {
+    const container = createContainer();
+    const app = new App(container, buildOptions());
+    app.init();
+
+    const fullCount = app.options.lightPairsPerRoadWay * 2;
+    app.bootIn(2);
+
+    const leftCount = app.leftCarLights.mesh?.geometry.instanceCount;
+    const rightCount = app.rightCarLights.mesh?.geometry.instanceCount;
+
+    // 뮤테이션 (a) — 램프를 제거하고 처음부터 최대로 그리면 이 표제 계약이
+    // FAIL해야 한다.
+    expect(leftCount).toBeLessThan(fullCount);
+    expect(leftCount).toBeGreaterThan(0);
+    expect(rightCount).toBe(leftCount);
+
+    app.dispose();
+  });
+
+  it('사이드 라이트스틱(totalSideLightSticks)은 램프 대상이 아니다 — bootIn 직후에도 전체 개수를 그린다', () => {
+    const container = createContainer();
+    const app = new App(container, buildOptions());
+    app.init();
+
+    app.bootIn(2);
+
+    expect(app.leftSticks.mesh?.geometry.instanceCount).toBe(app.options.totalSideLightSticks);
+    app.dispose();
+  });
+
+  it('프레임이 진행될수록 instanceCount가 단조 증가하다 목표(idle) 개수에서 멈춘다 — 연속성 계약', () => {
+    const container = createContainer();
+    const app = new App(container, buildOptions());
+    app.init();
+
+    let t = 0;
+    fireNextFrame(t); // performance.now() 오프셋 흡수 — 이후 delta는 t 증분과 같다
+
+    const fullCount = app.options.lightPairsPerRoadWay * 2;
+    app.bootIn(2);
+
+    let prev = app.leftCarLights.mesh?.geometry.instanceCount as number;
+    for (let i = 0; i < 20; i++) {
+      t += 100; // 100ms/프레임
+      fireNextFrame(t);
+      const current = app.leftCarLights.mesh?.geometry.instanceCount as number;
+      expect(current, `프레임 ${i}에서 감소했다`).toBeGreaterThanOrEqual(prev);
+      prev = current;
+    }
+
+    // 뮤테이션 (d) — 램프 종료값이 idle(qualityProfile) 개수와 다르면(예:
+    // target-1로 클램프) 여기서 FAIL한다.
+    expect(prev).toBe(fullCount);
+    app.dispose();
+  });
+
+  it('부팅 램프 도중 런타임 강등(setQuality)이 일어나도 새 목표치로 순간 점프하지 않는다 — setQuality() 충돌 방지', () => {
+    const container = createContainer();
+    const app = new App(container, buildOptions());
+    app.init();
+
+    let t = 0;
+    fireNextFrame(t); // 오프셋 흡수
+
+    app.bootIn(2); // 목표: high(40쌍), 램프 길이 1.3s
+    t += 400; // 400/1300 ≈ 31% 진행
+    fireNextFrame(t);
+
+    const lowFullCount = QUALITY_PROFILES.low.lightPairsPerRoadWay * 2; // 40
+    app.setQuality('low'); // rebuildLights()가 mesh를 다시 만들며 일단 lowFullCount로 초기화한다
+
+    const afterCount = app.leftCarLights.mesh?.geometry.instanceCount as number;
+
+    // 램프가 그 초기화를 즉시 되돌리지 않으면 afterCount가 lowFullCount와
+    // 같아진다(순간 풀 카운트 점프). 아직 램프가 안 끝났으므로(400ms<1300ms)
+    // full보다 작아야 한다.
+    expect(afterCount).toBeLessThan(lowFullCount);
+    expect(afterCount).toBeGreaterThan(0);
+
+    app.dispose();
+  });
+});

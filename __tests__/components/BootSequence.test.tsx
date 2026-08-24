@@ -278,8 +278,9 @@ describe('BootSequence LCP 계약', () => {
 });
 
 describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨다', () => {
-  // 확정 안무: 이름 0.15~1.05초, 역할 라벨 1.30~1.55초, START 1.55~1.80초.
-  // 광선이 0.90~1.30초에 감속하며 "도착"하고 그 뒤에 캡션이 순서대로 붙는다.
+  // 확정 안무(2차): 이름 0.75~1.30초, 역할 라벨 1.30~1.55초, START
+  // 1.55~1.80초. 광선의 개수 램프·감속이 0.90~1.30초에 idle로 정착("도착")
+  // 하고, 이름도 같은 1.30초에 도착한 뒤 캡션이 순서대로 붙는다.
   // 경계마다 양옆을 짚어 순서가 뒤집히거나 겹치면 잡히게 한다.
   // 숫자는 일부러 리터럴이다 — 이 일정 자체가 사용자가 승인한 계약이므로
   // 구현 상수를 import하면 일정이 바뀌어도 테스트가 조용히 따라가 버린다.
@@ -314,6 +315,64 @@ describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨
     expect(start.style.opacity).toBe('1');
   });
 
+  it('이름 wrapper는 원경감 있는 축소(scale 0.35)에서 시작한다 — 뮤테이션 (e)', async () => {
+    render(<Harness />);
+    await flushGsapImport();
+    const wrapperEl = screen.getByTestId('wordmark').parentElement as HTMLElement;
+
+    // fromTo의 immediateRender(GSAP 기본값)가 타임라인 생성 즉시 from 값을
+    // 적용한다 — CSS(no-preference)가 이미 그린 값과 같아 핸드오프 점프가
+    // 없다. 뮤테이션 (e) — 시작 scale을 1.0으로 되돌리면 '0.35'가 transform
+    // 문자열에 나타나지 않아 FAIL한다.
+    expect(wrapperEl.style.transform).toContain('0.35');
+  });
+
+  it('밑줄이 실제로 그려진다(scaleX 트윈이 존재하고 진행된다) — 뮤테이션 (j)', async () => {
+    render(<Harness />);
+    await flushGsapImport();
+    const tl = capturedTimeline();
+    const underline = screen.getByTestId('boot-start-underline');
+
+    // fromTo의 immediateRender가 생성 즉시 from 값(scaleX 0)을 적용한다 —
+    // 뮤테이션 (j)로 draw 트윈 자체를 지우면 이 값이 계속 빈 문자열로
+    // 남아 FAIL한다.
+    const atStart = underline.style.transform;
+    expect(atStart, '밑줄 트윈의 from 값이 즉시 렌더돼 있어야 한다').not.toBe('');
+
+    act(() => {
+      tl.seek(1.9); // UNDERLINE_DRAW_DURATION 종료 시각
+    });
+    const atEnd = underline.style.transform;
+    expect(atEnd).not.toBe('');
+    expect(atEnd, '좌→우로 그려지는 중이므로 시작 값과 달라야 한다').not.toBe(atStart);
+  });
+
+  it('이름은 광선이 idle로 정착하는 구간(0.75~1.30초)에 실려 도착한다 — 뮤테이션 (g)', async () => {
+    render(<Harness />);
+    await flushGsapImport();
+    const tl = capturedTimeline();
+    const wrapperEl = screen.getByTestId('wordmark').parentElement as HTMLElement;
+
+    // 뮤테이션 (g) — 등장 시각을 다시 0.15초로 되돌리면 0.7초 시점에 이미
+    // 상당히 진행돼 있어(0.35를 벗어난 값) FAIL한다.
+    act(() => {
+      tl.seek(0.7);
+    });
+    expect(wrapperEl.style.transform).toContain('0.35');
+
+    // 도착 시각(1.30) — wrapper의 transform이 인라인 'none'으로 정착한다
+    // (광선 개수 램프·감속 도착과 같은 시각, FLIP 대비 containing block
+    // 안정화).
+    // seek()의 두 번째 인자(suppressEvents)는 기본 true라 tl.call()이
+    // 딱 그 시각에 도착하는 것만으로는 발화하지 않는다(gsap-core.js 주석
+    // 참고 — "이벤트가 억제된 seek에서는 아무것도 발화하지 않는다"). false를
+    // 명시해 실제 재생과 동일하게 콜백이 실행되는지를 본다.
+    act(() => {
+      tl.seek(1.3, false);
+    });
+    expect(wrapperEl.style.transform).toBe('none');
+  });
+
   it('2초 안에 완료되고 Overview 대형 모드로 잔류한다', async () => {
     render(<Harness />);
     await flushGsapImport();
@@ -332,12 +391,26 @@ describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨
     expect(start.style.opacity).toBe('1');
   });
 
-  it('START 클릭은 onStart를 호출한다', () => {
+  it('START 클릭은 링이 읽힐 지연(200~260ms) 뒤 onStart를 호출한다', () => {
+    // 부팅 안무 2차 브리프 4절 — 클릭 즉시 전환되면 클릭 링을 볼 시간이
+    // 없다. onStart는 지연 뒤에만 불려야 한다(뮤테이션 (k)).
     const onStart = vi.fn();
     render(<Harness onStart={onStart} />);
 
-    screen.getByTestId('boot-start').click();
-    expect(onStart).toHaveBeenCalledTimes(1);
+    act(() => {
+      screen.getByTestId('boot-start').click();
+    });
+    expect(onStart, '클릭 즉시 불리면 안 된다').not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(199);
+    });
+    expect(onStart, '200ms 전에 불리면 안 된다').not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(61); // 총 260ms
+    });
+    expect(onStart, '260ms 안에는 불려야 한다').toHaveBeenCalledTimes(1);
   });
 
   it('unmount 뒤 timeline을 kill한다', async () => {
@@ -391,17 +464,17 @@ describe('BootSequence 게이트 — reduced-motion·routeResolved·motionReady'
 // 픽셀 정렬은 증명할 수 없다 — 여기서는 "어떤 클래스·변수가 어디서
 // 오는가"라는 구조만 고정한다.
 describe('BootSequence 구도 — 중앙 정렬·간격·CTA 위계', () => {
-  it('워드마크 pre-boot blur도 CSS가 소유한다 — data-wordmark-mode=hero가 no-preference에서만 blur(8px)', () => {
+  it('워드마크 pre-boot blur도 CSS가 소유한다 — data-wordmark-mode=hero가 no-preference에서만 blur(11px)', () => {
     const selector = "[data-wordmark-mode='hero']";
     const base = unconditionalRuleBody(selector);
     expect(base, `${selector} 기본 규칙이 없다`).toBeDefined();
     expect(base).toMatch(/filter\s*:\s*blur\(0px\)\s*;/);
 
-    // 8px — 부팅 안무 브리프 LCP 절이 정한 상한(≤8px, 글자를 글자로 알아볼
-    // 수 있는 한계). 이전 라운드의 5px에서 올랐다.
+    // 11px — 부팅 안무 2차 브리프가 권고한 10~12px 범위의 중간값(1차의
+    // 8px에서 올렸다 — 2차 실기기 피드백 "멀리서 도착한다는 느낌이 없다").
     const override = noPreferenceOverrideBody(selector);
     expect(override, `${selector}의 no-preference 오버라이드가 없다`).toBeDefined();
-    expect(override).toMatch(/filter\s*:\s*blur\(8px\)\s*;/);
+    expect(override).toMatch(/filter\s*:\s*blur\(11px\)\s*;/);
 
     // reduce 미디어쿼리 블록 어디에도 이 선택자로 다시 블러를 거는 규칙이
     // 없어야 한다 — role/start와 같은 이유(역방향 플래시 방지).
@@ -421,6 +494,40 @@ describe('BootSequence 구도 — 중앙 정렬·간격·CTA 위계', () => {
     const source = readFileSync(bootSequencePath, 'utf8');
     expect(source).not.toMatch(/tl\.set\(\s*wordmarkEl/);
     expect(source).toMatch(/tl\.fromTo\(\s*wordmarkEl/);
+  });
+
+  it('이름 scale은 워드마크 버튼이 아니라 wrapper에만 걸린다 — FLIP 불변식, 뮤테이션 (h)', () => {
+    // 워드마크 버튼(FLIP 대상)은 position·transform을 갖지 않는다 — GSAP
+    // Flip이 이 노드에 inline transform을 걸고 absolute:true로 잠깐
+    // position:absolute까지 주는데, 부팅 타임라인이 같은 노드에 scale까지
+    // 걸면 두 transform 소유자가 충돌해 "START 직후 워드마크 소실" 버그가
+    // 재발한다(Navigation/index.tsx 계약). scale은 반드시 wrapperEl
+    // (wordmarkScaleRef)에만 걸려야 한다.
+    const source = readFileSync(bootSequencePath, 'utf8');
+    const wordmarkCall = source.match(/tl\.(?:to|fromTo|set)\(\s*wordmarkEl[\s\S]*?\);/)?.[0];
+    expect(wordmarkCall, 'wordmarkEl을 대상으로 한 트윈을 찾지 못했다').toBeDefined();
+    // 뮤테이션 (h) — scale을 wordmarkEl 트윈으로 옮기면 여기서 FAIL한다.
+    expect(wordmarkCall).not.toMatch(/scale/);
+
+    const wrapperCall = source.match(/tl\.fromTo\(\s*wrapperEl[\s\S]*?\);/)?.[0];
+    expect(wrapperCall, 'wrapperEl에 scale 트윈이 없다').toBeDefined();
+    expect(wrapperCall).toMatch(/scale/);
+  });
+
+  it('이름(wordmarkEl·wrapperEl)의 opacity는 절대 건드리지 않는다 — LCP 계약, 뮤테이션 (f)', () => {
+    // 확정 계약: 이름은 opacity: 0으로 시작하지 않고, transform·filter만
+    // 쓴다. SSR 마크업 검사(위 LCP 계약 describe)만으로는 GSAP이 나중에
+    // opacity를 거는 경로를 못 잡는다 — 타임라인이 실제로 이 두 요소에
+    // opacity를 걸지 않는지 소스에서 직접 고정한다.
+    const source = readFileSync(bootSequencePath, 'utf8');
+    const wordmarkCall = source.match(/tl\.(?:to|fromTo|set)\(\s*wordmarkEl[\s\S]*?\);/)?.[0];
+    const wrapperCall = source.match(/tl\.(?:to|fromTo|set)\(\s*wrapperEl[\s\S]*?\);/)?.[0];
+    expect(wordmarkCall, 'wordmarkEl 트윈을 찾지 못했다').toBeDefined();
+    expect(wrapperCall, 'wrapperEl 트윈을 찾지 못했다').toBeDefined();
+
+    // 뮤테이션 (f) — 둘 중 하나에라도 opacity를 걸면 FAIL한다.
+    expect(wordmarkCall).not.toMatch(/opacity/);
+    expect(wrapperCall).not.toMatch(/opacity/);
   });
 
   it('캡션(역할·START) 블록은 워드마크와 같은 뷰포트 중앙 기준(50%)에서 --boot-caption-gap만큼 아래 시작한다', () => {
@@ -538,6 +645,60 @@ describe('BootSequence 구도 — 중앙 정렬·간격·CTA 위계', () => {
     expect(underline).toHaveAttribute('aria-hidden', 'true');
   });
 
+  it('밑줄은 버튼 박스가 아니라 텍스트를 감싸는 relative span의 자손이다 — 뮤테이션 (i)', () => {
+    // 컨트롤러가 코드에서 확정한 원인: 버튼이 min-h-11(44px 터치 타깃)이고
+    // items-center로 글자가 그 안에서 수직 중앙에 놓이는데, 밑줄이 버튼
+    // 바로 아래 absolute bottom-0 자식이면 글자가 아니라 버튼 박스
+    // 바닥에 그어진다. 텍스트를 relative span으로 감싸 밑줄을 그 안에
+    // 두면 밑줄이 글자 자신의 박스 바닥에 붙는다.
+    render(<Harness />);
+    const start = screen.getByTestId('boot-start');
+    const underline = screen.getByTestId('boot-start-underline');
+
+    // 뮤테이션 (i) — 밑줄을 다시 버튼 바로 아래 자식으로 옮기면(텍스트
+    // wrapper 없이) parentElement가 start 자신이 되어 FAIL한다.
+    expect(underline.parentElement).not.toBe(start);
+    expect(underline.parentElement?.className).toContain('relative');
+    expect(underline.parentElement?.textContent).toBe('START');
+  });
+
+  it('START 버튼은 44px 터치 타깃(min-h-11)을 유지한다 — 뮤테이션 (r)', () => {
+    render(<Harness />);
+    const start = screen.getByTestId('boot-start');
+    expect(start.className).toContain('min-h-11');
+  });
+
+  it('클릭 링은 버튼의 2.4배 반경 상한(기저 60% × keyframe scale(4)) 안에서 굵기·불투명도로 가시성을 올린다 — 뮤테이션 (q)', () => {
+    render(<Harness />);
+    const start = screen.getByTestId('boot-start');
+    act(() => {
+      start.click();
+    });
+    const ripple = screen.getByTestId('boot-start-ripple');
+
+    // 반경 상한 — 이 두 리터럴(60%, scale(4))이 함께 2.4배를 만든다.
+    // 뮤테이션 (q) — scale(4)를 scale(6)으로 올리면(60% × 6 = 3.6배) 아래
+    // keyframe 검사가 FAIL한다.
+    expect(ripple.className).toMatch(/\bh-\[60%\]/);
+    expect(ripple.className).toMatch(/\bw-\[60%\]/);
+    const keyframeBlock = DESIGN_TOKENS_CSS.match(
+      /@keyframes ripple-expand \{([\s\S]*?)\n {2}\}/
+    )?.[1];
+    expect(keyframeBlock, 'ripple-expand keyframe을 찾지 못했다').toBeDefined();
+    expect(keyframeBlock).toMatch(/scale\(4\)/);
+    expect(keyframeBlock).not.toMatch(/scale\(6\)/);
+
+    // 굵기 — 채움 위에 테두리를 더해 윤곽을 또렷하게 한다.
+    expect(ripple.className).toMatch(/\bborder-2\b/);
+    expect(ripple.className).toMatch(/border-\[var\(--color-cyan-hi\)\]/);
+
+    // 정점 불투명도 — 이전(0.35)보다 뚜렷한 "순간 백색 피크"가 있어야 한다.
+    const opacities = [...(keyframeBlock ?? '').matchAll(/opacity:\s*([\d.]+)/g)].map((m) =>
+      Number(m[1])
+    );
+    expect(Math.max(...opacities)).toBeGreaterThanOrEqual(0.7);
+  });
+
   it('아이들 광휘 span이 START 뒤에 존재한다', () => {
     render(<Harness />);
     const start = screen.getByTestId('boot-start');
@@ -585,6 +746,90 @@ describe('BootSequence — 캡션 컨테인먼트 점프 회피(active 기반 �
     expect(container).toHaveAttribute('aria-hidden', 'true');
     expect(container.className).toContain('boot-caption-hidden');
     expect(container.className).not.toContain('boot-caption-visible');
+  });
+});
+
+// START 클릭 지연 — 부팅 안무 2차 브리프 4절(b). 클릭 즉시 전환되면 클릭
+// 링(축적→방출 서사의 방출 절반)을 볼 시간이 없었다. onStart를
+// START_TRANSITION_DELAY_MS만큼 늦추되 네 가드(중복 클릭·다른 네비 경합·
+// 언마운트 정리·reducedMotion)를 지킨다.
+describe('BootSequence — START 클릭 지연(링 가시성 확보)과 가드', () => {
+  it('지연 중 두 번 클릭해도 onStart는 한 번만 예약된다 — 뮤테이션 (l)', () => {
+    const onStart = vi.fn();
+    render(<Harness onStart={onStart} />);
+    const start = screen.getByTestId('boot-start');
+
+    act(() => {
+      start.click();
+    });
+    act(() => {
+      vi.advanceTimersByTime(50);
+    });
+    act(() => {
+      start.click(); // 지연 중 재클릭 — 무시돼야 한다
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(300); // 두 지연 모두 끝났을 시간
+    });
+    expect(onStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('지연 중 active가 다른 곳으로 바뀌면(다른 네비게이션이 이김) 예약된 onStart를 부르지 않는다 — 뮤테이션 (m)', () => {
+    const onStart = vi.fn();
+    const { rerender } = render(<Harness onStart={onStart} active="overview" />);
+
+    act(() => {
+      screen.getByTestId('boot-start').click();
+    });
+    act(() => {
+      vi.advanceTimersByTime(50);
+    });
+
+    // 다른 경로(예: 해시 변경)로 이미 다른 섹션으로 이동했다고 가정한다.
+    rerender(<Harness onStart={onStart} active="about" />);
+
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(
+      onStart,
+      '예약된 전환이 다른 네비게이션 결과를 덮어쓰면 안 된다'
+    ).not.toHaveBeenCalled();
+  });
+
+  it('언마운트 시 예약된 onStart 타이머를 정리한다 — 뮤테이션 (n)', () => {
+    const onStart = vi.fn();
+    const { unmount } = render(<Harness onStart={onStart} />);
+
+    act(() => {
+      screen.getByTestId('boot-start').click();
+    });
+    unmount();
+
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(onStart).not.toHaveBeenCalled();
+  });
+
+  it('reducedMotion에서는 지연 없이 즉시 onStart를 부른다 — 뮤테이션 (o)', () => {
+    const onStart = vi.fn();
+    render(<Harness onStart={onStart} reducedMotion />);
+
+    act(() => {
+      screen.getByTestId('boot-start').click();
+    });
+    expect(onStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('reducedMotion에서는 클릭해도 클릭 링이 마운트되지 않는다 — 뮤테이션 (p)', () => {
+    render(<Harness reducedMotion />);
+
+    act(() => {
+      screen.getByTestId('boot-start').click();
+    });
+    expect(screen.queryByTestId('boot-start-ripple')).not.toBeInTheDocument();
   });
 });
 

@@ -263,6 +263,13 @@ describe('WordmarkFlip — 단일 워드마크 노드의 hero/compact 전환', (
 
       act(() => trigger(container));
 
+      // START는 클릭 링(방출 서사의 뒷절반)을 볼 시간을 주려고 실제 전환을
+      // START_TRANSITION_DELAY_MS만큼 미룬다. 다른 세 트리거는 즉시 전환이라
+      // 이 진행이 무해하다 — 네 트리거를 같은 모양으로 두기 위해 공통으로 흘린다.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(500);
+      });
+
       expect(getStateSpy).toHaveBeenCalledTimes(1);
       expect(fromSpy).toHaveBeenCalledTimes(1);
     }

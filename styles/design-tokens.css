@@ -238,9 +238,15 @@
     animation: shimmer 2s linear infinite;
   }
 
+  /* START 클릭 링 — 반경 상한(base 60% × scale(4) = 2.4배, 2차 감사)은
+     그대로 두고, 정점 불투명도를 0.35→0.9로 올려 "순간 백색 피크"가
+     읽히게 한다(2차 실기기 피드백 "너무 미미하다"). 18%(≈108ms) 지점까지
+     밝기를 유지해 짧게 번쩍인 뒤 확장하며 사라지는 "터짐"으로 읽히게
+     한다 — 처음부터 바로 페이드하던 이전 버전과 다르다. */
   @keyframes ripple-expand {
-    from { transform: translate(-50%, -50%) scale(0); opacity: 0.35; }
-    to   { transform: translate(-50%, -50%) scale(4); opacity: 0; }
+    0% { transform: translate(-50%, -50%) scale(0); opacity: 0.9; }
+    18% { transform: translate(-50%, -50%) scale(0.55); opacity: 0.85; }
+    100% { transform: translate(-50%, -50%) scale(4); opacity: 0; }
   }
 
   .animate-ripple {
@@ -667,14 +673,18 @@
     }
 
     [data-wordmark-mode='hero'] {
-      /* 8px — 부팅 안무 브리프 LCP 절이 정한 상한(글자가 글자로 알아볼 수
-         있는 한계). 광선의 fov 펀치와 짝을 이루는 "멀리서 도착" 느낌을
-         5px보다 또렷하게 낸다. */
-      filter: blur(8px);
+      /* 11px — 2차 실기기 피드백("멀리서 도착한다는 느낌이 없다")에 따라
+         1차의 8px에서 올렸다. 부팅 안무 2차 브리프가 권고한 10~12px
+         범위의 중간값이다. */
+      filter: blur(11px);
     }
 
     .wordmark-scale-wrapper {
-      transform: scale(0.65);
+      /* 0.35 — 1차의 0.65에서 낮췄다(2차 실기기 피드백). 2차 감사는
+         가독을 이유로 0.6~0.7을 권했고 0.2~0.3 같은 극단에는 반대했다 —
+         0.35는 그 권고 범위 바로 아래, 사용자가 요구한 "더 강한 원경감"과
+         감사의 가독 우려 사이의 절충이다. */
+      transform: scale(0.35);
     }
 
     .boot-start-underline {

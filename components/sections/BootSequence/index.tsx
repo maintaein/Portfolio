@@ -22,23 +22,37 @@ export interface BootSequenceProps {
   onStart: () => void;
 }
 
-// 부팅 안무 타이밍(초) — 부팅 안무 브리프가 확정한 표. 광선(HyperspeedHandle.
-// bootIn)과 이름(이 컴포넌트)이 같은 BOOT_DURATION_SECONDS를 공유하고 같은
-// 씬-준비 신호에서 함께 출발한다.
+// 부팅 안무 타이밍(초) — 부팅 안무 2차 브리프가 다시 확정한 표. 광선
+// (HyperspeedHandle.bootIn)과 이름(이 컴포넌트)이 같은 BOOT_DURATION_SECONDS를
+// 공유하고 같은 씬-준비 신호에서 함께 출발한다.
 //
-//   0.00–0.15  광선 fov 펀치            | 이름 scale .65 / blur 8px로 이미 페인트
-//   0.15–1.05  광선 고속 유지            | 이름 scale→1, blur→0
-//   0.90–1.30  광선 감속(도착)           | (이름은 1.05에 도착 — 감속 구간에 얹힌다)
-//   1.30–1.55  idle                     | 역할 라벨
-//   1.55–1.80  idle                     | START + 밑줄 draw(0.35s, 1.90 종료)
+// 1차 라운드는 이름이 0.15초부터 등장해 "광선이 아직 깊이에서 밀려오는 중인데
+// 이름이 이미 도착해 있다"는 문제였다(2차 실기기 피드백). 광선의 개수 램프가
+// 목표(idle)에 도달해 "자연스럽게 전환"되는 시각(App의 BOOT_LIGHT_RAMP_RATIO —
+// 2초 부팅 기준 1.30초, 기존 감속 표의 "도착" 시각과 동일)에 이름이 함께
+// 실리도록 등장 시각을 뒤로 미뤘다 — 광선의 감속 구간(0.90~1.30) 후반부에서
+// 시작해 도착과 동시에 정착한다.
+//
+//   0.00–1.30  광선 fov 펀치 + 개수 램프(먼 것부터 idle까지 채움) | 이름은 아직 scale .35 / blur 11px로 대기(페인트만 돼 있다)
+//   0.75–1.30  (위와 겹침)                                        | 이름 scale→1, blur→0(0.55s) — 광선이 idle로 정착하는 것과 같은 박자
+//   0.90–1.30  광선 감속(도착)                                    | 이름도 같은 1.30에 도착
+//   1.30–1.55  idle                                               | 역할 라벨
+//   1.55–1.80  idle                                               | START + 밑줄 draw(0.35s, 1.90 종료)
 //   1.80–2.00  버퍼
-const NAME_TRANSFORM_AT = 0.15;
-const NAME_TRANSFORM_DURATION = 0.9; // 종료 시각 1.05초
+const NAME_TRANSFORM_AT = 0.75;
+const NAME_TRANSFORM_DURATION = 0.55; // 종료 시각 1.30초 — 광선 개수 램프·감속 도착과 동시
 const ROLE_REVEAL_AT = 1.3;
 const ROLE_REVEAL_DURATION = 0.25; // 종료 시각 1.55초
 const START_REVEAL_AT = 1.55;
 const START_REVEAL_DURATION = 0.25; // 종료 시각 1.80초
 const UNDERLINE_DRAW_DURATION = 0.35; // 종료 시각 1.90초(버퍼 구간까지 살짝 걸친다)
+
+// START 클릭 후 실제 섹션 전환(onStart)까지의 지연(ms) — 2차 실기기 피드백:
+// 클릭 즉시 전환이 시작돼 클릭 링(축적→방출 서사의 방출 절반)을 볼 시간이
+// 없었다. 200~260ms 범위(2차 감사 권고) 안에서 잡는다 — 그 이상은 "느리다"로
+// 읽힌다. 부팅 2초 계약과는 별개 예산이다(START를 눌러야만 발생하고, 부팅
+// 자체의 길이에는 포함되지 않는다).
+const START_TRANSITION_DELAY_MS = 220;
 
 // 씬 준비 신호가 이 시간(ms) 안에 안 오면(WebGL 실패·청크 실패) 타임아웃이
 // 대신 부팅을 출발시킨다 — 이름이 영원히 안 나오는 사고를 막는다. Hyperspeed
@@ -63,6 +77,9 @@ export default function BootSequence({
   // START를 누를 때마다 새 키로 링을 다시 마운트해 애니메이션을 처음부터
   // 재생한다. 0이면 아직 한 번도 누르지 않은 것이라 아무것도 렌더하지 않는다.
   const [rippleKey, setRippleKey] = useState(0);
+  // 클릭 후 실제 onStart()까지의 지연 예약. null이면 예약이 없다 — 이
+  // 값의 존재 자체가 "이미 예약됨" 가드다(중복 클릭 방지).
+  const startTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 씬 준비 신호 또는 타임아웃 중 먼저 오는 쪽으로 출발한다. sceneReady가
   // true가 되면 곧바로, 아니면 SCENE_READY_TIMEOUT_MS 뒤 타임아웃이 대신
@@ -138,10 +155,18 @@ export default function BootSequence({
           // 이름이 "멀리서 도착"하는 scale — 워드마크 버튼이 아니라 이
           // wrapper에 건다(FLIP 불변식, Navigation/index.tsx 계약). from
           // 값은 CSS(.wordmark-scale-wrapper, no-preference)가 이미 그린
-          // 값과 같아 핸드오프에 점프가 없다.
+          // 값과 같아 핸드오프에 점프가 없다. 0.35 — 2차 실기기 피드백
+          // ("멀리서 도착한다는 느낌이 없다")에 따라 1차의 0.65에서
+          // 낮췄다. 2차 감사는 가독을 이유로 0.6~0.7을 권했고 0.2~0.3
+          // 같은 극단에는 반대했다 — 0.35는 그 권고 범위 바로 아래,
+          // 사용자가 요구한 "더 강한 원경감"과 감사의 가독 우려 사이의
+          // 절충이다. opacity는 건드리지 않으므로(LCP 계약) 이 값 자체는
+          // LCP 후보 자격에 영향이 없지만, scale(0.35)이 만드는 시각적
+          // 크기 축소가 LCP 요소의 "가장 크게 렌더된 순간"을 늦출 가능성은
+          // 남는다 — 실기기 LCP 재측정 필요(리포트 참고).
           tl.fromTo(
             wrapperEl,
-            { scale: 0.65 },
+            { scale: 0.35 },
             { scale: 1, duration: NAME_TRANSFORM_DURATION, ease: SITE_EASE },
             NAME_TRANSFORM_AT
           );
@@ -163,12 +188,14 @@ export default function BootSequence({
 
         if (wordmarkEl) {
           // pre-boot blur는 CSS([data-wordmark-mode='hero'], design-tokens.css)가
-          // 소유한다. from 값(8px)이 CSS와 같아(immediateRender) 핸드오프에
-          // 점프가 없다. 광선과 같은 시각(0.15)에 시작해 같은 시각(1.05)에
-          // 도착한다 — scale과 짝을 이루는 "도착" 신호의 다른 절반이다.
+          // 소유한다. from 값(11px)이 CSS와 같아(immediateRender) 핸드오프에
+          // 점프가 없다. 광선의 개수 램프·감속이 idle로 정착하는 시각과
+          // 같은 시각(NAME_TRANSFORM_AT~+DURATION)에 시작해 도착한다 —
+          // scale과 짝을 이루는 "도착" 신호의 다른 절반이다. 11px — 1차의
+          // 8px에서 올렸다(2차 브리프 권고 범위 10~12px의 중간).
           tl.fromTo(
             wordmarkEl,
-            { filter: 'blur(8px)' },
+            { filter: 'blur(11px)' },
             { filter: 'blur(0px)', duration: NAME_TRANSFORM_DURATION, ease: SITE_EASE },
             NAME_TRANSFORM_AT
           );
@@ -228,13 +255,42 @@ export default function BootSequence({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, motionReady, reducedMotion, routeResolved, readyOrTimedOut]);
 
+  // 지연 중 active가 다른 곳으로 바뀌면(다른 네비게이션이 먼저 이겼다는
+  // 뜻) 예약된 onStart()가 그걸 덮어쓰면 안 된다 — 이 effect의 cleanup이
+  // active가 바뀔 때마다(그리고 unmount 시에도) 남은 예약을 정리한다.
+  useEffect(() => {
+    return () => {
+      if (startTimeoutRef.current !== null) {
+        clearTimeout(startTimeoutRef.current);
+        startTimeoutRef.current = null;
+      }
+    };
+  }, [active]);
+
   // START를 누르면 클릭 링을 새로 마운트하고(반경은 START 버튼의 2.4배까지만)
-  // 곧바로 섹션 전환을 시작한다. 배경의 fov 펀치("임팩트")는 이 클릭이
-  // 만드는 isTransitioning edge를 HyperspeedBackground가 이미 boost()로
-  // 받는다(기존 계약) — 여기서 handle을 따로 참조하지 않는다.
+  // START_TRANSITION_DELAY_MS 뒤에 섹션 전환을 시작한다 — 링이 "터졌다"로
+  // 읽힐 시간을 준다(2차 실기기 피드백). 배경의 fov 펀치("임팩트")는 이
+  // 전환이 만드는 isTransitioning edge를 HyperspeedBackground가 이미
+  // boost()로 받는다(기존 계약) — 여기서 handle을 따로 참조하지 않는다.
+  //
+  // 가드 네 가지: (1) 이미 예약돼 있으면(startTimeoutRef가 non-null) 재클릭을
+  // 무시한다 — 전환이 두 번 예약되지 않는다. (2) 지연 중 다른 네비가 이기면
+  // 위 effect의 cleanup이 이 예약을 정리한다. (3) 언마운트도 같은 cleanup이
+  // 처리한다. (4) reducedMotion이면 지연 없이 즉시 이동한다.
   function handleStartClick() {
+    if (startTimeoutRef.current !== null) return;
+
     setRippleKey((key) => key + 1);
-    onStart();
+
+    if (reducedMotion) {
+      onStart();
+      return;
+    }
+
+    startTimeoutRef.current = setTimeout(() => {
+      startTimeoutRef.current = null;
+      onStart();
+    }, START_TRANSITION_DELAY_MS);
   }
 
   // 워드마크와 마찬가지로 이 컴포넌트는 HomeClient에서 overview 섹션 밖(셸
@@ -276,7 +332,7 @@ export default function BootSequence({
         data-testid="boot-start"
         type="button"
         onClick={handleStartClick}
-        className="boot-start relative inline-flex min-h-11 items-center pb-1 text-t5 sm:text-t3 md:text-t2 uppercase tracking-[0.2em] text-[var(--color-text-primary)] transition-colors duration-300 hover:text-[var(--color-cyan-hi)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)]"
+        className="boot-start relative inline-flex min-h-11 items-center text-t5 sm:text-t3 md:text-t2 uppercase tracking-[0.2em] text-[var(--color-text-primary)] transition-colors duration-300 hover:text-[var(--color-cyan-hi)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)]"
       >
         {/* 아이들 광휘 — 정지 상태의 생동감(축적 서사). transform·opacity만
             애니메이션하는 순수 CSS 루프라 캔버스 비용이 없다. */}
@@ -289,26 +345,38 @@ export default function BootSequence({
               'radial-gradient(circle, var(--color-cyan-core) 0%, transparent 70%)',
           }}
         />
-        START
-        {/* 밑줄 — GSAP이 좌→우로 한 번 그린 뒤(scaleX), 이후는 순수 CSS
-            루프로 opacity만 0.55↔1 호흡한다(글자는 건드리지 않는다). */}
-        <span
-          ref={underlineRef}
-          data-testid="boot-start-underline"
-          aria-hidden="true"
-          className="boot-start-underline absolute bottom-0 left-0 h-px w-full origin-left bg-[var(--color-cyan-core)]"
-        />
+        {/* 텍스트를 감싸는 relative span — 밑줄의 위치 기준이다. 44px
+            터치 타깃(min-h-11)은 버튼 자신이 지키고, 이 span은 글자
+            자신의 박스 크기만 갖는다. 예전에는 밑줄이 버튼 바로 아래
+            자식(absolute bottom-0)이라 44px 박스의 바닥(글자보다
+            10~13px 아래)에 그어졌다 — 이 wrapper로 밑줄을 글자에
+            붙인다(2차 실기기 피드백). */}
+        <span className="relative inline-block pb-1">
+          START
+          {/* 밑줄 — GSAP이 좌→우로 한 번 그린 뒤(scaleX), 이후는 순수 CSS
+              루프로 opacity만 0.55↔1 호흡한다(글자는 건드리지 않는다). */}
+          <span
+            ref={underlineRef}
+            data-testid="boot-start-underline"
+            aria-hidden="true"
+            className="boot-start-underline absolute bottom-0 left-0 h-px w-full origin-left bg-[var(--color-cyan-core)]"
+          />
+        </span>
         {/* 클릭 링 — 이미 있던 .animate-ripple(design-tokens.css)을 재사용한다.
-            시안 대신 정점색(--color-cyan-hi)으로 "순간 백색 피크"를 낸다.
-            base 크기 60% × keyframe의 scale(4) = 2.4배 반경 상한. 캔버스는
+            정점색(--color-cyan-hi) 테두리 + 채움으로 "순간 백색 피크"를
+            낸다. base 크기 60% × keyframe의 scale(4) = 2.4배 반경 상한(2차
+            감사가 정한 상한 — 이 값 자체는 올리지 않았다). 반경은 그대로 두고
+            keyframe의 불투명도 정점·테두리 굵기(border-2)로 가시성을
+            올렸다(2차 실기기 피드백 "너무 미미하다"). reducedMotion에서는
+            아예 마운트하지 않는다 — 호흡·개수 램프와 같은 원칙. 캔버스는
             되살리지 않는다 — 배경이 이미 팽창하는 광선 터널이라 동심원
             링을 더 얹으면 노이즈 위의 노이즈로 읽힌다(감사 판정). */}
-        {rippleKey > 0 && (
+        {rippleKey > 0 && !reducedMotion && (
           <span
             key={rippleKey}
             aria-hidden="true"
             data-testid="boot-start-ripple"
-            className="animate-ripple pointer-events-none absolute left-1/2 top-1/2 h-[60%] w-[60%] rounded-full bg-[var(--color-cyan-hi)]"
+            className="animate-ripple pointer-events-none absolute left-1/2 top-1/2 h-[60%] w-[60%] rounded-full border-2 border-[var(--color-cyan-hi)] bg-[var(--color-cyan-hi)]"
           />
         )}
       </button>
