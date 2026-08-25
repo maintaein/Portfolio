@@ -196,17 +196,40 @@ describe('BootSequence LCP 계약', () => {
     expect(html).toContain('KIM TAEIN');
   });
 
-  it('이름이 opacity 0으로 시작하지 않는다', () => {
+  // 뒤집힌 계약(터널 진입 브리프 3절) — 사용자가 "opacity: 0으로 시작하지
+  // 않는다"를 폐기하기로 결정했다. "광선을 타고 가다가 이름에 닿는다"를
+  // 위해 이름은 이제 no-preference에서 opacity 0으로 시작해 도착 시점에
+  // 1이 된다. 소유권은 여전히 CSS다 — SSR 마크업 자체에는 인라인 style이
+  // 없다(JS 낙관 boolean으로 하면 역방향 플래시가 난다, 계획이 명시적으로
+  // 금지). blur와 완전히 같은 패턴이라 같은 헬퍼로 기본 규칙(1)·
+  // no-preference 오버라이드(0)를 직접 CSS에서 고정한다.
+  it('이름은 opacity 0으로 시작해(CSS 소유) 도착 시점에 1이 된다 — LCP 계약 변경, 뮤테이션 (d)', () => {
+    const selector = "[data-wordmark-mode='hero']";
+    const base = unconditionalRuleBody(selector);
+    expect(base, `${selector} 기본 규칙이 없다`).toBeDefined();
+    expect(base).toMatch(/opacity\s*:\s*1\s*;/);
+
+    const override = noPreferenceOverrideBody(selector);
+    expect(override, `${selector}의 no-preference 오버라이드가 없다`).toBeDefined();
+    expect(override).toMatch(/opacity\s*:\s*0\s*;/);
+
+    // reduce 미디어쿼리 블록 어디에도 이 선택자를 다시 숨기는 규칙이 없어야
+    // 한다 — 역방향 플래시 방지(역할·START·blur와 같은 이유).
+    const reduceBlocks = DESIGN_TOKENS_CSS.match(
+      /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\n {2}\}\n/g
+    ) ?? [];
+    for (const block of reduceBlocks) {
+      expect(block).not.toMatch(/data-wordmark-mode/);
+    }
+
+    // SSR 마크업 자체에는 여전히 인라인 style이 없다 — CSS가 소유한다는
+    // 계약(JS 낙관 boolean 금지)은 유지된다.
     const html = renderToString(<SsrHarness />);
     const wordmarkMarkup = html.match(
       /<button[^>]*data-testid="wordmark"[^>]*>[\s\S]*?<\/button>/
     )?.[0];
-
     expect(wordmarkMarkup, 'wordmark 마크업을 SSR HTML에서 찾지 못했다').toBeDefined();
-    // 인라인 style 자체가 없어야 한다 — "JS의 낙관적 boolean"으로 opacity를
-    // 끄고 켜는 패턴을 원천적으로 배제한다.
     expect(wordmarkMarkup).not.toMatch(/style=/);
-    expect(wordmarkMarkup).not.toMatch(/opacity:\s*0(?!\.)/);
   });
 
   it('Navigation만 워드마크를 렌더하고 BootSequence는 복제하지 않는다', () => {
@@ -327,6 +350,20 @@ describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨
     expect(wrapperEl.style.transform).toContain('0.35');
   });
 
+  // 컨트롤러 추가. LCP 계약 변경(이름이 opacity 0으로 시작)의 표제 계약인데
+  // 트윈의 from 값이 고정돼 있지 않았다 — 1로 바꿔도 통과했다. pre-boot 은닉은
+  // CSS([data-wordmark-mode='hero'] no-preference)가 소유하지만, fromTo의
+  // immediateRender가 생성 즉시 from 값을 인라인으로 쓰므로 그 값이 CSS와
+  // 어긋나면 GSAP이 로드되는 순간 이름이 튀어나온다 — 앞서 고친 역방향
+  // blur 플래시와 정확히 같은 부류다.
+  it('이름은 opacity 0에서 시작한다 — 트윈 from이 CSS 은닉과 같아야 핸드오프에 점프가 없다', async () => {
+    render(<Harness />);
+    await flushGsapImport();
+    const wordmarkEl = screen.getByTestId('wordmark');
+
+    expect(wordmarkEl.style.opacity).toBe('0');
+  });
+
   it('밑줄이 실제로 그려진다(scaleX 트윈이 존재하고 진행된다) — 뮤테이션 (j)', async () => {
     render(<Harness />);
     await flushGsapImport();
@@ -387,13 +424,39 @@ describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨
       tl.seek(2);
     });
     expect(wordmark.style.filter).toBe('blur(0px)');
+    expect(wordmark.style.opacity).toBe('1');
     expect(role.style.opacity).toBe('1');
     expect(start.style.opacity).toBe('1');
   });
 
-  it('START 클릭은 링이 읽힐 지연(200~260ms) 뒤 onStart를 호출한다', () => {
-    // 부팅 안무 2차 브리프 4절 — 클릭 즉시 전환되면 클릭 링을 볼 시간이
-    // 없다. onStart는 지연 뒤에만 불려야 한다(뮤테이션 (k)).
+  // 7경로 표 — "씬 준비 타임아웃 → 이름이 드러난다". sceneReady가 영영 안
+  // 오면(WebGL·청크 실패) SCENE_READY_TIMEOUT_MS(600ms) 뒤 readyOrTimedOut이
+  // 대신 true가 되어 부팅이 출발해야 한다 — 그러지 않으면 eligible이 영원히
+  // false로 남아 이름이 CSS의 no-preference 은닉에 갇힌다.
+  it('씬 준비 타임아웃이 지나면 sceneReady 없이도 부팅이 출발해 이름이 드러난다 — 뮤테이션 (f)', async () => {
+    render(<Harness sceneReady={false} />);
+    expect(timelineSpy).not.toHaveBeenCalled();
+
+    // 뮤테이션 (f) — SCENE_READY_TIMEOUT_MS 폴백을 지우면 sceneReady가 계속
+    // false인 이 테스트에서 timeline이 영원히 안 만들어져 FAIL한다.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600);
+    });
+    await flushGsapImport();
+
+    const tl = capturedTimeline();
+    const wordmark = screen.getByTestId('wordmark');
+
+    act(() => {
+      tl.seek(2);
+    });
+    expect(wordmark.style.opacity).toBe('1');
+    expect(wordmark.style.filter).toBe('blur(0px)');
+  });
+
+  it('START 클릭은 반짝임이 보일 지연(230ms) 뒤 onStart를 호출한다 — 뮤테이션 (m)', () => {
+    // 터널 진입 브리프 4절 — 클릭 즉시 전환되면 "에너지가 차오르는" 반짝임을
+    // 볼 시간이 없다. onStart는 지연 뒤에만 불려야 한다(뮤테이션 (k)·(m)).
     const onStart = vi.fn();
     render(<Harness onStart={onStart} />);
 
@@ -403,29 +466,42 @@ describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨
     expect(onStart, '클릭 즉시 불리면 안 된다').not.toHaveBeenCalled();
 
     act(() => {
-      vi.advanceTimersByTime(199);
+      vi.advanceTimersByTime(229);
     });
-    expect(onStart, '200ms 전에 불리면 안 된다').not.toHaveBeenCalled();
+    expect(onStart, '230ms 전에 불리면 안 된다').not.toHaveBeenCalled();
 
     act(() => {
-      vi.advanceTimersByTime(61); // 총 260ms
+      vi.advanceTimersByTime(1); // 총 230ms
     });
-    expect(onStart, '260ms 안에는 불려야 한다').toHaveBeenCalledTimes(1);
+    expect(onStart, '230ms 뒤에는 불려야 한다').toHaveBeenCalledTimes(1);
   });
 
-  it('unmount 뒤 timeline을 kill한다', async () => {
+  // 터널 진입 브리프 3절, 7경로 표 — "부팅 도중 언마운트·이탈 → 최종
+  // 상태로 정착". opacity 계약 변경 뒤 가장 위험한 경로 중 하나다 —
+  // revealFinalState()가 wordmarkEl.style.opacity를 세팅하지 않으면 이름이
+  // CSS의 no-preference 은닉(opacity: 0)에 영원히 갇힌다.
+  it('unmount 뒤 timeline을 kill하고 이름을 최종 상태(opacity 1)로 정착시킨다 — 자가 뮤테이션(언마운트 cleanup의 revealFinalState 제거)', async () => {
     const { unmount } = render(<Harness />);
     await flushGsapImport();
     const tl = capturedTimeline();
     const killSpy = vi.spyOn(tl, 'kill');
+    const wordmark = screen.getByTestId('wordmark');
 
     unmount();
     expect(killSpy).toHaveBeenCalledTimes(1);
+    // 브리프의 (e)는 GSAP 로드 "실패"(.catch) 경로의 revealFinalState() 호출
+    // 제거를 가리킨다 — 이 테스트는 다른 호출부(effect cleanup, 언마운트·이탈
+    // 공용)를 겨눈 자가 발견 뮤테이션이다. revealFinalState()에서
+    // wordmarkEl.style.opacity 대입을 지우면 이 값이 ''로 남아 FAIL한다.
+    expect(wordmark.style.opacity).toBe('1');
   });
 });
 
 describe('BootSequence 게이트 — reduced-motion·routeResolved·motionReady', () => {
-  it('reduced-motion이면 부팅을 건너뛰고 즉시 완료한다(timeline·rAF 0개)', () => {
+  // 7경로 표 — "reducedMotion = true → 첫 프레임부터 보인다(부팅 없음)".
+  // JS가 인라인 opacity를 전혀 건드리지 않아야 CSS의 reduce 분기(오버라이드
+  // 없음 = 기본 규칙 opacity:1)가 최초 페인트부터 그대로 적용된다.
+  it('reduced-motion이면 부팅을 건너뛰고 즉시 완료한다(timeline·rAF 0개) — 이름은 CSS가 처음부터 보여준다', () => {
     render(<Harness reducedMotion />);
 
     expect(timelineSpy).not.toHaveBeenCalled();
@@ -433,29 +509,39 @@ describe('BootSequence 게이트 — reduced-motion·routeResolved·motionReady'
 
     const role = screen.getByTestId('boot-role');
     const start = screen.getByTestId('boot-start');
-    // JS가 인라인 스타일을 전혀 건드리지 않는다 — CSS(.boot-role/.boot-start
-    // 기본 규칙)가 최종 상태를 처음부터 보여준다.
+    const wordmark = screen.getByTestId('wordmark');
+    // JS가 인라인 스타일을 전혀 건드리지 않는다 — CSS(.boot-role/.boot-start/
+    // [data-wordmark-mode='hero'] 기본 규칙)가 최종 상태를 처음부터 보여준다.
     expect(role.style.opacity).toBe('');
     expect(start.style.opacity).toBe('');
+    expect(wordmark.style.opacity).toBe('');
   });
 
-  it('motionReady=false이면 timeline·rAF를 만들지 않는다', () => {
+  // 7경로 표 — "motionReady = false → 보인다". JS가 이 상태에서 인라인
+  // opacity를 강제로 걸지 않아야(early return) CSS가 계속 소유권을 쥔다 —
+  // "JS 낙관 boolean으로 하면 역방향 플래시가 난다"는 브리프 경고를 직접
+  // 확인한다.
+  it('motionReady=false이면 timeline·rAF를 만들지 않고 이름의 opacity를 강제로 건드리지 않는다', () => {
     render(<Harness motionReady={false} />);
 
     expect(timelineSpy).not.toHaveBeenCalled();
     expect(rafSpy).not.toHaveBeenCalled();
+    expect(screen.getByTestId('wordmark').style.opacity).toBe('');
   });
 
-  it('routeResolved=false이면 timeline을 만들지 않고, 해시가 section으로 확정된 뒤에도 시작하지 않는다', () => {
+  // 7경로 표 — "routeResolved = false → 보인다". 위와 같은 이유.
+  it('routeResolved=false이면 timeline을 만들지 않고, 해시가 section으로 확정된 뒤에도 시작하지 않는다 — 이름 opacity도 건드리지 않는다', () => {
     const { rerender } = render(
       <Harness routeResolved={false} active="overview" />
     );
     expect(timelineSpy).not.toHaveBeenCalled();
+    expect(screen.getByTestId('wordmark').style.opacity).toBe('');
 
     // routeResolved가 true가 되었지만 확정된 해시가 overview가 아니다 —
     // "해시가 section이면 끝까지 시작하지 않는다".
     rerender(<Harness routeResolved active="about" />);
     expect(timelineSpy).not.toHaveBeenCalled();
+    expect(screen.getByTestId('wordmark').style.opacity).toBe('');
   });
 });
 
@@ -514,19 +600,20 @@ describe('BootSequence 구도 — 중앙 정렬·간격·CTA 위계', () => {
     expect(wrapperCall).toMatch(/scale/);
   });
 
-  it('이름(wordmarkEl·wrapperEl)의 opacity는 절대 건드리지 않는다 — LCP 계약, 뮤테이션 (f)', () => {
-    // 확정 계약: 이름은 opacity: 0으로 시작하지 않고, transform·filter만
-    // 쓴다. SSR 마크업 검사(위 LCP 계약 describe)만으로는 GSAP이 나중에
-    // opacity를 거는 경로를 못 잡는다 — 타임라인이 실제로 이 두 요소에
-    // opacity를 걸지 않는지 소스에서 직접 고정한다.
+  // 뒤집힌 계약(터널 진입 브리프 3절) — wordmarkEl은 이제 opacity 0→1을
+  // 쓴다(도착 시각에 filter와 같이 열린다). wrapperEl은 여전히 opacity를
+  // 건드리지 않는다 — scale만 걸어야 하는 FLIP 불변식은 이번 변경과
+  // 무관하게 유지된다(별도 축, 뮤테이션 (h)가 지킨다).
+  it('wordmarkEl은 opacity 0→1을 쓰고, wrapperEl은 여전히 opacity를 쓰지 않는다 — LCP 계약 변경, 뮤테이션 (d)', () => {
     const source = readFileSync(bootSequencePath, 'utf8');
     const wordmarkCall = source.match(/tl\.(?:to|fromTo|set)\(\s*wordmarkEl[\s\S]*?\);/)?.[0];
     const wrapperCall = source.match(/tl\.(?:to|fromTo|set)\(\s*wrapperEl[\s\S]*?\);/)?.[0];
     expect(wordmarkCall, 'wordmarkEl 트윈을 찾지 못했다').toBeDefined();
     expect(wrapperCall, 'wrapperEl 트윈을 찾지 못했다').toBeDefined();
 
-    // 뮤테이션 (f) — 둘 중 하나에라도 opacity를 걸면 FAIL한다.
-    expect(wordmarkCall).not.toMatch(/opacity/);
+    // 뮤테이션 (d) — opacity 트윈을 지우면(항상 1) FAIL한다.
+    expect(wordmarkCall).toMatch(/opacity/);
+    // wrapperEl에 opacity가 걸리면 FLIP 불변식 축이 깨진다 — 여기서도 FAIL해야 한다.
     expect(wrapperCall).not.toMatch(/opacity/);
   });
 
@@ -668,35 +755,47 @@ describe('BootSequence 구도 — 중앙 정렬·간격·CTA 위계', () => {
     expect(start.className).toContain('min-h-11');
   });
 
-  it('클릭 링은 버튼의 2.4배 반경 상한(기저 60% × keyframe scale(4)) 안에서 굵기·불투명도로 가시성을 올린다 — 뮤테이션 (q)', () => {
+  // 클릭 링은 3차(터널 진입 브리프 4절) 사용자 판단으로 제거됐다 — 대신
+  // 글자가 반짝인다. 뮤테이션 (j)(링을 되살림)·(k)(반짝임을 지움) 둘 다
+  // 이 테스트 하나로 잡는다 — 반대 방향을 함께 짚어야 어느 쪽으로
+  // 회귀해도 걸린다.
+  it('클릭하면 글자가 반짝이고, 클릭 링은 더 이상 존재하지 않는다 — 뮤테이션 (j)·(k)', () => {
     render(<Harness />);
     const start = screen.getByTestId('boot-start');
+
+    // 클릭 전 — 상시 루프가 아니므로 아직 반짝임 클래스가 없다.
+    expect(screen.getByTestId('boot-start-text').className).not.toContain('boot-start-flash');
+
     act(() => {
       start.click();
     });
-    const ripple = screen.getByTestId('boot-start-ripple');
 
-    // 반경 상한 — 이 두 리터럴(60%, scale(4))이 함께 2.4배를 만든다.
-    // 뮤테이션 (q) — scale(4)를 scale(6)으로 올리면(60% × 6 = 3.6배) 아래
-    // keyframe 검사가 FAIL한다.
-    expect(ripple.className).toMatch(/\bh-\[60%\]/);
-    expect(ripple.className).toMatch(/\bw-\[60%\]/);
+    // 뮤테이션 (k) — 클릭에 반짝임 클래스 부착을 지우면 FAIL한다.
+    expect(screen.getByTestId('boot-start-text').className).toContain('boot-start-flash');
+
+    // 뮤테이션 (j) — 클릭 링을 되살리면(JSX·CSS 어느 쪽이든) 아래 넷 중
+    // 하나가 FAIL한다.
+    expect(screen.queryByTestId('boot-start-ripple')).not.toBeInTheDocument();
+    expect(start.querySelector('.animate-ripple')).toBeNull();
+    // 실제 규칙 선언만 본다(주석에 남은 "이전에는 이랬다"는 역사 설명은
+    // 허용한다) — 규칙 자체가 되살아나면 여기서 FAIL한다.
+    expect(DESIGN_TOKENS_CSS).not.toMatch(/@keyframes ripple-expand\s*\{/);
+    expect(DESIGN_TOKENS_CSS).not.toMatch(/\.animate-ripple\s*\{/);
+
+    // 반짝임 keyframe 자체 — cyan-hi로 정점을 찍고, 1회성이다(infinite가
+    // 아니다) — 이 둘이 "상시 맥동 아님"과 "Hyperspeed 색으로 반짝임"을
+    // CSS 수준에서 고정한다.
     const keyframeBlock = DESIGN_TOKENS_CSS.match(
-      /@keyframes ripple-expand \{([\s\S]*?)\n {2}\}/
+      /@keyframes boot-start-flash \{([\s\S]*?)\n {2}\}/
     )?.[1];
-    expect(keyframeBlock, 'ripple-expand keyframe을 찾지 못했다').toBeDefined();
-    expect(keyframeBlock).toMatch(/scale\(4\)/);
-    expect(keyframeBlock).not.toMatch(/scale\(6\)/);
+    expect(keyframeBlock, 'boot-start-flash keyframe을 찾지 못했다').toBeDefined();
+    expect(keyframeBlock).toMatch(/cyan-hi/);
 
-    // 굵기 — 채움 위에 테두리를 더해 윤곽을 또렷하게 한다.
-    expect(ripple.className).toMatch(/\bborder-2\b/);
-    expect(ripple.className).toMatch(/border-\[var\(--color-cyan-hi\)\]/);
-
-    // 정점 불투명도 — 이전(0.35)보다 뚜렷한 "순간 백색 피크"가 있어야 한다.
-    const opacities = [...(keyframeBlock ?? '').matchAll(/opacity:\s*([\d.]+)/g)].map((m) =>
-      Number(m[1])
-    );
-    expect(Math.max(...opacities)).toBeGreaterThanOrEqual(0.7);
+    const flashRule = DESIGN_TOKENS_CSS.match(
+      /\n {2}\.boot-start-flash\s*\{([\s\S]*?)\n {2}\}/
+    )?.[1];
+    expect(flashRule, '.boot-start-flash 규칙을 찾지 못했다').toBeDefined();
+    expect(flashRule).not.toMatch(/infinite/);
   });
 
   it('아이들 광휘 span이 START 뒤에 존재한다', () => {
@@ -749,11 +848,11 @@ describe('BootSequence — 캡션 컨테인먼트 점프 회피(active 기반 �
   });
 });
 
-// START 클릭 지연 — 부팅 안무 2차 브리프 4절(b). 클릭 즉시 전환되면 클릭
-// 링(축적→방출 서사의 방출 절반)을 볼 시간이 없었다. onStart를
+// START 클릭 지연 — 클릭 즉시 전환되면 반짝임("에너지가 차오르는" 연출,
+// 터널 진입 브리프 4절이 클릭 링을 대체했다)을 볼 시간이 없었다. onStart를
 // START_TRANSITION_DELAY_MS만큼 늦추되 네 가드(중복 클릭·다른 네비 경합·
 // 언마운트 정리·reducedMotion)를 지킨다.
-describe('BootSequence — START 클릭 지연(링 가시성 확보)과 가드', () => {
+describe('BootSequence — START 클릭 지연(반짝임 가시성 확보)과 가드', () => {
   it('지연 중 두 번 클릭해도 onStart는 한 번만 예약된다 — 뮤테이션 (l)', () => {
     const onStart = vi.fn();
     render(<Harness onStart={onStart} />);
@@ -823,13 +922,16 @@ describe('BootSequence — START 클릭 지연(링 가시성 확보)과 가드',
     expect(onStart).toHaveBeenCalledTimes(1);
   });
 
-  it('reducedMotion에서는 클릭해도 클릭 링이 마운트되지 않는다 — 뮤테이션 (p)', () => {
+  it('reducedMotion에서는 클릭해도 글자가 반짝이지 않는다 — 뮤테이션 (p)', () => {
     render(<Harness reducedMotion />);
 
     act(() => {
       screen.getByTestId('boot-start').click();
     });
-    expect(screen.queryByTestId('boot-start-ripple')).not.toBeInTheDocument();
+    // 뮤테이션 (p) — reducedMotion 가드 없이 flashKey>0이면 늘 클래스를
+    // 걸면 FAIL한다. 클릭 링은 애초에 존재하지 않는다(위 describe에서
+    // 이미 확인) — 여기서는 대체된 반짝임 쪽 게이트만 본다.
+    expect(screen.getByTestId('boot-start-text').className).not.toContain('boot-start-flash');
   });
 });
 
@@ -882,7 +984,10 @@ describe('BootSequence — 워드마크 blur 안무 (Navigation 결합)', () => 
   // 부팅 타임라인은 재생되지 않는다(hasStartedRef). 인라인 blur(0px)가 남아
   // CSS를 덮지 않으면 이름이 흐린 채로 굳는다. jsdom은 CSS를 로드하지 않으므로
   // 관측 가능한 채널은 "인라인 filter가 CSS를 무력화하는 값으로 남아 있는가"다.
-  it('overview를 떠났다 돌아와도 이름이 흐린 채로 굳지 않는다', async () => {
+  // 7경로 표 — "overview 재방문 → 보인다(부팅 재생 없음)". hasStartedRef가
+  // 이미 true라 재방문은 새 timeline을 만들지 않는다 — 이름은 최초 이탈 때
+  // revealFinalState()가 남긴 최종 상태(opacity 1) 그대로 유지돼야 한다.
+  it('overview를 떠났다 돌아와도 이름이 흐리거나 안 보이는 채로 굳지 않는다 — 뮤테이션 (i)', async () => {
     const { rerender } = render(<CompositionHarness active="overview" />);
     await flushGsapImport();
 
@@ -892,7 +997,11 @@ describe('BootSequence — 워드마크 blur 안무 (Navigation 결합)', () => 
 
     const wordmark = screen.getByTestId('wordmark');
     expect(wordmark).toHaveAttribute('data-wordmark-mode', 'hero');
-    // CSS는 hero에 blur(5px)를 건다. 인라인이 그것을 덮어야 한다.
+    // CSS는 hero에 blur(11px)·opacity:0을 건다. 인라인이 그것을 덮어야 한다.
     expect(wordmark.style.filter).toBe('blur(0px)');
+    // 뮤테이션 (i) — revealFinalState()의 opacity 대입을 지우면 이 값이
+    // ''로 남고, CSS의 no-preference 오버라이드(opacity:0)가 재방문에도
+    // 그대로 적용돼 이름이 안 보인다.
+    expect(wordmark.style.opacity).toBe('1');
   });
 });

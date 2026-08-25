@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { createRef, Profiler } from 'react';
 import { render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -495,100 +497,166 @@ describe('given 8 — tier 변경이 boost/settle 속도 상태를 덮어쓰지 
   });
 });
 
-// bootIn — 부팅 안무(boot-choreography-brief.md 1절). App은 자기 자신의
-// setTimeout으로 감속 시점을 예약하므로 real timer로는 테스트가 느려진다 —
-// 이 describe만 fake timer를 쓴다(governor 관련 테스트들의 rAF 큐와는
-// 독립적인 타이머 채널이라 서로 간섭하지 않는다).
-describe('(다) bootIn — 부팅 안무 fov 펀치·감속', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('호출 즉시 boost()와 같은 목표로 fov 펀치를 시작한다', () => {
+// bootIn — 터널 진입 브리프 2절이 방향을 뒤집었다("느리게 시작 → 개수
+// 램프와 함께 빨라짐 → idle로 정착", 이전엔 정반대로 t=0에 즉시 boost()였다).
+// 더 이상 setTimeout이 아니라 매 프레임(update()) 진행되는 연속 곡선이라
+// fake timer가 아니라 이 파일의 rafQueue(fireNextFrame)로 진행시킨다 —
+// 아래 "부팅 안무 — 개수 램프" describe와 같은 패턴(THREE.Timer의 첫 프레임
+// 오프셋 흡수 포함).
+describe('(다) bootIn — 부팅 속도 곡선(느림→빠름→idle)', () => {
+  it('호출 즉시 idle과 같은 상태로 시작한다 — boost()가 아니다', () => {
     const container = createContainer();
     const app = new App(container, buildOptions());
     app.init();
 
     app.bootIn(2);
 
-    expect(app.fovTarget).toBe(app.options.fovSpeedUp);
-    expect(app.speedUpTarget).toBe(app.options.speedUp);
-  });
-
-  it('2초 부팅 기준 0.90초 지점(duration의 45%)에서 settle()로 감속을 시작한다', () => {
-    const container = createContainer();
-    const app = new App(container, buildOptions());
-    app.init();
-
-    app.bootIn(2);
-    vi.advanceTimersByTime(899);
-    expect(app.fovTarget, '아직 감속 시점 전이다').toBe(app.options.fovSpeedUp);
-
-    vi.advanceTimersByTime(2);
+    // 뮤테이션 (b) — bootIn()이 다시 this.boost()를 즉시 부르면 이 값들이
+    // fovSpeedUp/speedUp이 되어 FAIL한다.
     expect(app.fovTarget).toBe(app.options.fov);
     expect(app.speedUpTarget).toBe(0);
   });
 
-  it('duration이 다르면 감속 시점도 같은 비율로 비례한다', () => {
+  it('램프 중반(raw=0.5)에 fov·speed가 boost와 같은 정점에 오른다', () => {
     const container = createContainer();
     const app = new App(container, buildOptions());
     app.init();
 
-    app.bootIn(4); // 0.45 * 4 = 1.8s
-    vi.advanceTimersByTime(1799);
-    expect(app.fovTarget).toBe(app.options.fovSpeedUp);
+    let t = 0;
+    fireNextFrame(t); // THREE.Timer의 performance.now() 오프셋 흡수
 
-    vi.advanceTimersByTime(2);
+    app.bootIn(2); // lightRampDuration = 2 * 1.3/2 = 1.3s = 1300ms
+    t += 650; // raw = 650/1300 = 0.5 → sin(π·0.5) = 1(정점)
+    fireNextFrame(t);
+
+    expect(app.fovTarget).toBeCloseTo(app.options.fovSpeedUp, 5);
+    expect(app.speedUpTarget).toBeCloseTo(app.options.speedUp, 5);
+  });
+
+  it('램프가 끝나는 프레임(raw=1)에 fov·speed·개수·깊이가 전부 같은 순간 idle로 수렴한다 — 뮤테이션 (c)', () => {
+    const container = createContainer();
+    const app = new App(container, buildOptions());
+    app.init();
+
+    let t = 0;
+    fireNextFrame(t);
+
+    const fullCount = app.options.lightPairsPerRoadWay * 2;
+    app.bootIn(2);
+    t += 1300; // raw = 1300/1300 = 1(램프 종료)
+    fireNextFrame(t);
+
+    expect(app.fovTarget).toBe(app.options.fov);
+    expect(app.speedUpTarget).toBe(0);
+    expect(app.leftCarLights.mesh?.geometry.instanceCount).toBe(fullCount);
+    expect(app.leftCarLights.mesh?.material.uniforms.uBootSpread.value).toBe(1);
+
+    app.dispose();
+  });
+
+  it('램프가 아직 끝나기 전(raw=0.7)에는 속도·개수·깊이 셋 다 아직 idle/목표에 도달하지 않았다 — 뮤테이션 (c)', () => {
+    // 뮤테이션 (c) — 속도 곡선의 수렴 시점을 개수·깊이와 다른 duration으로
+    // 떼어놓으면(예: 절반) 이 시각에 속도만 먼저 idle로 떨어져 아래
+    // fovTarget 검사가 FAIL한다. raw=0.9가 아니라 0.7을 쓰는 이유 — 개수
+    // 램프의 이차 ease-out + 반올림이 raw≈0.87 부근에서 이미 목표(반올림
+    // 상 40쌍)에 닿아버려 0.9는 셋을 가르는 시점으로 쓸 수 없었다(자가
+    // 뮤테이션으로 발견).
+    const container = createContainer();
+    const app = new App(container, buildOptions());
+    app.init();
+
+    let t = 0;
+    fireNextFrame(t);
+
+    const fullCount = app.options.lightPairsPerRoadWay * 2;
+    app.bootIn(2);
+    t += 910; // raw = 910/1300 = 0.7
+    fireNextFrame(t);
+
+    expect(app.fovTarget).not.toBe(app.options.fov);
+    expect(app.leftCarLights.mesh?.geometry.instanceCount).toBeLessThan(fullCount);
+    expect(app.leftCarLights.mesh?.material.uniforms.uBootSpread.value).toBeLessThan(1);
+
+    app.dispose();
+  });
+
+  it('duration이 다르면 정점·정착 시각도 같은 비율로 비례한다', () => {
+    const container = createContainer();
+    const app = new App(container, buildOptions());
+    app.init();
+
+    let t = 0;
+    fireNextFrame(t);
+
+    app.bootIn(4); // lightRampDuration = 4 * 1.3/2 = 2.6s = 2600ms
+    t += 1300; // raw = 1300/2600 = 0.5(정점)
+    fireNextFrame(t);
+    expect(app.fovTarget).toBeCloseTo(app.options.fovSpeedUp, 5);
+
+    t += 1300; // 누적 2600ms → raw = 1(종료)
+    fireNextFrame(t);
     expect(app.fovTarget).toBe(app.options.fov);
   });
 
-  it('연속 호출은 이전 감속 예약을 취소하고 새로 시작한다', () => {
+  it('부팅 중 boost()가 불리면(섹션 전환) 이후 프레임에서 곡선이 그 값을 덮어쓰지 않는다', () => {
+    // "부팅 중 섹션 전환이 일어나면 충돌하지 않아야 한다"(터널 진입 브리프 2절).
     const container = createContainer();
     const app = new App(container, buildOptions());
     app.init();
 
+    let t = 0;
+    fireNextFrame(t);
+
     app.bootIn(2);
-    vi.advanceTimersByTime(500);
-    app.bootIn(2); // 재시작 — 새 900ms 카운트다운이어야 한다
+    t += 400; // raw ≈ 0.31, 아직 램프 도중
+    fireNextFrame(t);
 
-    vi.advanceTimersByTime(899);
-    expect(
-      app.fovTarget,
-      '이전 예약이 취소되지 않았다면 500+899=1399ms 지점이라 이미 감속했을 것이다'
-    ).toBe(app.options.fovSpeedUp);
+    app.boost(); // 사용자가 부팅 도중 START/네비를 눌러 boost()가 직접 불렸다
+    expect(app.fovTarget).toBe(app.options.fovSpeedUp);
+    expect(app.speedUpTarget).toBe(app.options.speedUp);
 
-    vi.advanceTimersByTime(2);
+    // 곡선이 여전히 살아있다면 다음 프레임에 raw에 따른 값으로 되돌릴
+    // 것이다 — bootSpeedRampActive가 꺼졌어야 그러지 않는다.
+    t += 100;
+    fireNextFrame(t);
+    expect(app.fovTarget).toBe(app.options.fovSpeedUp);
+    expect(app.speedUpTarget).toBe(app.options.speedUp);
+
+    app.dispose();
+  });
+
+  it('부팅 중 settle()이 불리면 이후 프레임에서 곡선이 다시 값을 끌어올리지 않는다', () => {
+    const container = createContainer();
+    const app = new App(container, buildOptions());
+    app.init();
+
+    let t = 0;
+    fireNextFrame(t);
+
+    app.bootIn(2);
+    t += 400; // raw ≈ 0.31 — 곡선이 아직 살아있으면 boostFactor > 0(fov가 idle보다 높다)
+    fireNextFrame(t);
+
+    app.settle();
     expect(app.fovTarget).toBe(app.options.fov);
-  });
+    expect(app.speedUpTarget).toBe(0);
 
-  it('dispose()는 예약된 감속을 취소한다 — 죽은 인스턴스에 뒤늦은 부작용이 없다', () => {
-    const container = createContainer();
-    const app = new App(container, buildOptions());
-    app.init();
+    t += 100; // 곡선이 살아있었다면 raw가 더 진행돼 boostFactor가 다시 fov를 끌어올렸을 것이다
+    fireNextFrame(t);
+    expect(app.fovTarget).toBe(app.options.fov);
+    expect(app.speedUpTarget).toBe(0);
 
-    app.bootIn(2);
     app.dispose();
-
-    expect(() => vi.advanceTimersByTime(2000)).not.toThrow();
-    expect(app.fovTarget).toBe(app.options.fovSpeedUp);
   });
 
-  it('dispose 이후 bootIn을 호출해도 예약된 settle이 disposed 가드로 no-op한다', () => {
+  it('dispose 이후 bootIn을 호출해도 예외 없이 안전하다(더 이상 진행할 rAF가 없다)', () => {
     const container = createContainer();
     const app = new App(container, buildOptions());
     app.init();
     app.dispose();
 
-    app.bootIn(2);
-    expect(app.fovTarget).toBe(app.options.fovSpeedUp); // boost() 자체는 동기 실행된다
-
-    vi.advanceTimersByTime(2000);
-    // disposed 가드가 없으면 여기서 settle()이 실행돼 options.fov로 바뀐다.
-    expect(app.fovTarget).toBe(app.options.fovSpeedUp);
+    expect(() => app.bootIn(2)).not.toThrow();
+    expect(app.fovTarget).toBe(app.options.fov); // 동기 부분(idle 시작값)은 그대로 적용된다
   });
 });
 
@@ -1025,6 +1093,93 @@ describe('부팅 안무 — 개수 램프(instanceCount)와 깊이 정렬', () =
     // full보다 작아야 한다.
     expect(afterCount).toBeLessThan(lowFullCount);
     expect(afterCount).toBeGreaterThan(0);
+
+    app.dispose();
+  });
+});
+
+// 터널 진입 브리프 1절 — 광선이 소실점에서 나온다. aOffset.z를 0쪽으로
+// 압축(uBootSpread=0)하면 mod(...)가 uTravelLength에 가까워져 z가 가장 먼
+// 쪽으로 몰린다(브리프의 수학 근거). jsdom은 셰이더를 실행하지 않으므로
+// 두 층을 각각 고정한다 — (1) JS가 uniform 값을 올바른 시각에 올바르게
+// 진행시키는가(런타임), (2) 셰이더 소스가 그 uniform을 실제로 aOffset.z에
+// 곱하는가(소스 검사). 둘 다 있어야 "uBootSpread 값은 맞는데 셰이더가
+// 안 쓴다"는 구멍이 안 남는다.
+describe('부팅 안무 — 소실점 압축(uBootSpread)', () => {
+  it('셰이더가 aOffset.z에 uBootSpread를 곱한다', () => {
+    const source = readFileSync(
+      path.resolve(process.cwd(), 'components/blocks/Hyperspeed/index.tsx'),
+      'utf8'
+    );
+    // 뮤테이션 (a) — 셰이더의 곱셈 자체를 지우면(uniform 값은 그대로
+    // 갱신되더라도) 여기서 FAIL한다.
+    expect(source).toMatch(/aOffset\.z\s*\*\s*uBootSpread/);
+  });
+
+  it('bootIn()을 부르지 않은 App은 uBootSpread가 항상 1이다 — 부팅 미적용 경로(reducedMotion 등)', () => {
+    const container = createContainer();
+    const app = new App(container, buildOptions());
+    app.init();
+
+    // 뮤테이션 (n) — 부팅을 걸지 않은 경로에서도 램프가 돌면(예: 기본값을
+    // 0으로 바꾸거나 lightRampActive를 무조건 켜면) 여기서 FAIL한다.
+    expect(app.leftCarLights.mesh?.material.uniforms.uBootSpread.value).toBe(1);
+    expect(app.rightCarLights.mesh?.material.uniforms.uBootSpread.value).toBe(1);
+  });
+
+  it('bootIn() 직후 uBootSpread는 0이다 — 광선이 소실점 한 점으로 압축된다 — 뮤테이션 (a)', () => {
+    const container = createContainer();
+    const app = new App(container, buildOptions());
+    app.init();
+
+    app.bootIn(2);
+
+    // 뮤테이션 (a) — uBootSpread를 항상 1로 고정하면 이 값이 1로 남아 FAIL한다.
+    expect(app.leftCarLights.mesh?.material.uniforms.uBootSpread.value).toBe(0);
+    expect(app.rightCarLights.mesh?.material.uniforms.uBootSpread.value).toBe(0);
+
+    app.dispose();
+  });
+
+  it('프레임이 진행될수록 uBootSpread가 단조 증가해 1에서 멈춘다', () => {
+    const container = createContainer();
+    const app = new App(container, buildOptions());
+    app.init();
+
+    let t = 0;
+    fireNextFrame(t);
+
+    app.bootIn(2);
+    let prev = app.leftCarLights.mesh?.material.uniforms.uBootSpread.value as number;
+    for (let i = 0; i < 20; i++) {
+      t += 100;
+      fireNextFrame(t);
+      const current = app.leftCarLights.mesh?.material.uniforms.uBootSpread.value as number;
+      expect(current, `프레임 ${i}에서 감소했다`).toBeGreaterThanOrEqual(prev);
+      prev = current;
+    }
+
+    expect(prev).toBe(1);
+    app.dispose();
+  });
+
+  it('setQuality로 mesh가 재생성돼도(부팅 도중) uBootSpread가 진행 중인 progress로 즉시 재적용된다', () => {
+    const container = createContainer();
+    const app = new App(container, buildOptions());
+    app.init();
+
+    let t = 0;
+    fireNextFrame(t);
+
+    app.bootIn(2);
+    t += 400; // 진행 중(raw ≈ 0.31, uBootSpread도 0..1 사이 어딘가)
+    fireNextFrame(t);
+
+    app.setQuality('low'); // rebuildLights()가 material을 새로 만든다 — 기본값 1로 초기화됐다가 재적용돼야 한다
+    const reapplied = app.leftCarLights.mesh?.material.uniforms.uBootSpread.value as number;
+
+    expect(reapplied).toBeGreaterThan(0);
+    expect(reapplied).toBeLessThan(1);
 
     app.dispose();
   });

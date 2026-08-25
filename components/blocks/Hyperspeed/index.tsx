@@ -92,16 +92,13 @@ const BOOST_TIME_SCALE = 1.15;
 // 무관한 1 - exp(-rate*delta) 형태로 바로잡는다. 값이 작을수록 완만하다.
 const SPEED_SMOOTHING_RATE = 1.6;
 
-// bootIn()이 감속(settle)을 시작하는 시점 — 부팅 안무 브리프가 확정한 표
-// 기준(2초 부팅에서 0.90초)의 비율이다. duration이 2가 아니어도 같은
-// 비율(전체의 45%)로 "광선이 감속하며 도착"하는 지점을 잡는다.
-const BOOT_DECEL_RATIO = 0.9 / 2;
-
-// 부팅 개수 램프(instanceCount)가 목표치에 도달해 idle과 완전히 이어지는
-// 시점 — 감속이 시작(BOOT_DECEL_RATIO)해서 실제로 "도착"으로 읽히는
-// 지점까지의 비율이다(2초 부팅 기준 1.30초 = 전체의 65%). 광선 개수와
-// 속도가 같은 순간에 idle로 정착해야 "자연스러운 전환"으로 읽힌다(부팅
-// 안무 브리프 1절).
+// 부팅 개수 램프(instanceCount)·속도 램프·소실점 압축(uBootSpread)이 모두
+// 같은 duration(=bootIn 인자 * 이 비율)에서 idle로 수렴하는 지점 — 2초
+// 부팅 기준 1.30초(전체의 65%). 셋을 같은 progress(update()의 raw/eased)로
+// 구동해 "광선 개수·속도·깊이가 같은 순간에 idle로 정착해야 자연스러운
+// 전환으로 읽힌다"(부팅 안무 브리프 1·2절)를 별도 동기화 코드 없이
+// 구조적으로 만족시킨다. 속도는 "느리게 시작 → 램프 중반에 정점 → 이
+// 지점에서 idle로 복귀"하는 대칭 곡선을 쓴다(App.update 참고).
 const BOOT_LIGHT_RAMP_RATIO = 1.3 / 2;
 
 // 램프 시작 시점에 그리는 쌍의 비율. 0으로 하면 "광선이 전혀 없다가
@@ -278,7 +275,12 @@ class CarLights {
         {
           uTime: { value: 0 },
           uTravelLength: { value: options.length },
-          uFade: { value: this.fade }
+          uFade: { value: this.fade },
+          // 부팅 안무 — 0이면 aOffset.z가 전부 0쪽으로 압축돼 광선이 소실점
+          // 한 점에서 나온다. 1이면 원래 분포(App.applyLightRampProgress
+          // 참고). bootIn()을 부르지 않는 모든 경로(reducedMotion 등)는 이
+          // 기본값 1을 절대 건드리지 않으므로 구조적으로 항상 원래 분포다.
+          uBootSpread: { value: 1 }
         },
         this.webgl.fogUniforms,
         (typeof this.options.distortion === 'object' ? this.options.distortion.uniforms : {}) || {}
@@ -329,6 +331,11 @@ const carLightsVertex = `
   attribute vec3 aColor;
   uniform float uTravelLength;
   uniform float uTime;
+  // 부팅 안무 — aOffset.z(-random(length)..0)를 0쪽으로 압축하면
+  // mod(...)가 uTravelLength에 가까워져 z가 가장 먼 쪽(myLength -
+  // uTravelLength)으로 몰린다. 1이면 원래 분포 그대로다(index.tsx
+  // App.applyLightRampProgress 주석 참고 — 수학 근거).
+  uniform float uBootSpread;
   varying vec2 vUv;
   varying vec3 vColor;
   #include <getDistortion_vertex>
@@ -341,7 +348,7 @@ const carLightsVertex = `
     transformed.xy *= radius;
     transformed.z *= myLength;
 
-    transformed.z += myLength - mod(uTime * speed + aOffset.z, uTravelLength);
+    transformed.z += myLength - mod(uTime * speed + aOffset.z * uBootSpread, uTravelLength);
     transformed.xy += aOffset.xy;
 
     float progress = abs(transformed.z / uTravelLength);
@@ -704,10 +711,6 @@ class App {
   baseTime: number;
   timeOffset: number;
   hasValidSize: boolean;
-  // bootIn()이 예약한 감속(settle) 타이머. dispose 시 정리한다 — 정리하지
-  // 않아도 콜백은 disposed 플래그를 보고 안전하게 no-op하지만, 명시적으로
-  // 취소하는 편이 깔끔하다.
-  bootTimer: ReturnType<typeof setTimeout> | null;
   // 부팅 개수 램프 상태 — bootIn()이 켠다. update()가 매 프레임 실제 경과초
   // (IDLE_TIME_SCALE과 무관, delta 그대로)로 진행시킨다.
   lightRampActive: boolean;
@@ -718,6 +721,11 @@ class App {
   // 이 값으로 즉시 재적용해, 다음 프레임까지 한 프레임짜리 "풀 카운트 플래시"가
   // 나지 않게 한다.
   lightRampProgress: number;
+  // 부팅 속도 곡선(느림→빠름→idle)이 fovTarget/speedUpTarget을 매 프레임
+  // 덮어쓰는 중인지. boost()/settle()이 외부(섹션 전환 등)에서 불리면 이
+  // 플래그를 꺼서 그 호출이 다음 프레임에 곧바로 되돌려지지 않게 한다 —
+  // "부팅 중 섹션 전환이 일어나면 충돌하지 않아야 한다"(부팅 안무 브리프 2절).
+  bootSpeedRampActive: boolean;
 
   constructor(container: HTMLElement, options: HyperspeedOptions) {
     this.options = options;
@@ -814,11 +822,11 @@ class App {
     this.speedUp = 0;
     this.baseTime = 0;
     this.timeOffset = 0;
-    this.bootTimer = null;
     this.lightRampActive = false;
     this.lightRampElapsed = 0;
     this.lightRampDuration = 0;
     this.lightRampProgress = 0;
+    this.bootSpeedRampActive = false;
 
     this.tick = this.tick.bind(this);
     this.init = this.init.bind(this);
@@ -942,6 +950,12 @@ class App {
   // 부팅 도중 setQuality()가 목표를 바꿔도(런타임 강등) 그 변화를 따라간다.
   // 라이트스틱(totalSideLightSticks)은 램프 대상이 아니다 — 판단 근거는
   // 리포트 참고(부팅 안무 브리프 1절, "함께 램프할지 판단하라").
+  //
+  // 같은 progress로 uBootSpread(소실점 압축, 셰이더 uniform)도 함께
+  // 적용한다 — 개수와 깊이가 항상 같은 값을 공유해야 "같은 순간에 idle로
+  // 수렴"이 자동으로 성립한다(터널 진입 브리프 1절). rebuildLights()가
+  // material을 새로 만들어도(setQuality 등) 이 메서드가 부팅 도중 다시
+  // 불리면(applyQualityProfile 참고) 새 material에 즉시 재적용된다.
   private applyLightRampProgress(progress: number) {
     this.lightRampProgress = progress;
 
@@ -951,9 +965,11 @@ class App {
 
     if (this.leftCarLights.mesh) {
       this.leftCarLights.mesh.geometry.instanceCount = pairs * 2;
+      this.leftCarLights.mesh.material.uniforms.uBootSpread.value = progress;
     }
     if (this.rightCarLights.mesh) {
       this.rightCarLights.mesh.geometry.instanceCount = pairs * 2;
+      this.rightCarLights.mesh.material.uniforms.uBootSpread.value = progress;
     }
   }
 
@@ -1038,41 +1054,36 @@ class App {
   }
 
   // boost/settle이 노출하는 것과 같은 동작이다 — 원본의 onMouseDown/onMouseUp이
-  // 이미 하던 일을 명령형 메서드로 옮겼다.
+  // 이미 하던 일을 명령형 메서드로 옮겼다. 부팅 속도 곡선이 매 프레임
+  // fovTarget/speedUpTarget을 덮어쓰는 중이었다면(bootSpeedRampActive) 여기서
+  // 끈다 — 그러지 않으면 이 호출 바로 다음 프레임에 곡선이 값을 되돌려
+  // 버려 "부팅 중 섹션 전환"이 무시된다(터널 진입 브리프 2절).
   boost() {
+    this.bootSpeedRampActive = false;
     this.fovTarget = this.options.fovSpeedUp;
     this.speedUpTarget = this.options.speedUp;
   }
 
   settle() {
+    this.bootSpeedRampActive = false;
     this.fovTarget = this.options.fov;
     this.speedUpTarget = 0;
   }
 
-  // 부팅 안무 — boost()/settle()이 이미 쓰는 fovTarget·speedUpTarget 두
-  // 필드만 건드리므로 새 비용이 없다. duration(초) 안에서 fov 펀치로 즉시
-  // 고속 유지를 시작하고, BOOT_DECEL_RATIO 지점(2초 기준 0.90초)에서
-  // settle()로 감속을 시작한다 — 감속이 "도착"으로 읽히는 지점이다.
-  // 개수 램프도 같은 호출에서 시작한다 — 적은 개수로 즉시 스냅한 뒤
-  // update()가 매 프레임 진행시킨다(진행 자체는 그쪽 주석 참고).
+  // 부팅 안무 — boost()/settle()을 그대로 쓰지 않고 부팅 전용 곡선을 쓴다
+  // (터널 진입 브리프 2절, 둘은 섹션 전환용이라 의미가 다르다). t=0은
+  // idle과 같다(fovTarget=options.fov, speedUpTarget=0) — "느리게 시작".
+  // 이후 update()가 개수 램프와 같은 progress로 fovTarget/speedUpTarget을
+  // 올렸다 내려(느림→빠름→idle) lightRampDuration 끝에 정확히 idle로
+  // 되돌린다 — 개수·속도·깊이가 같은 프레임에 수렴한다.
   bootIn(duration: number) {
-    if (this.bootTimer !== null) {
-      clearTimeout(this.bootTimer);
-      this.bootTimer = null;
-    }
-
-    this.boost();
-
     this.lightRampActive = true;
     this.lightRampElapsed = 0;
     this.lightRampDuration = duration * BOOT_LIGHT_RAMP_RATIO;
+    this.bootSpeedRampActive = true;
+    this.fovTarget = this.options.fov;
+    this.speedUpTarget = 0;
     this.applyLightRampProgress(0);
-
-    this.bootTimer = setTimeout(() => {
-      this.bootTimer = null;
-      if (this.disposed) return;
-      this.settle();
-    }, duration * BOOT_DECEL_RATIO * 1000);
   }
 
   onMouseDown(ev: MouseEvent) {
@@ -1111,17 +1122,32 @@ class App {
     this.timeOffset += this.speedUp * delta;
     const time = this.baseTime + this.timeOffset;
 
-    // 부팅 개수 램프 진행 — IDLE_TIME_SCALE·speedUp과 무관하게 실제 경과초
-    // (delta 그대로)로 진행한다. 개수는 "광선의 발생 밀도"이지 흐름 속도가
-    // 아니므로 시간 배율에 영향받지 않아야 한다.
+    // 부팅 개수(+깊이) 램프 진행 — IDLE_TIME_SCALE·speedUp과 무관하게 실제
+    // 경과초(delta 그대로)로 진행한다. 개수·깊이는 "광선의 발생 밀도/위치"이지
+    // 흐름 속도가 아니므로 시간 배율에 영향받지 않아야 한다.
     if (this.lightRampActive) {
       this.lightRampElapsed += delta;
       const raw = this.lightRampDuration > 0 ? Math.min(1, this.lightRampElapsed / this.lightRampDuration) : 1;
       // 이차 ease-out — 초반에 빠르게 늘다가 목표치 근처에서 완만해진다.
       const eased = 1 - (1 - raw) * (1 - raw);
       this.applyLightRampProgress(eased);
+
+      if (this.bootSpeedRampActive) {
+        // 부팅 속도 곡선 — raw(가공하지 않은 진행도)로 sin(π·raw)를 쓰면
+        // 0(시작)→1(램프 중반, boost 정점)→0(raw=1, 끝)으로 대칭이라
+        // 개수·깊이 램프가 끝나는 바로 그 프레임에 정확히 idle로 되돌아온다.
+        const boostFactor = Math.sin(Math.PI * raw);
+        this.fovTarget = this.options.fov + (this.options.fovSpeedUp - this.options.fov) * boostFactor;
+        this.speedUpTarget = this.options.speedUp * boostFactor;
+      }
+
       if (raw >= 1) {
         this.lightRampActive = false;
+        if (this.bootSpeedRampActive) {
+          this.bootSpeedRampActive = false;
+          this.fovTarget = this.options.fov;
+          this.speedUpTarget = 0;
+        }
       }
     }
 
@@ -1186,11 +1212,6 @@ class App {
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
-    }
-
-    if (this.bootTimer !== null) {
-      clearTimeout(this.bootTimer);
-      this.bootTimer = null;
     }
 
     this.timer.dispose();

@@ -238,19 +238,20 @@
     animation: shimmer 2s linear infinite;
   }
 
-  /* START 클릭 링 — 반경 상한(base 60% × scale(4) = 2.4배, 2차 감사)은
-     그대로 두고, 정점 불투명도를 0.35→0.9로 올려 "순간 백색 피크"가
-     읽히게 한다(2차 실기기 피드백 "너무 미미하다"). 18%(≈108ms) 지점까지
-     밝기를 유지해 짧게 번쩍인 뒤 확장하며 사라지는 "터짐"으로 읽히게
-     한다 — 처음부터 바로 페이드하던 이전 버전과 다르다. */
-  @keyframes ripple-expand {
-    0% { transform: translate(-50%, -50%) scale(0); opacity: 0.9; }
-    18% { transform: translate(-50%, -50%) scale(0.55); opacity: 0.85; }
-    100% { transform: translate(-50%, -50%) scale(4); opacity: 0; }
+  /* START 클릭 반짝임 — 클릭 링(이전 .animate-ripple/@keyframes
+     ripple-expand)을 터널 진입 브리프(3차) 사용자 판단으로 대체했다.
+     "에너지가 차오르듯이" — 글자 색이 text-primary에서 cyan-hi로
+     차올랐다(40% 지점) text-primary로 돌아온다. 1회성(infinite가 아니다)
+     이고 BootSequence가 클릭마다 span을 key로 재마운트해야만 재생된다 —
+     상시 루프가 아니라 클릭 반응이라는 계약을 CSS 쪽에서도 지킨다. */
+  @keyframes boot-start-flash {
+    0% { color: var(--color-text-primary); }
+    40% { color: var(--color-cyan-hi); }
+    100% { color: var(--color-text-primary); }
   }
 
-  .animate-ripple {
-    animation: ripple-expand 0.6s ease-out forwards;
+  .boot-start-flash {
+    animation: boot-start-flash 0.42s ease-out;
   }
 
   /* ============================================ */
@@ -640,14 +641,18 @@
     opacity: 0;
   }
 
-  /* 워드마크(이름)의 pre-boot blur도 같은 원칙 — 이전에는 동적 import가
-     끝난 뒤에야 JS(tl.set)가 blur(5px)를 걸어서 선명 → 흐림 → 선명으로
-     역주행했다(boot-composition 브리프 "구멍 5"). data-wordmark-mode는
+  /* 워드마크(이름)의 pre-boot blur·opacity도 같은 원칙 — 이전에는 동적
+     import가 끝난 뒤에야 JS(tl.set)가 blur(5px)를 걸어서 선명 → 흐림 →
+     선명으로 역주행했다(boot-composition 브리프 "구멍 5"). data-wordmark-mode는
      Navigation이 이미 붙이는 속성이라 별도 클래스·matchMedia 없이
-     재사용한다. 기본 규칙(모션 비허용 포함)은 항상 선명하다 — 이름은
-     opacity를 건드리지 않는 LCP 요소이므로 filter만 쓴다. */
+     재사용한다. 기본 규칙(모션 비허용 포함)은 항상 선명하고 보인다.
+     opacity — 터널 진입 브리프(3차)가 "opacity: 0으로 시작하지 않는다"
+     LCP 계약을 사용자 판단으로 폐기하며 추가됐다: "광선을 타고 가다가
+     이름에 닿는다"를 위해 no-preference에서는 이제 이름도 도착 전까지
+     아예 페인트되지 않는다(아래 오버라이드). */
   [data-wordmark-mode='hero'] {
     filter: blur(0px);
+    opacity: 1;
   }
 
   /* 이름이 "광선을 따라 저 멀리서 도착한다" — scale은 워드마크 버튼이 아니라
@@ -675,8 +680,13 @@
     [data-wordmark-mode='hero'] {
       /* 11px — 2차 실기기 피드백("멀리서 도착한다는 느낌이 없다")에 따라
          1차의 8px에서 올렸다. 부팅 안무 2차 브리프가 권고한 10~12px
-         범위의 중간값이다. */
+         범위의 중간값이다. opacity: 0 — LCP 계약 변경(터널 진입 브리프
+         3절). BootSequence의 GSAP 타임라인이 도착 시각(NAME_TRANSFORM_AT
+         ~+DURATION)에 1로 열거나, 타임라인이 돌지 않는 모든 경로(청크
+         실패·타임아웃·언마운트 등)에서 revealFinalState()가 인라인으로
+         강제 노출한다 — 그러지 않으면 이름이 영원히 안 보인다. */
       filter: blur(11px);
+      opacity: 0;
     }
 
     .wordmark-scale-wrapper {

@@ -143,17 +143,24 @@ describe('BootSequence — GSAP 동적 로드 타이밍', () => {
     expect(attempted).not.toHaveBeenCalled();
   });
 
-  it('로드 실패 시 역할·START를 최종 상태로 강제 노출한다(이번 변경이 새로 만든 위험)', async () => {
+  // 7경로 표(터널 진입 브리프 3절) — "GSAP 청크 로드 실패 → 이름이 최종
+  // 상태로 드러난다". 이름(wordmarkEl)도 이제 opacity 0에서 시작하므로,
+  // 역할·START와 마찬가지로 revealFinalState()가 없으면 영원히 안 보인다.
+  it('로드 실패 시 역할·START·이름을 최종 상태로 강제 노출한다(이번 변경이 새로 만든 위험) — 뮤테이션 (e)', async () => {
     mockRejects();
     render(<Harness />);
     const role = screen.getByTestId('boot-role');
     const start = screen.getByTestId('boot-start');
+    const wordmark = screen.getByTestId('wordmark');
 
     // CSS의 no-preference 오버라이드가 opacity 0으로 계속 숨기므로, 실패
     // 경로가 없으면 이 값은 영원히 ''(미지정) 또는 '0'으로 남는다.
+    // 뮤테이션 (e) — revealFinalState()에서 wordmarkEl.style.opacity 대입을
+    // 지우면 wordmark 쪽 expect만 FAIL한다.
     await waitFor(() => {
       expect(role.style.opacity).toBe('1');
       expect(start.style.opacity).toBe('1');
+      expect(wordmark.style.opacity).toBe('1');
     });
     expect(timelineFn).not.toHaveBeenCalled();
   });
