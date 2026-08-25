@@ -59,13 +59,12 @@ function Harness({
   onStart = vi.fn(),
 }: Partial<BootSequenceProps>) {
   const wordmarkRef = useRef<HTMLButtonElement>(null);
-  const wordmarkScaleRef = useRef<HTMLDivElement>(null);
   return (
     <>
       {/* 실제 Navigation을 쓰지 않고 최소한의 wordmark 자리만 재현한다 —
           hero/compact 스타일은 Navigation 자신의 관심사고, 여기 관심사는
           BootSequence가 이 노드를 어떻게 애니메이션하는지다. */}
-      <div ref={wordmarkScaleRef}>
+      <div>
         <button ref={wordmarkRef} data-testid="wordmark">
           KIM TAEIN
         </button>
@@ -77,7 +76,6 @@ function Harness({
         reducedMotion={reducedMotion}
         sceneReady={sceneReady}
         wordmarkRef={wordmarkRef}
-        wordmarkScaleRef={wordmarkScaleRef}
         onStart={onStart}
       />
     </>
@@ -103,18 +101,17 @@ function SsrHarness() {
         reducedMotion={false}
         sceneReady={false}
         wordmarkRef={wordmarkRef}
-        wordmarkScaleRef={wordmarkScaleRef}
         onStart={() => {}}
       />
     </>
   );
 }
 
-// BootSequence는 wordmarkRef가 가리키는 노드에 blur만 애니메이션한다(시안
-// 스윕은 3라운드에서 제거했다). 위 Harness의 가짜 <button>에는
-// data-wordmark-mode가 없어 CSS의 pre-boot blur 오버라이드가 걸리지 않으므로,
-// 그 결합(data-wordmark-mode='hero' ↔ blur)을 검증하려면 실제 Navigation을
-// 함께 렌더해야 한다.
+// BootSequence는 wordmarkRef가 가리키는 노드에 opacity만 애니메이션한다
+// (시안 스윕은 3라운드에서, scale·blur의 원경감은 파티클 형성 브리프(4차)에서
+// 제거했다). 위 Harness의 가짜 <button>에는 data-wordmark-mode가 없어 CSS의
+// pre-boot opacity 오버라이드가 걸리지 않으므로, 그 결합(data-wordmark-mode=
+// 'hero' ↔ opacity)을 검증하려면 실제 Navigation을 함께 렌더해야 한다.
 function CompositionHarness({
   active = 'overview',
   routeResolved = true,
@@ -141,7 +138,6 @@ function CompositionHarness({
         reducedMotion={reducedMotion}
         sceneReady={sceneReady}
         wordmarkRef={wordmarkRef}
-        wordmarkScaleRef={wordmarkScaleRef}
         onStart={onStart}
       />
     </>
@@ -159,15 +155,30 @@ let rafSpy: MockInstance<typeof window.requestAnimationFrame>;
 // vi.advanceTimersByTime()로 "진행"시키는 것이지, 잔여 실 타이머 발화를
 // 막기 위해 fake timer를 까는 것 자체가 아니다). afterEach에서 걸린 채로
 // 남은 fake timer를 전부 버리고 real timer로 복원한다.
+// 이 파일 대부분의 테스트는 파티클 형성 자체를 검증 대상으로 삼지 않는다 —
+// jsdom 기본값(getContext → null)에 맡기면 "not implemented" 경고가 매
+// 테스트마다 콘솔에 찍히므로 명시적으로 null을 반환해 조용히 "캔버스 없음"
+// 경로를 taken한다(HyperspeedApi.test.tsx와 같은 패턴). 이것은 동시에
+// "파티클 캔버스가 실패해도 이름은 보인다"는 8번째 폴백 경로를 이 파일의
+// 거의 모든 테스트가 이미 통과하고 있다는 뜻이기도 하다 — DOM 워드마크의
+// opacity 트윈이 파티클 성공 여부와 무관하게 독립적으로 동작하기 때문이다.
+// 파티클이 실제로 "성공"하는 경로는 별도 describe에서 이 mock을
+// mockReturnValue(stubContext)로 재정의해 검증한다.
+let getContextSpy: MockInstance<typeof HTMLCanvasElement.prototype.getContext>;
+
 beforeEach(() => {
   vi.useFakeTimers();
   timelineSpy = vi.spyOn(gsap, 'timeline');
   rafSpy = vi.spyOn(window, 'requestAnimationFrame');
+  getContextSpy = vi
+    .spyOn(HTMLCanvasElement.prototype, 'getContext')
+    .mockReturnValue(null);
 });
 
 afterEach(() => {
   timelineSpy.mockRestore();
   rafSpy.mockRestore();
+  getContextSpy.mockRestore();
   vi.useRealTimers();
 });
 
@@ -338,16 +349,15 @@ describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨
     expect(start.style.opacity).toBe('1');
   });
 
-  it('이름 wrapper는 원경감 있는 축소(scale 0.35)에서 시작한다 — 뮤테이션 (e)', async () => {
-    render(<Harness />);
-    await flushGsapImport();
-    const wrapperEl = screen.getByTestId('wordmark').parentElement as HTMLElement;
-
-    // fromTo의 immediateRender(GSAP 기본값)가 타임라인 생성 즉시 from 값을
-    // 적용한다 — CSS(no-preference)가 이미 그린 값과 같아 핸드오프 점프가
-    // 없다. 뮤테이션 (e) — 시작 scale을 1.0으로 되돌리면 '0.35'가 transform
-    // 문자열에 나타나지 않아 FAIL한다.
-    expect(wrapperEl.style.transform).toContain('0.35');
+  // 파티클 형성 브리프(4차) — scale(0.35→1)·blur(11px→0)로 "멀리서 도착"하던
+  // 원경감을 걷어내고 흩어진 파티클이 뭉쳐 이름이 되는 캔버스 연출로
+  // 대체했다(아래 "이름 파티클 형성" describe). wordmarkScaleRef prop과
+  // scale 트윈이 소스에 재도입되면 FLIP 대상 조상에 다시 transform이
+  // 걸릴 위험이 되살아나므로, 소스 수준에서 부재를 못박는다.
+  it('wordmarkScaleRef·scale 원경감 트윈이 소스에 남아 있지 않다', () => {
+    const source = readFileSync(bootSequencePath, 'utf8');
+    expect(source).not.toMatch(/wordmarkScaleRef/);
+    expect(source).not.toMatch(/scale\s*:\s*0\.35/);
   });
 
   // 컨트롤러 추가. LCP 계약 변경(이름이 opacity 0으로 시작)의 표제 계약인데
@@ -384,30 +394,34 @@ describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨
     expect(atEnd, '좌→우로 그려지는 중이므로 시작 값과 달라야 한다').not.toBe(atStart);
   });
 
-  it('이름은 광선이 idle로 정착하는 구간(0.75~1.30초)에 실려 도착한다 — 뮤테이션 (g)', async () => {
+  it('이름은 광선이 idle로 정착하는 구간(0.75~1.30초)에 opacity가 열려 도착한다 — 파티클 브리프 뮤테이션 (b)', async () => {
     render(<Harness />);
     await flushGsapImport();
     const tl = capturedTimeline();
-    const wrapperEl = screen.getByTestId('wordmark').parentElement as HTMLElement;
+    const wordmark = screen.getByTestId('wordmark');
 
-    // 뮤테이션 (g) — 등장 시각을 다시 0.15초로 되돌리면 0.7초 시점에 이미
-    // 상당히 진행돼 있어(0.35를 벗어난 값) FAIL한다.
+    // 등장 시각(0.75) 이전 — 아직 from 값(opacity 0)에 머문다. 파티클
+    // 브리프 뮤테이션 (b)처럼 등장 시각을 앞당기면 이 시점에 이미 0을
+    // 벗어나 있어 FAIL한다.
     act(() => {
       tl.seek(0.7);
     });
-    expect(wrapperEl.style.transform).toContain('0.35');
+    expect(wordmark.style.opacity).toBe('0');
 
-    // 도착 시각(1.30) — wrapper의 transform이 인라인 'none'으로 정착한다
-    // (광선 개수 램프·감속 도착과 같은 시각, FLIP 대비 containing block
-    // 안정화).
-    // seek()의 두 번째 인자(suppressEvents)는 기본 true라 tl.call()이
-    // 딱 그 시각에 도착하는 것만으로는 발화하지 않는다(gsap-core.js 주석
-    // 참고 — "이벤트가 억제된 seek에서는 아무것도 발화하지 않는다"). false를
-    // 명시해 실제 재생과 동일하게 콜백이 실행되는지를 본다.
+    // 도착 구간 중간 — 0과 1 사이 어딘가여야 한다(트윈이 실제로 진행 중).
+    act(() => {
+      tl.seek(1.0);
+    });
+    const midOpacity = Number.parseFloat(wordmark.style.opacity);
+    expect(midOpacity).toBeGreaterThan(0);
+    expect(midOpacity).toBeLessThan(1);
+
+    // 도착 시각(1.30, 광선 개수 램프·감속 도착과 같은 시각) — opacity가
+    // 정확히 1로 정착한다.
     act(() => {
       tl.seek(1.3, false);
     });
-    expect(wrapperEl.style.transform).toBe('none');
+    expect(wordmark.style.opacity).toBe('1');
   });
 
   it('2초 안에 완료되고 Overview 대형 모드로 잔류한다', async () => {
@@ -423,7 +437,6 @@ describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨
     act(() => {
       tl.seek(2);
     });
-    expect(wordmark.style.filter).toBe('blur(0px)');
     expect(wordmark.style.opacity).toBe('1');
     expect(role.style.opacity).toBe('1');
     expect(start.style.opacity).toBe('1');
@@ -451,7 +464,6 @@ describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨
       tl.seek(2);
     });
     expect(wordmark.style.opacity).toBe('1');
-    expect(wordmark.style.filter).toBe('blur(0px)');
   });
 
   it('START 클릭은 반짝임이 보일 지연(230ms) 뒤 onStart를 호출한다 — 뮤테이션 (m)', () => {
@@ -550,17 +562,20 @@ describe('BootSequence 게이트 — reduced-motion·routeResolved·motionReady'
 // 픽셀 정렬은 증명할 수 없다 — 여기서는 "어떤 클래스·변수가 어디서
 // 오는가"라는 구조만 고정한다.
 describe('BootSequence 구도 — 중앙 정렬·간격·CTA 위계', () => {
-  it('워드마크 pre-boot blur도 CSS가 소유한다 — data-wordmark-mode=hero가 no-preference에서만 blur(11px)', () => {
+  // 파티클 형성 브리프(4차)가 blur의 "멀리서 도착" 원경감을 걷어냈다 —
+  // [data-wordmark-mode='hero']는 이제 opacity만 갖고 no-preference에서도
+  // filter를 다시 걸지 않는다. 재도입을 소스 수준에서 못박는다.
+  it('워드마크 pre-boot 은닉은 opacity만 쓴다 — blur 원경감은 파티클 형성으로 대체됐다', () => {
     const selector = "[data-wordmark-mode='hero']";
     const base = unconditionalRuleBody(selector);
     expect(base, `${selector} 기본 규칙이 없다`).toBeDefined();
-    expect(base).toMatch(/filter\s*:\s*blur\(0px\)\s*;/);
+    expect(base).toMatch(/opacity\s*:\s*1\s*;/);
+    expect(base).not.toMatch(/filter/);
 
-    // 11px — 부팅 안무 2차 브리프가 권고한 10~12px 범위의 중간값(1차의
-    // 8px에서 올렸다 — 2차 실기기 피드백 "멀리서 도착한다는 느낌이 없다").
     const override = noPreferenceOverrideBody(selector);
     expect(override, `${selector}의 no-preference 오버라이드가 없다`).toBeDefined();
-    expect(override).toMatch(/filter\s*:\s*blur\(11px\)\s*;/);
+    expect(override).toMatch(/opacity\s*:\s*0\s*;/);
+    expect(override).not.toMatch(/filter/);
 
     // reduce 미디어쿼리 블록 어디에도 이 선택자로 다시 블러를 거는 규칙이
     // 없어야 한다 — role/start와 같은 이유(역방향 플래시 방지).
@@ -572,49 +587,40 @@ describe('BootSequence 구도 — 중앙 정렬·간격·CTA 위계', () => {
     }
   });
 
-  it('워드마크 blur를 JS가 t=0에 다시 걸지 않는다 — 감사 H2, 뮤테이션 (g)', () => {
-    // 이전 결함: tl.set(wordmarkEl, {filter:'blur(5px)'}, 0)이 동적 import가
-    // resolve된 뒤에야 실행돼, SSR로 선명하게 그려진 이름이 GSAP 로드 시점에
-    // 갑자기 흐려지는 역방향 플래시를 만들었다. fromTo만 허용한다 — from
-    // 값이 CSS가 이미 그린 값과 같아 즉시 렌더돼도 시각적 점프가 없다.
+  it('워드마크 opacity를 JS가 t=0에 tl.set으로 다시 걸지 않는다 — fromTo만 허용', () => {
+    // 이전 결함(감사 H2): tl.set(wordmarkEl, {filter:'blur(5px)'}, 0)이 동적
+    // import가 resolve된 뒤에야 실행돼, SSR로 선명하게 그려진 이름이 GSAP
+    // 로드 시점에 갑자기 흐려지는 역방향 플래시를 만들었다. fromTo만
+    // 허용한다 — from 값이 CSS가 이미 그린 값과 같아 즉시 렌더돼도 시각적
+    // 점프가 없다.
     const source = readFileSync(bootSequencePath, 'utf8');
     expect(source).not.toMatch(/tl\.set\(\s*wordmarkEl/);
     expect(source).toMatch(/tl\.fromTo\(\s*wordmarkEl/);
   });
 
-  it('이름 scale은 워드마크 버튼이 아니라 wrapper에만 걸린다 — FLIP 불변식, 뮤테이션 (h)', () => {
-    // 워드마크 버튼(FLIP 대상)은 position·transform을 갖지 않는다 — GSAP
-    // Flip이 이 노드에 inline transform을 걸고 absolute:true로 잠깐
-    // position:absolute까지 주는데, 부팅 타임라인이 같은 노드에 scale까지
-    // 걸면 두 transform 소유자가 충돌해 "START 직후 워드마크 소실" 버그가
-    // 재발한다(Navigation/index.tsx 계약). scale은 반드시 wrapperEl
-    // (wordmarkScaleRef)에만 걸려야 한다.
+  it('워드마크 버튼(FLIP 대상) 자신은 position·transform 계열 속성을 트윈하지 않는다 — FLIP 불변식', () => {
+    // GSAP Flip이 이 노드에 inline transform을 걸고 absolute:true로 잠깐
+    // position:absolute까지 주는데, 부팅 타임라인이 같은 노드에 scale·x·y
+    // 같은 transform 속성까지 걸면 두 transform 소유자가 충돌해 "START
+    // 직후 워드마크 소실" 버그가 재발한다(Navigation/index.tsx 계약).
+    // wordmarkEl 트윈은 opacity만 쓴다 — scale의 "원경감" 자체가 파티클
+    // 형성으로 대체되며 걷어졌으므로, 이제 그 어떤 트윈 대상도 아닌
+    // wrapperEl(wordmarkScaleRef)이 소스에 남아 있지 않은지도 함께 본다.
     const source = readFileSync(bootSequencePath, 'utf8');
     const wordmarkCall = source.match(/tl\.(?:to|fromTo|set)\(\s*wordmarkEl[\s\S]*?\);/)?.[0];
     expect(wordmarkCall, 'wordmarkEl을 대상으로 한 트윈을 찾지 못했다').toBeDefined();
-    // 뮤테이션 (h) — scale을 wordmarkEl 트윈으로 옮기면 여기서 FAIL한다.
-    expect(wordmarkCall).not.toMatch(/scale/);
+    expect(wordmarkCall).not.toMatch(/scale|[^\w]x\s*:|[^\w]y\s*:|transform/);
 
-    const wrapperCall = source.match(/tl\.fromTo\(\s*wrapperEl[\s\S]*?\);/)?.[0];
-    expect(wrapperCall, 'wrapperEl에 scale 트윈이 없다').toBeDefined();
-    expect(wrapperCall).toMatch(/scale/);
+    expect(source.match(/tl\.(?:to|fromTo|set)\(\s*wrapperEl/)).toBeNull();
   });
 
-  // 뒤집힌 계약(터널 진입 브리프 3절) — wordmarkEl은 이제 opacity 0→1을
-  // 쓴다(도착 시각에 filter와 같이 열린다). wrapperEl은 여전히 opacity를
-  // 건드리지 않는다 — scale만 걸어야 하는 FLIP 불변식은 이번 변경과
-  // 무관하게 유지된다(별도 축, 뮤테이션 (h)가 지킨다).
-  it('wordmarkEl은 opacity 0→1을 쓰고, wrapperEl은 여전히 opacity를 쓰지 않는다 — LCP 계약 변경, 뮤테이션 (d)', () => {
+  it('wordmarkEl 트윈은 opacity 0→1을 쓴다 — LCP 계약 변경, 뮤테이션 (d)', () => {
     const source = readFileSync(bootSequencePath, 'utf8');
     const wordmarkCall = source.match(/tl\.(?:to|fromTo|set)\(\s*wordmarkEl[\s\S]*?\);/)?.[0];
-    const wrapperCall = source.match(/tl\.(?:to|fromTo|set)\(\s*wrapperEl[\s\S]*?\);/)?.[0];
     expect(wordmarkCall, 'wordmarkEl 트윈을 찾지 못했다').toBeDefined();
-    expect(wrapperCall, 'wrapperEl 트윈을 찾지 못했다').toBeDefined();
 
     // 뮤테이션 (d) — opacity 트윈을 지우면(항상 1) FAIL한다.
     expect(wordmarkCall).toMatch(/opacity/);
-    // wrapperEl에 opacity가 걸리면 FLIP 불변식 축이 깨진다 — 여기서도 FAIL해야 한다.
-    expect(wrapperCall).not.toMatch(/opacity/);
   });
 
   it('캡션(역할·START) 블록은 워드마크와 같은 뷰포트 중앙 기준(50%)에서 --boot-caption-gap만큼 아래 시작한다', () => {
@@ -936,11 +942,12 @@ describe('BootSequence — START 클릭 지연(반짝임 가시성 확보)과 �
   });
 });
 
-// 워드마크 blur 안무 — Navigation과 결합해 seek()로 검증한다. 시안
+// 워드마크 opacity 안무 — Navigation과 결합해 seek()로 검증한다. 시안
 // 스윕(계획 D6/D7 2단계)은 3라운드에서 사용자 판단으로 제거했다(정상
-// 동작이나 보기에 이상하다는 판정). blur 초점(blur(5px)→blur(0))은
-// 안무 2단계의 다른 절반이라 남긴다.
-describe('BootSequence — 워드마크 blur 안무 (Navigation 결합)', () => {
+// 동작이나 보기에 이상하다는 판정). blur 초점(blur(5px)→blur(0))은 안무
+// 2단계의 다른 절반이었지만 파티클 형성 브리프(4차)가 blur 자체를
+// 완전히 걷어냈다 — 이제 이 축은 opacity 하나만 남는다.
+describe('BootSequence — 워드마크 opacity 안무 (Navigation 결합)', () => {
   // 실제 Navigation은 compact 뷰포트 판정에 matchMedia를 쓴다
   // (centerCompactItem). 이 파일의 다른 describe는 가짜 <button>만 쓰므로
   // 필요 없었지만, CompositionHarness는 실제 Navigation을 마운트한다.
@@ -977,18 +984,17 @@ describe('BootSequence — 워드마크 blur 안무 (Navigation 결합)', () => 
     expect(timelineSpy).not.toHaveBeenCalled();
 
     const wordmark = screen.getByTestId('wordmark');
-    expect(wordmark.style.filter).toBe('');
+    expect(wordmark.style.opacity).toBe('');
   });
 
-  // 컨트롤러 추가. pre-boot blur를 CSS가 [data-wordmark-mode='hero']로 소유하게
-  // 바뀌면서 새로 생긴 위험이다 — overview로 돌아오면 그 속성이 다시 붙는데
-  // 부팅 타임라인은 재생되지 않는다(hasStartedRef). 인라인 blur(0px)가 남아
-  // CSS를 덮지 않으면 이름이 흐린 채로 굳는다. jsdom은 CSS를 로드하지 않으므로
-  // 관측 가능한 채널은 "인라인 filter가 CSS를 무력화하는 값으로 남아 있는가"다.
-  // 7경로 표 — "overview 재방문 → 보인다(부팅 재생 없음)". hasStartedRef가
-  // 이미 true라 재방문은 새 timeline을 만들지 않는다 — 이름은 최초 이탈 때
+  // 컨트롤러 추가. pre-boot opacity를 CSS가 [data-wordmark-mode='hero']로
+  // 소유하게 바뀌면서 새로 생긴 위험이다 — overview로 돌아오면 그 속성이
+  // 다시 붙는데 부팅 타임라인은 재생되지 않는다(hasStartedRef). 인라인
+  // opacity:1이 남아 CSS를 덮지 않으면 이름이 안 보이는 채로 굳는다. 7경로
+  // 표 — "overview 재방문 → 보인다(부팅 재생 없음)". hasStartedRef가 이미
+  // true라 재방문은 새 timeline을 만들지 않는다 — 이름은 최초 이탈 때
   // revealFinalState()가 남긴 최종 상태(opacity 1) 그대로 유지돼야 한다.
-  it('overview를 떠났다 돌아와도 이름이 흐리거나 안 보이는 채로 굳지 않는다 — 뮤테이션 (i)', async () => {
+  it('overview를 떠났다 돌아와도 이름이 안 보이는 채로 굳지 않는다 — 뮤테이션 (i)', async () => {
     const { rerender } = render(<CompositionHarness active="overview" />);
     await flushGsapImport();
 
@@ -998,11 +1004,210 @@ describe('BootSequence — 워드마크 blur 안무 (Navigation 결합)', () => 
 
     const wordmark = screen.getByTestId('wordmark');
     expect(wordmark).toHaveAttribute('data-wordmark-mode', 'hero');
-    // CSS는 hero에 blur(11px)·opacity:0을 건다. 인라인이 그것을 덮어야 한다.
-    expect(wordmark.style.filter).toBe('blur(0px)');
     // 뮤테이션 (i) — revealFinalState()의 opacity 대입을 지우면 이 값이
     // ''로 남고, CSS의 no-preference 오버라이드(opacity:0)가 재방문에도
     // 그대로 적용돼 이름이 안 보인다.
     expect(wordmark.style.opacity).toBe('1');
+  });
+});
+
+// 이름 파티클 형성 — react-bits ParticleText를 부팅 전용으로 개조한
+// 컴포넌트(components/blocks/ParticleText)의 세부 동작(글리프 샘플링·
+// 파티클 수 상한·DPR 제한·rAF 정지)은 __tests__/components/ParticleText.test.tsx가
+// 직접 고정한다. 여기서는 BootSequence가 그 컴포넌트를 "언제 렌더하고
+// 언제 재생을 트리거하는가"라는 게이팅·배선만 검증한다. 아래 브리프 표기의
+// (a)~(f)는 이 브리프(particle-name-brief.md)의 뮤테이션 목록이다 — 이
+// 파일에 이미 존재하는 (구) 터널 진입 브리프의 같은 글자와 뜻이 다르므로
+// "파티클 브리프"를 붙여 구분한다.
+describe('BootSequence — 이름 파티클 형성(gating·트리거)', () => {
+  function stubWorkingParticleCanvas() {
+    const ctx = {
+      clearRect: vi.fn(),
+      setTransform: vi.fn(),
+      beginPath: vi.fn(),
+      arc: vi.fn(),
+      fill: vi.fn(),
+      fillText: vi.fn(),
+      measureText: vi.fn((text: string) => ({
+        width: text.length * 8,
+        actualBoundingBoxAscent: 12,
+        actualBoundingBoxDescent: 4,
+      })),
+      getImageData: vi.fn((_x: number, _y: number, w: number, h: number) => ({
+        data: new Uint8ClampedArray(w * h * 4).fill(255),
+      })),
+      font: '',
+      fillStyle: '',
+      textBaseline: '',
+    };
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(ctx as unknown as CanvasRenderingContext2D);
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue({
+        width: 200,
+        height: 80,
+        left: 10,
+        top: 10,
+        right: 210,
+        bottom: 90,
+        x: 10,
+        y: 10,
+        toJSON: () => {},
+      } as DOMRect);
+    return { ctx, contextSpy, rectSpy };
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('기기 등급이 high/medium이고 reducedMotion이 아니면 파티클 캔버스가 렌더되고, 도착 시각(0.75초)에 형성이 시작된다 — 파티클 브리프 뮤테이션 (a)', async () => {
+    vi.stubGlobal('navigator', { hardwareConcurrency: 8, deviceMemory: 8 });
+    const { ctx } = stubWorkingParticleCanvas();
+
+    render(<Harness />);
+    await flushGsapImport();
+    await flushGsapImport(); // detectQuality의 Promise 체인까지 흘려보낸다
+
+    expect(screen.getByTestId('particle-name-canvas')).toBeInTheDocument();
+
+    const tl = capturedTimeline();
+    const before = rafSpy.mock.calls.length;
+    act(() => {
+      tl.seek(0.75, false);
+    });
+
+    // 뮤테이션 (a) — 파티클 형성을 제거하면(즉시 표시로 바꾸면) tl.call도
+    // ParticleText.play()도 사라져 rAF가 새로 예약되지 않아 FAIL한다.
+    expect(rafSpy.mock.calls.length).toBeGreaterThan(before);
+    // play()가 실제로 도달했다는 증거 — 글리프 샘플링이 이미 마운트 시
+    // 끝나 있었으므로 재생 트리거만으로 getImageData가 추가로 불리지
+    // 않는다(1회 유지, ParticleText.test.tsx의 (j)와 같은 계약).
+    expect(ctx.getImageData).toHaveBeenCalledTimes(1);
+  });
+
+  it('low tier에서는 파티클 캔버스를 렌더하지 않는다 — 파티클 브리프 뮤테이션 (f)', async () => {
+    vi.stubGlobal('navigator', { hardwareConcurrency: 2, deviceMemory: 2 });
+    stubWorkingParticleCanvas();
+
+    render(<Harness />);
+    await flushGsapImport();
+    await flushGsapImport();
+
+    // 뮤테이션 (f) — low tier에서도 렌더하도록 게이트를 지우면 이 캔버스가
+    // 나타나 FAIL한다.
+    expect(screen.queryByTestId('particle-name-canvas')).not.toBeInTheDocument();
+  });
+
+  it('reducedMotion에서는 파티클 캔버스를 만들지 않는다 — 파티클 브리프 뮤테이션 (e)', async () => {
+    vi.stubGlobal('navigator', { hardwareConcurrency: 8, deviceMemory: 8 });
+    stubWorkingParticleCanvas();
+
+    render(<Harness reducedMotion />);
+    await flushGsapImport();
+    await flushGsapImport();
+
+    // 뮤테이션 (e) — reducedMotion 게이트를 지우면 이 캔버스가 나타나 FAIL한다.
+    expect(screen.queryByTestId('particle-name-canvas')).not.toBeInTheDocument();
+  });
+
+  it('캔버스가 실패해도(getContext null) DOM 이름의 opacity 트윈은 독립적으로 도착한다 — 파티클 브리프 뮤테이션 (d)', async () => {
+    vi.stubGlobal('navigator', { hardwareConcurrency: 8, deviceMemory: 8 });
+    // 이 파일 전역 beforeEach가 이미 getContext를 null로 고정해 둔다 —
+    // "캔버스 실패"가 사실상 기본값이다. 여기서는 그 상태에서도 이름이
+    // 도착하는지를 명시적으로 확인한다.
+    render(<Harness />);
+    await flushGsapImport();
+    await flushGsapImport();
+    const tl = capturedTimeline();
+    const wordmark = screen.getByTestId('wordmark');
+
+    act(() => {
+      tl.seek(1.3, false);
+    });
+    // 뮤테이션 (d) — 파티클 실패 시에만 도는 별도 revealFinalState 경로를
+    // 지우는 것이 아니라, wordmarkEl의 opacity 트윈 자체가 파티클 재생
+    // 성패와 무관하게 독립적으로 스케줄되는 이 설계 자체가 계약이다.
+    // 이 트윈을 particleRef 성공 여부에 조건부로 만들면(즉 tl.call 안에
+    // 넣거나 play() 콜백에 의존하게 하면) 캔버스가 없는 이 테스트에서
+    // opacity가 계속 '0'으로 남아 FAIL한다.
+    expect(wordmark.style.opacity).toBe('1');
+  });
+
+  it('BootSequence는 lib/deviceQuality의 detectQuality()를 부른다 — 강등 판정의 단일 출처', () => {
+    const source = readFileSync(bootSequencePath, 'utf8');
+    expect(source).toMatch(/detectQuality\(\)/);
+    expect(source).toMatch(/from '@\/lib\/deviceQuality'/);
+  });
+});
+
+// START — Magnet(호버)·ClickSpark(클릭). 두 컴포넌트 자신의 세부 동작(이동
+// 범위 클램프·rAF idle 정지·색 해석)은 각각 __tests__/components/Magnet.test.tsx·
+// __tests__/components/ClickSpark.test.tsx가 직접 고정한다. 여기서는
+// BootSequence가 START 버튼을 올바르게 감싸고, reducedMotion에서 ClickSpark를
+// 아예 만들지 않는지를 본다.
+describe('BootSequence — START Magnet·ClickSpark 배선', () => {
+  it('START 버튼이 여전히 boot-start testid·44px 터치 타깃·밑줄을 갖는다 — Magnet/ClickSpark로 감싸도 마크업이 보존된다', () => {
+    render(<Harness />);
+    const start = screen.getByTestId('boot-start');
+    expect(start.tagName).toBe('BUTTON');
+    expect(start.className).toContain('min-h-11');
+    expect(screen.getByTestId('boot-start-underline')).toBeInTheDocument();
+  });
+
+  it('reducedMotion이 아니면 ClickSpark가 클릭 캔버스를 만든다', () => {
+    render(<Harness />);
+    // ClickSpark는 자신만의 <canvas>를 boot-sequence 컨테이너 안(START
+    // 버튼의 조상)에 렌더한다(components/blocks/ClickSpark). 이름 파티클
+    // 캔버스는 boot-sequence 컨테이너 *밖*(형제 fragment)에 렌더되므로
+    // 이 컨테이너 안에서 찾은 canvas는 반드시 ClickSpark의 것이다. Magnet은
+    // canvas를 만들지 않는다.
+    const container = screen.getByTestId('boot-sequence');
+    expect(container.querySelector('canvas')).toBeTruthy();
+  });
+
+  it('reducedMotion에서는 ClickSpark를 만들지 않는다 — 뮤테이션 (o)', () => {
+    render(<Harness reducedMotion />);
+    // reducedMotion에서는 이름 파티클 캔버스도 안 만들어지므로(위 describe)
+    // body 전체에 canvas가 하나도 없어야 한다 — ClickSpark가 만들어지면
+    // 이 값이 truthy가 되어 FAIL한다.
+    expect(document.body.querySelector('canvas')).toBeNull();
+  });
+
+  it('ClickSpark 색은 팔레트 상수(--color-cyan-hi)를 참조한다 — 뮤테이션 (p)', () => {
+    const source = readFileSync(bootSequencePath, 'utf8');
+    const clickSparkCall = source.match(/<ClickSpark[\s\S]*?>/)?.[0];
+    expect(clickSparkCall, 'ClickSpark 호출을 찾지 못했다').toBeDefined();
+    expect(clickSparkCall).toMatch(/--color-cyan-hi/);
+    // 뮤테이션 (p) — 색을 팔레트 밖 임의 값(예: '#ff00ff')으로 바꾸면
+    // sparkColorVar가 그 문자열을 참조하지 않아 FAIL한다.
+    expect(clickSparkCall).not.toMatch(/#ff00ff/);
+  });
+
+  it('Magnet은 이동 범위를 제한하는 maxOffsetPx를 넘긴다 — 뮤테이션 (m)', () => {
+    const source = readFileSync(bootSequencePath, 'utf8');
+    const magnetCall = source.match(/<Magnet[\s\S]*?>/)?.[0];
+    expect(magnetCall, 'Magnet 호출을 찾지 못했다').toBeDefined();
+    expect(magnetCall).toMatch(/maxOffsetPx/);
+  });
+
+  it('워드마크 버튼(FLIP 대상)은 Magnet/ClickSpark와 무관하다 — Navigation을 건드리지 않았다', () => {
+    // 이번 변경은 START(boot-start)만 감싼다. 워드마크(Navigation의 wordmark
+    // 버튼)는 여전히 position·transform 클래스를 갖지 않는다 — 뮤테이션
+    // (q)가 겨누는 FLIP 불변식은 Navigation/index.tsx 자체를 건드리지
+    // 않았으므로 소스 수준에서 그대로 유지된다.
+    const navigationPath = path.resolve(
+      process.cwd(),
+      'components/blocks/Navigation/index.tsx'
+    );
+    const navigationSource = readFileSync(navigationPath, 'utf8');
+    const wordmarkButton = navigationSource.match(
+      /<button\s+ref=\{wordmarkRef\}[\s\S]*?<\/button>/
+    )?.[0];
+    expect(wordmarkButton, 'wordmark 버튼 마크업을 찾지 못했다').toBeDefined();
+    expect(wordmarkButton).not.toMatch(/\btransform\b/);
+    expect(wordmarkButton).not.toMatch(/\bfixed\b|\babsolute\b/);
   });
 });

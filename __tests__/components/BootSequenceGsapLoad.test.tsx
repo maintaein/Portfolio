@@ -20,6 +20,11 @@ const timelineFn = vi.fn(() => ({
   set: vi.fn().mockReturnThis(),
   to: vi.fn().mockReturnThis(),
   fromTo: vi.fn().mockReturnThis(),
+  // 파티클 형성 브리프(4차)가 tl.call()로 ParticleText.play()를 예약한다
+  // (BootSequence/index.tsx 참고) — 이 메서드가 없으면 실제 gsap.timeline()
+  // 타임라인 빌더가 "tl.call is not a function"으로 던져 이 파일의 모든
+  // 성공 경로 테스트가 GSAP 로드 실패로 오인된다.
+  call: vi.fn().mockReturnThis(),
   kill: vi.fn(),
 }));
 const registerGsapFn = vi.fn();
@@ -73,10 +78,9 @@ function Harness({
   onStart = vi.fn(),
 }: Partial<BootSequenceProps>) {
   const wordmarkRef = useRef<HTMLButtonElement>(null);
-  const wordmarkScaleRef = useRef<HTMLDivElement>(null);
   return (
     <>
-      <div ref={wordmarkScaleRef}>
+      <div>
         <button ref={wordmarkRef} data-testid="wordmark">
           KIM TAEIN
         </button>
@@ -88,7 +92,6 @@ function Harness({
         reducedMotion={reducedMotion}
         sceneReady={sceneReady}
         wordmarkRef={wordmarkRef}
-        wordmarkScaleRef={wordmarkScaleRef}
         onStart={onStart}
       />
     </>
@@ -100,6 +103,11 @@ beforeEach(() => {
   attempted.mockClear();
   timelineFn.mockClear();
   registerGsapFn.mockClear();
+  // 이 파일은 GSAP 로드 타이밍만 본다 — 파티클 캔버스 준비 여부와는
+  // 무관해야 한다. jsdom 기본값(getContext → null)에 맡기면 콘솔에 매번
+  // "not implemented" 경고가 찍히므로 명시적으로 null을 반환해 조용히
+  // "캔버스 없음" 경로를 taken한다(HyperspeedApi.test.tsx와 같은 패턴).
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
 });
 
 afterEach(() => {

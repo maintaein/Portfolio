@@ -316,7 +316,6 @@ export default function HomeClient() {
         reducedMotion={reducedMotion}
         sceneReady={sceneReady}
         wordmarkRef={wordmarkRef}
-        wordmarkScaleRef={wordmarkScaleRef}
         onStart={() => setActive(SECTION_IDS.ABOUT)}
       />
 

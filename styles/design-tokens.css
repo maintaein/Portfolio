@@ -641,27 +641,29 @@
     opacity: 0;
   }
 
-  /* 워드마크(이름)의 pre-boot blur·opacity도 같은 원칙 — 이전에는 동적
-     import가 끝난 뒤에야 JS(tl.set)가 blur(5px)를 걸어서 선명 → 흐림 →
-     선명으로 역주행했다(boot-composition 브리프 "구멍 5"). data-wordmark-mode는
-     Navigation이 이미 붙이는 속성이라 별도 클래스·matchMedia 없이
-     재사용한다. 기본 규칙(모션 비허용 포함)은 항상 선명하고 보인다.
-     opacity — 터널 진입 브리프(3차)가 "opacity: 0으로 시작하지 않는다"
-     LCP 계약을 사용자 판단으로 폐기하며 추가됐다: "광선을 타고 가다가
-     이름에 닿는다"를 위해 no-preference에서는 이제 이름도 도착 전까지
-     아예 페인트되지 않는다(아래 오버라이드). */
+  /* 워드마크(이름)의 pre-boot opacity — data-wordmark-mode는 Navigation이
+     이미 붙이는 속성이라 별도 클래스·matchMedia 없이 재사용한다. 기본
+     규칙(모션 비허용 포함)은 항상 보인다. opacity — 터널 진입 브리프(3차)가
+     "opacity: 0으로 시작하지 않는다" LCP 계약을 사용자 판단으로 폐기하며
+     추가됐다: "광선을 타고 가다가 이름에 닿는다"를 위해 no-preference에서는
+     이제 이름도 도착 전까지 아예 페인트되지 않는다(아래 오버라이드).
+     blur를 통한 "멀리서 도착"하는 원경감은 파티클 형성 브리프(4차, 3차
+     실기기 피드백 "멀리서 드러나는 효과 제거")로 걷어냈다 — 그 자리는
+     흩어진 파티클이 뭉쳐 이름이 되는 캔버스 연출(ParticleText,
+     components/blocks/ParticleText)이 대신한다. scale도 같은 이유로
+     .wordmark-scale-wrapper에서 걷어냈다 — 그 클래스 자체는 Navigation의
+     hero 포지셔닝(fixed 배치)을 위해 남아 있지만 더 이상 애니메이션되지
+     않는다. */
   [data-wordmark-mode='hero'] {
-    filter: blur(0px);
     opacity: 1;
   }
 
-  /* 이름이 "광선을 따라 저 멀리서 도착한다" — scale은 워드마크 버튼이 아니라
-     이 wrapper(Navigation의 hero 포지셔닝 div)에 건다(부팅 안무 브리프
-     1절, FLIP 불변식). 기본 규칙은 최종 상태(scale 없음)이고, BootSequence의
-     GSAP 타임라인이 완료·중단 어느 경로든 이 wrapper의 transform을 인라인
-     'none'으로 명시적으로 정착시킨다 — CSS가 아무리 no-preference로 계속
-     매칭돼도 인라인이 항상 이긴다(blur·opacity와 같은 영구 오버라이드
-     패턴). */
+  /* Navigation이 이 클래스를 hero 포지셔닝(fixed 배치)용으로 여전히 쓴다.
+     예전에는 BootSequence의 GSAP 타임라인이 여기 scale을 걸었지만(원경감,
+     이제 파티클 형성으로 대체) 더 이상 어떤 코드도 이 노드의 transform을
+     건드리지 않는다 — 이 규칙은 그 사실을 명시적으로 못박는 불변식이다.
+     FLIP이 나중에 워드마크 버튼을 absolute:true로 붙잡을 때 조상의
+     containing block이 예기치 않게 바뀌지 않도록 항상 'none'을 유지한다. */
   .wordmark-scale-wrapper {
     transform: none;
   }
@@ -678,23 +680,12 @@
     }
 
     [data-wordmark-mode='hero'] {
-      /* 11px — 2차 실기기 피드백("멀리서 도착한다는 느낌이 없다")에 따라
-         1차의 8px에서 올렸다. 부팅 안무 2차 브리프가 권고한 10~12px
-         범위의 중간값이다. opacity: 0 — LCP 계약 변경(터널 진입 브리프
-         3절). BootSequence의 GSAP 타임라인이 도착 시각(NAME_TRANSFORM_AT
-         ~+DURATION)에 1로 열거나, 타임라인이 돌지 않는 모든 경로(청크
-         실패·타임아웃·언마운트 등)에서 revealFinalState()가 인라인으로
-         강제 노출한다 — 그러지 않으면 이름이 영원히 안 보인다. */
-      filter: blur(11px);
+      /* opacity: 0 — LCP 계약 변경(터널 진입 브리프 3절). BootSequence의
+         GSAP 타임라인이 도착 시각(NAME_TRANSFORM_AT~+DURATION)에 1로
+         열거나, 타임라인이 돌지 않는 모든 경로(청크 실패·타임아웃·
+         언마운트 등)에서 revealFinalState()가 인라인으로 강제 노출한다 —
+         그러지 않으면 이름이 영원히 안 보인다. */
       opacity: 0;
-    }
-
-    .wordmark-scale-wrapper {
-      /* 0.35 — 1차의 0.65에서 낮췄다(2차 실기기 피드백). 2차 감사는
-         가독을 이유로 0.6~0.7을 권했고 0.2~0.3 같은 극단에는 반대했다 —
-         0.35는 그 권고 범위 바로 아래, 사용자가 요구한 "더 강한 원경감"과
-         감사의 가독 우려 사이의 절충이다. */
-      transform: scale(0.35);
     }
 
     .boot-start-underline {

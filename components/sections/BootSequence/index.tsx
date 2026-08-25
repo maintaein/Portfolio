@@ -4,6 +4,13 @@ import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 're
 import { BOOT_DURATION_SECONDS } from '@/lib/constants';
 import { OVERVIEW, type NavId } from '@/hooks/useSectionNav';
 import type { gsap } from '@/lib/gsap';
+import { detectQuality, type QualityTier } from '@/lib/deviceQuality';
+import ParticleText, {
+  type ParticleTextHandle,
+  type ParticleTextTier,
+} from '@/components/blocks/ParticleText';
+import Magnet from '@/components/blocks/Magnet';
+import ClickSpark from '@/components/blocks/ClickSpark';
 
 export interface BootSequenceProps {
   active: NavId;
@@ -16,9 +23,6 @@ export interface BootSequenceProps {
   // 타임아웃과 경합시킨다 — 아래 readyOrTimedOut 참고.
   sceneReady: boolean;
   wordmarkRef: RefObject<HTMLButtonElement | null>;
-  // 이름이 "멀리서 도착하는" scale을 여는 wrapper. 워드마크 버튼(FLIP 대상)
-  // 자신에는 절대 걸지 않는다 — Navigation/index.tsx의 계약 참고.
-  wordmarkScaleRef: RefObject<HTMLDivElement | null>;
   onStart: () => void;
 }
 
@@ -36,16 +40,29 @@ export interface BootSequenceProps {
 // 1.30초에 idle로 정착"하는 대칭 곡선이고(Hyperspeed/index.tsx bootIn 참고),
 // 소실점(aOffset.z 압축)에서 밀려나오는 연출도 같은 1.30초에 완성된다. 이름
 // 타임라인 자체의 시각(NAME_TRANSFORM_AT 등)은 그대로다 — 광선이 idle로
-// 수렴하는 시각과 여전히 일치하기 때문이다. 이름은 opacity 0으로 시작해
-// (LCP 계약 변경, 3절) 이 구간에 scale·blur와 함께 1로 열린다.
+// 수렴하는 시각과 여전히 일치하기 때문이다.
 //
-//   0.00–1.30  광선 느림→빠름→idle 정착 + 개수 램프(먼 것부터 채움) + 소실점 압축 해제 | 이름은 아직 opacity 0 / scale .35 / blur 11px(페인트조차 안 된다)
-//   0.75–1.30  (위와 겹침)                                        | 이름 opacity→1, scale→1, blur→0(0.55s) — 광선이 idle로 정착하는 것과 같은 박자
+// 파티클 형성 브리프(4차, 3차 실기기 피드백 "멀리서 드러나는 효과 제거 —
+// 정착 순간 particle 형태로 흩어져있는 이름 조각들이 뭉쳐서 이름을
+// 구성하도록")가 이름 쪽 표현을 다시 바꿨다 — scale(0.35→1)·blur(11px→0)로
+// "멀리서 도착"하던 원경감을 걷어내고, 그 자리에 흩어진 파티클이 뭉쳐 이름이
+// 되는 캔버스 연출(ParticleText, 아래 참고)을 놓았다. 시각(NAME_TRANSFORM_AT/
+// DURATION)은 그대로 유지한다 — 형성 완료가 광선이 idle로 정착하는 순간과
+// 여전히 같아야 "광선을 타고 가다가 이름에 닿는다"가 성립하기 때문이다.
+// DOM 워드마크는 opacity 0으로 시작해(LCP 계약 변경, 3절) 이 구간에 1로
+// 열린다 — 파티클이 캔버스 위에서 뭉치는 것과 같은 구간, 같은 길이다. 파티클
+// 형성이 끝나는 순간 캔버스가 비고 DOM이 이미 같은 자리·같은 값으로 도착해
+// 있어 전환이 보이지 않는다(아래 ParticleText 컴포넌트의 "표현이 둘이 된다"
+// 위험 대응 참고).
+//
+//   0.00–1.30  광선 느림→빠름→idle 정착 + 개수 램프(먼 것부터 채움) + 소실점 압축 해제 | 이름은 아직 opacity 0(페인트조차 안 된다), 캔버스도 비어 있다
+//   0.75–1.30  (위와 겹침)                                        | 캔버스에서 파티클이 흩어진 상태→이름 형태로 뭉친다, DOM opacity→1(0.55s) — 광선이 idle로 정착하는 것과 같은 박자
 //   1.30–1.55  idle                                               | 역할 라벨
 //   1.55–1.80  idle                                               | START + 밑줄 draw(0.35s, 1.90 종료)
 //   1.80–2.00  버퍼
 const NAME_TRANSFORM_AT = 0.75;
 const NAME_TRANSFORM_DURATION = 0.55; // 종료 시각 1.30초 — 광선 개수 램프·감속 도착과 동시
+const NAME_TRANSFORM_DURATION_MS = NAME_TRANSFORM_DURATION * 1000;
 const ROLE_REVEAL_AT = 1.3;
 const ROLE_REVEAL_DURATION = 0.25; // 종료 시각 1.55초
 const START_REVEAL_AT = 1.55;
@@ -58,7 +75,29 @@ const UNDERLINE_DRAW_DURATION = 0.35; // 종료 시각 1.90초(버퍼 구간까�
 // 확실히 지나 "차오름"이 보인 뒤에 전환이 시작되도록 재조정했다(이전 링
 // 기준 220ms에서 소폭 상향). 부팅 2초 계약과는 별개 예산이다(START를
 // 눌러야만 발생하고, 부팅 자체의 길이에는 포함되지 않는다).
+//
+// 파티클 형성 브리프(4차)가 클릭에 ClickSpark(짧은 스파크 분출, 아래 참고)를
+// 더했다 — 재검토 결과 이 값은 그대로 둔다. 스파크는 220ms로 조정해 이
+// 지연보다 먼저 끝나고, 반짝임의 정점(168ms)도 여전히 그 안에 들어온다 —
+// 두 효과 모두 전환이 시작되기 전에 눈에 보일 시간을 확보한다.
 const START_TRANSITION_DELAY_MS = 230;
+
+// Magnet(호버) — 절제된 트리거 영역과 짧은 이동 범위. padding이 넓거나
+// magnetStrength가 작으면 버튼이 화면을 가로질러 쫓아오는 것처럼 보여
+// "장난스럽다"(파티클 형성 브리프 2절). maxOffsetPx가 최종 안전판이다 —
+// 캡션 정렬·겹침 방지 계약이 시각적으로 흔들리지 않을 만큼 작다.
+const MAGNET_PADDING_PX = 20;
+const MAGNET_STRENGTH = 6;
+const MAGNET_MAX_OFFSET_PX = 8;
+
+// ClickSpark(클릭) — 짧고 절제된 파티클 분출. 배경이 이미 팽창하는 광선
+// 터널이라 과하면 노이즈 위의 노이즈가 된다(파티클 형성 브리프 2절, 2차
+// 감사가 클릭 링을 반대한 것과 같은 이유). duration은 START_TRANSITION_
+// DELAY_MS(230ms)보다 짧게 잡아 전환이 시작되기 전에 스스로 끝난다.
+const CLICK_SPARK_COUNT = 5;
+const CLICK_SPARK_SIZE_PX = 8;
+const CLICK_SPARK_RADIUS_PX = 14;
+const CLICK_SPARK_DURATION_MS = 220;
 
 // 씬 준비 신호가 이 시간(ms) 안에 안 오면(WebGL 실패·청크 실패) 타임아웃이
 // 대신 부팅을 출발시킨다 — 이름이 영원히 안 나오는 사고를 막는다. Hyperspeed
@@ -73,13 +112,19 @@ export default function BootSequence({
   reducedMotion,
   sceneReady,
   wordmarkRef,
-  wordmarkScaleRef,
   onStart,
 }: BootSequenceProps) {
   const roleRef = useRef<HTMLSpanElement>(null);
   const startRef = useRef<HTMLButtonElement>(null);
   const underlineRef = useRef<HTMLSpanElement>(null);
   const hasStartedRef = useRef(false);
+  // 이름 파티클 형성(ParticleText)의 재생 트리거. GSAP 타임라인이
+  // NAME_TRANSFORM_AT에 tl.call()로 이 ref의 play()를 부른다 — 캔버스가
+  // 아직 마운트 전이거나(기기 등급 미확정·reducedMotion 등) 준비에
+  // 실패했으면 옵셔널 체이닝으로 조용히 아무 일도 없다. DOM 워드마크의
+  // opacity 트윈은 이 호출과 무관하게 항상 스케줄되므로, 파티클이 실패해도
+  // "이름이 안 보이는" 사고로 이어지지 않는다(아래 wordmarkEl 트윈 참고).
+  const particleRef = useRef<ParticleTextHandle>(null);
   // START를 누를 때마다 새 키로 텍스트 span을 다시 마운트해 반짝임
   // 애니메이션(.boot-start-flash)을 처음부터 재생한다. 0이면 아직 한 번도
   // 누르지 않은 것이라 클래스를 걸지 않는다(상시 맥동이 아니다).
@@ -102,6 +147,31 @@ export default function BootSequence({
     return () => clearTimeout(timer);
   }, [sceneReady]);
 
+  // 기기 등급(low/medium/high) — 파티클 형성을 돌릴지, 돌린다면 어떤
+  // 파라미터로 돌릴지의 단일 출처(lib/deviceQuality.ts). null은 "아직
+  // 모른다"이고, 그동안은 파티클을 만들지 않는다(부팅을 기다리게 하지
+  // 않는다 — 아래 particleTier가 null이면 렌더하지 않을 뿐, eligible 게이트와
+  // 별개다). low는 영구히 파티클을 만들지 않는다 — 대신 DOM 워드마크의
+  // opacity 트윈(단순 페이드)이 그대로 이름을 보여준다.
+  const [tier, setTier] = useState<QualityTier | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void detectQuality().then((detected) => {
+      if (!cancelled) setTier(detected);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // medium(고밀도 터치 — deviceQuality.ts 기준 실측 기기, 예: Galaxy S25)에서도
+  // 파티클을 돌리기로 판단했다: 이 저장소의 실기기 피드백 전부가 바로 그
+  // 등급의 기기에서 나왔다. low에서만 완전히 끈다 — 판단 근거는
+  // particle-name-report.md 참고.
+  const particleTier: ParticleTextTier | null =
+    tier === 'high' || tier === 'medium' ? tier : null;
+
   useLayoutEffect(() => {
     const eligible =
       routeResolved &&
@@ -116,7 +186,6 @@ export default function BootSequence({
     // cleanup 시점엔 ref.current가 이미 바뀌어 있을 수 있으므로(린트가 경고하는
     // 그대로) 이 effect가 실제로 다룰 노드를 지금 스냅샷으로 고정해 둔다.
     const wordmarkEl = wordmarkRef.current;
-    const wrapperEl = wordmarkScaleRef.current;
     const roleEl = roleRef.current;
     const startEl = startRef.current;
     const underlineEl = underlineRef.current;
@@ -140,11 +209,7 @@ export default function BootSequence({
         startEl.style.transform = 'translateY(0)';
       }
       if (wordmarkEl) {
-        wordmarkEl.style.filter = 'blur(0px)';
         wordmarkEl.style.opacity = '1';
-      }
-      if (wrapperEl) {
-        wrapperEl.style.transform = 'none';
       }
       if (underlineEl) {
         underlineEl.style.transform = 'scaleX(1)';
@@ -159,59 +224,39 @@ export default function BootSequence({
         const tl = gsap.timeline();
         timeline = tl;
 
-        if (wrapperEl) {
-          // 이름이 "멀리서 도착"하는 scale — 워드마크 버튼이 아니라 이
-          // wrapper에 건다(FLIP 불변식, Navigation/index.tsx 계약). from
-          // 값은 CSS(.wordmark-scale-wrapper, no-preference)가 이미 그린
-          // 값과 같아 핸드오프에 점프가 없다. 0.35 — 2차 실기기 피드백
-          // ("멀리서 도착한다는 느낌이 없다")에 따라 1차의 0.65에서
-          // 낮췄다. 2차 감사는 가독을 이유로 0.6~0.7을 권했고 0.2~0.3
-          // 같은 극단에는 반대했다 — 0.35는 그 권고 범위 바로 아래,
-          // 사용자가 요구한 "더 강한 원경감"과 감사의 가독 우려 사이의
-          // 절충이다. wrapperEl 자신은 여전히 opacity를 건드리지 않는다
-          // (FLIP 불변식은 scale·position만의 문제이므로 이대로 유지) —
-          // 다만 opacity 0→1은 이제 wordmarkEl 쪽에서 걸린다(터널 진입
-          // 브리프 3절, LCP 계약 변경). 즉 이름은 도착 시각까지 아예
-          // 페인트되지 않으므로, scale(0.35)의 "가장 크게 렌더된 순간을
-          // 늦춘다"는 우려보다 opacity 자체가 LCP 시각을 늦춘다는 우려가
-          // 더 크다 — 실기기 LCP 재측정 필요(리포트 참고).
-          tl.fromTo(
-            wrapperEl,
-            { scale: 0.35 },
-            { scale: 1, duration: NAME_TRANSFORM_DURATION, ease: SITE_EASE },
-            NAME_TRANSFORM_AT
-          );
-          // 광선이 도착한 뒤(이 트윈이 끝나는 시각) wrapper의 transform을
-          // 인라인 'none'으로 명시 정착시킨다 — GSAP이 scale:1로 남기는
-          // 합성 transform(예: matrix(1,0,0,1,0,0))도 "transform 없음"과
-          // 달리 자손의 containing block을 바꿀 수 있어, 나중에 Flip이
-          // absolute:true로 워드마크를 붙잡을 때 좌표 기준이 흔들릴 위험이
-          // 있다(부팅 안무 브리프 1절 경고). 순수 DOM 대입이라 GSAP의 transform
-          // 문자열 파싱을 거치지 않고 항상 리터럴 'none'이 된다.
-          tl.call(
-            () => {
-              wrapperEl.style.transform = 'none';
-            },
-            undefined,
-            NAME_TRANSFORM_AT + NAME_TRANSFORM_DURATION
-          );
-        }
+        // 파티클 형성(ParticleText) 재생 — 광선 개수 램프·감속이 idle로
+        // 정착하는 시각과 같은 시각(NAME_TRANSFORM_AT)에 흩어진 조각이
+        // 뭉치기 시작한다. particleRef.current가 없으면(캔버스 미마운트·
+        // 준비 실패·기기 등급 미확정 등) 옵셔널 체이닝으로 조용히
+        // 아무것도 하지 않는다 — 아래 wordmarkEl의 opacity 트윈은 이
+        // 호출과 완전히 독립적으로 스케줄되므로, 파티클이 실패해도 이름은
+        // 원래 계획대로 도착한다(파티클 형성 브리프의 "이름 없는 사이트를
+        // 만들지 마라" 대응 — 8번째 실패 경로).
+        tl.call(
+          () => {
+            particleRef.current?.play();
+          },
+          undefined,
+          NAME_TRANSFORM_AT
+        );
 
         if (wordmarkEl) {
-          // pre-boot blur·opacity는 CSS([data-wordmark-mode='hero'],
-          // design-tokens.css)가 소유한다. from 값(11px·0)이 CSS와 같아
+          // pre-boot opacity는 CSS([data-wordmark-mode='hero'],
+          // design-tokens.css)가 소유한다. from 값(0)이 CSS와 같아
           // (immediateRender) 핸드오프에 점프가 없다. 광선의 개수 램프·감속이
           // idle로 정착하는 시각과 같은 시각(NAME_TRANSFORM_AT~+DURATION)에
-          // 시작해 도착한다 — scale과 짝을 이루는 "도착" 신호의 다른
-          // 절반이다. 11px — 1차의 8px에서 올렸다(2차 브리프 권고 범위
-          // 10~12px의 중간). opacity 0→1 — 사용자가 LCP 계약 중 "opacity
-          // 0으로 시작하지 않는다"를 폐기하기로 결정하며 새로 추가됐다
-          // (터널 진입 브리프 3절) — "광선을 타고 가다가 이름에 닿는다"를
-          // 위해 첫 프레임부터 흐릿하게라도 보이던 이름을 아예 감춘다.
+          // 열린다 — 캔버스 위 파티클이 뭉치는 것과 같은 구간, 같은 길이다.
+          // scale·blur의 "멀리서 도착"하는 원경감은 파티클 형성 브리프(4차,
+          // 3차 실기기 피드백)로 걷어냈다 — 대신 흩어진 파티클이 뭉쳐
+          // 이름이 되는 캔버스 연출이 그 자리를 대신한다(위 tl.call).
+          // opacity 0→1은 그 자체로 유지한다 — 사용자가 LCP 계약 중
+          // "opacity 0으로 시작하지 않는다"를 폐기하기로 결정한 것과
+          // 별개로(터널 진입 브리프 3절), 형성 완료 순간 캔버스가 비고
+          // DOM이 정확히 그 자리에 나타나야 전환이 보이지 않기 때문이다.
           tl.fromTo(
             wordmarkEl,
-            { filter: 'blur(11px)', opacity: 0 },
-            { filter: 'blur(0px)', opacity: 1, duration: NAME_TRANSFORM_DURATION, ease: SITE_EASE },
+            { opacity: 0 },
+            { opacity: 1, duration: NAME_TRANSFORM_DURATION, ease: SITE_EASE },
             NAME_TRANSFORM_AT
           );
         }
@@ -316,80 +361,137 @@ export default function BootSequence({
   // 컴포넌트 자신이 active를 보고 직접 그 상태를 소유한다.
   const hiddenFromOverview = active !== OVERVIEW;
 
-  return (
-    // 워드마크(Navigation)와 같은 뷰포트 50% 기준점을 쓴다 — margin-top의
-    // --boot-caption-gap 하나가 간격의 유일한 출처다(design-tokens.css).
-    // bottom 값을 여기서 미세조정하지 않는다.
-    <div
-      data-testid="boot-sequence"
-      inert={hiddenFromOverview}
-      aria-hidden={hiddenFromOverview}
-      className={`fixed top-1/2 left-1/2 z-40 mt-[var(--boot-caption-gap)] flex -translate-x-1/2 flex-col items-center gap-2 ${
-        hiddenFromOverview ? 'boot-caption-hidden' : 'boot-caption-visible'
-      }`}
+  // START 버튼 자체 — Magnet(호버)과 ClickSpark(클릭)가 이 마크업을 감싼다.
+  // 아래에서 한 번만 정의해 두 분기(reducedMotion 여부)가 같은 버튼을
+  // 공유한다 — 복제하면 두 노드가 되어 FLIP·단일 노드 계약과 같은 부류의
+  // 문제(표현이 둘)가 생긴다.
+  const startButton = (
+    <button
+      ref={startRef}
+      data-testid="boot-start"
+      type="button"
+      onClick={handleStartClick}
+      className="boot-start relative inline-flex min-h-11 items-center text-t5 sm:text-t3 md:text-t2 uppercase tracking-[0.2em] text-[var(--color-text-primary)] transition-colors duration-300 hover:text-[var(--color-cyan-hi)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)]"
     >
-      {/* 역할 라벨 — 정체성 진술. 보조 정보라 START보다 작고 흐리다. */}
-      <span
-        ref={roleRef}
-        data-testid="boot-role"
-        className="boot-role block text-t8 uppercase tracking-[0.1em] text-[var(--color-text-secondary)]"
-      >
-        FRONTEND DEVELOPER
-      </span>
-      {/* START — 행동 유도. 역할 라벨의 1.36배뿐이던 위계를 깨고 모바일
-          t5/태블릿 t3/데스크톱 t2로 역할 라벨(t8 고정)과 항상 2배 이상
-          벌어지게 한다 — "속삭임 → 행동"이 성립하는 최소 비율. 화살표·
-          목적지 표기 없이 텍스트만 남긴다(3라운드 사용자 판단) — 시안 밑줄
-          draw·호흡 + hover 색 전환 + focus-visible 윤곽이 화살표 없이도
-          클릭 가능함을 드러낸다. 정지 상태에서 글자 자신(START 텍스트)에는
-          어떤 상시 애니메이션도 걸지 않는다 — 맥동은 밑줄·광휘만의 몫이다.
-          클릭 시 한 번 반짝이는 것은 다른 것이고 사용자가 명시적으로
-          요청했다(터널 진입 브리프 4절) — 아래 flashKey 분기 참고. */}
-      <button
-        ref={startRef}
-        data-testid="boot-start"
-        type="button"
-        onClick={handleStartClick}
-        className="boot-start relative inline-flex min-h-11 items-center text-t5 sm:text-t3 md:text-t2 uppercase tracking-[0.2em] text-[var(--color-text-primary)] transition-colors duration-300 hover:text-[var(--color-cyan-hi)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)]"
-      >
-        {/* 아이들 광휘를 제거했다(3차 실기기 피드백). 버튼 크기의 220%라
-            START 위로 크게 삐져나와 이름과 START 사이에 정체불명의 얼룩으로
-            보였다 — 무엇을 위한 빛인지 읽히지 않으면 장식 노이즈이고, 2차
-            감사가 지적한 AI slop 6번(장식용 블롭)에 오히려 가까워진다.
-            START의 생동감은 밑줄 draw·호흡과 hover·click 반응이 맡는다. */}
-        {/* 텍스트를 감싸는 relative span — 밑줄의 위치 기준이다. 44px
-            터치 타깃(min-h-11)은 버튼 자신이 지키고, 이 span은 글자
-            자신의 박스 크기만 갖는다. 예전에는 밑줄이 버튼 바로 아래
-            자식(absolute bottom-0)이라 44px 박스의 바닥(글자보다
-            10~13px 아래)에 그어졌다 — 이 wrapper로 밑줄을 글자에
-            붙인다(2차 실기기 피드백). */}
-        <span className="relative inline-block pb-1">
-          {/* 클릭 반짝임 — 사용자 판단으로 클릭 링을 대체했다("에너지가
-              차오르듯이 글씨가 Hyperspeed 색으로 반짝거리기만 하도록",
-              터널 진입 브리프 4절). key를 클릭마다 올려 span을 다시
-              마운트하면 .boot-start-flash(design-tokens.css, 1회성
-              keyframe)가 처음부터 재생된다 — 상시 루프가 아니라 클릭
-              반응이므로 "글자 자신에는 어떤 CSS 애니메이션도 걸리지
-              않는다"는 계약(위 주석)은 정지 상태 한정으로 좁혀 유지한다.
-              reducedMotion에서는 클래스를 걸지 않는다 — 호흡·개수 램프와
-              같은 원칙. */}
-          <span
-            key={flashKey}
-            data-testid="boot-start-text"
-            className={flashKey > 0 && !reducedMotion ? 'boot-start-flash' : undefined}
-          >
-            START
-          </span>
-          {/* 밑줄 — GSAP이 좌→우로 한 번 그린 뒤(scaleX), 이후는 순수 CSS
-              루프로 opacity만 0.55↔1 호흡한다(글자는 건드리지 않는다). */}
-          <span
-            ref={underlineRef}
-            data-testid="boot-start-underline"
-            aria-hidden="true"
-            className="boot-start-underline absolute bottom-0 left-0 h-px w-full origin-left bg-[var(--color-cyan-core)]"
-          />
+      {/* 아이들 광휘를 제거했다(3차 실기기 피드백). 버튼 크기의 220%라
+          START 위로 크게 삐져나와 이름과 START 사이에 정체불명의 얼룩으로
+          보였다 — 무엇을 위한 빛인지 읽히지 않으면 장식 노이즈이고, 2차
+          감사가 지적한 AI slop 6번(장식용 블롭)에 오히려 가까워진다.
+          START의 생동감은 밑줄 draw·호흡과 hover·click 반응이 맡는다. */}
+      {/* 텍스트를 감싸는 relative span — 밑줄의 위치 기준이다. 44px
+          터치 타깃(min-h-11)은 버튼 자신이 지키고, 이 span은 글자
+          자신의 박스 크기만 갖는다. 예전에는 밑줄이 버튼 바로 아래
+          자식(absolute bottom-0)이라 44px 박스의 바닥(글자보다
+          10~13px 아래)에 그어졌다 — 이 wrapper로 밑줄을 글자에
+          붙인다(2차 실기기 피드백). */}
+      <span className="relative inline-block pb-1">
+        {/* 클릭 반짝임 — 사용자 판단으로 클릭 링을 대체했다("에너지가
+            차오르듯이 글씨가 Hyperspeed 색으로 반짝거리기만 하도록",
+            터널 진입 브리프 4절). key를 클릭마다 올려 span을 다시
+            마운트하면 .boot-start-flash(design-tokens.css, 1회성
+            keyframe)가 처음부터 재생된다 — 상시 루프가 아니라 클릭
+            반응이므로 "글자 자신에는 어떤 CSS 애니메이션도 걸리지
+            않는다"는 계약(위 주석)은 정지 상태 한정으로 좁혀 유지한다.
+            reducedMotion에서는 클래스를 걸지 않는다 — 호흡·개수 램프와
+            같은 원칙. 파티클 형성 브리프(4차)가 ClickSpark(아래)를
+            더했지만 이 반짝임은 그대로 유지한다 — 두 효과 모두 짧고
+            절제되게 조정해 함께 있어도 노이즈 위의 노이즈가 되지 않는다. */}
+        <span
+          key={flashKey}
+          data-testid="boot-start-text"
+          className={flashKey > 0 && !reducedMotion ? 'boot-start-flash' : undefined}
+        >
+          START
         </span>
-      </button>
-    </div>
+        {/* 밑줄 — GSAP이 좌→우로 한 번 그린 뒤(scaleX), 이후는 순수 CSS
+            루프로 opacity만 0.55↔1 호흡한다(글자는 건드리지 않는다).
+            모바일엔 hover가 없으므로 이 draw·호흡이 START가 클릭 가능함을
+            알리는 유일한 정지 상태 신호로 남는다 — Magnet은 데스크톱
+            보너스일 뿐이다(파티클 형성 브리프 2절). */}
+        <span
+          ref={underlineRef}
+          data-testid="boot-start-underline"
+          aria-hidden="true"
+          className="boot-start-underline absolute bottom-0 left-0 h-px w-full origin-left bg-[var(--color-cyan-core)]"
+        />
+      </span>
+    </button>
+  );
+
+  // Magnet은 항상 감싼다(disabled로 reducedMotion을 반영) — disabled일 때는
+  // mousemove 리스너 자체를 달지 않으므로(Magnet/index.tsx) 완전한 no-op이다.
+  const magnetButton = (
+    <Magnet
+      disabled={reducedMotion}
+      padding={MAGNET_PADDING_PX}
+      magnetStrength={MAGNET_STRENGTH}
+      maxOffsetPx={MAGNET_MAX_OFFSET_PX}
+    >
+      {startButton}
+    </Magnet>
+  );
+
+  // ClickSpark는 reducedMotion에서 아예 렌더하지 않는다(캔버스·리스너 자체를
+  // 만들지 않는다) — Magnet의 disabled 패턴과 달리 스파크는 "값이 0"으로
+  // 끌 방법이 없어(클릭 시 항상 스파크를 만드는 구조) 컴포넌트 자체를
+  // 조건부로 뺀다.
+  const startInteractive = reducedMotion ? (
+    magnetButton
+  ) : (
+    <ClickSpark
+      sparkColorVar="--color-cyan-hi"
+      sparkColorFallback="#7fe3ee"
+      sparkCount={CLICK_SPARK_COUNT}
+      sparkSize={CLICK_SPARK_SIZE_PX}
+      sparkRadius={CLICK_SPARK_RADIUS_PX}
+      duration={CLICK_SPARK_DURATION_MS}
+    >
+      {magnetButton}
+    </ClickSpark>
+  );
+
+  return (
+    <>
+      {/* 이름 파티클 형성 — 순수 장식(aria-hidden·pointer-events-none)이고
+          워드마크 DOM과 별개의 독립된 오버레이다. low tier·reducedMotion·
+          기기 등급 미확정(tier===null)에서는 아예 렌더하지 않는다 — 그동안
+          이름은 wordmarkEl의 opacity 트윈(단순 페이드)만으로 보인다. */}
+      {particleTier && !reducedMotion ? (
+        <ParticleText
+          ref={particleRef}
+          wordmarkRef={wordmarkRef}
+          tier={particleTier}
+          durationMs={NAME_TRANSFORM_DURATION_MS}
+        />
+      ) : null}
+      {/* 워드마크(Navigation)와 같은 뷰포트 50% 기준점을 쓴다 — margin-top의
+          --boot-caption-gap 하나가 간격의 유일한 출처다(design-tokens.css).
+          bottom 값을 여기서 미세조정하지 않는다. */}
+      <div
+        data-testid="boot-sequence"
+        inert={hiddenFromOverview}
+        aria-hidden={hiddenFromOverview}
+        className={`fixed top-1/2 left-1/2 z-40 mt-[var(--boot-caption-gap)] flex -translate-x-1/2 flex-col items-center gap-2 ${
+          hiddenFromOverview ? 'boot-caption-hidden' : 'boot-caption-visible'
+        }`}
+      >
+        {/* 역할 라벨 — 정체성 진술. 보조 정보라 START보다 작고 흐리다. */}
+        <span
+          ref={roleRef}
+          data-testid="boot-role"
+          className="boot-role block text-t8 uppercase tracking-[0.1em] text-[var(--color-text-secondary)]"
+        >
+          FRONTEND DEVELOPER
+        </span>
+        {/* START — 행동 유도. 역할 라벨의 1.36배뿐이던 위계를 깨고 모바일
+            t5/태블릿 t3/데스크톱 t2로 역할 라벨(t8 고정)과 항상 2배 이상
+            벌어지게 한다 — "속삭임 → 행동"이 성립하는 최소 비율. 화살표·
+            목적지 표기 없이 텍스트만 남긴다(3라운드 사용자 판단). 마크업
+            자체는 위 startButton(및 이를 감싸는 magnetButton/startInteractive)
+            에서 정의한다 — reducedMotion 분기에 따라 Magnet만 감싸거나
+            Magnet+ClickSpark를 함께 감싼다(파티클 형성 브리프 2절). */}
+        {startInteractive}
+      </div>
+    </>
   );
 }
