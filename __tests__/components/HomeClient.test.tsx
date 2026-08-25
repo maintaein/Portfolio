@@ -737,7 +737,9 @@ describe('HomeClient motion 구독 통합', () => {
   });
 });
 
-describe('HomeClient → HyperspeedBackground 배선', () => {
+// 이 블록의 ProjectModal 테스트는 gsap 동적 import와 ProjectModal 청크 로드가
+// 겹쳐 단독으로도 ~1.7초가 걸린다. 전체 스위트 부하에서는 기본 5초를 넘겼다.
+describe('HomeClient → HyperspeedBackground 배선', { timeout: 30_000 }, () => {
   it('단일 useSectionNav·usePageVisibility·useMotionPreference의 값이 일곱 prop으로 그대로 전달된다', () => {
     render(<HomeClient />);
     const probe = screen.getByTestId('hyperspeed-background-probe');

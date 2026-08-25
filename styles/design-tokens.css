@@ -674,17 +674,21 @@
       transform: translateY(8px);
     }
 
+    /* transition: filter — 아래 .boot-start:hover 전기 충전 이펙트의
+       차오름·방전을 이 한 줄이 함께 처리한다(호버 진입·이탈 둘 다 대칭
+       0.5s로 보간된다). */
     .boot-start {
       opacity: 0;
       transform: translateY(8px);
+      transition: filter 0.5s ease-out;
     }
 
     [data-wordmark-mode='hero'] {
       /* opacity: 0 — LCP 계약 변경(터널 진입 브리프 3절). BootSequence의
-         GSAP 타임라인이 도착 시각(NAME_TRANSFORM_AT~+DURATION)에 1로
-         열거나, 타임라인이 돌지 않는 모든 경로(청크 실패·타임아웃·
-         언마운트 등)에서 revealFinalState()가 인라인으로 강제 노출한다 —
-         그러지 않으면 이름이 영원히 안 보인다. */
+         GSAP 타임라인이 핸드오프 시각(NAME_HANDOFF_AT)에 1로 열거나,
+         타임라인이 돌지 않는 모든 경로(청크 실패·타임아웃·언마운트 등)에서
+         revealFinalState()가 인라인으로 강제 노출한다 — 그러지 않으면
+         이름이 영원히 안 보인다. */
       opacity: 0;
     }
 
@@ -695,6 +699,36 @@
 
     .boot-start-glow {
       animation: boot-start-glow-pulse 3.6s ease-in-out infinite;
+    }
+
+    /* START 호버 — 전기 충전 이펙트(HERO 재순서 브리프 4절, Magnet을
+       대체한다. "호버 시 전기적 에너지가 글씨에 충전되는듯한" 사용자
+       요청). filter(drop-shadow)가 위 .boot-start의 transition(0.5s)을
+       타고 0에서 최대로 차오르고, 호버를 벗어나면 같은 transition이
+       대칭으로 되감아 방전되듯 잦아든다(즉시 꺼지지 않는다). 시작의
+       미세한 깜빡임은 opacity에 거는 짧은 1회성 animation(0.18s)으로
+       겹쳐 축전기 느낌을 낸다. transform·opacity·filter만 쓴다. 호버
+       상태에만 걸리므로 위 .boot-start 기본 규칙(이 셀렉터 블록 밖,
+       animation 없음)의 "글자 상시 맥동 금지"와 충돌하지 않는다 — 이건
+       호버 반응이지 idle 루프가 아니다. */
+    .boot-start:hover {
+      filter: drop-shadow(0 0 6px var(--color-cyan-hi)) drop-shadow(0 0 2px var(--color-cyan-core));
+      animation: boot-start-charge-flicker 0.18s ease-out;
+    }
+
+    @keyframes boot-start-charge-flicker {
+      0% {
+        opacity: 1;
+      }
+      30% {
+        opacity: 0.55;
+      }
+      60% {
+        opacity: 1;
+      }
+      100% {
+        opacity: 1;
+      }
     }
   }
 

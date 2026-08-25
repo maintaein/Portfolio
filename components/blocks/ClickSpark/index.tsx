@@ -16,7 +16,22 @@
 // - 기본값(sparkCount·sparkSize·sparkRadius·duration)을 원본보다 짧고
 //   절제되게 낮췄다 — 배경이 이미 팽창하는 광선 터널이라 과하면 노이즈
 //   위의 노이즈가 된다(2차 감사가 클릭 링을 반대한 이유와 같다).
+// - HERO 재순서 브리프 5절(클릭 스파크가 안 보이던 결함 진단) — 원본은
+//   canvas를 부모(버튼 wrapper)의 여백 없는 tight box와 정확히 같은
+//   크기로 잡는다. 스파크는 클릭 지점에서 최대 sparkRadius+sparkSize만큼
+//   뻗어나가는데, START 버튼은 44px(min-h-11)라 그 절반(22px)과 스파크의
+//   최대 뻗음이 맞먹어 클릭 지점이 버튼 세로 중앙에서 조금만 벗어나도
+//   canvas 자신의 경계가 스파크 끝부분을 클리핑했다(canvas는 자기 버퍼
+//   밖을 그리지 않는다 — div의 overflow:visible과 다르다). ParticleText가
+//   이미 쓰는 것과 같은 해법 — 버튼 크기 밖으로 여백을 두고 canvas를 그만큼
+//   확장·오프셋한다(아래 CANVAS_MARGIN_EXTRA_PX).
 import { useCallback, useEffect, useRef, type ReactNode } from 'react';
+
+// 스파크가 클릭 지점에서 뻗어나갈 수 있는 이론적 최대 거리(sparkRadius*
+// extraScale + sparkSize)에 약간의 여유를 더한 값을 canvas 여백으로 쓴다.
+// 이 여백만큼 canvas를 부모 바깥으로 확장·오프셋해 스파크 끝부분이
+// canvas 자신의 경계에 잘리지 않게 한다.
+const CANVAS_MARGIN_EXTRA_PX = 4;
 
 interface ClickSparkProps {
   sparkColorVar?: string; // 해석할 CSS 커스텀 프로퍼티 이름(예: '--color-cyan-hi')
@@ -68,16 +83,30 @@ export default function ClickSpark({
     colorRef.current = resolveColorVar(sparkColorVar, sparkColorFallback);
   }, [sparkColorVar, sparkColorFallback]);
 
-  // 부모(버튼을 감싼 relative wrapper) 크기에 캔버스를 맞춘다.
+  // 부모(버튼을 감싼 relative wrapper) 크기 + 스파크 여백만큼 캔버스를
+  // 확장·오프셋한다(위 CANVAS_MARGIN_EXTRA_PX 주석 참고).
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const parent = canvas.parentElement;
     if (!parent) return;
 
+    const margin = Math.ceil(sparkRadius * extraScale + sparkSize) + CANVAS_MARGIN_EXTRA_PX;
+
     let resizeTimeout: ReturnType<typeof setTimeout>;
     const resizeCanvas = () => {
-      const { width, height } = parent.getBoundingClientRect();
+      const rect = parent.getBoundingClientRect();
+      const width = Math.max(1, Math.round(rect.width + margin * 2));
+      const height = Math.max(1, Math.round(rect.height + margin * 2));
+      canvas.style.left = `${-margin}px`;
+      canvas.style.top = `${-margin}px`;
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      // canvas.width/height는 항상 정수인데 getBoundingClientRect()는 보통
+      // 소수 CSS px를 준다 — 반올림하지 않고 직접 비교하면 크기가 실제로는
+      // 안 바뀌었는데도 매번 재대입해(canvas.width 대입은 그 자체로 버퍼를
+      // clear한다) 진행 중이던 스파크를 지울 수 있었다(자가 발견 결함).
+      // 양쪽 다 반올림한 뒤 비교해 진짜 변화에만 재대입한다.
       if (canvas.width !== width || canvas.height !== height) {
         canvas.width = width;
         canvas.height = height;
@@ -96,7 +125,7 @@ export default function ClickSpark({
       ro.disconnect();
       clearTimeout(resizeTimeout);
     };
-  }, []);
+  }, [sparkRadius, sparkSize, extraScale]);
 
   const easeFunc = useCallback(
     (t: number) => {
@@ -196,7 +225,10 @@ export default function ClickSpark({
 
   return (
     <div className={`relative inline-flex ${className}`} onClick={handleClick}>
-      <canvas ref={canvasRef} aria-hidden="true" className="absolute inset-0 pointer-events-none" />
+      {/* inset-0이 아니라 위 resizeCanvas가 left/top/width/height를 직접
+          맞춘다 — 여백(margin)만큼 부모 바깥으로 확장·오프셋해야 해서
+          네 변을 전부 0으로 고정하는 inset-0과 함께 쓸 수 없다. */}
+      <canvas ref={canvasRef} aria-hidden="true" className="absolute pointer-events-none" />
       {children}
     </div>
   );

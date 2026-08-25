@@ -20,7 +20,6 @@ const hyperspeedSpies = vi.hoisted(() => ({
   resume: vi.fn(),
   setQuality: vi.fn(),
   isLost: vi.fn(() => false),
-  bootIn: vi.fn(),
   mountCount: 0,
 }));
 
@@ -44,7 +43,6 @@ vi.mock('@/components/blocks/Hyperspeed', async () => {
         resume: hyperspeedSpies.resume,
         setQuality: hyperspeedSpies.setQuality,
         isLost: hyperspeedSpies.isLost,
-        bootIn: hyperspeedSpies.bootIn,
       }),
       []
     );
@@ -56,6 +54,10 @@ vi.mock('@/components/blocks/Hyperspeed', async () => {
   return { default: Hyperspeed };
 });
 
+// heroRevealed: true — 이 파일 대부분의 describe는 부팅 이후 "정상 상태"의
+// boost/settle·pause/resume·detectQuality 등을 다룬다. HERO 재순서(t=0 검은
+// 화면 → 이름 완성 → 배경 등장) 자체의 게이팅은 별도 describe에서
+// heroRevealed를 명시적으로 false로 바꿔가며 검증한다.
 const readyProps: HyperspeedBackgroundProps = {
   active: OVERVIEW,
   isTransitioning: false,
@@ -64,6 +66,7 @@ const readyProps: HyperspeedBackgroundProps = {
   routeResolved: true,
   motionReady: true,
   reducedMotion: false,
+  heroRevealed: true,
 };
 
 async function renderReady(overrides: Partial<HyperspeedBackgroundProps> = {}) {
@@ -338,50 +341,79 @@ describe('HyperspeedBackground — detectQuality 초기 적용', () => {
   });
 });
 
-// 부팅 안무 브리프 1절 — 씬이 처음 살아나는 순간 onSceneReady로 부모에
-// 알리고, active===overview일 때만 배경 자신의 bootIn()을 부른다. 기존
-// detectQuality 초기 적용과 같은 "핸들이 처음 생긴 시점 1회" 패턴이다.
-describe('HyperspeedBackground — 씬 준비 신호(onSceneReady)와 bootIn() 게이팅', () => {
-  it('scene이 처음 mount되면 onSceneReady를 정확히 한 번 부른다', async () => {
-    const onSceneReady = vi.fn();
-    const { rerender } = await renderReady({ onSceneReady });
-
-    expect(onSceneReady).toHaveBeenCalledTimes(1);
-
-    rerender(<HyperspeedBackground {...readyProps} onSceneReady={onSceneReady} active="about" isTransitioning />);
-    rerender(<HyperspeedBackground {...readyProps} onSceneReady={onSceneReady} active="about" isTransitioning={false} />);
-    expect(onSceneReady).toHaveBeenCalledTimes(1);
+// HERO 재순서 브리프 2절 — "아무것도 없는 배경 → 이름이 파티클로 뭉쳐
+// 완성 → 배경이 자연스럽게 등장". heroRevealed가 이 노출을 가른다.
+describe('HyperspeedBackground — heroRevealed 게이팅(t=0 검은 화면 → 이름 완성 → 배경 등장)', () => {
+  // 뮤테이션 (a) — heroPending 계산에서 heroRevealed를 무시하고 항상
+  // 보이게 하면 이 값이 '1'로 나와 FAIL해야 한다.
+  it('overview + 모션 허용 + heroRevealed=false면 opacity가 0이다', async () => {
+    await renderReady({ active: OVERVIEW, heroRevealed: false });
+    const root = screen.getByTestId('hyperspeed-background');
+    expect(root.style.opacity).toBe('0');
   });
 
-  it('onSceneReady 없이도(옵션) 렌더가 깨지지 않는다', async () => {
-    await expect(renderReady()).resolves.toBeDefined();
+  it('heroRevealed가 true로 바뀌면 overview 기준 최종 밝기(1)로 열린다', async () => {
+    const { rerender } = await renderReady({ active: OVERVIEW, heroRevealed: false });
+    const root = screen.getByTestId('hyperspeed-background');
+    expect(root.style.opacity).toBe('0');
+
+    rerender(<HyperspeedBackground {...readyProps} active={OVERVIEW} heroRevealed />);
+    expect(root.style.opacity).toBe('1');
   });
 
-  it('active===overview에서 첫 마운트 시 bootIn(2)를 정확히 한 번 부른다', async () => {
-    await renderReady({ active: OVERVIEW });
-
-    expect(hyperspeedSpies.bootIn).toHaveBeenCalledTimes(1);
-    expect(hyperspeedSpies.bootIn).toHaveBeenCalledWith(2);
+  // 씬 로드 자체는 heroRevealed와 무관하게 이미 진행 중이어야 한다
+  // ("준비는 일찍, 노출은 늦게") — 뮤테이션 (c) 대응: 로드를 이름 완성
+  // 뒤로 미루면(예: showScene 계산에 heroRevealed를 끼워 넣으면) 이
+  // 캔버스가 heroRevealed=false일 때 나타나지 않아 FAIL한다.
+  it('heroRevealed=false여도 씬(canvas)은 이미 mount돼 있다 — 준비는 일찍, 노출만 늦다', async () => {
+    await renderReady({ active: OVERVIEW, heroRevealed: false });
+    expect(screen.getByTestId('hyperspeed-canvas')).toBeInTheDocument();
   });
 
-  // 뮤테이션 (b) — 이름 타임라인이 씬 준비를 기다리지 않고 즉시 출발하는
-  // 회귀와 짝을 이루는 배경 쪽 계약: overview가 아닌 곳(예: /#projects
-  // 딥링크)에서 씬이 처음 뜰 때는 광선 fov 펀치를 만들지 않는다 — 안
-  // 보이는 부팅 연출이 불필요한 카메라 요동을 만들지 않는다.
-  it('active가 overview가 아니면 첫 마운트에도 bootIn을 부르지 않는다', async () => {
-    await renderReady({ active: 'about' });
-
-    expect(hyperspeedSpies.bootIn).not.toHaveBeenCalled();
+  // active가 overview가 아닌 곳(딥링크)에서 시작하면 재생할 부팅 자체가
+  // 없다 — heroRevealed가 계속 false여도 배경이 영원히 숨어 있으면 안 된다.
+  it('active가 overview가 아니면 heroRevealed=false여도 곧바로 최종 밝기(0.3)다', async () => {
+    await renderReady({ active: 'about', heroRevealed: false });
+    const root = screen.getByTestId('hyperspeed-background');
+    expect(root.style.opacity).toBe('0.3');
   });
 
-  it('재마운트 없이 섹션을 연속 전환해도 bootIn은 처음 한 번뿐이다', async () => {
-    const { rerender } = await renderReady({ active: OVERVIEW });
-    expect(hyperspeedSpies.bootIn).toHaveBeenCalledTimes(1);
+  // reducedMotion에서는 배경도 이름도 첫 프레임부터 최종 상태다(기존 계약).
+  it('reducedMotion이면 heroRevealed=false여도 곧바로 최종 밝기다', async () => {
+    // reducedMotion에서는 씬을 아예 마운트하지 않으므로(정적 폴백) canvas를
+    // 기다리는 renderReady를 쓰면 안 된다 — 관찰 대상은 래퍼의 밝기다.
+    render(
+      <HyperspeedBackground
+        {...readyProps}
+        active={OVERVIEW}
+        reducedMotion
+        heroRevealed={false}
+      />
+    );
+    const root = screen.getByTestId('hyperspeed-background');
+    expect(root.style.opacity).toBe('1');
+  });
 
-    rerender(<HyperspeedBackground {...readyProps} active="about" isTransitioning />);
-    rerender(<HyperspeedBackground {...readyProps} active="about" isTransitioning={false} />);
+  // 2차 감사 지적 — 래퍼에 전환이 없어 씬이 풀리는 순간·heroRevealed가
+  // 뒤집히는 순간 캔버스가 튀어 들어왔다. 뮤테이션 (b) — transition을
+  // 지우면(즉시 표시) 이 값이 'none'이거나 opacity를 포함하지 않아 FAIL한다.
+  it('모션 허용이면 opacity 트랜지션이 걸려 있다 — 팝인이 아니라 페이드다', async () => {
+    await renderReady({ active: OVERVIEW, heroRevealed: false });
+    const root = screen.getByTestId('hyperspeed-background');
+    expect(root.style.transition).toMatch(/opacity/);
+  });
 
-    expect(hyperspeedSpies.bootIn).toHaveBeenCalledTimes(1);
+  it('reducedMotion이면 트랜지션 자체를 걸지 않는다(즉시 최종 상태)', async () => {
+    render(
+      <HyperspeedBackground
+        {...readyProps}
+        active={OVERVIEW}
+        reducedMotion
+        heroRevealed={false}
+      />
+    );
+    const root = screen.getByTestId('hyperspeed-background');
+    expect(root.style.transition).toBe('none');
   });
 });
 

@@ -228,7 +228,10 @@ function BlockedDecorationHarness({ Component }: { Component: Decoration }) {
   );
 }
 
-describe('섹션 진입 애니메이션 트리거', () => {
+// 실제 AboutSection을 렌더하고 IntersectionObserver 전이를 여러 번 돌린다.
+// 전체 스위트(35+ 파일 병렬)에서는 CPU 경합만으로 기본 5초를 넘겨 플레이키가
+// 됐다 — checkBundle.test.ts와 같은 부류다. 수행 시간이 아니라 대기가 원인이다.
+describe('섹션 진입 애니메이션 트리거', { timeout: 30_000 }, () => {
   it('useIntersection을 사용하는 컴포넌트의 IntersectionObserver 진입 판정을 차단한다', () => {
     const componentRoot = resolve(process.cwd(), 'components');
     const sources = collectComponentFiles(componentRoot).map((file) => {

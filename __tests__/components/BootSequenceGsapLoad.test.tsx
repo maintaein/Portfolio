@@ -74,7 +74,6 @@ function Harness({
   routeResolved = true,
   motionReady = true,
   reducedMotion = false,
-  sceneReady = true,
   onStart = vi.fn(),
 }: Partial<BootSequenceProps>) {
   const wordmarkRef = useRef<HTMLButtonElement>(null);
@@ -90,7 +89,6 @@ function Harness({
         routeResolved={routeResolved}
         motionReady={motionReady}
         reducedMotion={reducedMotion}
-        sceneReady={sceneReady}
         wordmarkRef={wordmarkRef}
         onStart={onStart}
       />

@@ -28,12 +28,17 @@ describe('Hyperspeed ref API — WebGL 부재 시 안전성', () => {
     expect(() => render(<Hyperspeed ref={ref} />)).not.toThrow();
   });
 
-  it('ref로 7개 메서드를 노출한다', () => {
+  it('ref로 6개 메서드를 노출한다 — bootIn은 되살아나지 않았다', () => {
     const ref = createRef<HyperspeedHandle>();
     render(<Hyperspeed ref={ref} />);
-    for (const m of ['setQuality', 'pause', 'resume', 'boost', 'settle', 'isLost', 'bootIn'] as const) {
+    for (const m of ['setQuality', 'pause', 'resume', 'boost', 'settle', 'isLost'] as const) {
       expect(typeof ref.current?.[m], m).toBe('function');
     }
+    // 뮤테이션 (g) — 광선 부팅 안무(bootIn)를 되살리면 핸들에 다시
+    // 나타나 FAIL한다. 걷어냈다는 계약을 반대 방향으로도 못박는다.
+    expect(
+      (ref.current as unknown as Record<string, unknown>)?.bootIn
+    ).toBeUndefined();
   });
 
   it('WebGL 없이 메서드를 호출해도 던지지 않는다', () => {
@@ -45,7 +50,6 @@ describe('Hyperspeed ref API — WebGL 부재 시 안전성', () => {
       ref.current?.boost();
       ref.current?.settle();
       ref.current?.setQuality('low');
-      ref.current?.bootIn(2);
     }).not.toThrow();
   });
 

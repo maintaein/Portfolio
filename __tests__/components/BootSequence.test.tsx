@@ -55,8 +55,8 @@ function Harness({
   routeResolved = true,
   motionReady = true,
   reducedMotion = false,
-  sceneReady = true,
   onStart = vi.fn(),
+  onNameRevealed,
 }: Partial<BootSequenceProps>) {
   const wordmarkRef = useRef<HTMLButtonElement>(null);
   return (
@@ -74,9 +74,9 @@ function Harness({
         routeResolved={routeResolved}
         motionReady={motionReady}
         reducedMotion={reducedMotion}
-        sceneReady={sceneReady}
         wordmarkRef={wordmarkRef}
         onStart={onStart}
+        onNameRevealed={onNameRevealed}
       />
     </>
   );
@@ -99,7 +99,6 @@ function SsrHarness() {
         routeResolved={false}
         motionReady={false}
         reducedMotion={false}
-        sceneReady={false}
         wordmarkRef={wordmarkRef}
         onStart={() => {}}
       />
@@ -117,7 +116,6 @@ function CompositionHarness({
   routeResolved = true,
   motionReady = true,
   reducedMotion = false,
-  sceneReady = true,
   onStart = vi.fn(),
 }: Partial<BootSequenceProps>) {
   const wordmarkRef = useRef<HTMLButtonElement>(null);
@@ -136,7 +134,6 @@ function CompositionHarness({
         routeResolved={routeResolved}
         motionReady={motionReady}
         reducedMotion={reducedMotion}
-        sceneReady={sceneReady}
         wordmarkRef={wordmarkRef}
         onStart={onStart}
       />
@@ -330,20 +327,20 @@ describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨
     // 따라 생성 즉시 "from" 값(opacity 0)을 렌더하므로 CSS의 pre-boot 은닉과
     // 같은 값이고, 핸드오프에 시각적 점프가 없다.
     act(() => {
-      tl.seek(1.29);
+      tl.seek(1.04);
     });
     expect(role.style.opacity).toBe('0');
     expect(start.style.opacity).toBe('0');
 
     // 역할 라벨 완료 = START 시작 지점. 둘이 겹치지 않는다.
     act(() => {
-      tl.seek(1.55);
+      tl.seek(1.3);
     });
     expect(role.style.opacity).toBe('1');
     expect(start.style.opacity).toBe('0');
 
     act(() => {
-      tl.seek(1.8);
+      tl.seek(1.55);
     });
     expect(role.style.opacity).toBe('1');
     expect(start.style.opacity).toBe('1');
@@ -360,18 +357,19 @@ describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨
     expect(source).not.toMatch(/scale\s*:\s*0\.35/);
   });
 
-  // 컨트롤러 추가. LCP 계약 변경(이름이 opacity 0으로 시작)의 표제 계약인데
-  // 트윈의 from 값이 고정돼 있지 않았다 — 1로 바꿔도 통과했다. pre-boot 은닉은
-  // CSS([data-wordmark-mode='hero'] no-preference)가 소유하지만, fromTo의
-  // immediateRender가 생성 즉시 from 값을 인라인으로 쓰므로 그 값이 CSS와
-  // 어긋나면 GSAP이 로드되는 순간 이름이 튀어나온다 — 앞서 고친 역방향
-  // blur 플래시와 정확히 같은 부류다.
-  it('이름은 opacity 0에서 시작한다 — 트윈 from이 CSS 은닉과 같아야 핸드오프에 점프가 없다', async () => {
+  // HERO 재순서 이후 계약이 더 강해졌다. 이전에는 fromTo의 immediateRender가
+  // from 값(0)을 인라인으로 써서 CSS와 값이 같기만 하면 됐는데, 지금은 핸드오프
+  // 전까지 JS가 인라인 style을 아예 건드리지 않는다 — 은닉의 소유권이 온전히
+  // CSS([data-wordmark-mode='hero'] no-preference)에 있다. 그래야 GSAP이 언제
+  // 로드되든 이름의 겉모습이 달라지지 않는다.
+  it('핸드오프 전까지 JS가 이름의 인라인 opacity를 건드리지 않는다 — 은닉은 CSS 소유다', async () => {
     render(<Harness />);
     await flushGsapImport();
     const wordmarkEl = screen.getByTestId('wordmark');
 
-    expect(wordmarkEl.style.opacity).toBe('0');
+    // 인라인이 비어 있어야 CSS 규칙이 그대로 산다. '0'을 쓰는 것도(값이
+    // 같더라도) 소유권을 JS로 가져오는 것이라 여기서 잡는다.
+    expect(wordmarkEl.style.opacity).toBe('');
   });
 
   it('밑줄이 실제로 그려진다(scaleX 트윈이 존재하고 진행된다) — 뮤테이션 (j)', async () => {
@@ -394,32 +392,26 @@ describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨
     expect(atEnd, '좌→우로 그려지는 중이므로 시작 값과 달라야 한다').not.toBe(atStart);
   });
 
-  it('이름은 광선이 idle로 정착하는 구간(0.75~1.30초)에 opacity가 열려 도착한다 — 파티클 브리프 뮤테이션 (b)', async () => {
+  // HERO 재순서의 표제 계약. 파티클이 뭉치는 동안 DOM 이름이 함께 페이드인하면
+  // "따로 등장하는 두 컴포넌트"로 읽힌다(3차 실기기 피드백). 크로스페이드가
+  // 아니라 핸드오프여야 한다 — 핸드오프 직전까지 인라인이 비어 있고(CSS 은닉),
+  // 핸드오프 시각에 한 프레임으로 1이 된다. 중간값이 존재하면 그것은 페이드다.
+  it('이름은 페이드가 아니라 핸드오프 한 프레임으로 나타난다 — 중간값이 없다', async () => {
     render(<Harness />);
     await flushGsapImport();
     const tl = capturedTimeline();
     const wordmark = screen.getByTestId('wordmark');
 
-    // 등장 시각(0.75) 이전 — 아직 from 값(opacity 0)에 머문다. 파티클
-    // 브리프 뮤테이션 (b)처럼 등장 시각을 앞당기면 이 시점에 이미 0을
-    // 벗어나 있어 FAIL한다.
+    // 핸드오프(0.90) 직전 — JS는 아직 인라인을 건드리지 않았다.
     act(() => {
-      tl.seek(0.7);
+      tl.seek(0.89);
     });
-    expect(wordmark.style.opacity).toBe('0');
+    expect(wordmark.style.opacity).toBe('');
 
-    // 도착 구간 중간 — 0과 1 사이 어딘가여야 한다(트윈이 실제로 진행 중).
+    // 핸드오프 시각 — 곧바로 1이다. 0과 1 사이 값이 나오면 페이드라는 뜻이라
+    // 이 어서션이 잡는다(뮤테이션 (e) — 0.55초 페이드로 되돌리기).
     act(() => {
-      tl.seek(1.0);
-    });
-    const midOpacity = Number.parseFloat(wordmark.style.opacity);
-    expect(midOpacity).toBeGreaterThan(0);
-    expect(midOpacity).toBeLessThan(1);
-
-    // 도착 시각(1.30, 광선 개수 램프·감속 도착과 같은 시각) — opacity가
-    // 정확히 1로 정착한다.
-    act(() => {
-      tl.seek(1.3, false);
+      tl.seek(0.9, false);
     });
     expect(wordmark.style.opacity).toBe('1');
   });
@@ -442,20 +434,17 @@ describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨
     expect(start.style.opacity).toBe('1');
   });
 
-  // 7경로 표 — "씬 준비 타임아웃 → 이름이 드러난다". sceneReady가 영영 안
-  // 오면(WebGL·청크 실패) SCENE_READY_TIMEOUT_MS(600ms) 뒤 readyOrTimedOut이
-  // 대신 true가 되어 부팅이 출발해야 한다 — 그러지 않으면 eligible이 영원히
-  // false로 남아 이름이 CSS의 no-preference 은닉에 갇힌다.
-  it('씬 준비 타임아웃이 지나면 sceneReady 없이도 부팅이 출발해 이름이 드러난다 — 뮤테이션 (f)', async () => {
-    render(<Harness sceneReady={false} />);
-    expect(timelineSpy).not.toHaveBeenCalled();
-
-    // 뮤테이션 (f) — SCENE_READY_TIMEOUT_MS 폴백을 지우면 sceneReady가 계속
-    // false인 이 테스트에서 timeline이 영원히 안 만들어져 FAIL한다.
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(600);
-    });
+  // HERO 재순서로 배경이 이름 다음에 오면서, 부팅은 더 이상 씬 준비를
+  // 기다리지 않는다(예전 sceneReady prop과 600ms 타임아웃 폴백은 사라졌다).
+  // 그래도 그것이 지키던 계약은 그대로 살아 있어야 한다 — 이름이 다른
+  // 무엇의 인질이 되면 안 된다. 씬 준비 게이트를 다시 들이면 이 테스트가
+  // 잡는다: eligible이 되는 즉시 timeline이 만들어져야 한다.
+  it('부팅은 씬 준비를 기다리지 않고 eligible이 되는 즉시 출발한다', async () => {
+    render(<Harness />);
     await flushGsapImport();
+
+    // 어떤 지연·타이머도 진행시키지 않았는데 이미 만들어져 있어야 한다.
+    expect(timelineSpy).toHaveBeenCalled();
 
     const tl = capturedTimeline();
     const wordmark = screen.getByTestId('wordmark');
@@ -587,15 +576,20 @@ describe('BootSequence 구도 — 중앙 정렬·간격·CTA 위계', () => {
     }
   });
 
-  it('워드마크 opacity를 JS가 t=0에 tl.set으로 다시 걸지 않는다 — fromTo만 허용', () => {
+  it('워드마크를 t=0에 건드리지 않는다 — tl.set은 핸드오프 위치에서만 허용', () => {
     // 이전 결함(감사 H2): tl.set(wordmarkEl, {filter:'blur(5px)'}, 0)이 동적
     // import가 resolve된 뒤에야 실행돼, SSR로 선명하게 그려진 이름이 GSAP
-    // 로드 시점에 갑자기 흐려지는 역방향 플래시를 만들었다. fromTo만
-    // 허용한다 — from 값이 CSS가 이미 그린 값과 같아 즉시 렌더돼도 시각적
-    // 점프가 없다.
+    // 로드 시점에 갑자기 흐려지는 역방향 플래시를 만들었다.
+    //
+    // HERO 재순서 이후 계약이 좁혀졌다. 핸드오프(NAME_HANDOFF_AT)에서는
+    // tl.set이 오히려 필수다 — 0.55초 페이드가 아니라 한 프레임 전환이어야
+    // 하기 때문이다. 금지되는 것은 t=0 위치의 tl.set뿐이다.
     const source = readFileSync(bootSequencePath, 'utf8');
-    expect(source).not.toMatch(/tl\.set\(\s*wordmarkEl/);
-    expect(source).toMatch(/tl\.fromTo\(\s*wordmarkEl/);
+
+    // 위치 인자가 0인 tl.set(wordmarkEl, ...) — 역방향 플래시의 형태.
+    expect(source).not.toMatch(/tl\.set\(\s*wordmarkEl[^;]*,\s*0\s*\)/);
+    // 핸드오프 위치의 tl.set은 있어야 한다.
+    expect(source).toMatch(/tl\.set\(\s*wordmarkEl[^;]*NAME_HANDOFF_AT\s*\)/);
   });
 
   it('워드마크 버튼(FLIP 대상) 자신은 position·transform 계열 속성을 트윈하지 않는다 — FLIP 불변식', () => {
@@ -1186,11 +1180,13 @@ describe('BootSequence — START Magnet·ClickSpark 배선', () => {
     expect(clickSparkCall).not.toMatch(/#ff00ff/);
   });
 
-  it('Magnet은 이동 범위를 제한하는 maxOffsetPx를 넘긴다 — 뮤테이션 (m)', () => {
+  // 사용자 판단으로 Magnet을 걷었다("디자인 나쁨"). 호버 반응은 전기 충전
+  // 효과가 대신한다. 지우지 않고 반대 방향으로 못박는다 — 되살리면 잡힌다.
+  it('Magnet이 더 이상 쓰이지 않는다 — 호버는 전기 충전이 맡는다', () => {
     const source = readFileSync(bootSequencePath, 'utf8');
-    const magnetCall = source.match(/<Magnet[\s\S]*?>/)?.[0];
-    expect(magnetCall, 'Magnet 호출을 찾지 못했다').toBeDefined();
-    expect(magnetCall).toMatch(/maxOffsetPx/);
+
+    expect(source).not.toMatch(/<Magnet/);
+    expect(source).not.toMatch(/from '@\/components\/blocks\/Magnet'/);
   });
 
   it('워드마크 버튼(FLIP 대상)은 Magnet/ClickSpark와 무관하다 — Navigation을 건드리지 않았다', () => {

@@ -74,7 +74,6 @@ export interface HyperspeedHandle {
   boost(): void;
   settle(): void;
   isLost(): boolean;
-  bootIn(duration: number): void;
 }
 
 // 체류 중 기본 흐름 배율. 원본은 time = timer.getElapsed() + timeOffset이라
@@ -86,35 +85,11 @@ const IDLE_TIME_SCALE = 0.3;
 // 빨라 전환이 튀었다.
 const BOOST_TIME_SCALE = 1.15;
 
-// 부팅 램프의 정점 배속. 섹션 전환(BOOST_TIME_SCALE)보다 크다 — 터널로
-// 진입하는 순간이 섹션을 넘나드는 것보다 큰 사건이기 때문이다. 3차 실기기
-// 피드백("더 느렸다가 더 빠르게 가속했다가")에 따라 대비를 키웠다.
-const BOOT_PEAK_TIME_SCALE = 2.8;
-
-// 부팅 시작 시 기본 흐름 배율(IDLE_TIME_SCALE에 곱한다). 램프 초반에는
-// 광선이 적고 멀리 있으므로 흐름도 idle보다 느려야 "적고 느리게 시작"이
-// 읽힌다. 램프가 끝나면 1로 수렴해 idle과 정확히 이어진다.
-const BOOT_START_TIME_FACTOR = 0.25;
-
 // speedUp이 목표로 수렴하는 시간 상수의 역수(1/초). 원본은
 // Math.exp(-k*delta)를 그대로 비율로 써서 60fps에서 한 프레임에 간극의 86%를
 // 메웠다 — 사실상 즉시 도달이라 가속도 감속도 보이지 않았다. 프레임률과
 // 무관한 1 - exp(-rate*delta) 형태로 바로잡는다. 값이 작을수록 완만하다.
 const SPEED_SMOOTHING_RATE = 1.6;
-
-// 부팅 개수 램프(instanceCount)·속도 램프·소실점 압축(uBootSpread)이 모두
-// 같은 duration(=bootIn 인자 * 이 비율)에서 idle로 수렴하는 지점 — 2초
-// 부팅 기준 1.30초(전체의 65%). 셋을 같은 progress(update()의 raw/eased)로
-// 구동해 "광선 개수·속도·깊이가 같은 순간에 idle로 정착해야 자연스러운
-// 전환으로 읽힌다"(부팅 안무 브리프 1·2절)를 별도 동기화 코드 없이
-// 구조적으로 만족시킨다. 속도는 "느리게 시작 → 램프 중반에 정점 → 이
-// 지점에서 idle로 복귀"하는 대칭 곡선을 쓴다(App.update 참고).
-const BOOT_LIGHT_RAMP_RATIO = 1.3 / 2;
-
-// 램프 시작 시점에 그리는 쌍의 비율. 0으로 하면 "광선이 전혀 없다가
-// 갑자기 나타난다"가 되어 오히려 부자연스럽다 — "적은 양이 멀리서부터"를
-// 표현하는 최소치다.
-const BOOT_LIGHT_RAMP_START_RATIO = 0.04;
 
 const defaultOptions: HyperspeedOptions = {
   onSpeedUp: () => {},
@@ -225,17 +200,9 @@ class CarLights {
 
     const colorArray = toColorArray(this.colors);
 
-    // 부팅 개수 램프(App.bootIn)가 instanceCount를 늘릴 때 "먼 쌍부터"
-    // 드러나야 한다(부팅 안무 브리프 1절). t=0 기준 셰이더 위치는
-    // z ≈ myLength - mod(aOffset.z, uTravelLength)이고, offsetZ(=aOffset.z,
-    // -random(length) 범위 (-length, 0])가 0에 가까울수록 mod가
-    // uTravelLength에 가까워져 z가 더 깊이 음수(카메라에서 먼 쪽)로 나온다.
-    // 반대로 offsetZ가 -length에 가까울수록 z가 0 근방(카메라 앞, 가까운
-    // 쪽)이 된다(판정 근거는 index.tsx 상단 BOOT_LIGHT_RAMP_RATIO 주석
-    // 참고). 그래서 배열에 쏟기 전에 쌍 단위 레코드를 모아 offsetZ
-    // 내림차순(0에 가까운 값 먼저 = 먼 쌍 먼저)으로 정렬한다 — instanceCount가
-    // 낮을 때 앞쪽 인덱스(먼 쌍)만 그려지고, 늘어날수록 가까운 쌍이 채워진다.
-    const records: { offsetZ: number; offset: number[]; metrics: number[]; color: number[] }[] = [];
+    const aOffset: number[] = [];
+    const aMetrics: number[] = [];
+    const aColor: number[] = [];
 
     for (let i = 0; i < options.lightPairsPerRoadWay; i++) {
       const radius = random(options.carLightsRadius, rng);
@@ -254,23 +221,9 @@ class CarLights {
 
       const color = pickRandom<THREE.Color>(colorArray, rng);
 
-      records.push({
-        offsetZ,
-        offset: [laneX - carWidth / 2, offsetY, offsetZ, laneX + carWidth / 2, offsetY, offsetZ],
-        metrics: [radius, length, spd, radius, length, spd],
-        color: [color.r, color.g, color.b, color.r, color.g, color.b]
-      });
-    }
-
-    records.sort((a, b) => b.offsetZ - a.offsetZ);
-
-    const aOffset: number[] = [];
-    const aMetrics: number[] = [];
-    const aColor: number[] = [];
-    for (const record of records) {
-      aOffset.push(...record.offset);
-      aMetrics.push(...record.metrics);
-      aColor.push(...record.color);
+      aOffset.push(laneX - carWidth / 2, offsetY, offsetZ, laneX + carWidth / 2, offsetY, offsetZ);
+      aMetrics.push(radius, length, spd, radius, length, spd);
+      aColor.push(color.r, color.g, color.b, color.r, color.g, color.b);
     }
 
     instanced.setAttribute('aOffset', new THREE.InstancedBufferAttribute(new Float32Array(aOffset), 3, false));
@@ -285,12 +238,7 @@ class CarLights {
         {
           uTime: { value: 0 },
           uTravelLength: { value: options.length },
-          uFade: { value: this.fade },
-          // 부팅 안무 — 0이면 aOffset.z가 전부 0쪽으로 압축돼 광선이 소실점
-          // 한 점에서 나온다. 1이면 원래 분포(App.applyLightRampProgress
-          // 참고). bootIn()을 부르지 않는 모든 경로(reducedMotion 등)는 이
-          // 기본값 1을 절대 건드리지 않으므로 구조적으로 항상 원래 분포다.
-          uBootSpread: { value: 1 }
+          uFade: { value: this.fade }
         },
         this.webgl.fogUniforms,
         (typeof this.options.distortion === 'object' ? this.options.distortion.uniforms : {}) || {}
@@ -341,11 +289,6 @@ const carLightsVertex = `
   attribute vec3 aColor;
   uniform float uTravelLength;
   uniform float uTime;
-  // 부팅 안무 — aOffset.z(-random(length)..0)를 0쪽으로 압축하면
-  // mod(...)가 uTravelLength에 가까워져 z가 가장 먼 쪽(myLength -
-  // uTravelLength)으로 몰린다. 1이면 원래 분포 그대로다(index.tsx
-  // App.applyLightRampProgress 주석 참고 — 수학 근거).
-  uniform float uBootSpread;
   varying vec2 vUv;
   varying vec3 vColor;
   #include <getDistortion_vertex>
@@ -358,15 +301,7 @@ const carLightsVertex = `
     transformed.xy *= radius;
     transformed.z *= myLength;
 
-    // uBootSpread=0에서 오프셋을 정확히 0으로 압축하면 mod(0, L) = 0이 되어
-    // transformed.z = myLength, 즉 "카메라 바로 앞"이 된다 — 모듈로 불연속의
-    // 반대편이다. 먼 쪽은 mod가 L에 가까울 때이므로 목표를 아주 작은 음수로
-    // 둔다: mod(-eps, L) = L - eps → transformed.z = myLength - L(가장 멀다).
-    // 이 한 글자 차이 때문에 진입 순간 광선이 소실점이 아니라 눈앞에 몰려
-    // 있었다(3차 실기기 피드백 "진입한 시점부터 광선이 터널에 존재").
-    float bootFar = -uTravelLength * 0.001;
-    float bootOffset = mix(bootFar, aOffset.z, uBootSpread);
-    transformed.z += myLength - mod(uTime * speed + bootOffset, uTravelLength);
+    transformed.z += myLength - mod(uTime * speed + aOffset.z, uTravelLength);
     transformed.xy += aOffset.xy;
 
     float progress = abs(transformed.z / uTravelLength);
@@ -729,23 +664,6 @@ class App {
   baseTime: number;
   timeOffset: number;
   hasValidSize: boolean;
-  // 부팅 개수 램프 상태 — bootIn()이 켠다. update()가 매 프레임 실제 경과초
-  // (IDLE_TIME_SCALE과 무관, delta 그대로)로 진행시킨다.
-  lightRampActive: boolean;
-  lightRampElapsed: number;
-  lightRampDuration: number;
-  // 마지막으로 적용한 진행도(0..1). setQuality()가 부팅 도중 목표 개수를
-  // 바꿔도(런타임 강등·초기 tier 적용) rebuildLights()가 되돌린 instanceCount를
-  // 이 값으로 즉시 재적용해, 다음 프레임까지 한 프레임짜리 "풀 카운트 플래시"가
-  // 나지 않게 한다.
-  lightRampProgress: number;
-  // 부팅 속도 곡선(느림→빠름→idle)이 fovTarget/speedUpTarget을 매 프레임
-  // 덮어쓰는 중인지. boost()/settle()이 외부(섹션 전환 등)에서 불리면 이
-  // 플래그를 꺼서 그 호출이 다음 프레임에 곧바로 되돌려지지 않게 한다 —
-  // "부팅 중 섹션 전환이 일어나면 충돌하지 않아야 한다"(부팅 안무 브리프 2절).
-  bootSpeedRampActive: boolean;
-  // 부팅 램프의 가공하지 않은 진행도(0→1). baseTime 배율이 참조한다.
-  bootRampEase: number;
 
   constructor(container: HTMLElement, options: HyperspeedOptions) {
     this.options = options;
@@ -842,12 +760,6 @@ class App {
     this.speedUp = 0;
     this.baseTime = 0;
     this.timeOffset = 0;
-    this.lightRampActive = false;
-    this.lightRampElapsed = 0;
-    this.lightRampDuration = 0;
-    this.lightRampProgress = 0;
-    this.bootSpeedRampActive = false;
-    this.bootRampEase = 1;
 
     this.tick = this.tick.bind(this);
     this.init = this.init.bind(this);
@@ -965,35 +877,6 @@ class App {
     this.leftSticks.mesh?.position.setX(-(this.options.roadWidth + this.options.islandWidth / 2));
   }
 
-  // progress(0..1)에 해당하는 쌍 개수를 좌/우 CarLights mesh에 직접
-  // 적용한다. instanceCount는 드로우 파라미터일 뿐이라 geometry 재생성이
-  // 없다. 목표(target)는 매 호출마다 현재 qualityProfile에서 다시 읽는다 —
-  // 부팅 도중 setQuality()가 목표를 바꿔도(런타임 강등) 그 변화를 따라간다.
-  // 라이트스틱(totalSideLightSticks)은 램프 대상이 아니다 — 판단 근거는
-  // 리포트 참고(부팅 안무 브리프 1절, "함께 램프할지 판단하라").
-  //
-  // 같은 progress로 uBootSpread(소실점 압축, 셰이더 uniform)도 함께
-  // 적용한다 — 개수와 깊이가 항상 같은 값을 공유해야 "같은 순간에 idle로
-  // 수렴"이 자동으로 성립한다(터널 진입 브리프 1절). rebuildLights()가
-  // material을 새로 만들어도(setQuality 등) 이 메서드가 부팅 도중 다시
-  // 불리면(applyQualityProfile 참고) 새 material에 즉시 재적용된다.
-  private applyLightRampProgress(progress: number) {
-    this.lightRampProgress = progress;
-
-    const target = this.qualityProfile.lightPairsPerRoadWay;
-    const start = Math.max(1, Math.round(target * BOOT_LIGHT_RAMP_START_RATIO));
-    const pairs = Math.min(target, Math.max(start, Math.round(start + (target - start) * progress)));
-
-    if (this.leftCarLights.mesh) {
-      this.leftCarLights.mesh.geometry.instanceCount = pairs * 2;
-      this.leftCarLights.mesh.material.uniforms.uBootSpread.value = progress;
-    }
-    if (this.rightCarLights.mesh) {
-      this.rightCarLights.mesh.geometry.instanceCount = pairs * 2;
-      this.rightCarLights.mesh.material.uniforms.uBootSpread.value = progress;
-    }
-  }
-
   // 여섯 노브를 전부 이 App 인스턴스에 직접 적용한다 — dispose()도 새 App()도,
   // WebGL 컨텍스트도 canvas도 다시 만들지 않는다.
   private applyQualityProfile(profile: QualityProfile) {
@@ -1002,15 +885,6 @@ class App {
     this.options.lightPairsPerRoadWay = profile.lightPairsPerRoadWay;
     this.options.totalSideLightSticks = profile.totalSideLightSticks;
     this.rebuildLights();
-
-    // rebuildLights()가 방금 만든 mesh는 항상 profile의 전체 개수로
-    // instanceCount를 초기화한다(CarLights.init 참고) — 부팅 개수 램프가
-    // 아직 진행 중이면 그 초기화를 즉시 덮어써 "풀 카운트가 한 프레임
-    // 번쩍였다 다시 줄어드는" 역행을 막는다(브리프 "setQuality()와 충돌하지
-    // 않게 하라").
-    if (this.lightRampActive) {
-      this.applyLightRampProgress(this.lightRampProgress);
-    }
 
     this.renderer.setPixelRatio(this.effectivePixelRatio());
     if (this.hasValidSize) {
@@ -1075,38 +949,15 @@ class App {
   }
 
   // boost/settle이 노출하는 것과 같은 동작이다 — 원본의 onMouseDown/onMouseUp이
-  // 이미 하던 일을 명령형 메서드로 옮겼다. 부팅 속도 곡선이 매 프레임
-  // fovTarget/speedUpTarget을 덮어쓰는 중이었다면(bootSpeedRampActive) 여기서
-  // 끈다 — 그러지 않으면 이 호출 바로 다음 프레임에 곡선이 값을 되돌려
-  // 버려 "부팅 중 섹션 전환"이 무시된다(터널 진입 브리프 2절).
+  // 이미 하던 일을 명령형 메서드로 옮겼다.
   boost() {
-    this.bootSpeedRampActive = false;
     this.fovTarget = this.options.fovSpeedUp;
     this.speedUpTarget = this.options.speedUp;
   }
 
   settle() {
-    this.bootSpeedRampActive = false;
-    this.bootRampEase = 1;
     this.fovTarget = this.options.fov;
     this.speedUpTarget = 0;
-  }
-
-  // 부팅 안무 — boost()/settle()을 그대로 쓰지 않고 부팅 전용 곡선을 쓴다
-  // (터널 진입 브리프 2절, 둘은 섹션 전환용이라 의미가 다르다). t=0은
-  // idle과 같다(fovTarget=options.fov, speedUpTarget=0) — "느리게 시작".
-  // 이후 update()가 개수 램프와 같은 progress로 fovTarget/speedUpTarget을
-  // 올렸다 내려(느림→빠름→idle) lightRampDuration 끝에 정확히 idle로
-  // 되돌린다 — 개수·속도·깊이가 같은 프레임에 수렴한다.
-  bootIn(duration: number) {
-    this.lightRampActive = true;
-    this.lightRampElapsed = 0;
-    this.lightRampDuration = duration * BOOT_LIGHT_RAMP_RATIO;
-    this.bootSpeedRampActive = true;
-    this.bootRampEase = 0;
-    this.fovTarget = this.options.fov;
-    this.speedUpTarget = 0;
-    this.applyLightRampProgress(0);
   }
 
   onMouseDown(ev: MouseEvent) {
@@ -1141,47 +992,9 @@ class App {
     const speedSmoothing = 1 - Math.exp(-SPEED_SMOOTHING_RATE * delta);
     this.speedUp += (this.speedUpTarget - this.speedUp) * speedSmoothing;
 
-    // 부팅 램프 중에는 기본 흐름도 함께 느렸다 빨라진다 — speedUp만으로는
-    // idle보다 느려질 수 없다(speedUpTarget의 하한이 0이다).
-    const baseFactor = this.bootSpeedRampActive
-      ? BOOT_START_TIME_FACTOR +
-        (1 - BOOT_START_TIME_FACTOR) * this.bootRampEase
-      : 1;
-    this.baseTime += delta * IDLE_TIME_SCALE * baseFactor;
+    this.baseTime += delta * IDLE_TIME_SCALE;
     this.timeOffset += this.speedUp * delta;
     const time = this.baseTime + this.timeOffset;
-
-    // 부팅 개수(+깊이) 램프 진행 — IDLE_TIME_SCALE·speedUp과 무관하게 실제
-    // 경과초(delta 그대로)로 진행한다. 개수·깊이는 "광선의 발생 밀도/위치"이지
-    // 흐름 속도가 아니므로 시간 배율에 영향받지 않아야 한다.
-    if (this.lightRampActive) {
-      this.lightRampElapsed += delta;
-      const raw = this.lightRampDuration > 0 ? Math.min(1, this.lightRampElapsed / this.lightRampDuration) : 1;
-      // 이차 ease-out — 초반에 빠르게 늘다가 목표치 근처에서 완만해진다.
-      const eased = 1 - (1 - raw) * (1 - raw);
-      this.applyLightRampProgress(eased);
-
-      if (this.bootSpeedRampActive) {
-        // 부팅 속도 곡선 — raw(가공하지 않은 진행도)로 sin(π·raw)를 쓰면
-        // 0(시작)→1(램프 중반, boost 정점)→0(raw=1, 끝)으로 대칭이라
-        // 개수·깊이 램프가 끝나는 바로 그 프레임에 정확히 idle로 되돌아온다.
-        const boostFactor = Math.sin(Math.PI * raw);
-        this.fovTarget = this.options.fov + (this.options.fovSpeedUp - this.options.fov) * boostFactor;
-        this.speedUpTarget = BOOT_PEAK_TIME_SCALE * boostFactor;
-        // baseTime 배율이 참조한다 — 램프 진행도를 그대로 쓰면 시작이 0이라
-        // 흐름이 멈춘 것처럼 보인다. 정점을 지나면 1로 수렴해 idle과 잇는다.
-        this.bootRampEase = raw;
-      }
-
-      if (raw >= 1) {
-        this.lightRampActive = false;
-        if (this.bootSpeedRampActive) {
-          this.bootSpeedRampActive = false;
-          this.fovTarget = this.options.fov;
-          this.speedUpTarget = 0;
-        }
-      }
-    }
 
     this.rightCarLights.update(time);
     this.leftCarLights.update(time);
@@ -1405,8 +1218,7 @@ const Hyperspeed = forwardRef<HyperspeedHandle, HyperspeedProps>(function Hypers
       resume: () => appRef.current?.resume(),
       boost: () => appRef.current?.boost(),
       settle: () => appRef.current?.settle(),
-      isLost: () => appRef.current?.isLost() ?? false,
-      bootIn: (duration: number) => appRef.current?.bootIn(duration)
+      isLost: () => appRef.current?.isLost() ?? false
     }),
     []
   );

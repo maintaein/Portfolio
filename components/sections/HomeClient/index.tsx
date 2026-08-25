@@ -81,11 +81,13 @@ export default function HomeClient() {
   // 워드마크 버튼 자신이 아니다). BootSequence의 GSAP 타임라인이 이 노드에만
   // scale을 건다 — 부팅 안무 브리프 1절의 FLIP 불변식.
   const wordmarkScaleRef = useRef<HTMLDivElement>(null);
-  // HyperspeedBackground의 씬(핸들)이 처음 살아난 순간 true가 된다.
-  // BootSequence가 이 값을 기다렸다가(또는 타임아웃) 이름 타임라인을
-  // 광선과 같은 순간에 출발시킨다(부팅 안무 브리프 1절).
-  const [sceneReady, setSceneReady] = useState(false);
-  const handleSceneReady = useCallback(() => setSceneReady(true), []);
+  // HERO 재순서 브리프 — 파티클이 뭉쳐 이름이 완성되는 핸드오프 순간
+  // BootSequence가 이 값을 true로 뒤집는다. HyperspeedBackground는 이
+  // 값을 기다렸다가 배경을 페이드로 드러낸다(t=0 검은 화면 → 이름 완성 →
+  // 배경 등장, 브리프 2·3절). 씬 자체는 이 값과 무관하게 이미 일찍
+  // 로드·렌더되고 있다 — "준비는 일찍, 노출은 늦게".
+  const [heroRevealed, setHeroRevealed] = useState(false);
+  const handleNameRevealed = useCallback(() => setHeroRevealed(true), []);
   // GSAP은 정적 import에서 뺐다(First Load JS 예산 — gsap-lazy-brief.md).
   // 마운트 직후 미리 요청해 ref에 담아 두고, 아래 handleBeforeActiveChange는
   // 이 ref를 동기적으로만 읽는다 — Flip.getState()는 DOM이 바뀌기 직전에
@@ -289,7 +291,7 @@ export default function HomeClient() {
         routeResolved={routeResolved}
         motionReady={motionReady}
         reducedMotion={reducedMotion}
-        onSceneReady={handleSceneReady}
+        heroRevealed={heroRevealed}
       />
 
       <Navigation
@@ -314,9 +316,9 @@ export default function HomeClient() {
         routeResolved={routeResolved}
         motionReady={motionReady}
         reducedMotion={reducedMotion}
-        sceneReady={sceneReady}
         wordmarkRef={wordmarkRef}
         onStart={() => setActive(SECTION_IDS.ABOUT)}
+        onNameRevealed={handleNameRevealed}
       />
 
       <main

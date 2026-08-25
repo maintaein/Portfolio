@@ -9,7 +9,6 @@ import ParticleText, {
   type ParticleTextHandle,
   type ParticleTextTier,
 } from '@/components/blocks/ParticleText';
-import Magnet from '@/components/blocks/Magnet';
 import ClickSpark from '@/components/blocks/ClickSpark';
 
 export interface BootSequenceProps {
@@ -17,56 +16,43 @@ export interface BootSequenceProps {
   routeResolved: boolean;
   motionReady: boolean;
   reducedMotion: boolean;
-  // 씬(HyperspeedBackground)이 처음 살아난 순간 true가 된다. 이름 타임라인이
-  // 광선과 같은 순간에 출발해야 하나의 제스처로 읽힌다(부팅 안무 브리프
-  // 1절). 씬이 영영 안 뜨는 경우(WebGL·청크 실패)를 위해 SCENE_READY_TIMEOUT_MS
-  // 타임아웃과 경합시킨다 — 아래 readyOrTimedOut 참고.
-  sceneReady: boolean;
   wordmarkRef: RefObject<HTMLButtonElement | null>;
   onStart: () => void;
+  // HERO 재순서 브리프 — 파티클 뭉침이 끝나 DOM 이름이 나타나는 그 순간
+  // (아래 NAME_HANDOFF_AT) 정확히 한 번 불린다. 부모(HomeClient)는 이 신호로
+  // Hyperspeed 배경을 페이드로 드러낸다("배경이 이름 다음에 온다"). GSAP
+  // 타임라인이 도는 정상 경로뿐 아니라 실패·이탈 등 모든 폴백 경로에서도
+  // revealFinalState()가 함께 불러 배경이 영원히 숨은 채로 남지 않는다.
+  onNameRevealed?: () => void;
 }
 
-// 부팅 안무 타이밍(초) — 부팅 안무 2차 브리프가 다시 확정한 표. 광선
-// (HyperspeedHandle.bootIn)과 이름(이 컴포넌트)이 같은 BOOT_DURATION_SECONDS를
-// 공유하고 같은 씬-준비 신호에서 함께 출발한다.
+// HERO 재순서 브리프 — "아무것도 없는 배경 → 이름이 파티클로 뭉쳐 만들어짐 →
+// Hyperspeed 배경이 자연스럽게 등장". 이전 라운드들이 시도한 광선 부팅
+// 안무(느리게 시작 → 개수 램프와 함께 빨라짐 → idle 정착, 소실점 압축 해제
+// 등)는 세 라운드에 걸쳐도 실기기에서 읽히지 않아 사용자가 전부 취소했다 —
+// 이번에 전부 걷어내고(Hyperspeed/index.tsx 참고) 광선과 이름을 동기화하던
+// sceneReady/타임아웃 게이트도 함께 지웠다. 이름은 이제 배경 상태와 무관하게
+// 시작한다 — 애초에 배경이 이름이 끝날 때까지 보이지 않으므로 동기화할
+// 대상이 없다.
 //
-// 1차 라운드는 이름이 0.15초부터 등장해 "광선이 아직 깊이에서 밀려오는 중인데
-// 이름이 이미 도착해 있다"는 문제였다(2차 실기기 피드백). 광선의 개수 램프가
-// 목표(idle)에 도달해 "자연스럽게 전환"되는 시각(App의 BOOT_LIGHT_RAMP_RATIO —
-// 2초 부팅 기준 1.30초)에 이름이 함께 실리도록 등장 시각을 뒤로 미뤘다.
+// 파티클이 먼저 완전히 뭉치고, 뭉침이 끝나는 정확히 그 순간 DOM 이름이
+// 나타난다(핸드오프) — 크로스페이드가 아니다. NAME_HANDOFF_AT 하나가 세
+// 가지 시각의 단일 출처다: 파티클 형성 종료 = DOM 이름 등장(한 프레임,
+// 페이드 아님) = 배경 노출 시작(onNameRevealed). 파티클의 durationMs prop도
+// 이 값에서 파생된다(NAME_HANDOFF_AT_MS) — 두 컴포넌트가 각자 다른 상수를
+// 들고 있지 않다.
 //
-// 터널 진입 브리프(3차)가 광선 쪽을 다시 바꿨다 — 광선은 더 이상 t=0에 fov
-// 펀치로 즉시 최고 속도가 아니라 "느리게 시작 → 개수 램프와 함께 빨라짐 →
-// 1.30초에 idle로 정착"하는 대칭 곡선이고(Hyperspeed/index.tsx bootIn 참고),
-// 소실점(aOffset.z 압축)에서 밀려나오는 연출도 같은 1.30초에 완성된다. 이름
-// 타임라인 자체의 시각(NAME_TRANSFORM_AT 등)은 그대로다 — 광선이 idle로
-// 수렴하는 시각과 여전히 일치하기 때문이다.
-//
-// 파티클 형성 브리프(4차, 3차 실기기 피드백 "멀리서 드러나는 효과 제거 —
-// 정착 순간 particle 형태로 흩어져있는 이름 조각들이 뭉쳐서 이름을
-// 구성하도록")가 이름 쪽 표현을 다시 바꿨다 — scale(0.35→1)·blur(11px→0)로
-// "멀리서 도착"하던 원경감을 걷어내고, 그 자리에 흩어진 파티클이 뭉쳐 이름이
-// 되는 캔버스 연출(ParticleText, 아래 참고)을 놓았다. 시각(NAME_TRANSFORM_AT/
-// DURATION)은 그대로 유지한다 — 형성 완료가 광선이 idle로 정착하는 순간과
-// 여전히 같아야 "광선을 타고 가다가 이름에 닿는다"가 성립하기 때문이다.
-// DOM 워드마크는 opacity 0으로 시작해(LCP 계약 변경, 3절) 이 구간에 1로
-// 열린다 — 파티클이 캔버스 위에서 뭉치는 것과 같은 구간, 같은 길이다. 파티클
-// 형성이 끝나는 순간 캔버스가 비고 DOM이 이미 같은 자리·같은 값으로 도착해
-// 있어 전환이 보이지 않는다(아래 ParticleText 컴포넌트의 "표현이 둘이 된다"
-// 위험 대응 참고).
-//
-//   0.00–1.30  광선 느림→빠름→idle 정착 + 개수 램프(먼 것부터 채움) + 소실점 압축 해제 | 이름은 아직 opacity 0(페인트조차 안 된다), 캔버스도 비어 있다
-//   0.75–1.30  (위와 겹침)                                        | 캔버스에서 파티클이 흩어진 상태→이름 형태로 뭉친다, DOM opacity→1(0.55s) — 광선이 idle로 정착하는 것과 같은 박자
-//   1.30–1.55  idle                                               | 역할 라벨
-//   1.55–1.80  idle                                               | START + 밑줄 draw(0.35s, 1.90 종료)
-//   1.80–2.00  버퍼
-const NAME_TRANSFORM_AT = 0.75;
-const NAME_TRANSFORM_DURATION = 0.55; // 종료 시각 1.30초 — 광선 개수 램프·감속 도착과 동시
-const NAME_TRANSFORM_DURATION_MS = NAME_TRANSFORM_DURATION * 1000;
-const ROLE_REVEAL_AT = 1.3;
-const ROLE_REVEAL_DURATION = 0.25; // 종료 시각 1.55초
-const START_REVEAL_AT = 1.55;
-const START_REVEAL_DURATION = 0.25; // 종료 시각 1.80초
+//   0.00–0.90  캔버스에서 파티클이 흩어진 상태→이름 형태로 뭉친다 | DOM 이름은 opacity 0, 배경은 보이지 않는다
+//   0.90       핸드오프 — 파티클 캔버스 비움, DOM opacity 0→1(한 프레임), 배경 페이드 시작
+//   1.05–1.30  idle                                               | 역할 라벨
+//   1.30–1.55  idle                                               | START + 밑줄 draw(0.35s, 1.90 종료)
+//   1.55–2.00  버퍼
+const NAME_HANDOFF_AT = 0.9;
+const NAME_HANDOFF_AT_MS = NAME_HANDOFF_AT * 1000;
+const ROLE_REVEAL_AT = 1.05;
+const ROLE_REVEAL_DURATION = 0.25; // 종료 시각 1.30초
+const START_REVEAL_AT = 1.3;
+const START_REVEAL_DURATION = 0.25; // 종료 시각 1.55초
 const UNDERLINE_DRAW_DURATION = 0.35; // 종료 시각 1.90초(버퍼 구간까지 살짝 걸친다)
 
 // START 클릭 후 실제 섹션 전환(onStart)까지의 지연(ms). 클릭 링은 터널
@@ -82,14 +68,6 @@ const UNDERLINE_DRAW_DURATION = 0.35; // 종료 시각 1.90초(버퍼 구간까�
 // 두 효과 모두 전환이 시작되기 전에 눈에 보일 시간을 확보한다.
 const START_TRANSITION_DELAY_MS = 230;
 
-// Magnet(호버) — 절제된 트리거 영역과 짧은 이동 범위. padding이 넓거나
-// magnetStrength가 작으면 버튼이 화면을 가로질러 쫓아오는 것처럼 보여
-// "장난스럽다"(파티클 형성 브리프 2절). maxOffsetPx가 최종 안전판이다 —
-// 캡션 정렬·겹침 방지 계약이 시각적으로 흔들리지 않을 만큼 작다.
-const MAGNET_PADDING_PX = 20;
-const MAGNET_STRENGTH = 6;
-const MAGNET_MAX_OFFSET_PX = 8;
-
 // ClickSpark(클릭) — 짧고 절제된 파티클 분출. 배경이 이미 팽창하는 광선
 // 터널이라 과하면 노이즈 위의 노이즈가 된다(파티클 형성 브리프 2절, 2차
 // 감사가 클릭 링을 반대한 것과 같은 이유). duration은 START_TRANSITION_
@@ -99,30 +77,24 @@ const CLICK_SPARK_SIZE_PX = 8;
 const CLICK_SPARK_RADIUS_PX = 14;
 const CLICK_SPARK_DURATION_MS = 220;
 
-// 씬 준비 신호가 이 시간(ms) 안에 안 오면(WebGL 실패·청크 실패) 타임아웃이
-// 대신 부팅을 출발시킨다 — 이름이 영원히 안 나오는 사고를 막는다. Hyperspeed
-// 청크(three.js+postprocessing)가 합리적인 회선에서 로드되는 데 걸리는
-// 시간보다 넉넉히 크게 잡았다.
-const SCENE_READY_TIMEOUT_MS = 600;
-
 export default function BootSequence({
   active,
   routeResolved,
   motionReady,
   reducedMotion,
-  sceneReady,
   wordmarkRef,
   onStart,
+  onNameRevealed,
 }: BootSequenceProps) {
   const roleRef = useRef<HTMLSpanElement>(null);
   const startRef = useRef<HTMLButtonElement>(null);
   const underlineRef = useRef<HTMLSpanElement>(null);
   const hasStartedRef = useRef(false);
-  // 이름 파티클 형성(ParticleText)의 재생 트리거. GSAP 타임라인이
-  // NAME_TRANSFORM_AT에 tl.call()로 이 ref의 play()를 부른다 — 캔버스가
+  // 이름 파티클 형성(ParticleText)의 재생 트리거. GSAP 타임라인이 t=0에
+  // tl.call()로 이 ref의 play()를 부른다 — 캔버스가
   // 아직 마운트 전이거나(기기 등급 미확정·reducedMotion 등) 준비에
   // 실패했으면 옵셔널 체이닝으로 조용히 아무 일도 없다. DOM 워드마크의
-  // opacity 트윈은 이 호출과 무관하게 항상 스케줄되므로, 파티클이 실패해도
+  // opacity 전환은 이 호출과 무관하게 항상 스케줄되므로, 파티클이 실패해도
   // "이름이 안 보이는" 사고로 이어지지 않는다(아래 wordmarkEl 트윈 참고).
   const particleRef = useRef<ParticleTextHandle>(null);
   // START를 누를 때마다 새 키로 텍스트 span을 다시 마운트해 반짝임
@@ -132,20 +104,6 @@ export default function BootSequence({
   // 클릭 후 실제 onStart()까지의 지연 예약. null이면 예약이 없다 — 이
   // 값의 존재 자체가 "이미 예약됨" 가드다(중복 클릭 방지).
   const startTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // 씬 준비 신호 또는 타임아웃 중 먼저 오는 쪽으로 출발한다. sceneReady가
-  // true가 되면 곧바로, 아니면 SCENE_READY_TIMEOUT_MS 뒤 타임아웃이 대신
-  // readyOrTimedOut을 true로 만든다 — 이후로는 절대 false로 돌아가지 않는다.
-  const [readyOrTimedOut, setReadyOrTimedOut] = useState(false);
-
-  useEffect(() => {
-    if (sceneReady) {
-      setReadyOrTimedOut(true);
-      return;
-    }
-    const timer = setTimeout(() => setReadyOrTimedOut(true), SCENE_READY_TIMEOUT_MS);
-    return () => clearTimeout(timer);
-  }, [sceneReady]);
 
   // 기기 등급(low/medium/high) — 파티클 형성을 돌릴지, 돌린다면 어떤
   // 파라미터로 돌릴지의 단일 출처(lib/deviceQuality.ts). null은 "아직
@@ -174,11 +132,7 @@ export default function BootSequence({
 
   useLayoutEffect(() => {
     const eligible =
-      routeResolved &&
-      motionReady &&
-      !reducedMotion &&
-      active === OVERVIEW &&
-      readyOrTimedOut;
+      routeResolved && motionReady && !reducedMotion && active === OVERVIEW;
 
     if (!eligible || hasStartedRef.current) return;
     hasStartedRef.current = true;
@@ -199,6 +153,9 @@ export default function BootSequence({
     // 상태 노출. 역할 라벨·START의 pre-boot 은닉은 CSS가 소유하므로
     // (styles/design-tokens.css의 no-preference 오버라이드) 인라인 스타일로
     // 그것을 덮어써야 드러난다 — gsap.set()과 동일한 값을 직접 대입한다.
+    // onNameRevealed도 여기서 함께 부른다 — 이 경로(GSAP 실패·이탈·언마운트)
+    // 는 이름이 이미 최종 상태로 강제 노출되므로 배경도 같은 순간 드러나야
+    // 한다(그러지 않으면 이름은 보이는데 배경만 영원히 검은 채로 남는다).
     function revealFinalState() {
       if (roleEl) {
         roleEl.style.opacity = '1';
@@ -214,6 +171,7 @@ export default function BootSequence({
       if (underlineEl) {
         underlineEl.style.transform = 'scaleX(1)';
       }
+      onNameRevealed?.();
     }
 
     import('@/lib/gsap')
@@ -224,42 +182,40 @@ export default function BootSequence({
         const tl = gsap.timeline();
         timeline = tl;
 
-        // 파티클 형성(ParticleText) 재생 — 광선 개수 램프·감속이 idle로
-        // 정착하는 시각과 같은 시각(NAME_TRANSFORM_AT)에 흩어진 조각이
-        // 뭉치기 시작한다. particleRef.current가 없으면(캔버스 미마운트·
-        // 준비 실패·기기 등급 미확정 등) 옵셔널 체이닝으로 조용히
-        // 아무것도 하지 않는다 — 아래 wordmarkEl의 opacity 트윈은 이
-        // 호출과 완전히 독립적으로 스케줄되므로, 파티클이 실패해도 이름은
-        // 원래 계획대로 도착한다(파티클 형성 브리프의 "이름 없는 사이트를
-        // 만들지 마라" 대응 — 8번째 실패 경로).
+        // 파티클 형성(ParticleText) 재생 — t=0에 흩어진 조각이 뭉치기
+        // 시작한다(핸드오프 브리프 3절 "파티클이 먼저 완전히 뭉친다").
+        // particleRef.current가 없으면(캔버스 미마운트·준비 실패·기기 등급
+        // 미확정 등) 옵셔널 체이닝으로 조용히 아무것도 하지 않는다 — 아래
+        // wordmarkEl의 opacity 전환은 이 호출과 완전히 독립적으로
+        // 스케줄되므로, 파티클이 실패해도 이름은 원래 계획대로 도착한다
+        // (파티클 형성 브리프의 "이름 없는 사이트를 만들지 마라" 대응 —
+        // 8번째 실패 경로).
         tl.call(
           () => {
             particleRef.current?.play();
           },
           undefined,
-          NAME_TRANSFORM_AT
+          0
         );
 
         if (wordmarkEl) {
-          // pre-boot opacity는 CSS([data-wordmark-mode='hero'],
-          // design-tokens.css)가 소유한다. from 값(0)이 CSS와 같아
-          // (immediateRender) 핸드오프에 점프가 없다. 광선의 개수 램프·감속이
-          // idle로 정착하는 시각과 같은 시각(NAME_TRANSFORM_AT~+DURATION)에
-          // 열린다 — 캔버스 위 파티클이 뭉치는 것과 같은 구간, 같은 길이다.
-          // scale·blur의 "멀리서 도착"하는 원경감은 파티클 형성 브리프(4차,
-          // 3차 실기기 피드백)로 걷어냈다 — 대신 흩어진 파티클이 뭉쳐
-          // 이름이 되는 캔버스 연출이 그 자리를 대신한다(위 tl.call).
-          // opacity 0→1은 그 자체로 유지한다 — 사용자가 LCP 계약 중
-          // "opacity 0으로 시작하지 않는다"를 폐기하기로 결정한 것과
-          // 별개로(터널 진입 브리프 3절), 형성 완료 순간 캔버스가 비고
-          // DOM이 정확히 그 자리에 나타나야 전환이 보이지 않기 때문이다.
-          tl.fromTo(
-            wordmarkEl,
-            { opacity: 0 },
-            { opacity: 1, duration: NAME_TRANSFORM_DURATION, ease: SITE_EASE },
-            NAME_TRANSFORM_AT
-          );
+          // 핸드오프(브리프 3절) — 크로스페이드가 아니라 정확히 이 한
+          // 순간(NAME_HANDOFF_AT)에 파티클이 완전히 뭉치는 것과 DOM 이름이
+          // 나타나는 것이 동시에 일어난다. tl.fromTo의 트윈 duration을
+          // 걷어내고 tl.set으로 한 프레임 전환을 쓴다 — "0.55초 페이드가
+          // 아니라 한 프레임 전환이어야 한다"는 표제 계약. pre-boot
+          // opacity(0)는 여전히 CSS([data-wordmark-mode='hero'],
+          // design-tokens.css)가 소유한다 — GSAP은 핸드오프 순간에만 1로
+          // 뒤집는다(그 전에는 인라인 style을 전혀 건드리지 않는다).
+          tl.set(wordmarkEl, { opacity: 1 }, NAME_HANDOFF_AT);
         }
+
+        // 배경 노출 트리거 — 파티클 뭉침이 끝나는 것과 정확히 같은 순간에
+        // 부모(HomeClient)가 Hyperspeed 배경을 페이드로 드러낸다. 위
+        // wordmarkEl.set과 같은 위치(NAME_HANDOFF_AT)에 둬 "두 시각이 한
+        // 곳에서 정해진다"는 계약을 만족한다 — 상수가 아니라 타임라인
+        // 위치 자체가 단일 출처다.
+        tl.call(() => onNameRevealed?.(), undefined, NAME_HANDOFF_AT);
 
         if (roleEl) {
           tl.fromTo(
@@ -313,7 +269,7 @@ export default function BootSequence({
       revealFinalState();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, motionReady, reducedMotion, routeResolved, readyOrTimedOut]);
+  }, [active, motionReady, reducedMotion, routeResolved]);
 
   // 지연 중 active가 다른 곳으로 바뀌면(다른 네비게이션이 먼저 이겼다는
   // 뜻) 예약된 onStart()가 그걸 덮어쓰면 안 된다 — 이 effect의 cleanup이
@@ -361,7 +317,10 @@ export default function BootSequence({
   // 컴포넌트 자신이 active를 보고 직접 그 상태를 소유한다.
   const hiddenFromOverview = active !== OVERVIEW;
 
-  // START 버튼 자체 — Magnet(호버)과 ClickSpark(클릭)가 이 마크업을 감싼다.
+  // START 버튼 자체 — 호버 시 전기 충전 효과(순수 CSS, .boot-start:hover +
+  // design-tokens.css)와 ClickSpark(클릭)가 이 마크업을 감싼다. Magnet(자석
+  // 추종 호버)은 사용자 판단으로 걷어냈다 — "디자인 나쁨. 호버 시 효과를
+  // 자석이 아닌, 전기적 에너지가 글씨에 충전되는듯한 이펙트로" 재검토 결과다.
   // 아래에서 한 번만 정의해 두 분기(reducedMotion 여부)가 같은 버튼을
   // 공유한다 — 복제하면 두 노드가 되어 FLIP·단일 노드 계약과 같은 부류의
   // 문제(표현이 둘)가 생긴다.
@@ -406,8 +365,8 @@ export default function BootSequence({
         {/* 밑줄 — GSAP이 좌→우로 한 번 그린 뒤(scaleX), 이후는 순수 CSS
             루프로 opacity만 0.55↔1 호흡한다(글자는 건드리지 않는다).
             모바일엔 hover가 없으므로 이 draw·호흡이 START가 클릭 가능함을
-            알리는 유일한 정지 상태 신호로 남는다 — Magnet은 데스크톱
-            보너스일 뿐이다(파티클 형성 브리프 2절). */}
+            알리는 유일한 정지 상태 신호로 남는다 — 전기 충전 호버는 데스크톱
+            보너스일 뿐이다(파티클 형성 브리프 2절과 같은 원칙). */}
         <span
           ref={underlineRef}
           data-testid="boot-start-underline"
@@ -418,25 +377,13 @@ export default function BootSequence({
     </button>
   );
 
-  // Magnet은 항상 감싼다(disabled로 reducedMotion을 반영) — disabled일 때는
-  // mousemove 리스너 자체를 달지 않으므로(Magnet/index.tsx) 완전한 no-op이다.
-  const magnetButton = (
-    <Magnet
-      disabled={reducedMotion}
-      padding={MAGNET_PADDING_PX}
-      magnetStrength={MAGNET_STRENGTH}
-      maxOffsetPx={MAGNET_MAX_OFFSET_PX}
-    >
-      {startButton}
-    </Magnet>
-  );
-
   // ClickSpark는 reducedMotion에서 아예 렌더하지 않는다(캔버스·리스너 자체를
-  // 만들지 않는다) — Magnet의 disabled 패턴과 달리 스파크는 "값이 0"으로
-  // 끌 방법이 없어(클릭 시 항상 스파크를 만드는 구조) 컴포넌트 자체를
-  // 조건부로 뺀다.
+  // 만들지 않는다) — 스파크는 "값이 0"으로 끌 방법이 없어(클릭 시 항상
+  // 스파크를 만드는 구조) 컴포넌트 자체를 조건부로 뺀다. 전기 충전 호버는
+  // 순수 CSS(.boot-start:hover, no-preference 미디어쿼리 안)라 별도 wrapper가
+  // 필요 없다 — reducedMotion 게이팅은 그 미디어쿼리 자신이 이미 한다.
   const startInteractive = reducedMotion ? (
-    magnetButton
+    startButton
   ) : (
     <ClickSpark
       sparkColorVar="--color-cyan-hi"
@@ -446,7 +393,7 @@ export default function BootSequence({
       sparkRadius={CLICK_SPARK_RADIUS_PX}
       duration={CLICK_SPARK_DURATION_MS}
     >
-      {magnetButton}
+      {startButton}
     </ClickSpark>
   );
 
@@ -461,7 +408,7 @@ export default function BootSequence({
           ref={particleRef}
           wordmarkRef={wordmarkRef}
           tier={particleTier}
-          durationMs={NAME_TRANSFORM_DURATION_MS}
+          durationMs={NAME_HANDOFF_AT_MS}
         />
       ) : null}
       {/* 워드마크(Navigation)와 같은 뷰포트 50% 기준점을 쓴다 — margin-top의
@@ -487,9 +434,9 @@ export default function BootSequence({
             t5/태블릿 t3/데스크톱 t2로 역할 라벨(t8 고정)과 항상 2배 이상
             벌어지게 한다 — "속삭임 → 행동"이 성립하는 최소 비율. 화살표·
             목적지 표기 없이 텍스트만 남긴다(3라운드 사용자 판단). 마크업
-            자체는 위 startButton(및 이를 감싸는 magnetButton/startInteractive)
-            에서 정의한다 — reducedMotion 분기에 따라 Magnet만 감싸거나
-            Magnet+ClickSpark를 함께 감싼다(파티클 형성 브리프 2절). */}
+            자체는 위 startButton(및 이를 감싸는 startInteractive)에서
+            정의한다 — reducedMotion이면 버튼 그대로, 아니면 ClickSpark로
+            감싼다(파티클 형성 브리프 2절). */}
         {startInteractive}
       </div>
     </>
