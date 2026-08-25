@@ -352,17 +352,11 @@ export default function BootSequence({
         onClick={handleStartClick}
         className="boot-start relative inline-flex min-h-11 items-center text-t5 sm:text-t3 md:text-t2 uppercase tracking-[0.2em] text-[var(--color-text-primary)] transition-colors duration-300 hover:text-[var(--color-cyan-hi)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)]"
       >
-        {/* 아이들 광휘 — 정지 상태의 생동감(축적 서사). transform·opacity만
-            애니메이션하는 순수 CSS 루프라 캔버스 비용이 없다. */}
-        <span
-          aria-hidden="true"
-          data-testid="boot-start-glow"
-          className="boot-start-glow pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[220%] w-[220%] -translate-x-1/2 -translate-y-1/2 rounded-full"
-          style={{
-            background:
-              'radial-gradient(circle, var(--color-cyan-core) 0%, transparent 70%)',
-          }}
-        />
+        {/* 아이들 광휘를 제거했다(3차 실기기 피드백). 버튼 크기의 220%라
+            START 위로 크게 삐져나와 이름과 START 사이에 정체불명의 얼룩으로
+            보였다 — 무엇을 위한 빛인지 읽히지 않으면 장식 노이즈이고, 2차
+            감사가 지적한 AI slop 6번(장식용 블롭)에 오히려 가까워진다.
+            START의 생동감은 밑줄 draw·호흡과 hover·click 반응이 맡는다. */}
         {/* 텍스트를 감싸는 relative span — 밑줄의 위치 기준이다. 44px
             터치 타깃(min-h-11)은 버튼 자신이 지키고, 이 span은 글자
             자신의 박스 크기만 갖는다. 예전에는 밑줄이 버튼 바로 아래

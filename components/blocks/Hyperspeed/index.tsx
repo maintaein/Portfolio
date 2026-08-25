@@ -86,6 +86,16 @@ const IDLE_TIME_SCALE = 0.3;
 // 빨라 전환이 튀었다.
 const BOOST_TIME_SCALE = 1.15;
 
+// 부팅 램프의 정점 배속. 섹션 전환(BOOST_TIME_SCALE)보다 크다 — 터널로
+// 진입하는 순간이 섹션을 넘나드는 것보다 큰 사건이기 때문이다. 3차 실기기
+// 피드백("더 느렸다가 더 빠르게 가속했다가")에 따라 대비를 키웠다.
+const BOOT_PEAK_TIME_SCALE = 2.8;
+
+// 부팅 시작 시 기본 흐름 배율(IDLE_TIME_SCALE에 곱한다). 램프 초반에는
+// 광선이 적고 멀리 있으므로 흐름도 idle보다 느려야 "적고 느리게 시작"이
+// 읽힌다. 램프가 끝나면 1로 수렴해 idle과 정확히 이어진다.
+const BOOT_START_TIME_FACTOR = 0.25;
+
 // speedUp이 목표로 수렴하는 시간 상수의 역수(1/초). 원본은
 // Math.exp(-k*delta)를 그대로 비율로 써서 60fps에서 한 프레임에 간극의 86%를
 // 메웠다 — 사실상 즉시 도달이라 가속도 감속도 보이지 않았다. 프레임률과
@@ -104,7 +114,7 @@ const BOOT_LIGHT_RAMP_RATIO = 1.3 / 2;
 // 램프 시작 시점에 그리는 쌍의 비율. 0으로 하면 "광선이 전혀 없다가
 // 갑자기 나타난다"가 되어 오히려 부자연스럽다 — "적은 양이 멀리서부터"를
 // 표현하는 최소치다.
-const BOOT_LIGHT_RAMP_START_RATIO = 0.15;
+const BOOT_LIGHT_RAMP_START_RATIO = 0.04;
 
 const defaultOptions: HyperspeedOptions = {
   onSpeedUp: () => {},
@@ -348,7 +358,15 @@ const carLightsVertex = `
     transformed.xy *= radius;
     transformed.z *= myLength;
 
-    transformed.z += myLength - mod(uTime * speed + aOffset.z * uBootSpread, uTravelLength);
+    // uBootSpread=0에서 오프셋을 정확히 0으로 압축하면 mod(0, L) = 0이 되어
+    // transformed.z = myLength, 즉 "카메라 바로 앞"이 된다 — 모듈로 불연속의
+    // 반대편이다. 먼 쪽은 mod가 L에 가까울 때이므로 목표를 아주 작은 음수로
+    // 둔다: mod(-eps, L) = L - eps → transformed.z = myLength - L(가장 멀다).
+    // 이 한 글자 차이 때문에 진입 순간 광선이 소실점이 아니라 눈앞에 몰려
+    // 있었다(3차 실기기 피드백 "진입한 시점부터 광선이 터널에 존재").
+    float bootFar = -uTravelLength * 0.001;
+    float bootOffset = mix(bootFar, aOffset.z, uBootSpread);
+    transformed.z += myLength - mod(uTime * speed + bootOffset, uTravelLength);
     transformed.xy += aOffset.xy;
 
     float progress = abs(transformed.z / uTravelLength);
@@ -726,6 +744,8 @@ class App {
   // 플래그를 꺼서 그 호출이 다음 프레임에 곧바로 되돌려지지 않게 한다 —
   // "부팅 중 섹션 전환이 일어나면 충돌하지 않아야 한다"(부팅 안무 브리프 2절).
   bootSpeedRampActive: boolean;
+  // 부팅 램프의 가공하지 않은 진행도(0→1). baseTime 배율이 참조한다.
+  bootRampEase: number;
 
   constructor(container: HTMLElement, options: HyperspeedOptions) {
     this.options = options;
@@ -827,6 +847,7 @@ class App {
     this.lightRampDuration = 0;
     this.lightRampProgress = 0;
     this.bootSpeedRampActive = false;
+    this.bootRampEase = 1;
 
     this.tick = this.tick.bind(this);
     this.init = this.init.bind(this);
@@ -1066,6 +1087,7 @@ class App {
 
   settle() {
     this.bootSpeedRampActive = false;
+    this.bootRampEase = 1;
     this.fovTarget = this.options.fov;
     this.speedUpTarget = 0;
   }
@@ -1081,6 +1103,7 @@ class App {
     this.lightRampElapsed = 0;
     this.lightRampDuration = duration * BOOT_LIGHT_RAMP_RATIO;
     this.bootSpeedRampActive = true;
+    this.bootRampEase = 0;
     this.fovTarget = this.options.fov;
     this.speedUpTarget = 0;
     this.applyLightRampProgress(0);
@@ -1118,7 +1141,13 @@ class App {
     const speedSmoothing = 1 - Math.exp(-SPEED_SMOOTHING_RATE * delta);
     this.speedUp += (this.speedUpTarget - this.speedUp) * speedSmoothing;
 
-    this.baseTime += delta * IDLE_TIME_SCALE;
+    // 부팅 램프 중에는 기본 흐름도 함께 느렸다 빨라진다 — speedUp만으로는
+    // idle보다 느려질 수 없다(speedUpTarget의 하한이 0이다).
+    const baseFactor = this.bootSpeedRampActive
+      ? BOOT_START_TIME_FACTOR +
+        (1 - BOOT_START_TIME_FACTOR) * this.bootRampEase
+      : 1;
+    this.baseTime += delta * IDLE_TIME_SCALE * baseFactor;
     this.timeOffset += this.speedUp * delta;
     const time = this.baseTime + this.timeOffset;
 
@@ -1138,7 +1167,10 @@ class App {
         // 개수·깊이 램프가 끝나는 바로 그 프레임에 정확히 idle로 되돌아온다.
         const boostFactor = Math.sin(Math.PI * raw);
         this.fovTarget = this.options.fov + (this.options.fovSpeedUp - this.options.fov) * boostFactor;
-        this.speedUpTarget = this.options.speedUp * boostFactor;
+        this.speedUpTarget = BOOT_PEAK_TIME_SCALE * boostFactor;
+        // baseTime 배율이 참조한다 — 램프 진행도를 그대로 쓰면 시작이 0이라
+        // 흐름이 멈춘 것처럼 보인다. 정점을 지나면 1로 수렴해 idle과 잇는다.
+        this.bootRampEase = raw;
       }
 
       if (raw >= 1) {

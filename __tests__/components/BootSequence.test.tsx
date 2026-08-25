@@ -798,13 +798,14 @@ describe('BootSequence 구도 — 중앙 정렬·간격·CTA 위계', () => {
     expect(flashRule).not.toMatch(/infinite/);
   });
 
-  it('아이들 광휘 span이 START 뒤에 존재한다', () => {
+  // 3차 실기기 피드백으로 제거했다. 버튼 크기의 220%라 START 위로 크게
+  // 삐져나와 이름과 START 사이에 정체불명의 얼룩으로 보였다 — 무엇을 위한
+  // 빛인지 읽히지 않으면 장식 노이즈이고, 2차 감사가 지적한 AI slop 6번
+  // (장식용 블롭)에 오히려 가까워진다. 지우지 않고 반대 방향으로 못박는다.
+  it('START 뒤에 정체불명의 광휘 블롭이 없다', () => {
     render(<Harness />);
-    const start = screen.getByTestId('boot-start');
-    const glow = screen.getByTestId('boot-start-glow');
 
-    expect(start).toContainElement(glow);
-    expect(glow).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.queryByTestId('boot-start-glow')).not.toBeInTheDocument();
   });
 
   it('글자("START") 자신에는 어떤 CSS 애니메이션·keyframe도 걸리지 않는다 — 뮤테이션 (j)', () => {

@@ -530,7 +530,9 @@ describe('(다) bootIn — 부팅 속도 곡선(느림→빠름→idle)', () => 
     fireNextFrame(t);
 
     expect(app.fovTarget).toBeCloseTo(app.options.fovSpeedUp, 5);
-    expect(app.speedUpTarget).toBeCloseTo(app.options.speedUp, 5);
+    // 부팅 정점은 섹션 전환 boost보다 크다 — 터널 진입이 섹션을 넘나드는 것보다
+    // 큰 사건이기 때문이다(3차 실기기 피드백 "더 빠르게 가속했다가").
+    expect(app.speedUpTarget).toBeGreaterThan(app.options.speedUp);
   });
 
   it('램프가 끝나는 프레임(raw=1)에 fov·speed·개수·깊이가 전부 같은 순간 idle로 수렴한다 — 뮤테이션 (c)', () => {
@@ -1106,14 +1108,20 @@ describe('부팅 안무 — 개수 램프(instanceCount)와 깊이 정렬', () =
 // 곱하는가(소스 검사). 둘 다 있어야 "uBootSpread 값은 맞는데 셰이더가
 // 안 쓴다"는 구멍이 안 남는다.
 describe('부팅 안무 — 소실점 압축(uBootSpread)', () => {
-  it('셰이더가 aOffset.z에 uBootSpread를 곱한다', () => {
+  it('셰이더가 uBootSpread로 먼 쪽과 자연 분포를 보간한다 — 0으로 곱하지 않는다', () => {
     const source = readFileSync(
       path.resolve(process.cwd(), 'components/blocks/Hyperspeed/index.tsx'),
       'utf8'
     );
     // 뮤테이션 (a) — 셰이더의 곱셈 자체를 지우면(uniform 값은 그대로
     // 갱신되더라도) 여기서 FAIL한다.
-    expect(source).toMatch(/aOffset\.z\s*\*\s*uBootSpread/);
+    // 3차 실기기 피드백에서 드러난 결함: 오프셋을 정확히 0으로 압축하면
+    // mod(0, L) = 0이라 transformed.z = myLength, 즉 카메라 바로 앞이 된다.
+    // 먼 쪽은 mod가 L에 가까울 때이므로 목표가 작은 음수여야 한다. 곱셈으로
+    // 되돌리면 이 어서션들이 FAIL한다.
+    expect(source).toContain('mix(bootFar, aOffset.z, uBootSpread)');
+    expect(source).toContain('float bootFar = -uTravelLength');
+    expect(source).not.toContain('aOffset.z * uBootSpread');
   });
 
   it('bootIn()을 부르지 않은 App은 uBootSpread가 항상 1이다 — 부팅 미적용 경로(reducedMotion 등)', () => {
