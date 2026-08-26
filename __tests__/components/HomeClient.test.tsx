@@ -870,3 +870,90 @@ describe('HomeClient CONTACT 섹션 등록', () => {
     expect(contact).toHaveTextContent('Say hello');
   });
 });
+
+// START(그리고 순방향 네비·스와이프)를 누르면 다음 섹션이
+// .section-hidden(content-visibility: auto)에서 .section-visible로 한 번에
+// 바뀌며 건너뛰던 서브트리의 레이아웃·페인트가 전환 프레임에 몰렸다.
+// HomeClient는 지금 active의 "다음" 섹션 하나에만 미리 content-visibility를
+// 올려(.section-prewarm) 그 비용을 전환 전에 끝낸다. jsdom은
+// content-visibility를 실제로 계산하지 않으므로 여기서는 "어떤 섹션에 어떤
+// 클래스가 붙는가"라는 구조만 고정한다. 실제 프레임 비용 절감 여부는
+// 실기기 몫이다.
+describe('HomeClient 다음 섹션 예열(전환 끊김 완화)', () => {
+  it('overview에서는 about 하나만 예열되고 나머지는 예열되지 않는다, 뮤테이션 (a)·(c)', () => {
+    const { container } = render(<HomeClient />);
+    const about = getSection(container, 'about');
+
+    // 뮤테이션 (a): 예열 자체를 지우면 about에 section-prewarm이 붙지
+    // 않아 FAIL한다.
+    expect(about).toHaveClass('section-scroll', 'section-hidden', 'section-prewarm');
+    expect(about).not.toHaveClass('section-visible');
+
+    // 뮤테이션 (c): 비활성 섹션 전부를 예열하도록 게이트를 지우면 아래
+    // 나머지 다섯 곳 중 하나 이상이 section-prewarm을 갖게 되어 FAIL한다.
+    for (const { id } of HOME_SECTION_CONFIG) {
+      if (id === 'about') continue;
+      expect(getSection(container, id), id).not.toHaveClass('section-prewarm');
+    }
+  });
+
+  it('예열된 섹션도 여전히 보이지 않는다, inert·aria-hidden 유지, 뮤테이션 (b)', () => {
+    const { container } = render(<HomeClient />);
+    const about = getSection(container, 'about');
+
+    // 뮤테이션 (b): 예열된 섹션의 inert·aria-hidden을 벗기면(opacity나
+    // pointer-events를 함께 열어주는 구현으로 바뀌면) 아래 둘 중 하나가
+    // FAIL한다. content-visibility만 올라갈 뿐 여전히 비활성 섹션이다.
+    expect(about).toHaveAttribute('inert');
+    expect(about).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('이동하면 예열 대상이 다음 섹션으로 옮겨간다, 순방향 네비 클릭도 자연히 덮인다', () => {
+    const { container } = render(<HomeClient />);
+    navigateTo(/about/i);
+
+    const about = getSection(container, 'about');
+    const projects = getSection(container, 'projects');
+
+    // 활성 섹션 자신은 이미 진짜 section-visible이므로 예열 클래스가 필요
+    // 없다.
+    expect(about).toHaveClass('section-visible');
+    expect(about).not.toHaveClass('section-prewarm');
+
+    // 전환이 끝난 뒤에야 다음 대상이 옮겨온다. 아래 "전환 중에는 예열하지
+    // 않는다" 테스트가 그 이유를 지킨다. transitionend는 transitionrun으로
+    // 등록된 전환에만 반응하므로(handleSectionTransitionDone) 둘을 짝지어
+    // 보낸다.
+    fireOpacityTransition(about, 'transitionrun');
+    fireOpacityTransition(about, 'transitionend');
+    // HOME_SECTION_CONFIG 순서상 about 다음은 projects다.
+    expect(projects).toHaveClass('section-prewarm');
+  });
+
+  // 이 예열의 핵심 계약이다. prewarmId가 active만 보고 파생되면 overview에서
+  // about으로 넘어가는 그 커밋에서 about이 싸게 올라가는 대신 projects가
+  // hidden에서 prewarm으로 바뀐다. content-visibility가 그 프레임에 다시
+  // 올라가므로 지키려던 바로 그 프레임에 새 서브트리의 첫 렌더가 들어앉고,
+  // 끊김이 사라지는 게 아니라 옆 섹션으로 옮겨간다.
+  it('전환이 진행되는 동안에는 다음 대상을 예열하지 않는다, 끊김이 옆 섹션으로 옮겨가는 것을 막는다', () => {
+    const { container } = render(<HomeClient />);
+    navigateTo(/about/i);
+
+    // isTransitioning 게이트를 지우면(active만 보고 파생하면) projects가
+    // 이 시점에 이미 section-prewarm을 갖게 되어 FAIL한다.
+    expect(getSection(container, 'projects')).not.toHaveClass('section-prewarm');
+
+    // 전환 중이라고 해서 이미 데워 둔 목적지를 식히지도 않는다. about은
+    // 활성이 됐으므로 예열 클래스 없이 section-visible이어야 한다.
+    expect(getSection(container, 'about')).toHaveClass('section-visible');
+  });
+
+  it('reducedMotion에서는 예열하지 않는다, 애니메이션이 없으므로 프레임 비용을 뺄 이유도 없다', () => {
+    installMatchMedia(true);
+    const { container } = render(<HomeClient />);
+
+    for (const { id } of HOME_SECTION_CONFIG) {
+      expect(getSection(container, id), id).not.toHaveClass('section-prewarm');
+    }
+  });
+});

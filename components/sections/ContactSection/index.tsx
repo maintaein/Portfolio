@@ -54,16 +54,19 @@ export default function ContactSection() {
     <section
       id={SECTION_IDS.CONTACT}
       aria-labelledby="contact-heading"
-      className="text-white py-16 sm:py-20 lg:py-24"
+      className="text-[var(--color-text-primary)] py-16 sm:py-20 lg:py-24"
     >
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
         {/* 시스템 팔레트는 시안이다 — text-blue-400 대신 --color-cyan-core */}
         <p className="text-xs font-semibold tracking-widest text-[var(--color-cyan-core)] uppercase mb-3">
           Contact
         </p>
+        {/* text-2xl(24px)/text-3xl(30px)은 t 스케일에 정확히 대응하는 값이
+            없다. sm 쪽 30px과 정확히 같은 t1로 맞추고, 기본값은 가장 가까운
+            t2(26px)로 옮긴다. */}
         <h2
           id="contact-heading"
-          className="text-2xl sm:text-3xl font-semibold leading-snug text-white"
+          className="text-t2 sm:text-t1 font-semibold text-[var(--color-text-primary)]"
         >
           함께 만들 기회가 있다면
           <br />
@@ -72,13 +75,13 @@ export default function ContactSection() {
 
         {/* 이메일 복사 영역 */}
         <div className="inline-flex items-center gap-2.5 mt-5">
-          <span className="text-white/70 text-sm">{contact.email}</span>
+          <span className="text-[var(--color-text-secondary)] text-sm">{contact.email}</span>
           <button
             onClick={() => copy(contact.email, 'email')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-all duration-300 ease-in-out ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
               copied
-                ? 'border-emerald-500/50 text-emerald-400 bg-emerald-500/10'
-                : 'border-white/20 text-white/50 hover:border-white/40 hover:text-white/80'
+                ? 'border-[var(--color-elevation-near)] text-[var(--color-cyan-hi)] bg-[var(--color-elevation-far)]'
+                : 'border-[var(--color-hairline)] text-[var(--color-text-secondary)] hover:border-[var(--color-elevation-near)] hover:text-[var(--color-text-primary)]'
             }`}
             aria-label="이메일 복사"
           >

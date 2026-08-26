@@ -497,6 +497,35 @@
     touch-action: pan-y pinch-zoom;
   }
 
+  /* Footer 높이(45px)와 여기 하단 여백은 같은 숫자를 공유해야 한다. Footer가
+     .section-stage 위에 fixed로 얹히므로, 이 여백이 Footer 실제 높이보다
+     작으면 겹치고 크면 빈 공간이 남는다. 320px 폭에서 이메일, 저작권,
+     github 링크 세 항목이 각자 줄바꿈되면 45px보다 커지므로(아래
+     .site-footer의 좁은 화면 오버라이드 참고) 이 규칙도 같은 폭에서 같은
+     값으로 늘려 겹침을 막는다. */
+  @media (max-width: 479px) {
+    .section-stage {
+      inset: 72px 0 calc(64px + env(safe-area-inset-bottom, 0px));
+    }
+  }
+
+  /* 320px 폭에서 이메일, 저작권, github 링크 세 항목이 한 줄에 다 들어가지
+     못해 각자 줄바꿈된다(간격 포함 약 57px, t8 line-height 16.5px 세 줄 +
+     gap-y-1 4px 두 개). 기본 45px 띠로는 넘친다. 내용을 지우는 대신 좁은
+     화면에서만 띠를 64px로 늘려 세 줄이 다 들어가게 한다(overflow 대신
+     배치로 해결). 위 .section-stage의 좁은 화면 오버라이드와 반드시 같은
+     값(64px)을 써야 한다. 다르면 Footer가 섹션 콘텐츠 위로 겹치거나 그
+     아래에 빈 공간이 남는다. */
+  .site-footer {
+    height: calc(45px + env(safe-area-inset-bottom, 0px));
+  }
+
+  @media (max-width: 479px) {
+    .site-footer {
+      height: calc(64px + env(safe-area-inset-bottom, 0px));
+    }
+  }
+
   .section-stage-horizontal {
     touch-action: pan-x pan-y pinch-zoom;
   }
@@ -541,6 +570,17 @@
     content-visibility: visible;
     opacity: 1;
     transition: opacity var(--animate-duration-slow) cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* 전환 끊김 완화. HomeClient가 "다음에 갈 섹션" 하나에만 .section-hidden과
+     함께 이 클래스를 얹는다. content-visibility만 visible로 올려 레이아웃·
+     페인트를 미리 끝내 두고, opacity·pointer-events는 .section-hidden
+     값(0·none) 그대로 둔다. 예열된 섹션도 여전히 보이지는 않는다.
+     .section-hidden보다 뒤에 있어야 한다: 둘 다 클래스 하나짜리 selector라
+     specificity가 같고, 같은 속성(content-visibility)을 다시 선언하는
+     이 규칙이 소스 순서로 이긴다. */
+  .section-prewarm {
+    content-visibility: visible;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -702,18 +742,15 @@
       transform: translateY(8px);
     }
 
-    /* transition: color, filter — 아래 .boot-start:hover 전기 충전 이펙트의
-       차오름·방전을 이 한 줄이 함께 처리한다(호버 진입·이탈 둘 다 대칭
-       0.5s로 보간된다). 세 이음매 브리프 2절 — 예전에는 color 전환만
-       버튼 className의 Tailwind transition-colors duration-300(300ms)이
-       따로 맡고 있어 광휘(filter, 0.5s)와 서로 다른 지속으로 어긋났다 —
-       색이 먼저 도달하고 광휘가 그 뒤로 따라와 "호버 효과가 두 개로
-       보인다"는 실기기 피드백을 냈다. color를 이 한 줄로 옮겨 광휘와
-       같은 지속·이징으로 묶는다(하나의 제스처). */
+    /* transition: filter. 아래 .boot-start:hover 전기 충전 이펙트(광휘)의
+       차오름·방전을 이 한 줄이 처리한다(호버 진입·이탈 둘 다 대칭 0.5s로
+       보간된다). 이전 라운드는 color 전환도 같은 줄에 묶어 광휘와 색이
+       함께 바뀌게 했지만, 사용자가 "광휘 효과만 남기도록" 정정했다.
+       hover에서 글자 색은 더 이상 바뀌지 않고 drop-shadow만 차오른다. */
     .boot-start {
       opacity: 0;
       transform: translateY(8px);
-      transition: color 0.5s ease-out, filter 0.5s ease-out;
+      transition: filter 0.5s ease-out;
     }
 
     [data-wordmark-mode='hero'] {

@@ -229,6 +229,23 @@ describe('Navigation', () => {
     expect(wordmark).toHaveAttribute('data-wordmark-mode', 'compact');
   });
 
+  it('overview 워드마크는 text-5xl/7xl/8xl이 아니라 display 스케일 토큰(text-d3/d2/d1)을 쓴다, 뮤테이션 (i)', () => {
+    // text-5xl(48px)/text-7xl(72px)/text-8xl(96px)은 design-tokens.css의
+    // --font-size-d3/d2/d1과 값이 정확히 같다. 뮤테이션 (i): text-8xl 등을
+    // 되살리면 아래 not.toMatch가 FAIL한다.
+    render(
+      <Navigation items={NAV_ITEMS} active="overview" onNavigate={() => {}} />
+    );
+
+    const nameSpan = screen.getByTestId('wordmark').querySelector('span')!;
+    expect(nameSpan.className).toMatch(/\btext-d3\b/);
+    expect(nameSpan.className).toMatch(/\bsm:text-d2\b/);
+    expect(nameSpan.className).toMatch(/\bmd:text-d1\b/);
+    expect(nameSpan.className).not.toMatch(
+      /\btext-5xl\b|\btext-7xl\b|\btext-8xl\b/
+    );
+  });
+
   it('Compact 항목과 양 끝 fade가 터치·접근성 계약을 지킨다', () => {
     render(
       <Navigation
@@ -259,7 +276,11 @@ describe('Navigation', () => {
     }
   });
 
-  it('활성 언더라인은 cyan 전체 폭이고 비활성 언더라인은 폭이 0이다', () => {
+  it('활성 언더라인은 scaleX(1)이고 비활성 언더라인은 scaleX(0)이다, 뮤테이션 (h)', () => {
+    // width를 transition-all로 애니메이션하던 것을 scaleX(transform)로
+    // 바꿨다(브리프 H6). 너비 자신은 항상 w-full로 고정하고 scale-x-*로만
+    // 그려진 폭을 표현한다. 뮤테이션 (h): w-full/w-0로 되돌리면 아래
+    // 어서션이 FAIL한다.
     render(
       <Navigation
         items={NAV_ITEMS}
@@ -274,8 +295,11 @@ describe('Navigation', () => {
     expect(activeUnderline).toBeInTheDocument();
     expect(activeUnderline).toHaveClass(
       'bg-[var(--color-cyan-core)]',
-      'w-full'
+      'w-full',
+      'origin-left',
+      'scale-x-100'
     );
+    expect(activeUnderline?.className).not.toMatch(/\bw-0\b/);
 
     const inactiveUnderline = screen
       .getByRole('button', { name: /about/i })
@@ -283,8 +307,30 @@ describe('Navigation', () => {
     expect(inactiveUnderline).toBeInTheDocument();
     expect(inactiveUnderline).toHaveClass(
       'bg-[var(--color-cyan-core)]',
-      'w-0'
+      'w-full',
+      'origin-left',
+      'scale-x-0'
     );
+    expect(inactiveUnderline?.className).not.toMatch(/\bw-0\b/);
+  });
+
+  it('언더라인이 transition-all이 아니라 transition-transform만 쓴다, 뮤테이션 (h)', () => {
+    // transition-all은 width가 다시 애니메이션 대상이 될 여지를 남긴다.
+    // transform만 지정해야 레이아웃을 건드리지 않는다는 기존 계약과 맞는다.
+    render(
+      <Navigation
+        items={NAV_ITEMS}
+        active="projects"
+        onNavigate={() => {}}
+      />
+    );
+
+    const underline = screen
+      .getByRole('button', { name: /projects/i })
+      .querySelector('span.absolute.bottom-0');
+
+    expect(underline?.className).toMatch(/\btransition-transform\b/);
+    expect(underline?.className).not.toMatch(/\btransition-all\b/);
   });
 
   it('desktop에서는 mount와 활성 변경과 focus를 중앙 정렬하지 않는다', () => {

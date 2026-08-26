@@ -37,6 +37,16 @@ describe('Footer — 하단 한 줄 크롬', () => {
     ).toHaveAttribute('href', contact.githubUrl);
   });
 
+  it('높이를 인라인 style이 아니라 site-footer 토큰 클래스로 소유한다', () => {
+    // 320px에서 세 줄로 접히는 문제(H4)를 좁은 화면 미디어쿼리로 풀려면
+    // 높이가 CSS 클래스여야 한다. 인라인 style은 media query를 못 받는다.
+    render(<Footer />);
+    const footer = screen.getByRole('contentinfo');
+
+    expect(footer).toHaveClass('site-footer');
+    expect(footer).not.toHaveAttribute('style');
+  });
+
   it('대형 CONTACT CTA 문구를 복제하지 않는다', () => {
     // CONTACT 섹션으로 "옮긴" 것이지 "복제"한 것이 아님을 반대 방향으로
     // 고정한다 — 이 문구가 하단 줄에도 남아 있으면 FAIL해야 한다.

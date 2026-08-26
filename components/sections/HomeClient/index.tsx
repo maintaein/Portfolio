@@ -27,6 +27,7 @@ import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useProjectModalObscured } from '@/hooks/useProjectModalObscured';
 import { useSectionSwipe } from '@/hooks/useSectionSwipe';
 import {
+  NAV_SEQUENCE,
   OVERVIEW,
   useSectionNav,
   type NavId,
@@ -174,6 +175,36 @@ export default function HomeClient() {
   reducedMotionRef.current = reducedMotion;
   routeResolvedRef.current = routeResolved;
   const isProjectModalOpen = useProjectModalObscured();
+
+  // 전환 끊김 완화. 비활성 섹션은 .section-hidden의 content-visibility:
+  // auto로 렌더를 건너뛴다. active가 바뀌는 순간 .section-visible로
+  // 올라가며 건너뛰던 서브트리 전체의 레이아웃·페인트가 전환이 시작되는 그
+  // 프레임에 몰려 워드마크 FLIP, 섹션 진입 타임라인과 겹쳤다. NAV_SEQUENCE
+  // 순서상 지금 active의 "다음" 섹션 하나만 미리 content-visibility를
+  // 올려 두면(opacity·pointer-events·inert는 .section-hidden 값 그대로)
+  // 그 비용이 전환 전에 이미 끝나 있다.
+  // START의 420ms 충전 구간을 굳이 별도로 훅하지 않은 이유는 이렇다.
+  // active 파생값이라 overview에 머무는 동안 계속 예열돼 420ms보다 훨씬
+  // 긴 여유를 번다. 순방향 연속 이동(about에서 projects로 같은 네비 클릭,
+  // 스와이프)도 같은 이유로 자연히 덮인다. 다만 역방향 이동과 건너뛰는
+  // 네비 점프(예: about에서 contact로)는 목적지가 "다음 하나"가 아니므로
+  // 덮이지 않는다(리포트 참고). reducedMotion에서는 애니메이션 자체가
+  // 없으므로 예열도 하지 않는다.
+  //
+  // isTransitioning을 함께 보는 이유가 이 예열의 핵심이다. prewarmId가
+  // active만 보고 파생되면, overview에서 about으로 넘어가는 그 커밋에서
+  // about이 싸게 올라가는 대신 projects가 hidden에서 prewarm으로 바뀐다.
+  // content-visibility가 그 프레임에 다시 올라가므로 지키려던 바로 그
+  // 프레임에 새 서브트리의 첫 렌더가 들어앉고, 끊김이 사라지는 게 아니라
+  // 옆 섹션으로 옮겨간다. setActive가 setActiveState와 setIsTransitioning을
+  // 같은 배치에서 부르므로 전환이 시작되는 렌더에는 이미 isTransitioning이
+  // true다. 그동안 예열을 멈췄다가 transitionend로 completeTransition이
+  // 닫아 준 뒤, 아무것도 움직이지 않을 때 다음 섹션을 데운다.
+  const prewarmId =
+    motionReady && !reducedMotion && !isTransitioning
+      ? NAV_SEQUENCE[NAV_SEQUENCE.indexOf(active) + 1]
+      : undefined;
+
   const sectionRefs = useRef<
     Partial<Record<NavId, HTMLDivElement | null>>
   >({});
@@ -369,6 +400,7 @@ export default function HomeClient() {
         {HOME_SECTION_CONFIG.map(({ id, label }) => {
           const Section = SECTION_COMPONENTS[id];
           const isActive = active === id;
+          const isPrewarm = !isActive && id === prewarmId;
 
           return (
             <div
@@ -381,7 +413,11 @@ export default function HomeClient() {
               aria-label={label}
               tabIndex={-1}
               className={`section-scroll ${
-                isActive ? 'section-visible' : 'section-hidden'
+                isActive
+                  ? 'section-visible'
+                  : isPrewarm
+                    ? 'section-hidden section-prewarm'
+                    : 'section-hidden'
               }`}
               // 비활성 섹션은 보이지 않아도 Tab으로 들어갈 수 있으므로 inert가 필요하다.
               inert={!isActive}

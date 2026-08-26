@@ -706,8 +706,9 @@ describe('BootSequence 구도 — 중앙 정렬·간격·CTA 위계', () => {
     // 뮤테이션 (d) — "START — ABOUT →"로 되돌리면 정확히 일치하지 않아 FAIL한다.
     expect(start.textContent).toBe('START');
 
-    // hover·focus-visible 신호 — 화살표가 빠진 자리를 대신한다.
-    expect(start.className).toContain('hover:text-[var(--color-cyan-hi)]');
+    // hover·focus-visible 신호. 화살표가 빠진 자리를 대신한다. 색 hover는
+    // 이번 라운드에서 뺐다(광휘만 남긴다, 아래 "호버는 광휘만" describe
+    // 참고). 그 계약은 여기서 반복하지 않는다.
     expect(start.className).toMatch(/focus-visible:/);
     for (const banned of [
       'rounded-lg',
@@ -872,52 +873,51 @@ describe('BootSequence 구도 — 중앙 정렬·간격·CTA 위계', () => {
   });
 });
 
-// 세 이음매 브리프 2절 — 호버 효과가 두 개로 보인다. 예전에는 버튼
-// className의 Tailwind transition-colors duration-300(색, 300ms)과
-// design-tokens.css .boot-start의 transition: filter 0.5s(광휘, 500ms)가
-// 서로 다른 속성·지속으로 갈라져 있어 색이 먼저 도달하고 광휘가 뒤늦게
-// 따라오는 두 사건으로 읽혔다. color를 같은 transition 한 줄로 옮겨
-// 광휘와 지속·이징을 통일했다.
-describe('BootSequence — 호버는 하나의 제스처다(색·광휘가 같은 지속으로 묶인다)', () => {
-  it('버튼 className에 별도 transition-colors/duration 유틸이 없다 — CSS 쪽 transition이 유일한 소유자다', () => {
+// 이 라운드가 이 계약을 뒤집었다. 이전 라운드는 색 전환과 광휘를 같은
+// 0.5초 transition으로 묶었지만("호버 효과가 두 개로 보인다" 결함 대응),
+// 사용자는 "광휘 효과만 남기도록" 정정했다. 색은 이제 호버에 전혀 반응하지
+// 않는다. 버튼 className에서 hover:text-[var(--color-cyan-hi)]를 뺐고,
+// .boot-start의 transition에서도 color를 뺐다. 클릭 충전(.boot-start-flash)은
+// 이 정정과 무관한 별개 keyframe이라 손대지 않았다(여전히 color와 filter를
+// 함께 쓴다, 위 "클릭하면 글자가 반짝이고" 테스트 참고).
+describe('BootSequence 호버는 광휘만 남는다(색은 반응하지 않는다)', () => {
+  it('버튼 className에 색 hover 유틸도 transition-colors/duration 유틸도 없다', () => {
     render(<Harness />);
     const start = screen.getByTestId('boot-start');
 
-    // 뮤테이션(자가 발견) — transition-colors나 duration-* 유틸이 되살아나면
-    // CSS의 transition과 다시 두 기술이 같은 속성을 겨루게 된다.
+    // 뮤테이션 (d): hover:text-[var(--color-cyan-hi)]가 되살아나면
+    // FAIL한다. 광휘만 계약의 핵심이다.
+    expect(start.className).not.toContain('hover:text-[var(--color-cyan-hi)]');
+    // transition-colors나 duration-* 유틸이 되살아나도 안 된다. CSS의
+    // filter transition이 유일한 소유자여야 한다.
     expect(start.className).not.toMatch(/transition-colors/);
     expect(start.className).not.toMatch(/\bduration-\d+\b/);
-    // hover 시 색이 바뀐다는 사실 자체는 여전히 유지한다(값은 Tailwind가,
-    // 타이밍은 CSS가 소유).
-    expect(start.className).toContain('hover:text-[var(--color-cyan-hi)]');
   });
 
-  it('.boot-start의 transition 한 줄이 color와 filter를 같은 지속·이징으로 묶는다 — 뮤테이션 (d)', () => {
+  it('.boot-start의 transition은 filter만 쓰고 color는 쓰지 않는다, 뮤테이션 (d)', () => {
     const override = noPreferenceOverrideBody('.boot-start');
     expect(override, '.boot-start의 no-preference 오버라이드를 찾지 못했다').toBeDefined();
 
     const transitionDecl = override!.match(/transition\s*:\s*([^;]+);/)?.[1];
     expect(transitionDecl, '.boot-start의 transition 선언을 찾지 못했다').toBeDefined();
 
-    const colorMatch = transitionDecl!.match(/\bcolor\s+([\d.]+)s/);
-    const filterMatch = transitionDecl!.match(/\bfilter\s+([\d.]+)s/);
-    expect(colorMatch, 'color 전환이 없다').not.toBeNull();
-    expect(filterMatch, 'filter 전환이 없다').not.toBeNull();
-
-    // 뮤테이션 (d) — 색 전환과 광휘 전환의 duration을 다시 갈라놓으면(예:
-    // color만 0.3s로) 두 값이 달라져 FAIL한다.
-    expect(colorMatch![1]).toBe(filterMatch![1]);
+    expect(transitionDecl).toMatch(/\bfilter\s+[\d.]+s/);
+    // 뮤테이션 (d): color 전환이 다시 들어오면(호버에 색이 반응하면)
+    // 이 어서션이 FAIL한다.
+    expect(transitionDecl).not.toMatch(/\bcolor\b/);
   });
 
-  it('호버 진입·이탈이 .boot-start 기본 규칙 하나의 transition만 쓴다 — 대칭, 뮤테이션 (e)', () => {
+  it('호버 진입·이탈이 .boot-start 기본 규칙 하나의 transition만 쓴다, 대칭, 뮤테이션 (e)', () => {
     const hoverBlock = noPreferenceOverrideBody('.boot-start:hover');
     expect(hoverBlock, '.boot-start:hover 오버라이드를 찾지 못했다').toBeDefined();
 
     // :hover 블록 자신이 transition을 다시 선언하면 진입(hover 시작)과
     // 이탈(.boot-start 기본 규칙으로 복귀)이 서로 다른 transition을 타게
-    // 되어 대칭이 깨질 위험이 생긴다 — 대칭은 단일 선언(.boot-start 기본,
+    // 되어 대칭이 깨질 위험이 생긴다. 대칭은 단일 선언(.boot-start 기본,
     // 위 테스트)에서만 나온다.
     expect(hoverBlock).not.toMatch(/transition\s*:/);
+    // :hover 블록 자신도 color를 건드리지 않는다. filter(광휘)만 쓴다.
+    expect(hoverBlock).not.toMatch(/\bcolor\s*:/);
   });
 });
 

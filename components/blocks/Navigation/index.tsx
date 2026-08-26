@@ -100,7 +100,10 @@ export default function Navigation({
             <span
               className={cn(
                 'block font-bold tracking-widest text-[var(--color-text-primary)]',
-                active === 'overview' ? 'text-5xl sm:text-7xl md:text-8xl' : 'text-t6'
+                // text-5xl/text-7xl/text-8xl(48/72/96px)은 이 저장소의
+                // display 스케일 --font-size-d3/d2/d1과 값이 정확히 같다.
+                // 커스텀 유틸 text-d3/d2/d1(design-tokens.css)로 옮긴다.
+                active === 'overview' ? 'text-d3 sm:text-d2 md:text-d1' : 'text-t6'
               )}
             >
               {PERSONAL_INFO.NAME_EN}
@@ -164,11 +167,15 @@ export default function Navigation({
                   >
                     {item.label}
                   </span>
+                  {/* width를 transition-all로 애니메이션하면 매 프레임 레이아웃을
+                      다시 계산한다(브리프 H6). 너비는 항상 w-full로 고정해 두고
+                      scaleX(transform)만 0과 1 사이로 애니메이션한다. origin-left가
+                      기준점을 왼쪽에 고정하므로 시각 결과는 같다. */}
                   <span
                     className={cn(
-                      'absolute bottom-0 left-0 h-px bg-[var(--color-cyan-core)]',
-                      'transition-all duration-300 ease-out origin-left',
-                      isActive ? 'w-full' : 'w-0'
+                      'absolute bottom-0 left-0 h-px w-full origin-left bg-[var(--color-cyan-core)]',
+                      'transition-transform duration-300 ease-out',
+                      isActive ? 'scale-x-100' : 'scale-x-0'
                     )}
                   />
                 </button>

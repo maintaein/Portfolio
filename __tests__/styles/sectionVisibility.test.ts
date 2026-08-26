@@ -9,6 +9,19 @@ function ruleBody(selector: string): string | undefined {
   return css.match(new RegExp(`^  ${escapedSelector}\\s*\\{([\\s\\S]*?)^  \\}`, 'm'))?.[1];
 }
 
+// .site-footer 높이와 .section-stage 하단 여백은 320px 폭에서 같은 값으로
+// 함께 늘어나야 한다(footer-jank-report H4). 두 규칙이 각각 자기만의
+// @media (max-width: 479px) 블록 안에 있으므로, 그 블록 하나 안에서
+// selector의 본문만 뽑아낸다.
+function narrowViewportRuleBody(selector: string): string | undefined {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(
+    `@media \\(max-width: 479px\\) \\{\\n {4}${escapedSelector}\\s*\\{([\\s\\S]*?)^ {4}\\}`,
+    'm'
+  );
+  return css.match(pattern)?.[1];
+}
+
 // touch-action은 값을 나열로 비교하지 않고 허용 토큰의 집합으로 판정한다.
 // 순서가 바뀌거나 모르는 값이 추가돼도 fail-closed가 되게 하기 위함이다.
 function allowedTouchActions(selector: string): string[] {
@@ -47,6 +60,35 @@ describe('section visibility utilities', () => {
 
     expect(visible).toMatch(/content-visibility\s*:\s*visible\s*;/);
     expect(visible).toMatch(/opacity\s*:\s*1\s*;/);
+  });
+
+  // HomeClient가 "다음에 갈 섹션" 하나에만 .section-hidden과 함께 이
+  // 클래스를 얹는다. content-visibility만 올리고 opacity·pointer-events는
+  // .section-hidden 값(0·none)에 맡겨야 예열된 섹션도 여전히 안 보인다.
+  it('defines .section-prewarm that only raises content-visibility, never opacity or pointer-events', () => {
+    const prewarm = ruleBody('.section-prewarm');
+
+    expect(prewarm, '.section-prewarm 규칙이 없다').toBeDefined();
+    expect(prewarm).toMatch(/content-visibility\s*:\s*visible\s*;/);
+    // 이 값들을 .section-prewarm 자신이 다시 선언하면 예열된 섹션이 실제로
+    // 보이거나 클릭 가능해진다. .section-hidden의 은닉을 반드시 그대로
+    // 물려받아야 한다.
+    expect(prewarm).not.toMatch(/opacity\s*:/);
+    expect(prewarm).not.toMatch(/pointer-events\s*:/);
+  });
+
+  // 두 규칙 다 한 클래스짜리 selector라 specificity가 같다. 같은 속성을
+  // 다시 선언하는 쪽이 이기려면 소스에서 더 뒤에 있어야 한다.
+  // .section-prewarm이 .section-hidden보다 앞으로 옮겨지면 예열이 실제로는
+  // content-visibility를 올리지 못한다(원래 .section-hidden의 auto가
+  // 이겨버린다).
+  it('places .section-prewarm after .section-hidden so it wins the cascade', () => {
+    const hiddenIndex = css.indexOf('.section-hidden {');
+    const prewarmIndex = css.indexOf('.section-prewarm {');
+
+    expect(hiddenIndex).toBeGreaterThan(-1);
+    expect(prewarmIndex).toBeGreaterThan(-1);
+    expect(prewarmIndex).toBeGreaterThan(hiddenIndex);
   });
 
   it('uses the shared easing for both transitions', () => {
@@ -95,6 +137,40 @@ describe('section visibility utilities', () => {
       /inset\s*:\s*72px 0 calc\(45px \+ env\(safe-area-inset-bottom, 0px\)\)\s*;/
     );
     expect(stage).toMatch(/overflow\s*:\s*hidden\s*;/);
+  });
+
+  // Footer가 320px 폭에서 세 줄로 접히면(이메일, 저작권, github 링크) 약
+  // 57px이 되어 기본 45px 띠를 넘친다(jank-and-cleanup 브리프 H4). 내용을
+  // 지우지 않고 좁은 화면에서만 .site-footer 높이와 .section-stage 하단
+  // 여백을 함께 늘려 겹침 없이 세 줄이 다 들어가게 한다.
+  it('defines .site-footer with a 45px baseline that matches .section-stage', () => {
+    const footer = ruleBody('.site-footer');
+
+    expect(footer, '.site-footer 규칙이 없다').toBeDefined();
+    expect(footer).toMatch(
+      /height\s*:\s*calc\(45px \+ env\(safe-area-inset-bottom, 0px\)\)\s*;/
+    );
+  });
+
+  it('grows .site-footer and .section-stage together under 480px so three wrapped lines fit', () => {
+    const footerNarrow = narrowViewportRuleBody('.site-footer');
+    const stageNarrow = narrowViewportRuleBody('.section-stage');
+
+    expect(footerNarrow, '.site-footer의 좁은 화면 오버라이드가 없다').toBeDefined();
+    expect(stageNarrow, '.section-stage의 좁은 화면 오버라이드가 없다').toBeDefined();
+
+    const footerHeight = footerNarrow!.match(/height\s*:\s*calc\((\d+)px/)?.[1];
+    const stageBottom = stageNarrow!.match(
+      /inset\s*:\s*72px 0 calc\((\d+)px/
+    )?.[1];
+
+    expect(footerHeight, '.site-footer 좁은 화면 height를 못 찾았다').toBeDefined();
+    expect(stageBottom, '.section-stage 좁은 화면 inset을 못 찾았다').toBeDefined();
+    // 이 값이 서로 다르면 Footer가 섹션 콘텐츠 위로 겹치거나 그 아래에
+    // 빈 공간이 남는다.
+    expect(footerHeight).toBe(stageBottom);
+    // 기본 45px보다는 커야 한다. 안 커지면 320px 오버플로가 그대로 남는다.
+    expect(Number(footerHeight)).toBeGreaterThan(45);
   });
 
   it('defines each section as an independent vertical scroll container', () => {

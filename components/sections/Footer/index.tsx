@@ -15,10 +15,7 @@ export default function Footer() {
   const year = new Date().getFullYear();
 
   return (
-    <footer
-      className="fixed inset-x-0 bottom-0 z-40 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 px-4 text-center text-t8 text-[var(--color-text-secondary)]"
-      style={{ height: 'calc(45px + env(safe-area-inset-bottom, 0px))' }}
-    >
+    <footer className="site-footer fixed inset-x-0 bottom-0 z-40 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 px-4 text-center text-t8 text-[var(--color-text-secondary)]">
       <a
         href={`mailto:${contact.email}`}
         className="hover:text-[var(--color-cyan-core)] transition-colors duration-300"
