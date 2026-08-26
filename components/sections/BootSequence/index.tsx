@@ -9,7 +9,6 @@ import ParticleText, {
   type ParticleTextHandle,
   type ParticleTextTier,
 } from '@/components/blocks/ParticleText';
-import ClickSpark from '@/components/blocks/ClickSpark';
 
 export interface BootSequenceProps {
   active: NavId;
@@ -37,18 +36,30 @@ export interface BootSequenceProps {
 //
 // 파티클이 먼저 완전히 뭉치고, 뭉침이 끝나는 정확히 그 순간 DOM 이름이
 // 나타난다(핸드오프) — 크로스페이드가 아니다. NAME_HANDOFF_AT 하나가 세
-// 가지 시각의 단일 출처다: 파티클 형성 종료 = DOM 이름 등장(한 프레임,
-// 페이드 아님) = 배경 노출 시작(onNameRevealed). 파티클의 durationMs prop도
-// 이 값에서 파생된다(NAME_HANDOFF_AT_MS) — 두 컴포넌트가 각자 다른 상수를
-// 들고 있지 않다.
+// 가지 시각의 단일 출처다: 파티클 형성 종료 = DOM 이름 등장 = 배경 노출
+// 시작(onNameRevealed). 파티클의 durationMs prop도 이 값에서 파생된다
+// (NAME_HANDOFF_AT_MS) — 두 컴포넌트가 각자 다른 상수를 들고 있지 않다.
 //
-//   0.00–0.90  캔버스에서 파티클이 흩어진 상태→이름 형태로 뭉친다 | DOM 이름은 opacity 0, 배경은 보이지 않는다
-//   0.90       핸드오프 — 파티클 캔버스 비움, DOM opacity 0→1(한 프레임), 배경 페이드 시작
+// 파티클 이음매 브리프(5차) — "뭉친 파티클"과 "안티앨리어싱된 실제 글자"는
+// 애초에 다른 그림이라(반지름 vs 안티앨리어싱) 한 프레임 하드 스왑은
+// 아무리 타이밍을 맞춰도 툭 끊겨 보였다. 마지막 SEAM_OVERLAP_MS 동안만
+// 캔버스 페이드아웃(ParticleText 내부, seamMs prop)과 DOM 이름 페이드인이
+// 겹친다 — 3차 피드백이 거부한 0.55초 병렬 페이드(반 초 동안 파티클과
+// 이름이 둘 다 따로 보였다)와는 다르다. 상한은 150ms(테스트가 고정), 지금
+// 쓰는 값은 그 안의 120ms다.
+//
+//   0.00–0.78  캔버스에서 파티클이 흩어진 상태→이름 형태로 뭉친다 | DOM 이름은 opacity 0, 배경은 보이지 않는다
+//   0.78–0.90  겹침(SEAM_OVERLAP_MS) — 캔버스가 흐려지며 사라진다 | DOM 이름이 같은 창에서 페이드인한다
+//   0.90       핸드오프 종료 — 파티클 캔버스 완전히 비움, DOM opacity 1 확정, 배경 페이드 시작
 //   1.05–1.30  idle                                               | 역할 라벨
 //   1.30–1.55  idle                                               | START + 밑줄 draw(0.35s, 1.90 종료)
 //   1.55–2.00  버퍼
 const NAME_HANDOFF_AT = 0.9;
 const NAME_HANDOFF_AT_MS = NAME_HANDOFF_AT * 1000;
+// 이음매 겹침 구간(ms) — 위 표의 [0.78, 0.90] 창의 길이. 상한 150ms를
+// 테스트가 고정한다(__tests__/components/BootSequence.test.tsx).
+const SEAM_OVERLAP_MS = 120;
+const SEAM_OVERLAP_SECONDS = SEAM_OVERLAP_MS / 1000;
 const ROLE_REVEAL_AT = 1.05;
 const ROLE_REVEAL_DURATION = 0.25; // 종료 시각 1.30초
 const START_REVEAL_AT = 1.3;
@@ -56,26 +67,14 @@ const START_REVEAL_DURATION = 0.25; // 종료 시각 1.55초
 const UNDERLINE_DRAW_DURATION = 0.35; // 종료 시각 1.90초(버퍼 구간까지 살짝 걸친다)
 
 // START 클릭 후 실제 섹션 전환(onStart)까지의 지연(ms). 클릭 링은 터널
-// 진입 브리프(3차)에서 제거됐다 — 대신 글자가 --color-cyan-hi로 반짝인다
-// (.boot-start-flash, 0.42s, 정점은 40% 지점 ≈168ms). 지연은 그 정점을
-// 확실히 지나 "차오름"이 보인 뒤에 전환이 시작되도록 재조정했다(이전 링
-// 기준 220ms에서 소폭 상향). 부팅 2초 계약과는 별개 예산이다(START를
-// 눌러야만 발생하고, 부팅 자체의 길이에는 포함되지 않는다).
-//
-// 파티클 형성 브리프(4차)가 클릭에 ClickSpark(짧은 스파크 분출, 아래 참고)를
-// 더했다 — 재검토 결과 이 값은 그대로 둔다. 스파크는 220ms로 조정해 이
-// 지연보다 먼저 끝나고, 반짝임의 정점(168ms)도 여전히 그 안에 들어온다 —
-// 두 효과 모두 전환이 시작되기 전에 눈에 보일 시간을 확보한다.
-const START_TRANSITION_DELAY_MS = 230;
-
-// ClickSpark(클릭) — 짧고 절제된 파티클 분출. 배경이 이미 팽창하는 광선
-// 터널이라 과하면 노이즈 위의 노이즈가 된다(파티클 형성 브리프 2절, 2차
-// 감사가 클릭 링을 반대한 것과 같은 이유). duration은 START_TRANSITION_
-// DELAY_MS(230ms)보다 짧게 잡아 전환이 시작되기 전에 스스로 끝난다.
-const CLICK_SPARK_COUNT = 5;
-const CLICK_SPARK_SIZE_PX = 8;
-const CLICK_SPARK_RADIUS_PX = 14;
-const CLICK_SPARK_DURATION_MS = 220;
+// 진입 브리프(3차)에서 제거됐다 — 대신 글자가 --color-cyan-hi로 반짝이며
+// 호버와 같은 필터(drop-shadow) 충전이 함께 걸린다(.boot-start-flash,
+// 0.42s, design-tokens.css). 파티클 이음매 브리프(5차)가 ClickSpark(캔버스
+// 스파크)를 걷어내고 이 반짝임 자체를 "충전"으로 강화했다 — 스파크가 실기기에서
+// 안 보인다는 피드백에 스파크를 고치는 대신 걷어내고, 이미 있던 충전 언어를
+// 더 세게 재사용했다. 지연은 키프레임 전체 길이(0.42s)와 맞춰 충전이 다
+// 보인 뒤에 전환이 시작되게 한다(이전 230ms에서 상향).
+const START_TRANSITION_DELAY_MS = 420;
 
 export default function BootSequence({
   active,
@@ -199,22 +198,35 @@ export default function BootSequence({
         );
 
         if (wordmarkEl) {
-          // 핸드오프(브리프 3절) — 크로스페이드가 아니라 정확히 이 한
-          // 순간(NAME_HANDOFF_AT)에 파티클이 완전히 뭉치는 것과 DOM 이름이
-          // 나타나는 것이 동시에 일어난다. tl.fromTo의 트윈 duration을
-          // 걷어내고 tl.set으로 한 프레임 전환을 쓴다 — "0.55초 페이드가
-          // 아니라 한 프레임 전환이어야 한다"는 표제 계약. pre-boot
+          // 핸드오프(브리프 3절, 이음매 완화는 5차) — 크로스페이드가 아니라
+          // 마지막 SEAM_OVERLAP_MS 동안만 캔버스 페이드아웃(ParticleText
+          // 내부)과 겹친다. 3차 피드백이 거부한 0.55초 병렬 페이드(반 초
+          // 동안 파티클과 이름이 둘 다 따로 보였다)와 다르다 — 이번 겹침은
+          // SEAM_OVERLAP_MS(<=150ms 상한, 테스트가 고정)뿐이고 흐려지는
+          // 캔버스 "뒤"에서 일어나 이음매 자체가 거의 안 보인다. pre-boot
           // opacity(0)는 여전히 CSS([data-wordmark-mode='hero'],
-          // design-tokens.css)가 소유한다 — GSAP은 핸드오프 순간에만 1로
-          // 뒤집는다(그 전에는 인라인 style을 전혀 건드리지 않는다).
-          tl.set(wordmarkEl, { opacity: 1 }, NAME_HANDOFF_AT);
+          // design-tokens.css)가 소유한다 — immediateRender:false가 없으면
+          // gsap이 이 트윈을 만드는 즉시(포지션과 무관하게) opacity:0을
+          // 동기로 인라인에 써버려 "핸드오프 전까지 JS가 인라인을 안
+          // 건드린다"는 계약이 겹침 구간 시작 전에 깨진다 — 반드시 켜 둔다.
+          tl.fromTo(
+            wordmarkEl,
+            { opacity: 0 },
+            {
+              opacity: 1,
+              duration: SEAM_OVERLAP_SECONDS,
+              ease: 'none',
+              immediateRender: false,
+            },
+            NAME_HANDOFF_AT - SEAM_OVERLAP_SECONDS
+          );
         }
 
         // 배경 노출 트리거 — 파티클 뭉침이 끝나는 것과 정확히 같은 순간에
         // 부모(HomeClient)가 Hyperspeed 배경을 페이드로 드러낸다. 위
-        // wordmarkEl.set과 같은 위치(NAME_HANDOFF_AT)에 둬 "두 시각이 한
-        // 곳에서 정해진다"는 계약을 만족한다 — 상수가 아니라 타임라인
-        // 위치 자체가 단일 출처다.
+        // wordmarkEl 트윈이 끝나는 위치(NAME_HANDOFF_AT)와 같은 곳에 둬 "두
+        // 시각이 한 곳에서 정해진다"는 계약을 만족한다 — 상수가 아니라
+        // 타임라인 위치 자체가 단일 출처다.
         tl.call(() => onNameRevealed?.(), undefined, NAME_HANDOFF_AT);
 
         if (roleEl) {
@@ -318,12 +330,12 @@ export default function BootSequence({
   const hiddenFromOverview = active !== OVERVIEW;
 
   // START 버튼 자체 — 호버 시 전기 충전 효과(순수 CSS, .boot-start:hover +
-  // design-tokens.css)와 ClickSpark(클릭)가 이 마크업을 감싼다. Magnet(자석
-  // 추종 호버)은 사용자 판단으로 걷어냈다 — "디자인 나쁨. 호버 시 효과를
-  // 자석이 아닌, 전기적 에너지가 글씨에 충전되는듯한 이펙트로" 재검토 결과다.
-  // 아래에서 한 번만 정의해 두 분기(reducedMotion 여부)가 같은 버튼을
-  // 공유한다 — 복제하면 두 노드가 되어 FLIP·단일 노드 계약과 같은 부류의
-  // 문제(표현이 둘)가 생긴다.
+  // design-tokens.css)가 이 마크업에 걸린다. Magnet(자석 추종 호버)은 사용자
+  // 판단으로 걷어냈다 — "디자인 나쁨. 호버 시 효과를 자석이 아닌, 전기적
+  // 에너지가 글씨에 충전되는듯한 이펙트로" 재검토 결과다. ClickSpark(캔버스
+  // 스파크)도 파티클 이음매 브리프(5차)에서 걷어냈다 — "스파크 안 보임"
+  // 피드백에 스파크 자체를 고치는 대신 걷어내고, 클릭 시 아래 boot-start-flash
+  // (호버와 같은 filter drop-shadow 충전 언어)를 강화하는 쪽을 택했다.
   const startButton = (
     <button
       ref={startRef}
@@ -352,9 +364,10 @@ export default function BootSequence({
             반응이므로 "글자 자신에는 어떤 CSS 애니메이션도 걸리지
             않는다"는 계약(위 주석)은 정지 상태 한정으로 좁혀 유지한다.
             reducedMotion에서는 클래스를 걸지 않는다 — 호흡·개수 램프와
-            같은 원칙. 파티클 형성 브리프(4차)가 ClickSpark(아래)를
-            더했지만 이 반짝임은 그대로 유지한다 — 두 효과 모두 짧고
-            절제되게 조정해 함께 있어도 노이즈 위의 노이즈가 되지 않는다. */}
+            같은 원칙. 파티클 이음매 브리프(5차)가 이 키프레임에 filter
+            (drop-shadow) 스텝을 더해 호버 충전과 같은 언어로 강화했다 —
+            ClickSpark를 대신한다. key 리마운트만으로 재생되므로 hover
+            상태와 무관하다(모바일에서도 그대로 발동한다). */}
         <span
           key={flashKey}
           data-testid="boot-start-text"
@@ -377,26 +390,6 @@ export default function BootSequence({
     </button>
   );
 
-  // ClickSpark는 reducedMotion에서 아예 렌더하지 않는다(캔버스·리스너 자체를
-  // 만들지 않는다) — 스파크는 "값이 0"으로 끌 방법이 없어(클릭 시 항상
-  // 스파크를 만드는 구조) 컴포넌트 자체를 조건부로 뺀다. 전기 충전 호버는
-  // 순수 CSS(.boot-start:hover, no-preference 미디어쿼리 안)라 별도 wrapper가
-  // 필요 없다 — reducedMotion 게이팅은 그 미디어쿼리 자신이 이미 한다.
-  const startInteractive = reducedMotion ? (
-    startButton
-  ) : (
-    <ClickSpark
-      sparkColorVar="--color-cyan-hi"
-      sparkColorFallback="#7fe3ee"
-      sparkCount={CLICK_SPARK_COUNT}
-      sparkSize={CLICK_SPARK_SIZE_PX}
-      sparkRadius={CLICK_SPARK_RADIUS_PX}
-      duration={CLICK_SPARK_DURATION_MS}
-    >
-      {startButton}
-    </ClickSpark>
-  );
-
   return (
     <>
       {/* 이름 파티클 형성 — 순수 장식(aria-hidden·pointer-events-none)이고
@@ -409,6 +402,7 @@ export default function BootSequence({
           wordmarkRef={wordmarkRef}
           tier={particleTier}
           durationMs={NAME_HANDOFF_AT_MS}
+          seamMs={SEAM_OVERLAP_MS}
         />
       ) : null}
       {/* 워드마크(Navigation)와 같은 뷰포트 50% 기준점을 쓴다 — margin-top의
@@ -434,10 +428,8 @@ export default function BootSequence({
             t5/태블릿 t3/데스크톱 t2로 역할 라벨(t8 고정)과 항상 2배 이상
             벌어지게 한다 — "속삭임 → 행동"이 성립하는 최소 비율. 화살표·
             목적지 표기 없이 텍스트만 남긴다(3라운드 사용자 판단). 마크업
-            자체는 위 startButton(및 이를 감싸는 startInteractive)에서
-            정의한다 — reducedMotion이면 버튼 그대로, 아니면 ClickSpark로
-            감싼다(파티클 형성 브리프 2절). */}
-        {startInteractive}
+            자체는 위 startButton에서 정의한다. */}
+        {startButton}
       </div>
     </>
   );

@@ -5,7 +5,7 @@
 // 걸리는가(파티클 수·DPR), 어떤 값이 하드코딩되지 않고 DOM에서 읽히는가
 // (폰트·색). 시각적 결과(픽셀 정합)는 실기기 확인 사항이다(리포트 참고).
 import { createRef } from 'react';
-import { act, render } from '@testing-library/react';
+import { act, cleanup, render } from '@testing-library/react';
 import {
   afterEach,
   beforeEach,
@@ -422,5 +422,162 @@ describe('ParticleText — 폰트·색을 DOM에서 읽는다(하드코딩 금�
       )
     ).not.toThrow();
     expect(ctx.getImageData).toHaveBeenCalledTimes(1);
+  });
+});
+
+// 파티클 이음매 브리프 — 두 그림(뭉친 파티클 vs 안티앨리어싱된 실제 글자)이
+// 애초에 다르다는 진단에 대한 세 수단 중 (가): 반지름을 sampleStep에
+// 비례시키고 수렴하며 커지게 한다. jsdom은 실제 픽셀을 계산하지 않으므로
+// "이웃과 실제로 겹쳐 보이는가"는 증명할 수 없다 — 여기서는 ctx.arc에 넘어간
+// 반지름 인자(세 번째 인자) 값 자체를 구조적으로 고정한다.
+describe('ParticleText — 파티클 반지름은 sampleStep에 비례하고 수렴하며 커진다', () => {
+  function maxRadiusAt(tier: 'high' | 'medium', elapsedMs: number) {
+    // 이전 호출이 아직 완료되지 않은 rAF를 다시 예약해 뒀을 수 있다(elapsed가
+    // durationMs 전이라 frame()이 스스로를 재예약한다) — 그 잔여 콜백이 이번
+    // 호출의 큐 맨 앞에 남아 flushOneFrame이 엉뚱한(이전 tier의) 콜백을 집는
+    // 것을 막는다. 마운트된 이전 컴포넌트도 함께 정리한다.
+    cleanup();
+    rafCallbacks = [];
+
+    const ctx = mockWorkingCanvas();
+    mockWordmarkRect(400, 150);
+    const wordmarkRef = renderWithSpan();
+    const ref = createRef<ParticleTextHandle>();
+
+    render(
+      <ParticleText ref={ref} wordmarkRef={wordmarkRef} tier={tier} durationMs={200} />
+    );
+
+    act(() => {
+      ref.current?.play();
+    });
+    ctx.arc.mockClear();
+    flushOneFrame(elapsedMs);
+
+    const radii = ctx.arc.mock.calls.map((call) => call[2] as number);
+    expect(radii.length, `${tier} tier에서 arc 호출이 없다`).toBeGreaterThan(0);
+    return Math.max(...radii);
+  }
+
+  it('medium(간격 4px)의 반지름이 high(간격 2px)보다 크고, 지름/간격 비율이 1.3~1.5 범위 안이다 — 뮤테이션 (a)·(b)', () => {
+    const highMax = maxRadiusAt('high', 199); // durationMs(200) 직전 — 수렴 거의 완료
+    const mediumMax = maxRadiusAt('medium', 199);
+
+    // 뮤테이션 (a) — 다시 고정 반지름(예: 1.6px 그대로)으로 되돌리면 두
+    // tier가 같은 값이 되어 FAIL한다.
+    expect(mediumMax).toBeGreaterThan(highMax);
+
+    // 뮤테이션 (b) — sampleStep과 무관한 공식으로 바꾸면(예: 항상 2px)
+    // 아래 비율(지름/간격) 중 최소 하나가 1.3~1.5 범위를 벗어나 FAIL한다.
+    const highRatio = (highMax * 2) / 2; // 지름 / high의 sampleStep(2)
+    const mediumRatio = (mediumMax * 2) / 4; // 지름 / medium의 sampleStep(4)
+    for (const ratio of [highRatio, mediumRatio]) {
+      expect(ratio).toBeGreaterThanOrEqual(1.3);
+      expect(ratio).toBeLessThanOrEqual(1.5);
+    }
+  });
+
+  it('출발 시 작게, 수렴하며 최종 반지름까지 커진다 — 뮤테이션 (c)', () => {
+    const ctx = mockWorkingCanvas();
+    mockWordmarkRect(400, 150);
+    const wordmarkRef = renderWithSpan();
+    const ref = createRef<ParticleTextHandle>();
+
+    render(
+      <ParticleText ref={ref} wordmarkRef={wordmarkRef} tier="medium" durationMs={200} />
+    );
+
+    act(() => {
+      ref.current?.play();
+    });
+
+    // 같은 파티클(배열 순서가 고정이므로 매 프레임 첫 arc 호출은 항상
+    // particles[0])의 반지름을 초반과 종료 직전 두 시점에서 비교한다.
+    ctx.arc.mockClear();
+    flushOneFrame(0);
+    const earlyRadius = ctx.arc.mock.calls[0]?.[2] as number;
+
+    ctx.arc.mockClear();
+    flushOneFrame(199);
+    const lateRadius = ctx.arc.mock.calls[0]?.[2] as number;
+
+    // 뮤테이션 (c) — 처음부터 최종 크기로 고정하면(수렴 진행에 따른 증가를
+    // 제거하면) 두 값이 같아져 FAIL한다.
+    expect(lateRadius).toBeGreaterThan(earlyRadius);
+    expect(earlyRadius).toBeGreaterThan(0);
+    // 출발 크기는 최종 크기의 절반 아래여야 한다(START_RADIUS_RATIO=0.4).
+    expect(earlyRadius).toBeLessThan(lateRadius * 0.6);
+  });
+});
+
+// 파티클 이음매 브리프 — 세 수단 중 (나)(다): 형성 마지막 seamMs 동안 캔버스
+// 요소(그림이 아니라 요소 자신)가 흐려지며 페이드아웃한다. jsdom은 실제
+// 흐림·합성을 계산하지 않으므로 여기서는 canvas.style.opacity/filter에
+// 대입된 인라인 값 자체만 구조적으로 고정한다 — 사람 눈에 자연스러운지는
+// 실기기 확인 사항이다.
+describe('ParticleText — 이음매 완화(seamMs) — 캔버스 요소가 흐려지며 페이드아웃한다', () => {
+  it('겹침 구간 안에서만 중간값이 있다 — 구간 밖에서는 손대지 않는다, 뮤테이션 (d)·(f)', () => {
+    mockWorkingCanvas();
+    mockWordmarkRect();
+    const wordmarkRef = renderWithSpan();
+    const ref = createRef<ParticleTextHandle>();
+
+    const { getByTestId } = render(
+      <ParticleText
+        ref={ref}
+        wordmarkRef={wordmarkRef}
+        tier="high"
+        durationMs={200}
+        seamMs={40}
+      />
+    );
+    const canvas = getByTestId('particle-name-canvas') as HTMLCanvasElement;
+
+    act(() => {
+      ref.current?.play();
+    });
+
+    // 겹침 구간(seamStart = 200 - 40 = 160) 전 — 아직 손대지 않았다.
+    flushOneFrame(100);
+    expect(canvas.style.opacity).toBe('');
+    expect(canvas.style.filter).toBe('');
+
+    // 겹침 구간 한가운데(180) — 중간값이 있어야 한다. 이것이 "짧은 교차"
+    // 그 자체다. 뮤테이션 (d) — 흐림을 지우면 filter가 계속 ''로 남아
+    // FAIL한다. 뮤테이션 (f) — 겹침을 지우면(하드 스왑) opacity가 여전히
+    // ''이거나 이미 '0'이 되어 FAIL한다.
+    flushOneFrame(180);
+    const midOpacity = Number(canvas.style.opacity);
+    expect(midOpacity).toBeGreaterThan(0);
+    expect(midOpacity).toBeLessThan(1);
+    expect(canvas.style.filter).toMatch(/blur\(/);
+    expect(canvas.style.filter).not.toBe('blur(0px)');
+
+    // 형성 완료(>=200) — 완전히 비고 최대 흐림이다.
+    flushOneFrame(210);
+    expect(canvas.style.opacity).toBe('0');
+    expect(canvas.style.filter).toMatch(/blur\(3px\)/);
+  });
+
+  it('seamMs를 넘기지 않으면(기본값 0) 형성 완료까지 opacity·filter를 건드리지 않는다 — 회귀 안전망', () => {
+    mockWorkingCanvas();
+    mockWordmarkRect();
+    const wordmarkRef = renderWithSpan();
+    const ref = createRef<ParticleTextHandle>();
+
+    const { getByTestId } = render(
+      <ParticleText ref={ref} wordmarkRef={wordmarkRef} tier="high" durationMs={100} />
+    );
+    const canvas = getByTestId('particle-name-canvas') as HTMLCanvasElement;
+
+    act(() => {
+      ref.current?.play();
+    });
+    flushOneFrame(50);
+    expect(canvas.style.opacity).toBe('');
+
+    flushOneFrame(150); // durationMs(100) 이후 — 완료 분기
+    expect(canvas.style.opacity).toBe('');
+    expect(canvas.style.filter).toBe('');
   });
 });

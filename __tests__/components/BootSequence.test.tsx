@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { useRef } from 'react';
 import { renderToString } from 'react-dom/server';
-import { act, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import {
   afterEach,
   beforeEach,
@@ -392,24 +392,38 @@ describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨
     expect(atEnd, '좌→우로 그려지는 중이므로 시작 값과 달라야 한다').not.toBe(atStart);
   });
 
-  // HERO 재순서의 표제 계약. 파티클이 뭉치는 동안 DOM 이름이 함께 페이드인하면
-  // "따로 등장하는 두 컴포넌트"로 읽힌다(3차 실기기 피드백). 크로스페이드가
-  // 아니라 핸드오프여야 한다 — 핸드오프 직전까지 인라인이 비어 있고(CSS 은닉),
-  // 핸드오프 시각에 한 프레임으로 1이 된다. 중간값이 존재하면 그것은 페이드다.
-  it('이름은 페이드가 아니라 핸드오프 한 프레임으로 나타난다 — 중간값이 없다', async () => {
+  // HERO 재순서의 표제 계약 — 파티클 이음매 브리프(5차)로 좁혀졌다. 파티클이
+  // 뭉치는 동안 DOM 이름이 함께 페이드인하면 "따로 등장하는 두 컴포넌트"로
+  // 읽힌다(3차 실기기 피드백, 0.55초 병렬 페이드가 거부된 이유). 크로스페이드는
+  // 아니지만, 이제는 순수 한 프레임 스냅도 아니다 — 마지막 SEAM_OVERLAP_MS
+  // (120ms, 상한 150ms)에서만 짧게 겹친다. 겹침 구간 밖에서는 여전히 한쪽만
+  // 보인다(뮤테이션 (f) — 겹침을 지우고 하드 스왑으로 되돌리면 중간값이
+  // 사라져 FAIL한다. 뮤테이션 (e) — 겹침을 550ms로 늘리면 아래 SEAM_OVERLAP_MS
+  // 상한 테스트가 FAIL한다).
+  it('이름은 겹침 구간(마지막 120ms)에서만 페이드고, 구간 밖에서는 중간값이 없다 — 파티클 이음매 브리프', async () => {
     render(<Harness />);
     await flushGsapImport();
     const tl = capturedTimeline();
     const wordmark = screen.getByTestId('wordmark');
 
-    // 핸드오프(0.90) 직전 — JS는 아직 인라인을 건드리지 않았다.
+    // 겹침 구간 시작(0.78 = 0.90 - 0.12) 직전 — JS는 아직 인라인을 건드리지
+    // 않았다(CSS 은닉이 그대로 산다).
     act(() => {
-      tl.seek(0.89);
+      tl.seek(0.77);
     });
     expect(wordmark.style.opacity).toBe('');
 
-    // 핸드오프 시각 — 곧바로 1이다. 0과 1 사이 값이 나오면 페이드라는 뜻이라
-    // 이 어서션이 잡는다(뮤테이션 (e) — 0.55초 페이드로 되돌리기).
+    // 겹침 구간 한가운데(0.84) — 중간값이 있어야 한다. 이것이 "짧은 교차"
+    // 그 자체다. 뮤테이션 (f) — 겹침을 지우면(tl.set으로 되돌리면) 이 값이
+    // ''(아직 안 건드림)이거나 '1'(이미 끝남)이 되어 FAIL한다.
+    act(() => {
+      tl.seek(0.84, false);
+    });
+    const mid = Number(wordmark.style.opacity);
+    expect(mid).toBeGreaterThan(0);
+    expect(mid).toBeLessThan(1);
+
+    // 핸드오프 종료(0.90) — 완전히 1이다.
     act(() => {
       tl.seek(0.9, false);
     });
@@ -455,9 +469,11 @@ describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨
     expect(wordmark.style.opacity).toBe('1');
   });
 
-  it('START 클릭은 반짝임이 보일 지연(230ms) 뒤 onStart를 호출한다 — 뮤테이션 (m)', () => {
+  it('START 클릭은 충전이 보일 지연(420ms) 뒤 onStart를 호출한다 — 뮤테이션 (m)', () => {
     // 터널 진입 브리프 4절 — 클릭 즉시 전환되면 "에너지가 차오르는" 반짝임을
-    // 볼 시간이 없다. onStart는 지연 뒤에만 불려야 한다(뮤테이션 (k)·(m)).
+    // 볼 시간이 없다. 파티클 이음매 브리프(5차)가 ClickSpark를 걷어내고
+    // 반짝임을 필터 충전으로 강화하며 지연을 키프레임 전체 길이(0.42s)에
+    // 맞춰 420ms로 올렸다. onStart는 지연 뒤에만 불려야 한다(뮤테이션 (k)·(m)).
     const onStart = vi.fn();
     render(<Harness onStart={onStart} />);
 
@@ -467,14 +483,14 @@ describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨
     expect(onStart, '클릭 즉시 불리면 안 된다').not.toHaveBeenCalled();
 
     act(() => {
-      vi.advanceTimersByTime(229);
+      vi.advanceTimersByTime(419);
     });
-    expect(onStart, '230ms 전에 불리면 안 된다').not.toHaveBeenCalled();
+    expect(onStart, '420ms 전에 불리면 안 된다').not.toHaveBeenCalled();
 
     act(() => {
-      vi.advanceTimersByTime(1); // 총 230ms
+      vi.advanceTimersByTime(1); // 총 420ms
     });
-    expect(onStart, '230ms 뒤에는 불려야 한다').toHaveBeenCalledTimes(1);
+    expect(onStart, '420ms 뒤에는 불려야 한다').toHaveBeenCalledTimes(1);
   });
 
   // 터널 진입 브리프 3절, 7경로 표 — "부팅 도중 언마운트·이탈 → 최종
@@ -576,20 +592,28 @@ describe('BootSequence 구도 — 중앙 정렬·간격·CTA 위계', () => {
     }
   });
 
-  it('워드마크를 t=0에 건드리지 않는다 — tl.set은 핸드오프 위치에서만 허용', () => {
+  it('워드마크를 t=0에 건드리지 않는다 — 트윈은 겹침 구간 시작 위치에서만 허용', () => {
     // 이전 결함(감사 H2): tl.set(wordmarkEl, {filter:'blur(5px)'}, 0)이 동적
     // import가 resolve된 뒤에야 실행돼, SSR로 선명하게 그려진 이름이 GSAP
     // 로드 시점에 갑자기 흐려지는 역방향 플래시를 만들었다.
     //
-    // HERO 재순서 이후 계약이 좁혀졌다. 핸드오프(NAME_HANDOFF_AT)에서는
-    // tl.set이 오히려 필수다 — 0.55초 페이드가 아니라 한 프레임 전환이어야
-    // 하기 때문이다. 금지되는 것은 t=0 위치의 tl.set뿐이다.
+    // 파티클 이음매 브리프(5차)가 핸드오프를 한 프레임에서 짧은 겹침 창으로
+    // 넓혔다 — wordmarkEl 트윈은 이제 NAME_HANDOFF_AT이 아니라
+    // (NAME_HANDOFF_AT - SEAM_OVERLAP_SECONDS)에서 시작한다. 금지되는 것은
+    // 여전히 t=0 위치뿐이다.
     const source = readFileSync(bootSequencePath, 'utf8');
 
-    // 위치 인자가 0인 tl.set(wordmarkEl, ...) — 역방향 플래시의 형태.
-    expect(source).not.toMatch(/tl\.set\(\s*wordmarkEl[^;]*,\s*0\s*\)/);
-    // 핸드오프 위치의 tl.set은 있어야 한다.
-    expect(source).toMatch(/tl\.set\(\s*wordmarkEl[^;]*NAME_HANDOFF_AT\s*\)/);
+    // 위치 인자가 0인 wordmarkEl 트윈 — 역방향 플래시의 형태.
+    expect(source).not.toMatch(/tl\.(?:set|fromTo|to)\(\s*wordmarkEl[^;]*,\s*0\s*\)/);
+    // 겹침 구간 시작 위치의 fromTo는 있어야 한다 — immediateRender:false도
+    // 함께(없으면 gsap이 트윈 생성 즉시 opacity:0을 동기로 써버려 아래
+    // "핸드오프 전까지 JS가 인라인을 안 건드린다" 테스트가 깨진다).
+    expect(source).toMatch(
+      /tl\.fromTo\(\s*wordmarkEl[\s\S]*?NAME_HANDOFF_AT\s*-\s*SEAM_OVERLAP_SECONDS\s*\)/
+    );
+    const wordmarkCall = source.match(/tl\.fromTo\(\s*wordmarkEl[\s\S]*?\);/)?.[0];
+    expect(wordmarkCall, 'wordmarkEl fromTo 호출을 찾지 못했다').toBeDefined();
+    expect(wordmarkCall).toMatch(/immediateRender\s*:\s*false/);
   });
 
   it('워드마크 버튼(FLIP 대상) 자신은 position·transform 계열 속성을 트윈하지 않는다 — FLIP 불변식', () => {
@@ -796,6 +820,35 @@ describe('BootSequence 구도 — 중앙 정렬·간격·CTA 위계', () => {
     )?.[1];
     expect(flashRule, '.boot-start-flash 규칙을 찾지 못했다').toBeDefined();
     expect(flashRule).not.toMatch(/infinite/);
+
+    // 파티클 이음매 브리프(5차) — ClickSpark를 걷어내고 이 반짝임을
+    // 호버(.boot-start:hover)와 같은 filter(drop-shadow) 언어로 강화했다.
+    // 뮤테이션 (j) — filter 스텝을 지우면 FAIL한다.
+    expect(keyframeBlock).toMatch(/filter\s*:\s*drop-shadow\(/);
+
+    // "더 강하게" — 호버보다 큰 drop-shadow 반경이어야 한다(뮤테이션 (j)).
+    const hoverBlock = noPreferenceOverrideBody('.boot-start:hover');
+    expect(hoverBlock, '.boot-start:hover 오버라이드를 찾지 못했다').toBeDefined();
+    const hoverBlur = Number(hoverBlock!.match(/drop-shadow\(0 0 (\d+)px/)?.[1]);
+    const chargeBlur = Number(keyframeBlock!.match(/drop-shadow\(0 0 (\d+)px/)?.[1]);
+    expect(Number.isNaN(hoverBlur)).toBe(false);
+    expect(Number.isNaN(chargeBlur)).toBe(false);
+    expect(chargeBlur).toBeGreaterThan(hoverBlur);
+  });
+
+  // 모바일 계약(뮤테이션 (k)) — 클릭 충전은 :hover 의사 클래스에 기대면
+  // 안 된다(모바일엔 hover가 없다). 위 테스트가 이미 :hover를 전혀
+  // 시뮬레이션하지 않은 채로 클릭만으로 클래스가 붙는 것을 확인했지만,
+  // 여기서는 CSS 소스 수준에서 못박는다 — boot-start-flash 키프레임 자체가
+  // :hover 셀렉터 밖(독립 클래스)에 있어야 한다.
+  it('클릭 충전은 :hover 의사 클래스와 무관한 독립 규칙이다 — 모바일 계약, 뮤테이션 (k)', () => {
+    // .boot-start-flash는 no-preference 미디어쿼리 밖(항상 정의된 클래스)에
+    // 있고, .boot-start:hover 셀렉터 문자열을 포함하지 않는다.
+    const flashSection = DESIGN_TOKENS_CSS.match(
+      /@keyframes boot-start-flash \{[\s\S]*?\n {2}\.boot-start-flash\s*\{[\s\S]*?\n {2}\}/
+    )?.[0];
+    expect(flashSection, 'boot-start-flash 섹션을 찾지 못했다').toBeDefined();
+    expect(flashSection).not.toMatch(/:hover/);
   });
 
   // 3차 실기기 피드백으로 제거했다. 버튼 크기의 220%라 START 위로 크게
@@ -870,7 +923,7 @@ describe('BootSequence — START 클릭 지연(반짝임 가시성 확보)과 �
     });
 
     act(() => {
-      vi.advanceTimersByTime(300); // 두 지연 모두 끝났을 시간
+      vi.advanceTimersByTime(450); // 두 지연 모두 끝났을 시간(420ms 지연)
     });
     expect(onStart).toHaveBeenCalledTimes(1);
   });
@@ -1130,6 +1183,45 @@ describe('BootSequence — 이름 파티클 형성(gating·트리거)', () => {
     expect(wordmark.style.opacity).toBe('1');
   });
 
+  it('SEAM_OVERLAP_MS는 150ms 상한을 넘지 않는다 — 파티클 이음매 브리프, 뮤테이션 (e)', () => {
+    const source = readFileSync(bootSequencePath, 'utf8');
+    const match = source.match(/const SEAM_OVERLAP_MS = (\d+(?:\.\d+)?);/);
+    expect(match, 'SEAM_OVERLAP_MS 선언을 찾지 못했다').toBeDefined();
+    const overlapMs = Number(match![1]);
+
+    expect(overlapMs).toBeGreaterThan(0);
+    // 뮤테이션 (e) — 겹침을 상한 밖(예: 550ms)으로 늘리면 이 계약이 FAIL한다.
+    expect(overlapMs).toBeLessThanOrEqual(150);
+  });
+
+  it('ParticleText에 seamMs(SEAM_OVERLAP_MS)를 그대로 내려준다 — 캔버스·DOM 겹침의 단일 출처', () => {
+    // 캔버스 페이드아웃(ParticleText 내부 seamMs)과 DOM 페이드인(wordmarkEl
+    // 트윈 시작 위치)이 서로 다른 값을 참조하면 "겹침"이 실제로 어긋난다.
+    const source = readFileSync(bootSequencePath, 'utf8');
+    // <ParticleText\s로 앵커링한다 — <ParticleText만 쓰면 <ParticleTextHandle>
+    // (useRef 타입 인자)도 매치해 훨씬 뒤의 첫 self-closing 태그까지
+    // 삼켜버린다(자가 발견 결함).
+    const particleTextCall = source.match(/<ParticleText\s[\s\S]*?\/>/)?.[0];
+    expect(particleTextCall, 'ParticleText 호출을 찾지 못했다').toBeDefined();
+    expect(particleTextCall).toMatch(/seamMs=\{SEAM_OVERLAP_MS\}/);
+  });
+
+  // 뮤테이션 (g) — NAME_HANDOFF_AT을 값만 같은 별도 상수로 쪼개면(예:
+  // BG_REVEAL_AT = 0.9를 따로 선언) 선언 개수는 1로 남을 수 있어도 아래
+  // 참조 중 최소 하나는 다른 식별자를 쓰게 돼 FAIL한다.
+  it('NAME_HANDOFF_AT은 단일 출처다 — 배경 노출·파티클 durationMs·겹침 시작이 모두 이 상수 하나를 참조한다, 뮤테이션 (g)', () => {
+    const source = readFileSync(bootSequencePath, 'utf8');
+    const declarations = source.match(/const NAME_HANDOFF_AT\s*=/g) ?? [];
+    expect(declarations, 'NAME_HANDOFF_AT 선언 개수').toHaveLength(1);
+
+    expect(source).toMatch(
+      /tl\.call\(\(\) => onNameRevealed\?\.\(\), undefined, NAME_HANDOFF_AT\);/
+    );
+    expect(source).toMatch(/NAME_HANDOFF_AT_MS = NAME_HANDOFF_AT \* 1000;/);
+    expect(source).toMatch(/durationMs=\{NAME_HANDOFF_AT_MS\}/);
+    expect(source).toMatch(/NAME_HANDOFF_AT - SEAM_OVERLAP_SECONDS/);
+  });
+
   it('BootSequence는 lib/deviceQuality의 detectQuality()를 부른다 — 강등 판정의 단일 출처', () => {
     const source = readFileSync(bootSequencePath, 'utf8');
     expect(source).toMatch(/detectQuality\(\)/);
@@ -1137,13 +1229,11 @@ describe('BootSequence — 이름 파티클 형성(gating·트리거)', () => {
   });
 });
 
-// START — Magnet(호버)·ClickSpark(클릭). 두 컴포넌트 자신의 세부 동작(이동
-// 범위 클램프·rAF idle 정지·색 해석)은 각각 __tests__/components/Magnet.test.tsx·
-// __tests__/components/ClickSpark.test.tsx가 직접 고정한다. 여기서는
-// BootSequence가 START 버튼을 올바르게 감싸고, reducedMotion에서 ClickSpark를
-// 아예 만들지 않는지를 본다.
-describe('BootSequence — START Magnet·ClickSpark 배선', () => {
-  it('START 버튼이 여전히 boot-start testid·44px 터치 타깃·밑줄을 갖는다 — Magnet/ClickSpark로 감싸도 마크업이 보존된다', () => {
+// START — Magnet(호버)은 3차에서, ClickSpark(클릭 캔버스 스파크)는 파티클
+// 이음매 브리프(5차)에서 걷어냈다. 여기서는 BootSequence가 START 버튼을
+// 올바르게 배선하고, 둘 다 더 이상 쓰이지 않는지를 본다.
+describe('BootSequence — START 배선(Magnet·ClickSpark 부재)', () => {
+  it('START 버튼이 여전히 boot-start testid·44px 터치 타깃·밑줄을 갖는다', () => {
     render(<Harness />);
     const start = screen.getByTestId('boot-start');
     expect(start.tagName).toBe('BUTTON');
@@ -1151,33 +1241,31 @@ describe('BootSequence — START Magnet·ClickSpark 배선', () => {
     expect(screen.getByTestId('boot-start-underline')).toBeInTheDocument();
   });
 
-  it('reducedMotion이 아니면 ClickSpark가 클릭 캔버스를 만든다', () => {
-    render(<Harness />);
-    // ClickSpark는 자신만의 <canvas>를 boot-sequence 컨테이너 안(START
-    // 버튼의 조상)에 렌더한다(components/blocks/ClickSpark). 이름 파티클
-    // 캔버스는 boot-sequence 컨테이너 *밖*(형제 fragment)에 렌더되므로
-    // 이 컨테이너 안에서 찾은 canvas는 반드시 ClickSpark의 것이다. Magnet은
-    // canvas를 만들지 않는다.
-    const container = screen.getByTestId('boot-sequence');
-    expect(container.querySelector('canvas')).toBeTruthy();
-  });
-
-  it('reducedMotion에서는 ClickSpark를 만들지 않는다 — 뮤테이션 (o)', () => {
-    render(<Harness reducedMotion />);
-    // reducedMotion에서는 이름 파티클 캔버스도 안 만들어지므로(위 describe)
-    // body 전체에 canvas가 하나도 없어야 한다 — ClickSpark가 만들어지면
-    // 이 값이 truthy가 되어 FAIL한다.
-    expect(document.body.querySelector('canvas')).toBeNull();
-  });
-
-  it('ClickSpark 색은 팔레트 상수(--color-cyan-hi)를 참조한다 — 뮤테이션 (p)', () => {
+  // ClickSpark 제거를 뒤집어 못박는다(브리프 "계약을 뒤집어 못박아라") —
+  // 되살리면(JSX 사용·import 어느 쪽이든) 아래 셋 중 하나가 FAIL한다.
+  // 뮤테이션 (i).
+  it('ClickSpark가 더 이상 쓰이지 않는다 — 컴포넌트도 캔버스도 없다, 뮤테이션 (i)', () => {
+    // 실제 사용(JSX·import)만 본다 — 걷어낸 경위를 설명하는 역사 주석(예:
+    // "ClickSpark(캔버스 스파크)도 파티클 이음매 브리프에서 걷어냈다")까지
+    // 금지하면 이 저장소의 다른 "지우지 않고 반대 방향으로 못박는다" 주석
+    // 관례(Magnet·클릭 링 등)와 어긋난다.
     const source = readFileSync(bootSequencePath, 'utf8');
-    const clickSparkCall = source.match(/<ClickSpark[\s\S]*?>/)?.[0];
-    expect(clickSparkCall, 'ClickSpark 호출을 찾지 못했다').toBeDefined();
-    expect(clickSparkCall).toMatch(/--color-cyan-hi/);
-    // 뮤테이션 (p) — 색을 팔레트 밖 임의 값(예: '#ff00ff')으로 바꾸면
-    // sparkColorVar가 그 문자열을 참조하지 않아 FAIL한다.
-    expect(clickSparkCall).not.toMatch(/#ff00ff/);
+    expect(source).not.toMatch(/<ClickSpark/);
+    expect(source).not.toMatch(/from '@\/components\/blocks\/ClickSpark'/);
+
+    render(<Harness />);
+    // ClickSpark는 항상 자신만의 <canvas>를 boot-sequence 컨테이너 안(START
+    // 버튼의 조상)에 렌더한다 — 이름 파티클 캔버스는 컨테이너 *밖*(형제
+    // fragment)에 렌더되므로, 이 컨테이너 안에서 canvas가 발견되면 반드시
+    // 되살아난 ClickSpark다.
+    const container = screen.getByTestId('boot-sequence');
+    expect(container.querySelector('canvas')).toBeNull();
+
+    // reducedMotion에서도 마찬가지로 없어야 한다(이름 파티클 캔버스도 이
+    // 경로에서 안 만들어지므로 body 전체에 canvas가 없어야 정상이다).
+    cleanup();
+    render(<Harness reducedMotion />);
+    expect(document.body.querySelector('canvas')).toBeNull();
   });
 
   // 사용자 판단으로 Magnet을 걷었다("디자인 나쁨"). 호버 반응은 전기 충전

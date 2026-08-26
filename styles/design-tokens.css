@@ -243,11 +243,25 @@
      "에너지가 차오르듯이" — 글자 색이 text-primary에서 cyan-hi로
      차올랐다(40% 지점) text-primary로 돌아온다. 1회성(infinite가 아니다)
      이고 BootSequence가 클릭마다 span을 key로 재마운트해야만 재생된다 —
-     상시 루프가 아니라 클릭 반응이라는 계약을 CSS 쪽에서도 지킨다. */
+     상시 루프가 아니라 클릭 반응이라는 계약을 CSS 쪽에서도 지킨다.
+     파티클 이음매 브리프(5차) — ClickSpark(캔버스 스파크)를 걷어내고 이
+     키프레임에 filter(drop-shadow)를 더했다. 아래 .boot-start:hover와 같은
+     기법이지만 반경을 2배로 키워 "더 강하게"를 만족한다(호버 6px/2px →
+     클릭 12px/5px). :hover 의사 클래스와 무관한 독립 클래스라 모바일에서
+     hover 없이도 그대로 발동한다. */
   @keyframes boot-start-flash {
-    0% { color: var(--color-text-primary); }
-    40% { color: var(--color-cyan-hi); }
-    100% { color: var(--color-text-primary); }
+    0% {
+      color: var(--color-text-primary);
+      filter: none;
+    }
+    40% {
+      color: var(--color-cyan-hi);
+      filter: drop-shadow(0 0 12px var(--color-cyan-hi)) drop-shadow(0 0 5px var(--color-cyan-core));
+    }
+    100% {
+      color: var(--color-text-primary);
+      filter: none;
+    }
   }
 
   .boot-start-flash {

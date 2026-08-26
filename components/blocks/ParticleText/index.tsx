@@ -31,6 +31,11 @@
 //   transform을 가지면 안 되므로(Navigation/index.tsx 계약), 캔버스를 그
 //   버튼 안에 겹쳐 넣는 대신 뷰포트 좌표(getBoundingClientRect)로 버튼
 //   위치를 읽어와 스스로 자리를 잡는다.
+// - 파티클 이음매 브리프(5차) — 반지름을 sampleStep에 비례시키고 수렴하며
+//   커지게 했다(DIAMETER_TO_STEP_RATIO·START_RADIUS_RATIO). seamMs prop을
+//   받으면 형성 마지막 그 ms 동안 캔버스 요소 자신이 흐려지며
+//   페이드아웃한다 — DOM 이름의 페이드인과 짧게 겹쳐 "툭 끊기는" 대신
+//   흐림 뒤로 이음매를 감춘다.
 import {
   forwardRef,
   useEffect,
@@ -51,6 +56,11 @@ interface ParticleTextProps {
   wordmarkRef: RefObject<HTMLElement | null>;
   tier: ParticleTextTier;
   durationMs: number;
+  // 이음매 완화(파티클 이음매 브리프) — 형성 마지막 seamMs 동안 캔버스
+  // 요소가 흐려지며 페이드아웃한다. BootSequence가 자신의 SEAM_OVERLAP_MS
+  // (단일 출처, 상한 150ms)를 그대로 내려준다. 기본값 0 — 넘기지 않으면
+  // 기존처럼 형성 완료 시 한 프레임 하드 스왑이다(회귀 없음).
+  seamMs?: number;
 }
 
 interface TierConfig {
@@ -77,18 +87,34 @@ interface Particle {
   delay: number;
 }
 
-const PARTICLE_SIZE_PX = 1.6;
+// 파티클 반지름 — sampleStep(이웃 간격)에 비례시킨다(파티클 이음매 브리프).
+// 고정 반지름(예전 1.6px)은 medium(간격 4px)에서 지름(3.2px)이 간격보다
+// 작아 점 사이가 벌어졌다 — "점으로 근사한 글자"와 "안티앨리어싱된 실제
+// 글자"가 애초에 다른 그림이라 뭉친 순간 툭 끊겨 보였다. 지름을 간격의
+// DIAMETER_TO_STEP_RATIO배로 잡으면 이웃과 겹쳐 면이 찬다(1.3~1.5 권장 —
+// 이 값은 그 중간).
+const DIAMETER_TO_STEP_RATIO = 1.4;
+// 수렴 시작 시점의 반지름 비율 — 이미 계산돼 있는 eased(수렴 진행도)를
+// 그대로 재사용해 작게 시작해 최종 반지름까지 커진다. 처음부터 최대
+// 크기면 "조각이 모여 덩어리가 된다"는 수렴 과정 자체가 안 보인다.
+const START_RADIUS_RATIO = 0.4;
+// 형성 마지막(seamMs) 동안 캔버스 요소에 거는 최대 흐림 — 값이 크면 글자
+// 형태 자체가 뭉개진다.
+const SEAM_BLUR_PX = 3;
 const ALPHA_THRESHOLD = 60;
 const CANVAS_MARGIN_EXTRA_PX = 16;
 
 const ParticleText = forwardRef<ParticleTextHandle, ParticleTextProps>(
-  function ParticleText({ wordmarkRef, tier, durationMs }, ref) {
+  function ParticleText({ wordmarkRef, tier, durationMs, seamMs = 0 }, ref) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
     const particlesRef = useRef<Particle[] | null>(null);
     const colorRef = useRef('#eef4f5');
     const boxRef = useRef<{ width: number; height: number } | null>(null);
     const rafRef = useRef<number | null>(null);
+    // 파티클의 최종(수렴 완료) 반지름 — tier의 sampleStep에서 마운트 시
+    // 1회 계산해 둔다(위 DIAMETER_TO_STEP_RATIO).
+    const targetRadiusRef = useRef(0);
 
     // 글리프를 마운트 시 1회만 샘플링한다(위 주석 — 매 프레임 getImageData를
     // 부르지 않는다).
@@ -107,6 +133,7 @@ const ParticleText = forwardRef<ParticleTextHandle, ParticleTextProps>(
       if (rect.width <= 0 || rect.height <= 0) return;
 
       const config = TIER_CONFIG[tier];
+      targetRadiusRef.current = (config.sampleStep * DIAMETER_TO_STEP_RATIO) / 2;
       const margin = config.scatterPx + CANVAS_MARGIN_EXTRA_PX;
       const boxLeft = rect.left - margin;
       const boxTop = rect.top - margin;
@@ -220,13 +247,20 @@ const ParticleText = forwardRef<ParticleTextHandle, ParticleTextProps>(
       () => ({
         play() {
           const ctx = ctxRef.current;
+          const canvas = canvasRef.current;
           const particles = particlesRef.current;
           const box = boxRef.current;
-          if (!ctx || !particles || !box || particles.length === 0) return;
+          if (!ctx || !canvas || !particles || !box || particles.length === 0) return;
           if (rafRef.current !== null) return; // 1회성 계약 — 재생 중 재호출은 무시한다.
 
           const start = performance.now();
           const color = colorRef.current;
+          // 이음매 완화 — 형성 마지막 seamMs 동안만 캔버스 요소가 흐려지며
+          // 페이드아웃한다(파티클 이음매 브리프 (나)(다)). BootSequence의
+          // wordmarkEl 페이드인이 같은 [seamStart, durationMs] 창에서
+          // 겹친다 — "아주 짧은 교차"다. seamMs<=0이면(기본값) 기존과 같은
+          // 한 프레임 하드 스왑이다.
+          const seamStart = seamMs > 0 ? Math.max(0, durationMs - seamMs) : durationMs;
 
           const frame = (now: number) => {
             const elapsed = now - start;
@@ -235,18 +269,32 @@ const ParticleText = forwardRef<ParticleTextHandle, ParticleTextProps>(
             if (elapsed >= durationMs) {
               // 형성 완료 — 캔버스를 비운 채로 rAF를 더 이상 예약하지 않는다.
               rafRef.current = null;
+              if (seamMs > 0) {
+                canvas.style.opacity = '0';
+                canvas.style.filter = `blur(${SEAM_BLUR_PX}px)`;
+              }
               return;
             }
 
+            if (seamMs > 0 && elapsed >= seamStart) {
+              const seamProgress = Math.min(1, (elapsed - seamStart) / seamMs);
+              canvas.style.opacity = `${1 - seamProgress}`;
+              canvas.style.filter = `blur(${SEAM_BLUR_PX * seamProgress}px)`;
+            }
+
             ctx.fillStyle = color;
+            const targetRadius = targetRadiusRef.current;
             for (const p of particles) {
               const span = Math.max(1, durationMs - p.delay);
               const local = Math.min(1, Math.max(0, (elapsed - p.delay) / span));
               const eased = 1 - Math.pow(1 - local, 3);
               const x = p.startX + (p.targetX - p.startX) * eased;
               const y = p.startY + (p.targetY - p.startY) * eased;
+              // 반지름도 eased를 따라 커진다(파티클 이음매 브리프 (가)) —
+              // 작은 조각으로 출발해 수렴할수록 최종 반지름까지 자란다.
+              const radius = targetRadius * (START_RADIUS_RATIO + (1 - START_RADIUS_RATIO) * eased);
               ctx.beginPath();
-              ctx.arc(x, y, PARTICLE_SIZE_PX, 0, Math.PI * 2);
+              ctx.arc(x, y, radius, 0, Math.PI * 2);
               ctx.fill();
             }
 
@@ -256,7 +304,7 @@ const ParticleText = forwardRef<ParticleTextHandle, ParticleTextProps>(
           rafRef.current = requestAnimationFrame(frame);
         },
       }),
-      [durationMs]
+      [durationMs, seamMs]
     );
 
     useEffect(
