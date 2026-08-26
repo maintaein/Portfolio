@@ -425,6 +425,133 @@ describe('ParticleText — 폰트·색을 DOM에서 읽는다(하드코딩 금�
   });
 });
 
+// 베이스라인 교체 후속 브리프 — 덩어리→글자 Y 점프의 진짜 원인은
+// actualBoundingBoxDescent가 디센더 없는 대문자(KIM TAEIN)에서 합법적으로
+// 정확히 0이 되어 `||` 폴백이 오작동한 것이었다. Range 기반 접근(잉크 박스
+// 가정)도 걷어내고 fontBoundingBox*(폰트 메트릭) half-leading 공식으로
+// 교체했다. jsdom은 레이아웃도 캔버스 2D도 실제로 계산하지 않으므로, 여기서는
+// "어떤 값을 근거로 베이스라인을 잡는가"를 관측 채널로 삼는다 — measureText를
+// 스텁해 fontBoundingBoxAscent/Descent를 직접 주고, offCtx.fillText에 넘어간
+// y 인자(letterSpacing 미지원 스텁이라 글자마다 개별 호출되고, 세 번째 인자가
+// baselineY 그 자체다)가 공식과 정확히 같은지 확인한다. 실제 픽셀이 사람
+// 눈에 맞는지는 실기기 확인 사항이다(리포트 참고).
+describe('ParticleText — 베이스라인은 폰트 메트릭 half-leading 공식으로 계산된다', () => {
+  it('fillText에 넘어간 y가 (off.height-(fontAscent+fontDescent))/2+fontAscent와 정확히 같다 — 뮤테이션 (a)·(b)', () => {
+    const ctx = mockWorkingCanvas();
+    // line box(= off.height = source.getBoundingClientRect().height): 80.
+    mockWordmarkRect(200, 80);
+    // fontBoundingBox*(60/10)와 actualBoundingBox*(12/4)를 일부러 다르게
+    // 준다 — 새 공식(폰트 메트릭)과 옛 공식(잉크 중앙 정렬)이 서로 다른
+    // 값을 내야 뮤테이션 (a)·(b)를 구분해 잡는다.
+    ctx.measureText.mockReturnValue({
+      width: 100,
+      actualBoundingBoxAscent: 12,
+      actualBoundingBoxDescent: 4,
+      fontBoundingBoxAscent: 60,
+      fontBoundingBoxDescent: 10,
+    });
+
+    const wordmarkRef = renderWithSpan();
+    render(
+      <ParticleText wordmarkRef={wordmarkRef} tier="high" durationMs={550} />
+    );
+
+    // 새 공식: (80-(60+10))/2+60 = 5+60 = 65.
+    const yArgs = ctx.fillText.mock.calls.map((call) => call[2]);
+    expect(yArgs.length).toBeGreaterThan(0);
+    expect(yArgs.every((y) => y === 65)).toBe(true);
+
+    // 뮤테이션 (a) — actualBoundingBox*로 되돌리면 (80-16)/2+12 = 44가 되어
+    // 위 65와 달라 FAIL한다.
+    // 뮤테이션 (b) — half-leading 항을 빼고 fontAscent(60)만 쓰면 60이 되어
+    // 역시 65와 달라 FAIL한다.
+  });
+});
+
+describe('ParticleText — actualBoundingBoxDescent가 0이어도(디센더 없는 대문자) 베이스라인이 흔들리지 않는다', () => {
+  it('descent 0을 줘도 폰트 메트릭 공식대로 계산된다 — 이번 버그의 정확한 재현, 뮤테이션 (c)', () => {
+    const ctx = mockWorkingCanvas();
+    mockWordmarkRect(200, 80);
+    // actualBoundingBoxDescent를 0으로 준다 — KIM TAEIN처럼 디센더 없는
+    // 대문자만 있을 때 실제로 벌어지는 값이다(이번 버그 그 자체). 옛 코드는
+    // 이 0을 "값 없음"으로 오인해 `||`가 발동, fontSizePx*0.25로 부풀렸다.
+    // fontBoundingBoxDescent(18, 0이 아닌 값)는 그대로 둬 새 공식이 이
+    // 합법적 0에 흔들리지 않는지를 확인한다.
+    ctx.measureText.mockReturnValue({
+      width: 100,
+      actualBoundingBoxAscent: 60,
+      actualBoundingBoxDescent: 0,
+      fontBoundingBoxAscent: 70,
+      fontBoundingBoxDescent: 18,
+    });
+
+    const wordmarkRef = renderWithSpan();
+    render(
+      <ParticleText wordmarkRef={wordmarkRef} tier="high" durationMs={550} />
+    );
+
+    // 새 공식: (80-(70+18))/2+70 = -4+70 = 66. actualBoundingBoxDescent(0)를
+    // 전혀 참조하지 않으므로 이 값이 흔들리지 않는다.
+    const yArgs = ctx.fillText.mock.calls.map((call) => call[2]);
+    expect(yArgs.length).toBeGreaterThan(0);
+    expect(yArgs.every((y) => y === 66)).toBe(true);
+
+    // 뮤테이션 (c) — fontDescent 계산을 다시 actualBoundingBoxDescent(합법적
+    // 0) 기준 `||`로 덮으면 0이 falsy라 fontSizePx*0.25로 부풀어 66과 달라
+    // FAIL한다 — 이번 버그의 정확한 재현.
+  });
+});
+
+describe('ParticleText — fontBoundingBox*가 없어도(jsdom 등) 이름이 사라지지 않는다', () => {
+  it('폴백 공식으로 베이스라인을 계산하고 play()가 정상적으로 형성을 진행한다 — 뮤테이션 (d)', () => {
+    const ctx = mockWorkingCanvas();
+    mockWordmarkRect(200, 80);
+    // fontSizePx 폴백 분기를 결정적으로 만들기 위해 fontSize를 명시한다
+    // (jsdom 기본 computed.fontSize 값에 기대지 않는다).
+    const getComputedStyleSpy = vi
+      .spyOn(window, 'getComputedStyle')
+      .mockReturnValue({
+        color: 'rgb(1, 1, 1)',
+        fontWeight: '700',
+        fontSize: '80px',
+        fontFamily: 'TestFont',
+        letterSpacing: 'normal',
+      } as unknown as CSSStyleDeclaration);
+    // 기본 스텁 measureText는 fontBoundingBoxAscent/Descent를 아예 주지
+    // 않는다(undefined) — 실제 jsdom이 이 프로퍼티를 구현하지 않는 상황을
+    // 그대로 재현한다. typeof 가드 없이 `||`만으로 처리되므로 별도 가드가
+    // 필요 없다.
+    const wordmarkRef = renderWithSpan();
+    const ref = createRef<ParticleTextHandle>();
+
+    render(
+      <ParticleText
+        ref={ref}
+        wordmarkRef={wordmarkRef}
+        tier="high"
+        durationMs={550}
+      />
+    );
+
+    // 폴백 공식: fontAscent = 80*0.95 = 76, fontDescent = 80*0.25 = 20.
+    // baselineY = (80-(76+20))/2+76 = -8+76 = 68. NaN이 아니고 폴백값
+    // 그대로 계산됐다는 증거다.
+    const yArgs = ctx.fillText.mock.calls.map((call) => call[2]);
+    expect(yArgs.length).toBeGreaterThan(0);
+    expect(yArgs.every((y) => y === 68)).toBe(true);
+
+    // 뮤테이션 (d) — 폴백을 제거하면 fontBoundingBoxAscent/Descent가
+    // undefined인 채로 산술에 쓰여 baselineY가 NaN이 된다. 위 68 비교가
+    // FAIL하고, particlesRef의 좌표도 NaN이 되어 이름이 사라지는 것과
+    // 같은 실패 모양이다.
+    act(() => {
+      ref.current?.play();
+    });
+    expect(rafSpy).toHaveBeenCalled();
+    getComputedStyleSpy.mockRestore();
+  });
+});
+
 // 파티클 이음매 브리프 — 두 그림(뭉친 파티클 vs 안티앨리어싱된 실제 글자)이
 // 애초에 다르다는 진단에 대한 세 수단 중 (가): 반지름을 sampleStep에
 // 비례시키고 수렴하며 커지게 한다. jsdom은 실제 픽셀을 계산하지 않으므로

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import type { ReactElement } from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -452,5 +454,106 @@ describe('WordmarkFlip — 부팅 캡션은 overview 섹션 컨테인먼트 밖�
     const wordmark = screen.getByTestId('wordmark');
 
     expect(overviewSection!.contains(wordmark)).toBe(false);
+  });
+});
+
+// 세 이음매 브리프 3절 — 모바일에서 워드마크가 네비 항목(ABOUT)과 겹친다.
+// .nav-strip-visible(300ms)이 워드마크 FLIP(500ms)보다 먼저 다 보여 스트립이
+// 200ms 이르게 나타났다. 워드마크가 착지한(FLIP 지속) 뒤에만 스트립이 나타나게
+// transition-delay를 준다 — 숨기는 쪽은 지연 없이 즉시(비대칭). CSS 파일 자체는
+// jsdom에 로드되지 않으므로(Navigation.test.tsx 주석과 같은 이유) 여기서는
+// design-tokens.css 원문과 HomeClient 소스를 각각 readFileSync로 읽어 값을
+// 교차 검증한다 — 실제 시각적 겹침 소멸 여부는 실기기 확인 사항이다.
+describe('WordmarkFlip — 네비 스트립은 워드마크가 착지한 뒤에 나타난다(겹침 회피)', () => {
+  const homeClientSource = readFileSync(
+    path.resolve(process.cwd(), 'components/sections/HomeClient/index.tsx'),
+    'utf8'
+  );
+  const designTokensCss = readFileSync(
+    path.resolve(process.cwd(), 'styles/design-tokens.css'),
+    'utf8'
+  );
+
+  function ruleBody(selector: string): string | undefined {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return designTokensCss.match(
+      new RegExp(`^  ${escaped}\\s*\\{([\\s\\S]*?)^  \\}`, 'm')
+    )?.[1];
+  }
+
+  it('FLIP 지속(WORDMARK_FLIP_DURATION_MS)과 CSS --wordmark-flip-duration이 같은 값이다 — 단일 출처, 뮤테이션 (h)', () => {
+    // String.prototype.match()는 매치 실패 시 undefined가 아니라 null을
+    // 준다 — toBeDefined()는 null을 통과시켜버려(자가 발견 결함) CSS 변수가
+    // 통째로 사라져도 이 단언이 조용히 넘어가고 그 다음 줄에서야 크래시로
+    // 잡혔다. not.toBeNull()로 실패 이유가 여기서 바로 드러나게 한다.
+    const jsMatch = homeClientSource.match(
+      /WORDMARK_FLIP_DURATION_MS\s*=\s*(\d+)/
+    );
+    expect(jsMatch, 'WORDMARK_FLIP_DURATION_MS 선언을 찾지 못했다').not.toBeNull();
+
+    const cssMatch = designTokensCss.match(
+      /--wordmark-flip-duration:\s*(\d+)ms/
+    );
+    expect(cssMatch, '--wordmark-flip-duration 선언을 찾지 못했다').not.toBeNull();
+
+    // 뮤테이션 (h) — 두 값을 다른 숫자로 갈라놓으면(예: CSS만 400ms로 바꾸면)
+    // 이 비교가 FAIL한다.
+    expect(Number(jsMatch![1])).toBe(Number(cssMatch![1]));
+
+    // 상수를 선언만 하고 여전히 리터럴 0.5를 쓰면(단일 출처가 아니게 되면)
+    // 여기서도 잡힌다.
+    expect(homeClientSource).toMatch(
+      /duration:\s*WORDMARK_FLIP_DURATION_MS\s*\/\s*1000/
+    );
+  });
+
+  it('.nav-strip-visible은 --wordmark-flip-duration만큼 지연된 뒤 나타난다 — 뮤테이션 (f)', () => {
+    const visibleBody = ruleBody('.nav-strip-visible');
+    expect(visibleBody, '.nav-strip-visible 규칙을 찾지 못했다').toBeDefined();
+
+    // 뮤테이션 (f) — transition-delay(= var(--wordmark-flip-duration))를
+    // 지우면 이 매치가 실패한다.
+    expect(visibleBody).toMatch(
+      /transition\s*:\s*opacity[^;]*var\(--wordmark-flip-duration\)/
+    );
+  });
+
+  it('.nav-strip-hidden은 지연 없이 즉시 비킨다 — 비대칭, 뮤테이션 (g)', () => {
+    const hiddenBody = ruleBody('.nav-strip-hidden');
+    expect(hiddenBody, '.nav-strip-hidden 규칙을 찾지 못했다').toBeDefined();
+
+    // transition 값만 먼저 떼어낸다 — 그냥 [^,]+로 opacity 항목을 자르면
+    // cubic-bezier(0.22, 1, 0.36, 1) 안의 콤마에서 먼저 끊겨 뒤에 붙는
+    // --wordmark-flip-duration을 못 본다(자가 발견 결함 — 처음 작성한
+    // 정규식은 뮤테이션 (g)를 실제로 못 잡았다). "다음 항목(visibility) 직전의
+    // 콤마"를 lookahead로 찾아 opacity 항목 전체를 정확히 끊는다.
+    const transitionDecl = hiddenBody!.match(/transition\s*:\s*([\s\S]*?);/)?.[1];
+    expect(transitionDecl, '.nav-strip-hidden의 transition 선언을 찾지 못했다').toBeDefined();
+
+    const opacityTransition = transitionDecl!.match(
+      /opacity[\s\S]*?(?=,\s*visibility)/
+    )?.[0];
+    expect(opacityTransition, 'opacity 전환 항목을 찾지 못했다').toBeDefined();
+    // 뮤테이션 (g) — hidden 쪽에도 --wordmark-flip-duration 지연을 붙이면
+    // 여기서 잡힌다(비대칭 계약 위반).
+    expect(opacityTransition).not.toMatch(/--wordmark-flip-duration/);
+  });
+
+  it('reducedMotion에서는 nav-strip 전환 자체가 없다 — 지연도 없다, 뮤테이션 (i)', () => {
+    const reduceBlocks =
+      designTokensCss.match(
+        /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\n {2}\}\n/g
+      ) ?? [];
+    const navStripReduceBlock = reduceBlocks.find((block) =>
+      block.includes('.nav-strip-hidden')
+    );
+    expect(
+      navStripReduceBlock,
+      'nav-strip의 reduce 오버라이드를 찾지 못했다'
+    ).toBeDefined();
+    // 뮤테이션 (i) — transition: none을 지우거나 지연을 남기는 규칙을
+    // 추가하면 이 매치가 실패한다.
+    expect(navStripReduceBlock).toMatch(/transition\s*:\s*none\s*;/);
+    expect(navStripReduceBlock).not.toMatch(/--wordmark-flip-duration/);
   });
 });

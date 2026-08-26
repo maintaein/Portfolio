@@ -39,6 +39,15 @@ import {
 } from '@/lib/constants';
 import type { Flip } from '@/lib/gsap';
 
+// 워드마크 FLIP 지속(ms) — 네비 겹침 회피의 단일 출처(세 이음매 브리프
+// 3절). styles/design-tokens.css의 --wordmark-flip-duration
+// (.nav-strip-visible의 transition-delay)이 반드시 이 값과 같아야
+// "워드마크가 착지한 뒤에만 스트립이 나타난다"가 성립한다. TS와 CSS는
+// 빌드 타임에 값을 공유할 수 없으므로 WordmarkFlip.test.tsx가 두 파일을
+// 각각 읽어 숫자가 같은지 교차 검증한다 — 한쪽만 바뀌면 그 테스트가
+// FAIL한다.
+const WORDMARK_FLIP_DURATION_MS = 500;
+
 const SECTION_COMPONENTS = {
   [SECTION_IDS.ABOUT]: AboutSection,
   [SECTION_IDS.SKILLS]: SkillsSection,
@@ -188,7 +197,7 @@ export default function HomeClient() {
     if (!mod) return;
 
     mod.Flip.from(state, {
-      duration: 0.5,
+      duration: WORDMARK_FLIP_DURATION_MS / 1000,
       ease: mod.SITE_EASE,
       scale: true,
       absolute: true,

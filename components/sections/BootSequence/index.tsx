@@ -342,7 +342,7 @@ export default function BootSequence({
       data-testid="boot-start"
       type="button"
       onClick={handleStartClick}
-      className="boot-start relative inline-flex min-h-11 items-center text-t5 sm:text-t3 md:text-t2 uppercase tracking-[0.2em] text-[var(--color-text-primary)] transition-colors duration-300 hover:text-[var(--color-cyan-hi)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)]"
+      className="boot-start relative inline-flex min-h-11 items-center text-t5 sm:text-t3 md:text-t2 uppercase tracking-[0.2em] text-[var(--color-text-primary)] hover:text-[var(--color-cyan-hi)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)]"
     >
       {/* 아이들 광휘를 제거했다(3차 실기기 피드백). 버튼 크기의 220%라
           START 위로 크게 삐져나와 이름과 START 사이에 정체불명의 얼룩으로

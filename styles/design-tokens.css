@@ -108,6 +108,16 @@
   --animate-duration-base: 300ms;
   --animate-duration-slow: 500ms;
 
+  /* 워드마크 FLIP 지속(세 이음매 브리프 3절) — HomeClient의
+     Flip.from({ duration: WORDMARK_FLIP_DURATION_MS / 1000 })과 반드시 같은
+     값이어야 한다. 워드마크가 hero→compact로 착지하는 시간과 정확히 같은
+     시간만큼 .nav-strip-visible의 등장을 늦춰야("이름이 자리를 잡고, 그다음
+     메뉴가 나온다") 모바일에서 워드마크 궤적이 ABOUT 항목과 겹치지 않는다.
+     TS와 CSS는 빌드 타임에 값을 공유할 수 없으므로
+     WordmarkFlip.test.tsx가 두 파일을 각각 읽어 숫자가 같은지 교차
+     검증한다 — 한쪽만 바뀌면 그 테스트가 FAIL한다. */
+  --wordmark-flip-duration: 500ms;
+
   /* 부팅 화면 중앙 정렬 — 이름(Navigation 워드마크)과 캡션(BootSequence
      역할·START)은 서로 다른 컴포넌트라 DOM은 합칠 수 없지만, 뷰포트 50%
      지점을 공유 기준점으로 삼는다. 이름은 top:50%에서 -translate-y-full로
@@ -560,7 +570,11 @@
   .nav-strip-visible {
     opacity: 1;
     visibility: visible;
-    transition: opacity var(--animate-duration-base) cubic-bezier(0.22, 1, 0.36, 1);
+    /* 워드마크 FLIP(--wordmark-flip-duration, 위 @theme)이 착지한 뒤에만
+       스트립이 나타난다(세 이음매 브리프 3절) — 숨기는 쪽(.nav-strip-hidden,
+       위)은 지연이 없다. 워드마크가 hero로 돌아올 자리를 스트립이 먼저
+       비켜줘야 하므로 비대칭이다. */
+    transition: opacity var(--animate-duration-base) cubic-bezier(0.22, 1, 0.36, 1) var(--wordmark-flip-duration);
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -688,13 +702,18 @@
       transform: translateY(8px);
     }
 
-    /* transition: filter — 아래 .boot-start:hover 전기 충전 이펙트의
+    /* transition: color, filter — 아래 .boot-start:hover 전기 충전 이펙트의
        차오름·방전을 이 한 줄이 함께 처리한다(호버 진입·이탈 둘 다 대칭
-       0.5s로 보간된다). */
+       0.5s로 보간된다). 세 이음매 브리프 2절 — 예전에는 color 전환만
+       버튼 className의 Tailwind transition-colors duration-300(300ms)이
+       따로 맡고 있어 광휘(filter, 0.5s)와 서로 다른 지속으로 어긋났다 —
+       색이 먼저 도달하고 광휘가 그 뒤로 따라와 "호버 효과가 두 개로
+       보인다"는 실기기 피드백을 냈다. color를 이 한 줄로 옮겨 광휘와
+       같은 지속·이징으로 묶는다(하나의 제스처). */
     .boot-start {
       opacity: 0;
       transform: translateY(8px);
-      transition: filter 0.5s ease-out;
+      transition: color 0.5s ease-out, filter 0.5s ease-out;
     }
 
     [data-wordmark-mode='hero'] {

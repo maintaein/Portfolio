@@ -186,9 +186,27 @@ const ParticleText = forwardRef<ParticleTextHandle, ParticleTextProps>(
 
       const metrics = offCtx.measureText(text);
       const fontSizePx = Number.parseFloat(computed.fontSize) || off.height;
-      const ascent = metrics.actualBoundingBoxAscent || fontSizePx * 0.75;
-      const descent = metrics.actualBoundingBoxDescent || fontSizePx * 0.25;
-      const baselineY = (off.height - (ascent + descent)) / 2 + ascent;
+      // fontBoundingBox* — 폰트 자체의 메트릭 박스(브라우저가 줄 상자 안에
+      // 텍스트를 앉히는 기준). actualBoundingBox*(잉크 박스)를 썼던 예전
+      // 코드는 KIM TAEIN처럼 디센더 없는 대문자에서 descent가 합법적으로
+      // 정확히 0이 되는 경우가 있어, 그 뒤의 `||` 폴백이 오작동해(0을 "값이
+      // 없다"로 오인) descent를 24px로 부풀렸다 — 이것이 Y 점프의 진짜 원인
+      // (세 이음매 후속 브리프). fontBoundingBox*는 실제 폰트라면 결코 0이
+      // 될 수 없으므로(글꼴에 ascent/descent가 없을 수 없다) 같은 `||`가
+      // 여기서는 안전하다 — 아래 폴백은 fontBoundingBox* 자체가 없는 환경
+      // (jsdom) 전용이다.
+      const fontAscent = metrics.fontBoundingBoxAscent || fontSizePx * 0.95;
+      const fontDescent = metrics.fontBoundingBoxDescent || fontSizePx * 0.25;
+
+      // 베이스라인 — 브라우저가 줄 상자에 베이스라인을 앉히는 공식을 그대로
+      // 재현한다(세 이음매 후속 브리프). CSS 인라인 레이아웃에서 콘텐츠
+      // 영역 높이는 폰트 메트릭 ascent+descent이고, half-leading =
+      // (line-height − 그 높이) / 2, 베이스라인은 줄 상자 top에서 half-leading
+      // + ascent다. source(span)가 inline이면 off.height(= rect.height)가 곧
+      // ascent+descent라 이 식이 fontAscent로 자연히 수렴하고, block/
+      // inline-block이면 line-height가 들어와 half-leading이 살아난다 — 두
+      // 경우 모두 이 한 식으로 맞는다.
+      const baselineY = (off.height - (fontAscent + fontDescent)) / 2 + fontAscent;
 
       if (supportsLetterSpacing) {
         offCtx.fillText(text, 0, baselineY);
