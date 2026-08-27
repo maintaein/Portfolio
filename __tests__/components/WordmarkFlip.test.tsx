@@ -353,8 +353,13 @@ describe('WordmarkFlip — 단일 워드마크 노드의 hero/compact 전환', (
     expect(fromSpy).not.toHaveBeenCalled();
   });
 
-  it('부팅 중 조기 이탈은 BootSequence timeline을 정리하고 재방문 시 역할·START가 최종 상태로 보인다', () => {
+  it('부팅 중 조기 이탈은 BootSequence timeline을 정리하고 재방문 시 역할·START가 최종 상태로 보인다', async () => {
     renderHome();
+    // 파티클 경합 브리프. BootSequence의 타임라인 생성이 이제 기기 등급
+    // (tier) 판정도 함께 기다린다. 판정 promise가 도착할 microtask를
+    // 흘려보내야 이 시점에 timeline이 이미 만들어져 있다는 아래 전제가
+    // 성립한다(gsap import 흐름과 같은 flush).
+    await flushGsapImport();
     const role = screen.getByTestId('boot-role');
     const start = screen.getByTestId('boot-start');
 

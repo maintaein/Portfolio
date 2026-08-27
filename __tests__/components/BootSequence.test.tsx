@@ -198,6 +198,47 @@ async function flushGsapImport() {
   });
 }
 
+// 캔버스 2D를 실제로 성공시키는 스텁. "이름 파티클 형성" describe와 파티클
+// 경합 브리프의 게이트 테스트가 함께 쓰므로 모듈 스코프로 둔다(중복 방지).
+function stubWorkingParticleCanvas() {
+  const ctx = {
+    clearRect: vi.fn(),
+    setTransform: vi.fn(),
+    beginPath: vi.fn(),
+    arc: vi.fn(),
+    fill: vi.fn(),
+    fillText: vi.fn(),
+    measureText: vi.fn((text: string) => ({
+      width: text.length * 8,
+      actualBoundingBoxAscent: 12,
+      actualBoundingBoxDescent: 4,
+    })),
+    getImageData: vi.fn((_x: number, _y: number, w: number, h: number) => ({
+      data: new Uint8ClampedArray(w * h * 4).fill(255),
+    })),
+    font: '',
+    fillStyle: '',
+    textBaseline: '',
+  };
+  const contextSpy = vi
+    .spyOn(HTMLCanvasElement.prototype, 'getContext')
+    .mockReturnValue(ctx as unknown as CanvasRenderingContext2D);
+  const rectSpy = vi
+    .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+    .mockReturnValue({
+      width: 200,
+      height: 80,
+      left: 10,
+      top: 10,
+      right: 210,
+      bottom: 90,
+      x: 10,
+      y: 10,
+      toJSON: () => {},
+    } as DOMRect);
+  return { ctx, contextSpy, rectSpy };
+}
+
 describe('BootSequence LCP 계약', () => {
   it('이름이 SSR HTML에 존재한다', () => {
     const html = renderToString(<SsrHarness />);
@@ -1116,45 +1157,6 @@ describe('BootSequence — 워드마크 opacity 안무 (Navigation 결합)', () 
 // 파일에 이미 존재하는 (구) 터널 진입 브리프의 같은 글자와 뜻이 다르므로
 // "파티클 브리프"를 붙여 구분한다.
 describe('BootSequence — 이름 파티클 형성(gating·트리거)', () => {
-  function stubWorkingParticleCanvas() {
-    const ctx = {
-      clearRect: vi.fn(),
-      setTransform: vi.fn(),
-      beginPath: vi.fn(),
-      arc: vi.fn(),
-      fill: vi.fn(),
-      fillText: vi.fn(),
-      measureText: vi.fn((text: string) => ({
-        width: text.length * 8,
-        actualBoundingBoxAscent: 12,
-        actualBoundingBoxDescent: 4,
-      })),
-      getImageData: vi.fn((_x: number, _y: number, w: number, h: number) => ({
-        data: new Uint8ClampedArray(w * h * 4).fill(255),
-      })),
-      font: '',
-      fillStyle: '',
-      textBaseline: '',
-    };
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(ctx as unknown as CanvasRenderingContext2D);
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue({
-        width: 200,
-        height: 80,
-        left: 10,
-        top: 10,
-        right: 210,
-        bottom: 90,
-        x: 10,
-        y: 10,
-        toJSON: () => {},
-      } as DOMRect);
-    return { ctx, contextSpy, rectSpy };
-  }
-
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -1275,6 +1277,151 @@ describe('BootSequence — 이름 파티클 형성(gating·트리거)', () => {
     const source = readFileSync(bootSequencePath, 'utf8');
     expect(source).toMatch(/detectQuality\(\)/);
     expect(source).toMatch(/from '@\/lib\/deviceQuality'/);
+  });
+});
+
+// 파티클 경합 브리프(particle-race-brief.md). 컨트롤러가 확정한 원인은
+// tier가 정해지기 전에 GSAP 타임라인이 먼저 만들어지는 것이었다. 그
+// 순간 particleRef.current가 아직 null이라 play()가 옵셔널 체이닝으로
+// 조용히 삼켜졌다. lib/deviceQuality.ts의 readBattery()가 상한 없이
+// nav.getBattery()를 await하던 것이 진짜 원인이었다. 실행마다
+// detectQuality()의 완료 시점이 달라졌고 새로고침마다 결과가 뒤집혔다.
+//
+// 이 describe는 등급 판정이 느린 쪽(예전 코드에서 GSAP 쪽이 이기던 바로
+// 그 순서)에서 (가) readBattery 상한과 (나) 타임라인 게이트의 tier
+// 추가가 함께 있어야 결정적이라는 것을 검증한다. 등급 판정이 빠른 쪽은
+// 위 describe의 "기기 등급이 high/medium이고..." 테스트가 이미 맡고
+// 있다. 두 방향을 합쳐야 어느 쪽이 먼저 끝나든 파티클이 재생된다는
+// 계약이 완성된다.
+describe('BootSequence 파티클 경합 브리프(등급 판정이 느린 쪽)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('등급이 정해지기 전에는 GSAP를 시작하지 않는다(경합 계약, 뮤테이션 (b))', async () => {
+    // getBattery가 영원히 응답하지 않는다고 가정한다. 예전 코드라면
+    // detectQuality()도 영원히 안 끝나지만, tier 게이트가 없던 예전
+    // BootSequence는 이 지연과 무관하게 즉시 타임라인을 만들었다. 그게
+    // 경합의 정체였다.
+    vi.stubGlobal('navigator', {
+      getBattery: () => new Promise(() => {}),
+      hardwareConcurrency: 8,
+      deviceMemory: 8,
+    });
+    stubWorkingParticleCanvas();
+
+    render(<Harness />);
+    // 실 시간을 진행시키지 않는 microtask flush를 여러 번 흘려보내도
+    // (readBattery의 상한은 실 타이머라 0ms 진행으로는 끝나지 않는다)
+    // 타임라인은 여전히 만들어지지 않아야 한다.
+    await flushGsapImport();
+    await flushGsapImport();
+    expect(
+      timelineSpy,
+      '뮤테이션 (b), 게이트에서 tier를 빼면 이 시점에 이미 호출돼 있어야 한다'
+    ).not.toHaveBeenCalled();
+  });
+
+  it('배터리 조회 상한을 넘겨서야 등급이 정해져도 그 즉시 파티클이 정확히 재생된다(뮤테이션 (a)·(c))', async () => {
+    vi.stubGlobal('navigator', {
+      getBattery: () => new Promise(() => {}),
+      hardwareConcurrency: 8,
+      deviceMemory: 8,
+    });
+    const { ctx } = stubWorkingParticleCanvas();
+
+    render(<Harness />);
+    expect(timelineSpy).not.toHaveBeenCalled();
+
+    // readBattery의 내부 상한(80ms)을 넉넉히 넘기도록 실제로 시간을
+    // 진행시킨다. 이 파일의 다른 테스트들이 지키는 "안무는 tl.seek()로만
+    // 진행시킨다"는 규칙은 타임라인이 만들어진 뒤에 관한 것이다. 여기서
+    // 진행시키는 것은 타임라인이 생기기도 전인 readBattery의 내부
+    // 타이머이므로 그 규칙과 부딪히지 않는다.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
+    await flushGsapImport();
+
+    // 뮤테이션 (a), readBattery()의 상한을 지우면 이 시점에도 tier가
+    // 여전히 null이라 아래 전부가 FAIL한다(캔버스도 타임라인도 없다).
+    expect(screen.getByTestId('particle-name-canvas')).toBeInTheDocument();
+    expect(ctx.getImageData).toHaveBeenCalledTimes(1);
+
+    const tl = capturedTimeline();
+    const before = rafSpy.mock.calls.length;
+    act(() => {
+      tl.seek(0.75, false);
+    });
+    expect(rafSpy.mock.calls.length).toBeGreaterThan(before);
+
+    // 뮤테이션 (c), tier가 끝내 안 정해지는 상황을 이 테스트가 만든다.
+    // (가)의 상한이 없다면 이름도 영원히 안 보인다. 상한이 있으므로
+    // 여기서는 반드시 보인다.
+    const wordmark = screen.getByTestId('wordmark');
+    act(() => {
+      tl.seek(2, false);
+    });
+    expect(wordmark.style.opacity).toBe('1');
+  });
+
+  it('배터리 조회가 상한을 넘겨도 low 등급이면 파티클 없이 이름만 도착한다(이름은 반드시 보인다, 뮤테이션 (c))', async () => {
+    vi.stubGlobal('navigator', {
+      getBattery: () => new Promise(() => {}),
+      hardwareConcurrency: 2,
+      deviceMemory: 2,
+    });
+    stubWorkingParticleCanvas();
+
+    render(<Harness />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
+    await flushGsapImport();
+
+    // low 등급이라 파티클 캔버스는 없다. 그래도 타임라인은 만들어지고
+    // 이름은 도착한다. 파티클 실패가 이름까지 인질로 잡지 않는다는
+    // 계약이 등급 판정 지연 상황에서도 지켜진다.
+    expect(screen.queryByTestId('particle-name-canvas')).not.toBeInTheDocument();
+    const tl = capturedTimeline();
+    const wordmark = screen.getByTestId('wordmark');
+    act(() => {
+      tl.seek(2, false);
+    });
+    expect(wordmark.style.opacity).toBe('1');
+  });
+
+  // readBattery()의 상한은 "응답이 없는" 경우만 막는다. detectQuality()가
+  // 던지는 경우는 .then만으로는 setTier가 영영 불리지 않아 tier가 null로
+  // 남고, tier 게이트 때문에 부팅이 아예 시작되지 않는다. 이름이 안 보이는
+  // 최악의 결과라 BootSequence의 .catch가 low로 떨어뜨려 받는다.
+  it('등급 판정이 던져도 이름은 반드시 보인다, tier 게이트가 부팅을 막지 않는다', async () => {
+    // navigator 속성 접근 자체가 던지게 만들어 detectQuality()를 reject시킨다.
+    vi.stubGlobal(
+      'navigator',
+      new Proxy(
+        {},
+        {
+          get() {
+            throw new Error('navigator 접근 불가');
+          },
+        }
+      )
+    );
+
+    render(<Harness />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
+    await flushGsapImport();
+
+    // .catch를 지우면 여기서 타임라인 자체가 만들어지지 않아 던진다.
+    const tl = capturedTimeline();
+    const wordmark = screen.getByTestId('wordmark');
+    act(() => {
+      tl.seek(2, false);
+    });
+    expect(wordmark.style.opacity).toBe('1');
   });
 });
 

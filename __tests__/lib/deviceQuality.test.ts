@@ -74,6 +74,34 @@ describe('detectQuality', () => {
     await expect(detectQuality()).resolves.toBe('high');
   });
 
+  // 파티클 경합 브리프(particle-race-brief.md). 원 코드는 이 Promise를
+  // 타임아웃 없이 await했다. 실기기에서 getBattery()가 언제 끝나는지가
+  // 실행마다 달라서, detectQuality()의 완료 시점도 함께 흔들렸고 그것이
+  // BootSequence 쪽 파티클 경합의 근본 원인이었다. readBattery()에 상한을
+  // 둬 응답이 없어도 정해진 시간 안에 진행하게 한다.
+  it('getBattery가 응답하지 않아도 정해진 시간 안에 결과를 낸다(결정성 계약, 뮤테이션 (a))', async () => {
+    vi.useFakeTimers();
+    try {
+      stubNavigator({
+        getBattery: () => new Promise(() => {}), // 영원히 응답하지 않는다
+        hardwareConcurrency: 8,
+        deviceMemory: 8,
+      });
+
+      const promise = detectQuality();
+      // 정확한 상한값을 아는 것이 이 테스트의 목적이 아니다. "언젠가는
+      // 끝난다"는 계약만 넉넉한 여유를 두고 확인한다.
+      await vi.advanceTimersByTimeAsync(5000);
+
+      // 뮤테이션 (a), readBattery()의 상한(Promise.race)을 지우면 이
+      // promise가 영원히 pending이라 아래 expect가 vitest 기본 테스트
+      // 타임아웃으로 FAIL한다.
+      await expect(promise).resolves.toBe('high');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('코어가 적으면 등급이 내려간다', async () => {
     stubNavigator({ hardwareConcurrency: 2, deviceMemory: 2 });
     await expect(detectQuality()).resolves.toBe('low');
@@ -139,6 +167,16 @@ describe('detectQuality', () => {
       stubNavigator({ hardwareConcurrency: 8, deviceMemory: 8 });
       vi.stubGlobal('devicePixelRatio', 3);
       vi.stubGlobal('matchMedia', undefined);
+      await expect(detectQuality()).resolves.toBe('high');
+    });
+
+    // ?.가 matchMedia에만 걸려 있고 반환값에 없으면 여기서 .matches를 읽다
+    // 던진다. detectQuality()가 reject하면 BootSequence의 tier가 영영 null로
+    // 남아 부팅 게이트가 열리지 않는다.
+    it('matchMedia가 MediaQueryList를 돌려주지 않아도 던지지 않는다', async () => {
+      stubNavigator({ hardwareConcurrency: 8, deviceMemory: 8 });
+      vi.stubGlobal('devicePixelRatio', 3);
+      vi.stubGlobal('matchMedia', () => undefined);
       await expect(detectQuality()).resolves.toBe('high');
     });
   });

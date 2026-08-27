@@ -40,6 +40,7 @@ import {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useRef,
   type RefObject,
 } from 'react';
@@ -117,8 +118,14 @@ const ParticleText = forwardRef<ParticleTextHandle, ParticleTextProps>(
     const targetRadiusRef = useRef(0);
 
     // 글리프를 마운트 시 1회만 샘플링한다(위 주석 — 매 프레임 getImageData를
-    // 부르지 않는다).
-    useEffect(() => {
+    // 부르지 않는다). useLayoutEffect다. 부모(BootSequence)가 tier로
+    // 게이트를 연 뒤에야 이 컴포넌트를 마운트하므로, 같은 커밋 안에서
+    // 자식인 이 effect가 부모의 타임라인 생성 effect(같은 layout effect
+    // 종류)보다 먼저 돈다. 여기가 passive useEffect였다면 부모가 t=0에
+    // particleRef.current.play()를 부르는 시점에 particlesRef.current가
+    // 아직 null일 수 있었다. 두 번째 경합이다(particle-race-brief.md
+    // (다)).
+    useLayoutEffect(() => {
       const canvas = canvasRef.current;
       const buttonEl = wordmarkRef.current;
       if (!canvas || !buttonEl) return;

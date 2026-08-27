@@ -90,11 +90,13 @@ export default function BootSequence({
   const underlineRef = useRef<HTMLSpanElement>(null);
   const hasStartedRef = useRef(false);
   // 이름 파티클 형성(ParticleText)의 재생 트리거. GSAP 타임라인이 t=0에
-  // tl.call()로 이 ref의 play()를 부른다 — 캔버스가
-  // 아직 마운트 전이거나(기기 등급 미확정·reducedMotion 등) 준비에
-  // 실패했으면 옵셔널 체이닝으로 조용히 아무 일도 없다. DOM 워드마크의
-  // opacity 전환은 이 호출과 무관하게 항상 스케줄되므로, 파티클이 실패해도
-  // "이름이 안 보이는" 사고로 이어지지 않는다(아래 wordmarkEl 트윈 참고).
+  // tl.call()로 이 ref의 play()를 부른다. 아래 eligible 게이트가 tier를
+  // 포함하므로 "기기 등급 미확정"은 더 이상 null의 이유가 아니다(파티클
+  // 경합 브리프). 그래도 reducedMotion·low tier(캔버스 자체를 안 만드는
+  // 경우)나 getContext 실패 같은 준비 실패로 null일 수 있어, 옵셔널
+  // 체이닝으로 조용히 아무 일도 없게 둔다. DOM 워드마크의 opacity 전환은
+  // 이 호출과 무관하게 항상 스케줄되므로, 파티클이 실패해도 "이름이 안
+  // 보이는" 사고로 이어지지 않는다(아래 wordmarkEl 트윈 참고).
   const particleRef = useRef<ParticleTextHandle>(null);
   // START를 누를 때마다 새 키로 텍스트 span을 다시 마운트해 반짝임
   // 애니메이션(.boot-start-flash)을 처음부터 재생한다. 0이면 아직 한 번도
@@ -106,17 +108,33 @@ export default function BootSequence({
 
   // 기기 등급(low/medium/high) — 파티클 형성을 돌릴지, 돌린다면 어떤
   // 파라미터로 돌릴지의 단일 출처(lib/deviceQuality.ts). null은 "아직
-  // 모른다"이고, 그동안은 파티클을 만들지 않는다(부팅을 기다리게 하지
-  // 않는다 — 아래 particleTier가 null이면 렌더하지 않을 뿐, eligible 게이트와
-  // 별개다). low는 영구히 파티클을 만들지 않는다 — 대신 DOM 워드마크의
-  // opacity 트윈(단순 페이드)이 그대로 이름을 보여준다.
+  // 모른다"이고, 아래 eligible 게이트가 이 null을 막는다. 등급이 정해지고
+  // (필요하면) ParticleText가 마운트돼 ref가 붙은 뒤에야 부팅 타임라인이
+  // 만들어진다(파티클 경합 브리프 (나)). GSAP 청크가 캐시에서 즉시 와도
+  // ParticleText가 아직 마운트 전이라 particleRef.current가 null이던
+  // 경합이 근본 원인이었다. 이 게이트가 tier를 영영 못 받으면 부팅이
+  // 영원히 시작 안 되는 위험을 새로 만들므로, lib/deviceQuality.ts의
+  // readBattery()에 상한을 둬 detectQuality()가 반드시 끝나게 한다(그쪽
+  // 주석 참고). 이 게이트와 그 상한은 한 몸이다. low는 영구히 파티클을
+  // 만들지 않는다. 대신 DOM 워드마크의 opacity 트윈(단순 페이드)이 그대로
+  // 이름을 보여준다.
   const [tier, setTier] = useState<QualityTier | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    void detectQuality().then((detected) => {
-      if (!cancelled) setTier(detected);
-    });
+    void detectQuality()
+      .catch(() => {
+        // 등급을 못 정하면 tier가 영원히 null로 남는데, 아래 타임라인
+        // 게이트가 tier를 보므로 부팅이 시작되지 않아 이름이 아예 안
+        // 보인다. 여덟 경로 계약이 깨지는 최악의 결과다. readBattery의
+        // 상한은 "응답이 없는" 경우만 막아 주므로 "던지는" 경우는 여기서
+        // 받는다. low로 떨어뜨리면 파티클만 포기하고 DOM 워드마크의
+        // opacity 트윈이 이름을 그대로 보여준다.
+        return 'low' as const;
+      })
+      .then((detected) => {
+        if (!cancelled) setTier(detected);
+      });
     return () => {
       cancelled = true;
     };
@@ -130,8 +148,15 @@ export default function BootSequence({
     tier === 'high' || tier === 'medium' ? tier : null;
 
   useLayoutEffect(() => {
+    // tier !== null. 등급 판정 전에는 시작하지 않는다(파티클 경합 브리프
+    // (나)). readBattery()의 상한((가))이 이 조건을 영원히 막지 않게 하는
+    // 안전장치다.
     const eligible =
-      routeResolved && motionReady && !reducedMotion && active === OVERVIEW;
+      routeResolved &&
+      motionReady &&
+      !reducedMotion &&
+      active === OVERVIEW &&
+      tier !== null;
 
     if (!eligible || hasStartedRef.current) return;
     hasStartedRef.current = true;
@@ -182,13 +207,17 @@ export default function BootSequence({
         timeline = tl;
 
         // 파티클 형성(ParticleText) 재생 — t=0에 흩어진 조각이 뭉치기
-        // 시작한다(핸드오프 브리프 3절 "파티클이 먼저 완전히 뭉친다").
-        // particleRef.current가 없으면(캔버스 미마운트·준비 실패·기기 등급
-        // 미확정 등) 옵셔널 체이닝으로 조용히 아무것도 하지 않는다 — 아래
-        // wordmarkEl의 opacity 전환은 이 호출과 완전히 독립적으로
-        // 스케줄되므로, 파티클이 실패해도 이름은 원래 계획대로 도착한다
-        // (파티클 형성 브리프의 "이름 없는 사이트를 만들지 마라" 대응 —
-        // 8번째 실패 경로).
+        // 시작한다(핸드오프 브리프 3절 "파티클이 먼저 완전히 뭉친다"). 위
+        // eligible 게이트가 tier를 포함하므로 이 시점엔 등급이 이미
+        // 정해졌고, particleTier가 있으면 ParticleText도 같은 커밋에서
+        // 이미 마운트돼 layout effect로 샘플링까지 끝낸 뒤다(파티클 경합
+        // 브리프 (나)(다)). particleRef.current가 그래도 없으면(low
+        // tier·reducedMotion처럼 애초에 렌더하지 않는 경우, 또는 getContext
+        // 실패 같은 준비 실패) 옵셔널 체이닝으로 조용히 아무것도 하지
+        // 않는다. 아래 wordmarkEl의 opacity 전환은 이 호출과 완전히
+        // 독립적으로 스케줄되므로, 파티클이 실패해도 이름은 원래 계획대로
+        // 도착한다(파티클 형성 브리프의 "이름 없는 사이트를 만들지 마라"
+        // 대응, 8번째 실패 경로).
         tl.call(
           () => {
             particleRef.current?.play();
@@ -281,7 +310,7 @@ export default function BootSequence({
       revealFinalState();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, motionReady, reducedMotion, routeResolved]);
+  }, [active, motionReady, reducedMotion, routeResolved, tier]);
 
   // 지연 중 active가 다른 곳으로 바뀌면(다른 네비게이션이 먼저 이겼다는
   // 뜻) 예약된 onStart()가 그걸 덮어쓰면 안 된다 — 이 effect의 cleanup이

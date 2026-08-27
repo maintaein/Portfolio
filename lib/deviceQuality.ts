@@ -7,12 +7,33 @@ interface BatteryLike {
 
 // getBattery는 Chromium 계열에만 있다. Safari·Firefox에는 없고,
 // 있어도 거부될 수 있다. 어느 경우든 던지지 않고 null을 준다.
+//
+// 상한(BATTERY_TIMEOUT_MS). 예전 코드는 이 Promise를 타임아웃 없이
+// await했다. 실기기에서 nav.getBattery()가 언제 resolve되는지가 실행마다
+// 달라(권한 상태 등 내부 사정), detectQuality()의 완료 시점도 함께
+// 흔들렸다. 그 흔들림이 BootSequence의 타임라인 생성 게이트(tier 포함)와
+// 맞물려 "파티클이 보였다 안 보였다 한다"의 근본 원인이었다
+// (particle-race-brief.md). 80ms를 상한으로 둔다. Chromium의
+// getBattery()는 이미 만들어진 BatteryManager 싱글턴을 돌려주는 것이라
+// 하드웨어 왕복 없이 보통 수 ms 안에 끝난다. 80ms는 그 정상 범위보다
+// 10배 넘게 여유를 주면서도, 최악의 경우(응답 없음) 부팅 시작이 늦어지는
+// 체감 지연을 사람이 "즉시"로 느끼는 한계(약 100~200ms) 아래로 묶어
+// 둔다. 시간 안에 답이 없으면 null로 진행한다. 배터리는 batterySaver
+// 판정에만 쓰이므로 없어도 나머지 규칙으로 자연히 떨어진다(보수적인 폴백).
+const BATTERY_TIMEOUT_MS = 80;
+
+function batteryTimeout(): Promise<null> {
+  return new Promise((resolve) => {
+    setTimeout(() => resolve(null), BATTERY_TIMEOUT_MS);
+  });
+}
+
 async function readBattery(): Promise<BatteryLike | null> {
   const nav = navigator as Navigator & { getBattery?: () => Promise<BatteryLike> };
   if (typeof nav.getBattery !== 'function') return null;
 
   try {
-    return await nav.getBattery();
+    return await Promise.race([nav.getBattery(), batteryTimeout()]);
   } catch {
     return null;
   }
@@ -33,8 +54,9 @@ async function readBattery(): Promise<BatteryLike | null> {
 function isHighDensityTouch(): boolean {
   if (typeof window === 'undefined') return false;
 
-  // matchMedia가 없는 환경에서는 하드웨어 기준으로 폴백한다 — 던지지 않는다.
-  const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+  // matchMedia가 없거나 MediaQueryList를 돌려주지 않는 환경에서는 하드웨어
+  // 기준으로 폴백한다. 반환값에도 ?.를 걸어야 던지지 않는다.
+  const coarsePointer = window.matchMedia?.('(pointer: coarse)')?.matches ?? false;
   const highDensity = (window.devicePixelRatio ?? 1) >= 2;
 
   return coarsePointer && highDensity;

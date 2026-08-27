@@ -4,6 +4,8 @@
 // 무엇이 몇 번 호출되는가(글리프 샘플링 1회·rAF 정지 시점), 어떤 상한이
 // 걸리는가(파티클 수·DPR), 어떤 값이 하드코딩되지 않고 DOM에서 읽히는가
 // (폰트·색). 시각적 결과(픽셀 정합)는 실기기 확인 사항이다(리포트 참고).
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { createRef } from 'react';
 import { act, cleanup, render } from '@testing-library/react';
 import {
@@ -18,6 +20,11 @@ import {
 import ParticleText, {
   type ParticleTextHandle,
 } from '@/components/blocks/ParticleText';
+
+const particleTextPath = path.resolve(
+  process.cwd(),
+  'components/blocks/ParticleText/index.tsx'
+);
 
 // getImageData가 돌려줄 가짜 이미지 데이터 — 모든 픽셀을 완전 불투명(alpha
 // 255)으로 채운다. "글자 형태"의 실제 모양은 jsdom에서 증명할 수 없으므로,
@@ -197,6 +204,27 @@ describe('ParticleText — 글리프 샘플링은 1회만', () => {
     flushOneFrame(120);
 
     expect(ctx.getImageData).toHaveBeenCalledTimes(1);
+  });
+});
+
+// 파티클 경합 브리프(particle-race-brief.md (다)). BootSequence가 tier
+// 게이트를 열면 ParticleText는 부모와 같은 커밋에서 마운트된다. 이
+// 샘플링 effect가 passive useEffect라면 React가 이를 부모의
+// useLayoutEffect(타임라인 생성, t=0에 play() 호출)보다 나중에 돌려서
+// particlesRef.current가 아직 null인 채로 play()가 조용히 아무 일도 하지
+// 않을 수 있다. 두 번째 경합이다. jsdom의 act()는 layout·passive effect를
+// 항상 함께 플러시해서 이 순서 자체를 행동으로 재현할 수 없으므로(리포트의
+// jsdom 한계 절 참고), 여기서는 소스에서 effect 종류를 직접 고정한다.
+describe('ParticleText 글리프 샘플링은 useLayoutEffect다(파티클 경합 브리프)', () => {
+  it('샘플링 effect가 useEffect가 아니라 useLayoutEffect로 선언돼 있다(뮤테이션 (d))', () => {
+    const source = readFileSync(particleTextPath, 'utf8');
+    const match = source.match(
+      /(useLayoutEffect|useEffect)\(\(\) => \{[\s\S]*?getImageData\(0, 0, off\.width, off\.height\)[\s\S]*?\}, \[wordmarkRef, tier, durationMs\]\);/
+    );
+    expect(match, '샘플링 effect를 찾지 못했다').not.toBeNull();
+    // 뮤테이션 (d), useLayoutEffect를 useEffect로 되돌리면 이 캡처 그룹이
+    // 'useEffect'가 되어 FAIL한다.
+    expect(match![1]).toBe('useLayoutEffect');
   });
 });
 
