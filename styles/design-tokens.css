@@ -674,6 +674,15 @@
   .boot-start {
     opacity: 1;
     transform: translateY(0);
+    /* 기본 상태의 광휘. 밑줄을 걷어내면서 모바일에서 START가 누를 수
+       있는 것임을 알리던 정지 신호가 사라졌고, 처음에는 반짝이는 루프로
+       대신했는데 사용자가 주기를 빼고 상시 발현으로 바꿨다. 미디어쿼리
+       밖에 두는 이유는 이것이 모션이 아니라 정지 상태이기 때문이다.
+       reduce에서도 이 신호는 그대로 필요하다. 아래 no-preference의
+       transition이 호버로 올라갈 때만 세기를 보간한다. */
+    text-shadow:
+      0 0 8px var(--color-cyan-hi),
+      0 0 2px var(--color-cyan-core);
   }
 
   @keyframes boot-start-glow-pulse {
@@ -740,30 +749,6 @@
       opacity: 0;
       transform: translateY(8px);
       transition: text-shadow 0.5s ease-out;
-      /* 정지 상태의 느린 반짝임. 사용자 요청으로 "글자 상시 맥동 금지"
-         계약을 뒤집었다. 밑줄을 걷어내면서 모바일에서 START가 누를 수
-         있는 것임을 알리던 유일한 정지 신호가 사라졌는데, 이 반짝임이
-         그 자리를 대신한다. 호버가 없는 기기에서 특히 그렇다.
-         reduce에서는 이 블록 자체가 적용되지 않아 재생되지 않는다. */
-      animation: boot-start-idle-glow 4s ease-in-out infinite;
-    }
-
-    /* 세 단계의 세기. 정지 상태의 정점(8px)보다 호버(16px)가, 호버보다
-       클릭(24px)이 확실히 세다. 정점 값을 서로 가깝게 만들면 누르는 맛이
-       사라지므로 테스트가 이 순서를 대조한다. 목록 길이를 두 항목으로
-       맞춰야(투명·길이 0으로 채운다) 보간이 매끄럽다. */
-    @keyframes boot-start-idle-glow {
-      0%,
-      100% {
-        text-shadow:
-          0 0 0 transparent,
-          0 0 0 transparent;
-      }
-      50% {
-        text-shadow:
-          0 0 8px var(--color-cyan-hi),
-          0 0 2px var(--color-cyan-core);
-      }
     }
 
     [data-wordmark-mode='hero'] {
@@ -806,10 +791,6 @@
        "재렌더링 되는 느낌"으로 읽혔다. 걷어냈다. 호버는 광휘가 매끄럽게
        차오르고 매끄럽게 빠지는 것 하나면 된다. */
     .boot-start:hover {
-      /* 정지 상태의 반짝임을 멈추고 고정된 최대 세기로 간다. animation을
-         끄지 않으면 키프레임이 이 선언을 계속 덮어써(애니메이션이 일반
-         선언보다 우선한다) 호버가 전혀 반영되지 않는다. */
-      animation: none;
       text-shadow:
         0 0 16px var(--color-cyan-hi),
         0 0 6px var(--color-cyan-core);

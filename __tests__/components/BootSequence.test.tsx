@@ -947,11 +947,10 @@ describe('BootSequence 호버는 광휘만 남는다(색은 반응하지 않는�
     // 광휘는 남아 있어야 한다.
     expect(hover).toMatch(/text-shadow\s*:/);
 
-    // 호버에서 허용되는 animation은 none뿐이다. 정지 상태의 반짝임을 끄지
-    // 않으면 키프레임이 호버 선언을 계속 덮어써 호버가 반영되지 않는다.
-    // 이름 있는 애니메이션(예전 깜빡임)이 되살아나면 여기서 FAIL한다.
-    const animationDecl = hover!.match(/animation\s*:\s*([^;]+);/)?.[1]?.trim();
-    expect(animationDecl, '호버가 정지 상태 반짝임을 끄지 않는다').toBe('none');
+    // 호버에는 애니메이션이 없다. 세기 변화는 아래 .boot-start의
+    // transition이 보간한다. 예전 깜빡임이나 반짝임 루프가 되살아나면
+    // 여기서 FAIL한다.
+    expect(hover).not.toMatch(/animation\s*:/);
 
     // 예전 깜빡임 키프레임은 고아로도 남기지 않는다.
     expect(DESIGN_TOKENS_CSS).not.toMatch(
@@ -960,45 +959,56 @@ describe('BootSequence 호버는 광휘만 남는다(색은 반응하지 않는�
   });
 
   // 계약이 뒤집혔다. 예전에는 "글자 상시 맥동 금지"였고 호버와 클릭 반응만
-  // 예외였는데, 사용자가 정지 상태에서도 느리게 반짝이기를 요청했다. 밑줄을
-  // 걷어내면서 모바일에서 START가 누를 수 있음을 알리던 정지 신호가
-  // 사라졌으므로 이 반짝임이 그 자리를 대신한다.
-  it('정지 상태에서 느리게 반짝인다, reduce에서는 재생되지 않는다', () => {
-    const base = noPreferenceOverrideBody('.boot-start');
-    expect(base, '.boot-start의 no-preference 오버라이드를 찾지 못했다').toBeDefined();
+  // 예외였다. 밑줄을 걷어내면서 모바일에서 START가 누를 수 있음을 알리던
+  // 정지 신호가 사라졌고, 처음에는 반짝이는 루프로 대신했는데 사용자가
+  // 주기를 빼고 상시 발현으로 바꿨다. 맥동은 없고 광휘만 늘 켜져 있다.
+  it('기본 상태에 광휘가 늘 켜져 있고 주기적으로 깜빡이지 않는다', () => {
+    const base = unconditionalRuleBody('.boot-start');
+    expect(base, '.boot-start의 기본 규칙을 찾지 못했다').toBeDefined();
 
-    // 반짝임을 지우면 FAIL한다.
-    expect(base).toMatch(/animation\s*:\s*boot-start-idle-glow/);
-    expect(DESIGN_TOKENS_CSS).toMatch(/@keyframes\s+boot-start-idle-glow/);
+    // 광휘를 지우면 FAIL한다.
+    expect(base).toMatch(/text-shadow\s*:/);
+    // 주기가 되살아나면 FAIL한다.
+    expect(base).not.toMatch(/animation\s*:/);
+    expect(DESIGN_TOKENS_CSS).not.toMatch(/@keyframes\s+boot-start-idle-glow/);
 
-    // 미디어쿼리 밖 기본 규칙에는 없어야 한다. 있으면 reduce에서도 돌아
-    // 접근성 계약이 깨진다.
-    const unconditional = unconditionalRuleBody('.boot-start');
-    expect(unconditional).toBeDefined();
-    expect(unconditional).not.toMatch(/animation\s*:/);
+    // 미디어쿼리 밖에 두는 이유는 이것이 모션이 아니라 정지 상태이기
+    // 때문이다. reduce에서도 이 신호는 그대로 필요하다. no-preference로
+    // 옮기면 여기서 잡힌다.
+    const override = noPreferenceOverrideBody('.boot-start');
+    expect(override).toBeDefined();
+    expect(override).not.toMatch(/text-shadow\s*:\s*0/);
   });
 
-  it('세기가 정지 상태보다 호버, 호버보다 클릭 순으로 커진다', () => {
+  it('세기가 기본 상태보다 호버, 호버보다 클릭 순으로 커진다', () => {
     const maxBlur = (css: string) =>
       Math.max(...[...css.matchAll(/0 0 (\d+)px/g)].map((m) => Number(m[1])));
 
-    const idle = DESIGN_TOKENS_CSS.match(
-      /@keyframes boot-start-idle-glow \{([\s\S]*?)\n {4}\}/
-    )?.[1];
-    expect(idle, 'boot-start-idle-glow 키프레임을 찾지 못했다').toBeDefined();
+    const base = unconditionalRuleBody('.boot-start');
     const hover = noPreferenceOverrideBody('.boot-start:hover');
     const flash = DESIGN_TOKENS_CSS.match(
       /@keyframes boot-start-flash \{([\s\S]*?)\n {2}\}/
     )?.[1];
     expect(flash, 'boot-start-flash 키프레임을 찾지 못했다').toBeDefined();
 
-    const idleBlur = maxBlur(idle!);
+    const baseBlur = maxBlur(base!);
     const hoverBlur = maxBlur(hover!);
     const flashBlur = maxBlur(flash!);
 
     // 셋을 비슷하게 만들면 단계가 뭉개져 여기서 잡힌다.
-    expect(hoverBlur).toBeGreaterThan(idleBlur);
+    expect(hoverBlur).toBeGreaterThan(baseBlur);
     expect(flashBlur).toBeGreaterThan(hoverBlur);
+  });
+
+  // 호버로 올라가고 내려오는 세기 변화가 뚝 끊기지 않아야 한다는 요청이다.
+  // transition이 그것을 맡는다. 지우면 호버가 즉시 스냅한다.
+  it('세기 변화를 transition이 보간한다', () => {
+    const override = noPreferenceOverrideBody('.boot-start');
+    expect(override).toBeDefined();
+
+    const transitionDecl = override!.match(/transition\s*:\s*([^;]+);/)?.[1];
+    expect(transitionDecl, '.boot-start의 transition 선언을 찾지 못했다').toBeDefined();
+    expect(transitionDecl).toMatch(/\btext-shadow\s+[\d.]+s/);
   });
 
   // 사용자 요청으로 호버 광휘를 두 배로 키웠다(6px/2px에서 12px/4px). 그러면
