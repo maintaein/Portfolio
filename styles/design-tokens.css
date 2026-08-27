@@ -255,22 +255,25 @@
      이고 BootSequence가 클릭마다 span을 key로 재마운트해야만 재생된다 —
      상시 루프가 아니라 클릭 반응이라는 계약을 CSS 쪽에서도 지킨다.
      파티클 이음매 브리프(5차) — ClickSpark(캔버스 스파크)를 걷어내고 이
-     키프레임에 filter(drop-shadow)를 더했다. 아래 .boot-start:hover와 같은
-     기법이지만 반경을 2배로 키워 "더 강하게"를 만족한다(호버 6px/2px →
-     클릭 12px/5px). :hover 의사 클래스와 무관한 독립 클래스라 모바일에서
-     hover 없이도 그대로 발동한다. */
+     키프레임에 광휘를 더했다. 아래 .boot-start:hover와 같은 기법이지만
+     반경을 2배로 키워 "더 강하게"를 만족한다(호버 6px/2px → 클릭 12px/5px).
+     :hover 의사 클래스와 무관한 독립 클래스라 모바일에서 hover 없이도
+     그대로 발동한다. 파티클 잔소음 브리프(6차)에서 광휘를 filter(drop-shadow)
+     에서 text-shadow로 옮겼다(아래 .boot-start:hover 주석에 이유). 글자만
+     감싸는 요소라 두 기법의 보이는 결과 차이가 없고, 호버와 같은 기법을
+     써야 둘이 갈라지지 않는다. */
   @keyframes boot-start-flash {
     0% {
       color: var(--color-text-primary);
-      filter: none;
+      text-shadow: none;
     }
     40% {
       color: var(--color-cyan-hi);
-      filter: drop-shadow(0 0 12px var(--color-cyan-hi)) drop-shadow(0 0 5px var(--color-cyan-core));
+      text-shadow: 0 0 12px var(--color-cyan-hi), 0 0 5px var(--color-cyan-core);
     }
     100% {
       color: var(--color-text-primary);
-      filter: none;
+      text-shadow: none;
     }
   }
 
@@ -742,15 +745,19 @@
       transform: translateY(8px);
     }
 
-    /* transition: filter. 아래 .boot-start:hover 전기 충전 이펙트(광휘)의
-       차오름·방전을 이 한 줄이 처리한다(호버 진입·이탈 둘 다 대칭 0.5s로
-       보간된다). 이전 라운드는 color 전환도 같은 줄에 묶어 광휘와 색이
-       함께 바뀌게 했지만, 사용자가 "광휘 효과만 남기도록" 정정했다.
-       hover에서 글자 색은 더 이상 바뀌지 않고 drop-shadow만 차오른다. */
+    /* transition: text-shadow. 아래 .boot-start:hover 전기 충전
+       이펙트(광휘)의 차오름·방전을 이 한 줄이 처리한다(호버 진입·이탈 둘 다
+       대칭 0.5s로 보간된다). 이전 라운드는 color 전환도 같은 줄에 묶어
+       광휘와 색이 함께 바뀌게 했지만, 사용자가 "광휘 효과만 남기도록"
+       정정했다. hover에서 글자 색은 더 이상 바뀌지 않고 광휘만 차오른다.
+       파티클 잔소음 브리프(6차)에서 filter를 text-shadow로 옮겼다(아래
+       .boot-start:hover 주석에 이유). none↔다중 shadow 전환은 브라우저가
+       빈 목록을 투명·길이 0인 항목으로 채워 보간하므로(shadow list
+       interpolation) filter와 마찬가지로 0.5s 동안 매끄럽게 보간된다. */
     .boot-start {
       opacity: 0;
       transform: translateY(8px);
-      transition: filter 0.5s ease-out;
+      transition: text-shadow 0.5s ease-out;
     }
 
     [data-wordmark-mode='hero'] {
@@ -773,16 +780,28 @@
 
     /* START 호버 — 전기 충전 이펙트(HERO 재순서 브리프 4절, Magnet을
        대체한다. "호버 시 전기적 에너지가 글씨에 충전되는듯한" 사용자
-       요청). filter(drop-shadow)가 위 .boot-start의 transition(0.5s)을
-       타고 0에서 최대로 차오르고, 호버를 벗어나면 같은 transition이
-       대칭으로 되감아 방전되듯 잦아든다(즉시 꺼지지 않는다). 시작의
-       미세한 깜빡임은 opacity에 거는 짧은 1회성 animation(0.18s)으로
-       겹쳐 축전기 느낌을 낸다. transform·opacity·filter만 쓴다. 호버
+       요청). 광휘가 위 .boot-start의 transition(0.5s)을 타고 0에서
+       최대로 차오르고, 호버를 벗어나면 같은 transition이 대칭으로
+       되감아 방전되듯 잦아든다(즉시 꺼지지 않는다). 시작의 미세한
+       깜빡임은 opacity에 거는 짧은 1회성 animation(0.18s)으로 겹쳐
+       축전기 느낌을 낸다. transform·opacity·text-shadow만 쓴다. 호버
        상태에만 걸리므로 위 .boot-start 기본 규칙(이 셀렉터 블록 밖,
        animation 없음)의 "글자 상시 맥동 금지"와 충돌하지 않는다 — 이건
-       호버 반응이지 idle 루프가 아니다. */
+       호버 반응이지 idle 루프가 아니다.
+
+       파티클 잔소음 브리프(6차)에서 filter(drop-shadow)를 text-shadow로
+       옮겼다. drop-shadow는 요소를 오프스크린 텍스처로 그린 뒤 알파를
+       블러하는데, 체인된 두 개를 0.5초 전환 내내 매 프레임 다시
+       계산했다. "호버 끊김"으로 느껴진 원인이다. text-shadow는 그런
+       텍스처 없이 글리프 자체에 그림자 사본을 겹쳐 그리는 것뿐이라
+       똑같이 비싼 재계산이 없다. 이 요소는 텍스트만 담고 있어(글자
+       주위로 삐져나가는 도형이 없다) 두 기법이 만드는 광휘의 보이는
+       결과 차이는 실질적으로 없다. 반지름 값(6px/2px)은 그대로
+       옮겼다. 깜빡임(boot-start-charge-flicker)은 그대로 남긴다. opacity
+       하나만 바꾸는 합성 전용 애니메이션이라 원래도 저렴했고, "끊김"의
+       실제 원인은 그 아래서 매 프레임 다시 계산되던 필터 체인이었다. */
     .boot-start:hover {
-      filter: drop-shadow(0 0 6px var(--color-cyan-hi)) drop-shadow(0 0 2px var(--color-cyan-core));
+      text-shadow: 0 0 6px var(--color-cyan-hi), 0 0 2px var(--color-cyan-core);
       animation: boot-start-charge-flicker 0.18s ease-out;
     }
 

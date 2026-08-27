@@ -863,16 +863,19 @@ describe('BootSequence 구도 — 중앙 정렬·간격·CTA 위계', () => {
     expect(flashRule, '.boot-start-flash 규칙을 찾지 못했다').toBeDefined();
     expect(flashRule).not.toMatch(/infinite/);
 
-    // 파티클 이음매 브리프(5차) — ClickSpark를 걷어내고 이 반짝임을
-    // 호버(.boot-start:hover)와 같은 filter(drop-shadow) 언어로 강화했다.
-    // 뮤테이션 (j) — filter 스텝을 지우면 FAIL한다.
-    expect(keyframeBlock).toMatch(/filter\s*:\s*drop-shadow\(/);
+    // 파티클 이음매 브리프(5차). ClickSpark를 걷어내고 이 반짝임을
+    // 호버(.boot-start:hover)와 같은 광휘 언어로 강화했다. 파티클 잔소음
+    // 브리프(6차)가 그 언어를 filter(drop-shadow)에서 text-shadow로
+    // 옮겼다(체인된 filter가 호버 전환 내내 매 프레임 다시 계산되던 게
+    // "호버 끊김"의 원인이었다). 뮤테이션 (j). text-shadow 스텝을 지우면
+    // FAIL한다.
+    expect(keyframeBlock).toMatch(/text-shadow\s*:\s*0 0 \d+px/);
 
-    // "더 강하게" — 호버보다 큰 drop-shadow 반경이어야 한다(뮤테이션 (j)).
+    // "더 강하게"다. 호버보다 큰 반경이어야 한다(뮤테이션 (j)).
     const hoverBlock = noPreferenceOverrideBody('.boot-start:hover');
     expect(hoverBlock, '.boot-start:hover 오버라이드를 찾지 못했다').toBeDefined();
-    const hoverBlur = Number(hoverBlock!.match(/drop-shadow\(0 0 (\d+)px/)?.[1]);
-    const chargeBlur = Number(keyframeBlock!.match(/drop-shadow\(0 0 (\d+)px/)?.[1]);
+    const hoverBlur = Number(hoverBlock!.match(/text-shadow\s*:\s*0 0 (\d+)px/)?.[1]);
+    const chargeBlur = Number(keyframeBlock!.match(/text-shadow\s*:\s*0 0 (\d+)px/)?.[1]);
     expect(Number.isNaN(hoverBlur)).toBe(false);
     expect(Number.isNaN(chargeBlur)).toBe(false);
     expect(chargeBlur).toBeGreaterThan(hoverBlur);
@@ -919,8 +922,10 @@ describe('BootSequence 구도 — 중앙 정렬·간격·CTA 위계', () => {
 // 사용자는 "광휘 효과만 남기도록" 정정했다. 색은 이제 호버에 전혀 반응하지
 // 않는다. 버튼 className에서 hover:text-[var(--color-cyan-hi)]를 뺐고,
 // .boot-start의 transition에서도 color를 뺐다. 클릭 충전(.boot-start-flash)은
-// 이 정정과 무관한 별개 keyframe이라 손대지 않았다(여전히 color와 filter를
-// 함께 쓴다, 위 "클릭하면 글자가 반짝이고" 테스트 참고).
+// 이 정정과 무관한 별개 keyframe이라 손대지 않았다(여전히 color와 광휘를
+// 함께 쓴다, 위 "클릭하면 글자가 반짝이고" 테스트 참고). 파티클 잔소음
+// 브리프(6차)에서 그 광휘가 filter(drop-shadow)에서 text-shadow로
+// 바뀌었으므로 아래 테스트도 함께 갱신했다.
 describe('BootSequence 호버는 광휘만 남는다(색은 반응하지 않는다)', () => {
   it('버튼 className에 색 hover 유틸도 transition-colors/duration 유틸도 없다', () => {
     render(<Harness />);
@@ -930,19 +935,19 @@ describe('BootSequence 호버는 광휘만 남는다(색은 반응하지 않는�
     // FAIL한다. 광휘만 계약의 핵심이다.
     expect(start.className).not.toContain('hover:text-[var(--color-cyan-hi)]');
     // transition-colors나 duration-* 유틸이 되살아나도 안 된다. CSS의
-    // filter transition이 유일한 소유자여야 한다.
+    // text-shadow transition이 유일한 소유자여야 한다.
     expect(start.className).not.toMatch(/transition-colors/);
     expect(start.className).not.toMatch(/\bduration-\d+\b/);
   });
 
-  it('.boot-start의 transition은 filter만 쓰고 color는 쓰지 않는다, 뮤테이션 (d)', () => {
+  it('.boot-start의 transition은 text-shadow만 쓰고 color는 쓰지 않는다, 뮤테이션 (d)', () => {
     const override = noPreferenceOverrideBody('.boot-start');
     expect(override, '.boot-start의 no-preference 오버라이드를 찾지 못했다').toBeDefined();
 
     const transitionDecl = override!.match(/transition\s*:\s*([^;]+);/)?.[1];
     expect(transitionDecl, '.boot-start의 transition 선언을 찾지 못했다').toBeDefined();
 
-    expect(transitionDecl).toMatch(/\bfilter\s+[\d.]+s/);
+    expect(transitionDecl).toMatch(/\btext-shadow\s+[\d.]+s/);
     // 뮤테이션 (d): color 전환이 다시 들어오면(호버에 색이 반응하면)
     // 이 어서션이 FAIL한다.
     expect(transitionDecl).not.toMatch(/\bcolor\b/);
@@ -957,7 +962,7 @@ describe('BootSequence 호버는 광휘만 남는다(색은 반응하지 않는�
     // 되어 대칭이 깨질 위험이 생긴다. 대칭은 단일 선언(.boot-start 기본,
     // 위 테스트)에서만 나온다.
     expect(hoverBlock).not.toMatch(/transition\s*:/);
-    // :hover 블록 자신도 color를 건드리지 않는다. filter(광휘)만 쓴다.
+    // :hover 블록 자신도 color를 건드리지 않는다. text-shadow(광휘)만 쓴다.
     expect(hoverBlock).not.toMatch(/\bcolor\s*:/);
   });
 });

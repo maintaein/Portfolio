@@ -294,9 +294,12 @@ describe('ParticleText — 캔버스 DPR 제한', () => {
     );
     const canvas = getByTestId('particle-name-canvas') as HTMLCanvasElement;
 
-    // margin = scatterPx(64) + 16 = 80 → box = 200+160 = 360 → *1.5 = 540.
-    // 뮤테이션 (h) — dprCap 없이 그대로 4를 곱하면 1440이 되어 FAIL한다.
-    expect(canvas.width).toBe(540);
+    // 파티클 잔소음 브리프 2절. 여백이 scatterPx + 상수가 아니라 최대 산포
+    // 거리 + 반지름에서 유도된다(아래 "여백은 최대 산포 거리를 덮는다"
+    // describe 참고). high: scatterPx(90)*1.2 + radius(1.4) = 109.4 → box =
+    // 200+218.8 = 418.8 → *1.5 = 628.2 → round = 628.
+    // 뮤테이션 (h). dprCap 없이 그대로 4를 곱하면 훨씬 큰 값이 되어 FAIL한다.
+    expect(canvas.width).toBe(628);
     expect(canvas.width).toBeLessThan(200 * 4);
   });
 
@@ -311,8 +314,106 @@ describe('ParticleText — 캔버스 DPR 제한', () => {
     );
     const canvas = getByTestId('particle-name-canvas') as HTMLCanvasElement;
 
-    // margin = scatterPx(40) + 16 = 56 → box = 200+112 = 312 → *1 = 312.
-    expect(canvas.width).toBe(312);
+    // medium: scatterPx(56)*1.2 + radius(2.8) = 70 → box = 200+140 = 340 → *1.
+    expect(canvas.width).toBe(340);
+  });
+});
+
+// 파티클 잔소음 브리프 2절. "구현 가능하지만 숫자만 올리면 잘린다"는
+// 진단에 대한 계약 테스트다. margin이 scatterPx + 상수라는 예전 형태로
+// 되돌아가면(뮤테이션 (c)) 산포를 넓힐수록 다시 아슬아슬해진다. 여기서는
+// 렌더된 canvas의 left 오프셋(= rect.left - margin)에서 실제 margin을
+// 역산해, 그 값이 "최대 산포 거리 + 파티클 반지름"을 항상 덮는지 구조적으로
+// 고정한다. jsdom 기본 뷰포트(1024×768)에서는 200×80 rect가 작아 뷰포트
+// 상한에 걸리지 않으므로 이 테스트가 유도 공식 자체를 순수하게 검증한다.
+describe('ParticleText 여백은 최대 산포 거리와 파티클 반지름을 덮는다', () => {
+  it.each([
+    ['high', 90, 2] as const,
+    ['medium', 56, 4] as const,
+  ])('%s tier margin은 scatterPx*1.2 + radius 이상이다, 뮤테이션 (c)·(d)', (tier, scatterPx, sampleStep) => {
+    mockWorkingCanvas();
+    mockWordmarkRect(200, 80); // rect.left = 100(mockWordmarkRect 기본값)
+    const wordmarkRef = renderWithSpan();
+
+    const { getByTestId } = render(
+      <ParticleText wordmarkRef={wordmarkRef} tier={tier} durationMs={550} />
+    );
+    const canvas = getByTestId('particle-name-canvas') as HTMLCanvasElement;
+
+    const margin = 100 - Number.parseFloat(canvas.style.left);
+    const targetRadius = (sampleStep * 1.4) / 2;
+    const maxScatterDistance = scatterPx * 1.2;
+
+    // 뮤테이션 (c). 여백 유도를 scatterPx + 상수(예: 16)로 되돌리면
+    // margin이 이 값보다 작아져 FAIL한다.
+    expect(margin).toBeCloseTo(maxScatterDistance + targetRadius, 5);
+    // 뮤테이션 (d). scatterPx만 올리고 margin 유도를 그대로 두면(상수
+    // 여백) 이 부등식이 깨져 FAIL한다.
+    expect(margin).toBeGreaterThanOrEqual(maxScatterDistance + targetRadius - 0.01);
+  });
+
+  it('캔버스 크기가 뷰포트를 넘지 않는다(좁은 화면, 뮤테이션 (e))', () => {
+    mockWorkingCanvas();
+    // rect 폭이 좁은 뷰포트에 육박하게 잡는다.
+    mockWordmarkRect(250, 80);
+    const originalInnerWidth = window.innerWidth;
+    const originalInnerHeight = window.innerHeight;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 300 });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 200 });
+
+    const wordmarkRef = renderWithSpan();
+    const { getByTestId } = render(
+      <ParticleText wordmarkRef={wordmarkRef} tier="high" durationMs={550} />
+    );
+    const canvas = getByTestId('particle-name-canvas') as HTMLCanvasElement;
+
+    const boxWidth = Number.parseFloat(canvas.style.width);
+    const boxHeight = Number.parseFloat(canvas.style.height);
+
+    // 여백을 그대로 두면(90*1.2+1.4=109.4, 상한 없이) boxWidth가
+    // 250+218.8=468.8이 되어 뷰포트(300)를 넘는다. 뮤테이션 (e). 상한을
+    // 지우면 아래 두 어서션 중 하나가 FAIL한다.
+    expect(boxWidth).toBeLessThanOrEqual(300 + 0.01);
+    expect(boxHeight).toBeLessThanOrEqual(200 + 0.01);
+
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalInnerWidth });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: originalInnerHeight });
+  });
+
+  // 위 두 테스트는 margin 값 자체를 공식과 대조한다. 이 테스트는 한 겹
+  // 더 파고들어 실제로 그려지는 파티클 좌표가 캔버스 안에 있는지를 본다.
+  // margin 공식이 맞아도 distance 공식(산포 거리)만 따로 넓히면(뮤테이션
+  // (d)를 이렇게 해석할 수도 있다) margin 값 대조 테스트는 못 잡는다.
+  // 가장 멀리 있는 시점(elapsed=0, 아직 수렴 전)에 그려진 모든 파티클의
+  // 원이 canvas.style.width/height 안에 완전히 들어가는지 좌표로 직접
+  // 검증한다.
+  it('가장 멀리 있는 시점(t=0)에도 파티클이 캔버스 경계 안에서 그려진다, 뮤테이션 (c)·(d)', () => {
+    const ctx = mockWorkingCanvas();
+    mockWordmarkRect(400, 150);
+    const wordmarkRef = renderWithSpan();
+    const ref = createRef<ParticleTextHandle>();
+
+    const { getByTestId } = render(
+      <ParticleText ref={ref} wordmarkRef={wordmarkRef} tier="high" durationMs={550} />
+    );
+    const canvas = getByTestId('particle-name-canvas') as HTMLCanvasElement;
+    const boxWidth = Number.parseFloat(canvas.style.width);
+    const boxHeight = Number.parseFloat(canvas.style.height);
+
+    act(() => {
+      ref.current?.play();
+    });
+    ctx.arc.mockClear();
+    flushOneFrame(0);
+
+    expect(ctx.arc.mock.calls.length).toBeGreaterThan(0);
+    for (const call of ctx.arc.mock.calls) {
+      const [x, y, r] = call as unknown as [number, number, number];
+      expect(x - r).toBeGreaterThanOrEqual(-0.01);
+      expect(x + r).toBeLessThanOrEqual(boxWidth + 0.01);
+      expect(y - r).toBeGreaterThanOrEqual(-0.01);
+      expect(y + r).toBeLessThanOrEqual(boxHeight + 0.01);
+    }
   });
 });
 
@@ -665,14 +766,16 @@ describe('ParticleText — 파티클 반지름은 sampleStep에 비례하고 수
   });
 });
 
-// 파티클 이음매 브리프 — 세 수단 중 (나)(다): 형성 마지막 seamMs 동안 캔버스
-// 요소(그림이 아니라 요소 자신)가 흐려지며 페이드아웃한다. jsdom은 실제
-// 흐림·합성을 계산하지 않으므로 여기서는 canvas.style.opacity/filter에
-// 대입된 인라인 값 자체만 구조적으로 고정한다 — 사람 눈에 자연스러운지는
-// 실기기 확인 사항이다.
-describe('ParticleText — 이음매 완화(seamMs) — 캔버스 요소가 흐려지며 페이드아웃한다', () => {
-  it('겹침 구간 안에서만 중간값이 있다 — 구간 밖에서는 손대지 않는다, 뮤테이션 (d)·(f)', () => {
-    mockWorkingCanvas();
+// 파티클 잔소음 브리프 1절. 예전엔 이음매 구간(seamMs) 매 프레임 opacity·
+// filter를 다시 계산하고 수백 개 arc()도 계속 그렸다. 이제는 그 구간에
+// 들어가는 첫 프레임에서 캔버스를 한 번만 최종 상태로 그리고 rAF를 멈춘 뒤,
+// 사라지는 연출은 CSS transition 선언 하나에 맡긴다. jsdom은 실제 합성·
+// transition 진행을 계산하지 않으므로 여기서는 "그 프레임에서 인라인 값이
+// 즉시 최종값으로 굳는가"와 "그 뒤로 더 이상 rAF가 돌지 않는가"를 구조적으로
+// 고정한다. transition이 실제로 부드럽게 보이는지는 실기기 확인 사항이다.
+describe('ParticleText 이음매 완화(seamMs)는 마지막 프레임에서 굳히고 CSS transition에 맡긴다', () => {
+  it('겹침 구간 진입 프레임에서 최종 상태로 굳히고 rAF를 멈춘다, 뮤테이션 (a)·(b)', () => {
+    const ctx = mockWorkingCanvas();
     mockWordmarkRect();
     const wordmarkRef = renderWithSpan();
     const ref = createRef<ParticleTextHandle>();
@@ -692,29 +795,62 @@ describe('ParticleText — 이음매 완화(seamMs) — 캔버스 요소가 흐�
       ref.current?.play();
     });
 
-    // 겹침 구간(seamStart = 200 - 40 = 160) 전 — 아직 손대지 않았다.
+    // 겹침 구간(seamStart = 200 - 40 = 160) 전이다. 아직 손대지 않았고
+    // 다음 프레임이 정상적으로 재예약된다(진행 중).
     flushOneFrame(100);
     expect(canvas.style.opacity).toBe('');
     expect(canvas.style.filter).toBe('');
+    expect(canvas.style.transition).toBe('');
+    expect(rafSpy).toHaveBeenCalledTimes(2); // 최초 예약 + 이번 프레임의 재예약
 
-    // 겹침 구간 한가운데(180) — 중간값이 있어야 한다. 이것이 "짧은 교차"
-    // 그 자체다. 뮤테이션 (d) — 흐림을 지우면 filter가 계속 ''로 남아
-    // FAIL한다. 뮤테이션 (f) — 겹침을 지우면(하드 스왑) opacity가 여전히
-    // ''이거나 이미 '0'이 되어 FAIL한다.
+    // 겹침 구간 진입(180), 이 프레임이 마지막이다. 뮤테이션 (a). 다시
+    // 매 프레임 블러 반경을 쓰게 되돌리면(seamProgress 기반 중간값 갱신을
+    // 되살리면) 아래 opacity·filter가 이미 최종값이라는 어서션과
+    // transition 선언 자체가 없다는 구 코드의 모양이 어긋나 FAIL한다.
+    const rafCallsBeforeSeam = rafSpy.mock.calls.length;
     flushOneFrame(180);
-    const midOpacity = Number(canvas.style.opacity);
-    expect(midOpacity).toBeGreaterThan(0);
-    expect(midOpacity).toBeLessThan(1);
-    expect(canvas.style.filter).toMatch(/blur\(/);
-    expect(canvas.style.filter).not.toBe('blur(0px)');
-
-    // 형성 완료(>=200) — 완전히 비고 최대 흐림이다.
-    flushOneFrame(210);
     expect(canvas.style.opacity).toBe('0');
-    expect(canvas.style.filter).toMatch(/blur\(3px\)/);
+    expect(canvas.style.filter).toBe('blur(3px)');
+    expect(canvas.style.transition).toMatch(/opacity 40ms/);
+    expect(canvas.style.transition).toMatch(/filter 40ms/);
+
+    // 뮤테이션 (b). 이음매에서 rAF를 계속 돌게 하면 이 프레임에서도 새
+    // rAF가 예약돼 아래 개수가 늘어나 FAIL한다.
+    expect(rafSpy.mock.calls.length).toBe(rafCallsBeforeSeam);
+    expect(ctx.arc).toHaveBeenCalled(); // 마지막 한 번은 여전히 그린다.
   });
 
-  it('seamMs를 넘기지 않으면(기본값 0) 형성 완료까지 opacity·filter를 건드리지 않는다 — 회귀 안전망', () => {
+  it('겹침 구간 진입 프레임은 목표 위치·최종 반지름으로 그린다(더 이상 eased 보간을 계산하지 않는다), 뮤테이션 (a)', () => {
+    const ctx = mockWorkingCanvas();
+    mockWordmarkRect(400, 150);
+    const wordmarkRef = renderWithSpan();
+    const ref = createRef<ParticleTextHandle>();
+
+    render(
+      <ParticleText
+        ref={ref}
+        wordmarkRef={wordmarkRef}
+        tier="high"
+        durationMs={200}
+        seamMs={40}
+      />
+    );
+
+    act(() => {
+      ref.current?.play();
+    });
+    ctx.arc.mockClear();
+    flushOneFrame(180); // 겹침 구간 진입
+
+    // targetRadius = sampleStep(2)*1.4/2 = 1.4. 모든 arc 호출의 반지름이
+    // 이 값 하나로 고정된다. 파티클마다 다른 eased 값을 계산해 반지름을
+    // 보간하던 구 코드였다면 이 값들이 서로 달랐을 것이다.
+    const radii = ctx.arc.mock.calls.map((call) => call[2] as number);
+    expect(radii.length).toBeGreaterThan(0);
+    expect(radii.every((r) => r === 1.4)).toBe(true);
+  });
+
+  it('seamMs를 넘기지 않으면(기본값 0) 형성 완료까지 opacity·filter·transition을 건드리지 않는다(회귀 안전망)', () => {
     mockWorkingCanvas();
     mockWordmarkRect();
     const wordmarkRef = renderWithSpan();
@@ -734,5 +870,6 @@ describe('ParticleText — 이음매 완화(seamMs) — 캔버스 요소가 흐�
     flushOneFrame(150); // durationMs(100) 이후 — 완료 분기
     expect(canvas.style.opacity).toBe('');
     expect(canvas.style.filter).toBe('');
+    expect(canvas.style.transition).toBe('');
   });
 });

@@ -31,11 +31,15 @@
 //   transform을 가지면 안 되므로(Navigation/index.tsx 계약), 캔버스를 그
 //   버튼 안에 겹쳐 넣는 대신 뷰포트 좌표(getBoundingClientRect)로 버튼
 //   위치를 읽어와 스스로 자리를 잡는다.
-// - 파티클 이음매 브리프(5차) — 반지름을 sampleStep에 비례시키고 수렴하며
+// - 파티클 이음매 브리프(5차). 반지름을 sampleStep에 비례시키고 수렴하며
 //   커지게 했다(DIAMETER_TO_STEP_RATIO·START_RADIUS_RATIO). seamMs prop을
-//   받으면 형성 마지막 그 ms 동안 캔버스 요소 자신이 흐려지며
-//   페이드아웃한다 — DOM 이름의 페이드인과 짧게 겹쳐 "툭 끊기는" 대신
-//   흐림 뒤로 이음매를 감춘다.
+//   받으면 형성 마지막 그 ms 동안 캔버스가 흐려지며 페이드아웃한다. DOM
+//   이름의 페이드인과 짧게 겹쳐 "툭 끊기는" 대신 흐림 뒤로 이음매를 감춘다.
+// - 파티클 잔소음 브리프(6차). 이음매 구간 진입 시 캔버스를 마지막으로 한
+//   번만 그리고 rAF를 멈춘다. 사라지는 연출(opacity·filter)은 더 이상 매
+//   프레임 인라인 스타일로 다시 계산하지 않고 CSS transition 한 번으로
+//   맡긴다. scatterPx도 넓히면서 캔버스 여백을 최대 산포 거리에서 유도하고
+//   뷰포트 상한을 뒀다(아래 SCATTER_DISTANCE_* 주석).
 import {
   forwardRef,
   useEffect,
@@ -75,9 +79,12 @@ interface TierConfig {
 // particle-name-report.md 참고. high는 여유가 있는 기기(레티나 데스크톱 등)
 // 기준, medium은 실측 기준 기기(고밀도 터치 — deviceQuality.ts 주석의
 // Galaxy S25급)를 겨눈 보수적인 값이다.
+// scatterPx는 파티클 잔소음 브리프 2절에서 약 40% 넓혔다(64→90, 40→56).
+// "조금 더 넓게 퍼져있다가 뭉쳤으면" 요청에 대한 값이다. 파티클 수는 그대로
+// 두고 여백만 아래 SCATTER_DISTANCE_* 공식으로 함께 유도한다(잘림 방지).
 const TIER_CONFIG: Record<ParticleTextTier, TierConfig> = {
-  high: { maxParticles: 480, sampleStep: 2, dprCap: 1.5, scatterPx: 64 },
-  medium: { maxParticles: 220, sampleStep: 4, dprCap: 1, scatterPx: 40 },
+  high: { maxParticles: 480, sampleStep: 2, dprCap: 1.5, scatterPx: 90 },
+  medium: { maxParticles: 220, sampleStep: 4, dprCap: 1, scatterPx: 56 },
 };
 
 interface Particle {
@@ -103,7 +110,13 @@ const START_RADIUS_RATIO = 0.4;
 // 형태 자체가 뭉개진다.
 const SEAM_BLUR_PX = 3;
 const ALPHA_THRESHOLD = 60;
-const CANVAS_MARGIN_EXTRA_PX = 16;
+// 산포 거리 공식(아래 particlesRef.current 계산부)의 두 계수다. distance =
+// scatterPx * (BASE + seed * RANGE), 최댓값은 seed→1일 때 BASE + RANGE다.
+// 캔버스 여백(아래 margin)을 이 최댓값으로 유도한다. 두 곳이 각자 다른
+// 숫자를 들고 있으면 scatterPx를 넓힐 때마다 다시 어긋난다(파티클 잔소음
+// 브리프 2절, 예전엔 margin = scatterPx + 상수라 여유가 2px도 안 됐다).
+const SCATTER_DISTANCE_BASE_FACTOR = 0.4;
+const SCATTER_DISTANCE_RANGE_FACTOR = 0.8;
 
 const ParticleText = forwardRef<ParticleTextHandle, ParticleTextProps>(
   function ParticleText({ wordmarkRef, tier, durationMs, seamMs = 0 }, ref) {
@@ -140,8 +153,24 @@ const ParticleText = forwardRef<ParticleTextHandle, ParticleTextProps>(
       if (rect.width <= 0 || rect.height <= 0) return;
 
       const config = TIER_CONFIG[tier];
-      targetRadiusRef.current = (config.sampleStep * DIAMETER_TO_STEP_RATIO) / 2;
-      const margin = config.scatterPx + CANVAS_MARGIN_EXTRA_PX;
+      const targetRadius = (config.sampleStep * DIAMETER_TO_STEP_RATIO) / 2;
+      targetRadiusRef.current = targetRadius;
+
+      // 여백. 최대 산포 거리(위 SCATTER_DISTANCE_* 공식의 최댓값, distance
+      // 계산과 정확히 같은 값)에 파티클 반지름을 더해서 유도한다. 파티클이
+      // 궤적 어디에 있든 "목표에서 먼 지점일수록 반지름이 작다"(아래 play()의
+      // eased 보간)라 이 합이 실제로 필요한 것보다 넉넉하다. 안전 쪽으로
+      // 여유를 둔 상한이다.
+      const maxScatterDistance =
+        config.scatterPx * (SCATTER_DISTANCE_BASE_FACTOR + SCATTER_DISTANCE_RANGE_FACTOR);
+      const desiredMargin = maxScatterDistance + targetRadius;
+      // 캔버스가 뷰포트를 넘지 않게 상한을 둔다. 좁은 화면에서 이름 rect가
+      // 이미 뷰포트에 가까우면 이 여백을 더한 캔버스가 뷰포트 밖으로 크게
+      // 삐져나가 보이지도 않는 영역을 그리느라 낭비한다. 뷰포트와 rect 사이의
+      // 여유(폭·높이 각각)의 절반을 넘지 않게 자른다.
+      const maxMarginX = Math.max(0, (window.innerWidth - rect.width) / 2);
+      const maxMarginY = Math.max(0, (window.innerHeight - rect.height) / 2);
+      const margin = Math.min(desiredMargin, maxMarginX, maxMarginY);
       const boxLeft = rect.left - margin;
       const boxTop = rect.top - margin;
       const boxWidth = rect.width + margin * 2;
@@ -252,7 +281,8 @@ const ParticleText = forwardRef<ParticleTextHandle, ParticleTextProps>(
       particlesRef.current = targets.map((t, i) => {
         const seed = ((i * 9301 + 49297) % 233280) / 233280;
         const angle = seed * Math.PI * 2;
-        const distance = config.scatterPx * (0.4 + seed * 0.8);
+        const distance =
+          config.scatterPx * (SCATTER_DISTANCE_BASE_FACTOR + seed * SCATTER_DISTANCE_RANGE_FACTOR);
         const targetX = t.x + margin;
         const targetY = t.y + margin;
         return {
@@ -280,33 +310,55 @@ const ParticleText = forwardRef<ParticleTextHandle, ParticleTextProps>(
 
           const start = performance.now();
           const color = colorRef.current;
-          // 이음매 완화 — 형성 마지막 seamMs 동안만 캔버스 요소가 흐려지며
-          // 페이드아웃한다(파티클 이음매 브리프 (나)(다)). BootSequence의
-          // wordmarkEl 페이드인이 같은 [seamStart, durationMs] 창에서
-          // 겹친다 — "아주 짧은 교차"다. seamMs<=0이면(기본값) 기존과 같은
-          // 한 프레임 하드 스왑이다.
+          // 이음매 완화. 형성 마지막 seamMs 동안 캔버스가 흐려지며
+          // 페이드아웃한다. BootSequence의 wordmarkEl 페이드인이 같은
+          // [seamStart, durationMs] 창에서 겹친다("아주 짧은 교차").
+          // seamMs<=0이면(기본값) 기존과 같은 한 프레임 하드 스왑이다.
+          //
+          // 파티클 잔소음 브리프 1절. 예전엔 이 구간 매 프레임 canvas.style.
+          // filter를 새 값으로 다시 쓰고 수백 개 arc()도 계속 그렸다. 진입
+          // 시점(seamStart)이면 가장 늦게 출발한 파티클도 이미 eased 기준
+          // 99% 이상 수렴해 있어(durationMs·delay 계산상 상한), 남은 각
+          // 프레임의 위치·반지름 차이는 1px에도 못 미친다(계산 근거는
+          // 리포트 참고). 그 미세한 차이를 매 프레임 다시 그리는 대신, 이
+          // 프레임에서 목표 위치·최종 반지름으로 한 번만 그리고 rAF를
+          // 멈춘 뒤, 사라지는 연출은 CSS transition에 맡긴다. 캔버스
+          // 내용이 더 이상 안 바뀌므로 브라우저가 블러 결과를 캐시할 수
+          // 있고 opacity는 합성만으로 처리된다.
           const seamStart = seamMs > 0 ? Math.max(0, durationMs - seamMs) : durationMs;
 
           const frame = (now: number) => {
             const elapsed = now - start;
-            ctx.clearRect(0, 0, box.width, box.height);
 
-            if (elapsed >= durationMs) {
-              // 형성 완료 — 캔버스를 비운 채로 rAF를 더 이상 예약하지 않는다.
-              rafRef.current = null;
-              if (seamMs > 0) {
-                canvas.style.opacity = '0';
-                canvas.style.filter = `blur(${SEAM_BLUR_PX}px)`;
+            if (seamMs > 0 && elapsed >= seamStart) {
+              const targetRadius = targetRadiusRef.current;
+              ctx.clearRect(0, 0, box.width, box.height);
+              ctx.fillStyle = color;
+              for (const p of particles) {
+                ctx.beginPath();
+                ctx.arc(p.targetX, p.targetY, targetRadius, 0, Math.PI * 2);
+                ctx.fill();
               }
+
+              rafRef.current = null;
+              // linear. 예전 per-frame 갱신이 elapsed에 정비례해 선형으로
+              // 움직였다(easing 없음). 같은 곡선을 CSS transition으로 옮겨
+              // 시각 결과를 그대로 유지한다.
+              canvas.style.transition = `opacity ${seamMs}ms linear, filter ${seamMs}ms linear`;
+              canvas.style.opacity = '0';
+              canvas.style.filter = `blur(${SEAM_BLUR_PX}px)`;
               return;
             }
 
-            if (seamMs > 0 && elapsed >= seamStart) {
-              const seamProgress = Math.min(1, (elapsed - seamStart) / seamMs);
-              canvas.style.opacity = `${1 - seamProgress}`;
-              canvas.style.filter = `blur(${SEAM_BLUR_PX * seamProgress}px)`;
+            if (elapsed >= durationMs) {
+              // 형성 완료(seamMs<=0 경로). 캔버스를 비운 채로 rAF를 더
+              // 이상 예약하지 않는다.
+              rafRef.current = null;
+              ctx.clearRect(0, 0, box.width, box.height);
+              return;
             }
 
+            ctx.clearRect(0, 0, box.width, box.height);
             ctx.fillStyle = color;
             const targetRadius = targetRadiusRef.current;
             for (const p of particles) {
