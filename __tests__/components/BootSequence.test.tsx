@@ -562,6 +562,14 @@ describe('BootSequence 부팅 판정은 최초 라우트에서 한 번만 내려
     // 다시 참이 되어 배경이 영원히 숨는다.
     expect(onNameRevealed).toHaveBeenCalledTimes(1);
 
+    // 부팅을 건너뛰어도 최종 상태로는 맞춰 둬야 한다. pre-boot 은닉은 CSS가
+    // 소유하고 그것을 벗기는 것은 타임라인 아니면 revealFinalState뿐이다.
+    // 여기서 벗기지 않으면 나중에 overview로 왔을 때 배경과 푸터만 남고
+    // 이름·역할·START가 통째로 안 보인다.
+    expect(screen.getByTestId('wordmark').style.opacity).toBe('1');
+    expect(screen.getByTestId('boot-role').style.opacity).toBe('1');
+    expect(screen.getByTestId('boot-start').style.opacity).toBe('1');
+
     // 워드마크를 눌러 overview로 돌아가는 경로. 빗장을 "시작했을 때만"
     // 잠그게 되돌리면 여기서 타임라인이 만들어져 FAIL한다.
     rerender(<Harness active="overview" onNameRevealed={onNameRevealed} />);
@@ -791,22 +799,36 @@ describe('BootSequence 구도 — 중앙 정렬·간격·CTA 위계', () => {
     const start = screen.getByTestId('boot-start');
     const role = screen.getByTestId('boot-role');
 
-    // 뮤테이션 (h) — t6(반응형 없는 고정 크기)으로 되돌리면 이 세 토큰이
-    // 사라져 FAIL한다.
-    expect(start.className).toContain('text-t5');
-    expect(start.className).toContain('sm:text-t3');
-    expect(start.className).toContain('md:text-t2');
-    expect(role.className).toContain('text-t8');
+    // 사용자 요청으로 둘 다 한 단계씩 키웠다. START는 t5/t3/t2에서
+    // t3/t2/t1로, 역할 라벨은 고정 t8에서 t7/t6/t5로 올라갔다. 역할 라벨은
+    // 반응형 단계가 아예 없었는데 이번에 생겼다. 되돌리면 FAIL한다.
+    expect(start.className).toContain('text-t3');
+    expect(start.className).toContain('sm:text-t2');
+    expect(start.className).toContain('md:text-t1');
+    expect(role.className).toContain('text-t7');
+    expect(role.className).toContain('sm:text-t6');
+    expect(role.className).toContain('md:text-t5');
 
-    // 실제 px 값으로도 위계를 재확인한다 — 이전 라운드는 15/11=1.36배였다.
+    // 크기를 키워도 위계는 유지돼야 한다. 각 뷰포트 단계에서 START가 역할
+    // 라벨보다 확실히 커야 한다. 둘을 같은 비율로 올려버리면 여기서 잡힌다.
     const PX_BY_TOKEN: Record<string, number> = {
-      t8: 11,
+      t7: 13,
+      t6: 15,
       t5: 17,
       t3: 22,
       t2: 26,
+      t1: 30,
     };
-    for (const startToken of ['t5', 't3', 't2']) {
-      expect(PX_BY_TOKEN[startToken] / PX_BY_TOKEN.t8).toBeGreaterThan(1.36);
+    const STEPS: [string, string][] = [
+      ['t3', 't7'],
+      ['t2', 't6'],
+      ['t1', 't5'],
+    ];
+    for (const [startToken, roleToken] of STEPS) {
+      expect(
+        PX_BY_TOKEN[startToken] / PX_BY_TOKEN[roleToken],
+        `${startToken}/${roleToken}`
+      ).toBeGreaterThan(1.36);
     }
   });
 
@@ -979,6 +1001,33 @@ describe('BootSequence 호버는 광휘만 남는다(색은 반응하지 않는�
     expect(DESIGN_TOKENS_CSS).not.toMatch(
       /@keyframes\s+boot-start-charge-flicker/
     );
+  });
+
+  // 사용자 요청으로 호버 광휘를 두 배로 키웠다(6px/2px에서 12px/4px). 그러면
+  // 클릭 충전이 상대적으로 약해지므로 같은 비율로 함께 올렸다. 클릭이 호버보다
+  // 확실히 세다는 위계 자체가 계약이다.
+  it('클릭 충전이 호버 광휘보다 세다(위계 유지)', () => {
+    const hover = noPreferenceOverrideBody('.boot-start:hover');
+    expect(hover, '.boot-start:hover 규칙을 찾지 못했다').toBeDefined();
+
+    const flash = DESIGN_TOKENS_CSS.match(
+      /@keyframes boot-start-flash \{([\s\S]*?)\n {2}\}/
+    )?.[1];
+    expect(flash, 'boot-start-flash 키프레임을 찾지 못했다').toBeDefined();
+
+    // 각 규칙에서 가장 큰 흐림 반경을 뽑는다.
+    const maxBlur = (css: string) =>
+      Math.max(
+        ...[...css.matchAll(/0 0 (\d+)px/g)].map((m) => Number(m[1]))
+      );
+
+    const hoverBlur = maxBlur(hover!);
+    const flashBlur = maxBlur(flash!);
+
+    // 호버를 예전 값(6px)으로 되돌리면 FAIL한다.
+    expect(hoverBlur).toBeGreaterThanOrEqual(12);
+    // 호버만 키우고 클릭을 그대로 두면 위계가 뒤집혀 FAIL한다.
+    expect(flashBlur).toBeGreaterThan(hoverBlur);
   });
 
   it('.boot-start의 transition은 text-shadow만 쓰고 color는 쓰지 않는다, 뮤테이션 (d)', () => {

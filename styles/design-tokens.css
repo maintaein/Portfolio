@@ -269,7 +269,7 @@
     }
     40% {
       color: var(--color-cyan-hi);
-      text-shadow: 0 0 12px var(--color-cyan-hi), 0 0 5px var(--color-cyan-core);
+      text-shadow: 0 0 24px var(--color-cyan-hi), 0 0 9px var(--color-cyan-core);
     }
     100% {
       color: var(--color-text-primary);
@@ -805,7 +805,7 @@
        "재렌더링 되는 느낌"으로 읽혔다. 걷어냈다. 호버는 광휘가 매끄럽게
        차오르고 매끄럽게 빠지는 것 하나면 된다. */
     .boot-start:hover {
-      text-shadow: 0 0 6px var(--color-cyan-hi), 0 0 2px var(--color-cyan-core);
+      text-shadow: 0 0 12px var(--color-cyan-hi), 0 0 4px var(--color-cyan-core);
     }
   }
 

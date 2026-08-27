@@ -158,16 +158,6 @@ export default function BootSequence({
     // 이미 최종 상태로 보인다. 예전과 같이 아무것도 하지 않는다.
     if (reducedMotion) return;
 
-    // 최초 라우트가 overview가 아니었다. 부팅은 영영 재생되지 않는다. 다만
-    // 배경은 heroRevealed가 참이어야 보이는데, 여기서 알리지 않으면 나중에
-    // 워드마크로 overview에 갈 때 heroPending이 다시 참이 되어 배경이 영원히
-    // 숨는다. 이름은 이미 보인다(워드마크가 compact 모드라 hero 은닉을 타지
-    // 않는다). 그래서 여기서는 배경만 열어 주면 된다.
-    if (active !== OVERVIEW) {
-      onNameRevealed?.();
-      return;
-    }
-
     // cleanup 시점엔 ref.current가 이미 바뀌어 있을 수 있으므로(린트가 경고하는
     // 그대로) 이 effect가 실제로 다룰 노드를 지금 스냅샷으로 고정해 둔다.
     const wordmarkEl = wordmarkRef.current;
@@ -203,6 +193,17 @@ export default function BootSequence({
         underlineEl.style.transform = 'scaleX(1)';
       }
       onNameRevealed?.();
+    }
+
+    // 최초 라우트가 overview가 아니었다. 부팅은 영영 재생되지 않는다. 그래도
+    // 최종 상태로는 반드시 맞춰 둬야 한다. 이름·역할·START의 pre-boot 은닉은
+    // CSS가 소유하고(no-preference 오버라이드) 그것을 벗기는 것은 부팅
+    // 타임라인 아니면 이 함수뿐이다. 여기서 부르지 않으면 나중에 워드마크로
+    // overview에 왔을 때 배경과 푸터만 남고 본문이 비어 보인다. 배경을 여는
+    // onNameRevealed도 이 안에 함께 있다.
+    if (active !== OVERVIEW) {
+      revealFinalState();
+      return;
     }
 
     import('@/lib/gsap')
@@ -365,7 +366,7 @@ export default function BootSequence({
       data-testid="boot-start"
       type="button"
       onClick={handleStartClick}
-      className="boot-start relative inline-flex min-h-11 items-center text-t5 sm:text-t3 md:text-t2 uppercase tracking-[0.2em] text-[var(--color-text-primary)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)]"
+      className="boot-start relative inline-flex min-h-11 items-center text-t3 sm:text-t2 md:text-t1 uppercase tracking-[0.2em] text-[var(--color-text-primary)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)]"
     >
       {/* 아이들 광휘를 제거했다(3차 실기기 피드백). 버튼 크기의 220%라
           START 위로 크게 삐져나와 이름과 START 사이에 정체불명의 얼룩으로
@@ -443,7 +444,7 @@ export default function BootSequence({
         <span
           ref={roleRef}
           data-testid="boot-role"
-          className="boot-role block text-t8 uppercase tracking-[0.1em] text-[var(--color-text-secondary)]"
+          className="boot-role block text-t7 sm:text-t6 md:text-t5 uppercase tracking-[0.1em] text-[var(--color-text-secondary)]"
         >
           FRONTEND DEVELOPER
         </span>
