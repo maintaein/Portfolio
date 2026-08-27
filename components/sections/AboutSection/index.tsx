@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { awards, coreValues } from '@/lib/data';
+import dynamic from 'next/dynamic';
+import WhenVisible from '@/components/common/WhenVisible';
+import { awards, coreValues, techStack } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
 
 // 인덱스 레일과 상세 제목이 함께 쓰는 순번 표기. coreValues 길이(3)와 짝을
@@ -12,8 +14,13 @@ const ORDINALS = ['01', '02', '03'];
 // 프론트엔드 리더..." 서술을 뒷받침하는 근거로 재사용한다(lib/data/profile.ts).
 const alphaMailAward = awards[0];
 
-// 비주얼(Cubes·Orbit·LogoLoop)은 Task 2~4가 채운다. 이 태스크는 구조와
-// 텍스트만 세운다. 비주얼 자리는 빈 컨테이너로 남긴다.
+// 격자는 순전히 장식이라 첫 로드 번들에 넣지 않는다. 예전 About의 장식들도
+// next/dynamic이었고 그 패턴을 그대로 따른다. ssr:false인 이유는 이 격자가 aria-hidden이라 SSR HTML에
+// 있을 이유가 없기 때문이다. 기술명은 AboutSection이 sr-only로 직접 낸다.
+const Cubes = dynamic(() => import('@/components/blocks/Cubes'), { ssr: false });
+
+// 비주얼 중 01(tech-stack)은 Cubes가 채운다. 02(ux-focus)·03(collaboration)은
+// Orbit·LogoLoop이 채울 자리로 아직 빈 컨테이너다(Task 3·4).
 export default function AboutSection() {
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -95,11 +102,40 @@ export default function AboutSection() {
               {/* 본문: lg 이상에서 하단 80%를 비주얼 | 텍스트로 나눈다.
                   Compact는 비주얼 위 / 텍스트 아래의 세로 스택이다. */}
               <div className="flex flex-1 flex-col lg:h-[80%] lg:flex-row">
-                {/* 비주얼 자리. 이 태스크에서는 빈 컨테이너. Task 2~4가 채운다 */}
-                <div
-                  aria-hidden="true"
-                  className="aspect-square shrink-0 border-b border-[var(--color-hairline)] lg:aspect-auto lg:h-full lg:w-1/2 lg:border-b-0 lg:border-r"
-                />
+                {value.imagePlaceholder === 'tech-stack' ? (
+                  <div className="aspect-square shrink-0 border-b border-[var(--color-hairline)] lg:aspect-auto lg:h-full lg:w-1/2 lg:border-b-0 lg:border-r">
+                    <WhenVisible section="about" index={index} activeIndex={activeIndex}>
+                      {({ paused, shouldLoad }) =>
+                        // 청크 자체를 shouldLoad 뒤로 미룬다. 격자는 순전히
+                        // 장식이라 열어 보기 전까지 코드를 내려받을 이유가
+                        // 없다. 기술명은 아래 sr-only 목록이 항상 SSR에
+                        // 들고 있으므로 이 청크가 늦게 오거나 실패해도
+                        // 의미는 완결된다.
+                        shouldLoad ? (
+                          <Cubes
+                            paused={paused}
+                            shouldLoad={shouldLoad}
+                            gridSize={4}
+                            wrapperClassName="h-full w-full"
+                          />
+                        ) : null
+                      }
+                    </WhenVisible>
+                    {/* 격자가 aria-hidden인 데다 청크가 늦게 온다. 기술명은
+                        여기서 텍스트로만 항상 내보낸다. 시각적 변화는 없다. */}
+                    <ul className="sr-only">
+                      {techStack.map((tech) => (
+                        <li key={tech.name}>{tech.name}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  // 비주얼 자리. Orbit(02)·LogoLoop(03)이 Task 3·4에서 채운다.
+                  <div
+                    aria-hidden="true"
+                    className="aspect-square shrink-0 border-b border-[var(--color-hairline)] lg:aspect-auto lg:h-full lg:w-1/2 lg:border-b-0 lg:border-r"
+                  />
+                )}
 
                 <div className="flex-1 px-4 py-6 sm:px-8 lg:w-1/2 lg:overflow-y-auto lg:px-10 lg:py-10">
                   {value.imagePlaceholder === 'tech-stack' && (

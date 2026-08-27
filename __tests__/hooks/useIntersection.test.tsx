@@ -5,7 +5,6 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CollaborationMesh from '@/components/blocks/CollaborationMesh';
 import EmpathyRadar from '@/components/blocks/EmpathyRadar';
-import TechParticleStorm from '@/components/blocks/TechParticleStorm';
 import AboutSection from '@/components/sections/AboutSection';
 import {
   SectionActivityProvider,
@@ -32,6 +31,16 @@ vi.mock('next/dynamic', () => ({
   },
 }));
 
+// TechParticleStorm 항목은 뺐다(계획 4 Task 2가 컴포넌트를 삭제하고 Cubes로
+// 대체했다). 이 배열의 계약은 "장식이 CSS 트랜지션 클래스로 진입·일시정지
+// 상태를 드러낸다"이고(initialClasses/finalClasses, 아래 collectInfiniteAnimations가
+// CSS `animation: ...infinite` 클래스나 인라인 style.animation을 찾는다),
+// Cubes는 이 계약이 애초에 성립하지 않는 성격이다. 개별 큐브를
+// gsap.to(cube, { rotateX, rotateY })로 트윈할 뿐 CSS 키프레임 애니메이션도
+// 진입 트랜지션 클래스도 없다. Cubes의 paused→rAF 미예약 계약은
+// __tests__/components/Cubes.test.tsx가 rAF spy로 직접 본다(계획 4 Task 2
+// 브리프가 요구하는 여섯 테스트 중 하나). WhenVisible 자체의 게이팅 계약은
+// 컴포넌트와 무관하게 WhenVisible.test.tsx가 덮는다.
 const decorations = [
   {
     name: 'CollaborationMesh',
@@ -44,12 +53,6 @@ const decorations = [
     Component: EmpathyRadar,
     initialClasses: ['transition-all', 'duration-300', 'opacity-0', 'scale-50'],
     finalClasses: ['transition-all', 'duration-300', 'opacity-100', 'scale-100'],
-  },
-  {
-    name: 'TechParticleStorm',
-    Component: TechParticleStorm,
-    initialClasses: ['transition-all', 'duration-0'],
-    finalClasses: ['transition-all', 'duration-[1200ms]'],
   },
 ] satisfies ReadonlyArray<{
   name: string;
@@ -437,10 +440,17 @@ describe('섹션 진입 애니메이션 트리거', { timeout: 30_000 }, () => {
   // 계획 4 Task 1이 About을 인덱스와 상세 구조로 다시 쓰면서 예전 장식
   // (TechParticleStorm, EmpathyRadar, CollaborationMesh)의 배선을 걷어냈고,
   // 자리를 대신할 Cubes와 Orbit과 LogoLoop은 Task 2부터 4에서 들어온다.
-  // 지금은 통합할 장식이 없다. 게이팅 계약 자체는 WhenVisible.test.tsx의
+  //
+  // Task 2가 Cubes를 01 상세에 물렸지만 이 셋은 여전히 되살리지 않는다.
+  // 셋 다 decorations[0](CollaborationMesh, 03 상세·LogoLoop·Task 4의 몫)의
+  // finalClasses나 CSS `infinite`/`radar-sweep` 애니메이션 클래스를 찾는데,
+  // Cubes는 GSAP 트윈만 쓰고 CSS 클래스로 상태를 드러내지 않아 이 판정
+  // 방식 자체가 성립하지 않는다(decorations 배열 위 주석 참고). Cubes 자신의
+  // production 배선 계약(paused→rAF 미예약, shouldLoad 게이팅)은
+  // Cubes.test.tsx가 이미 본다. 게이팅 계약 자체는 WhenVisible.test.tsx의
   // 열한 개가 컴포넌트와 무관하게 덮고 있으므로 계약에 구멍이 나지는
-  // 않는다. 지우지 않고 갚아야 할 몫으로 남긴다. Task 4가 끝나면 새 세
-  // 장식으로 되살린다.
+  // 않는다. Task 4가 끝나 CollaborationMesh 자리에 LogoLoop이 들어오면 그때
+  // 새 장식으로 되살린다.
   it.todo('production AboutSection wiring latches decoration entry state across a revisit', async () => {
     const { container } = render(<AboutHarness />);
 
