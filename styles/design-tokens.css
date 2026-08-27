@@ -269,7 +269,7 @@
     }
     40% {
       color: var(--color-cyan-hi);
-      text-shadow: 0 0 24px var(--color-cyan-hi), 0 0 9px var(--color-cyan-core);
+      text-shadow: 0 0 38px var(--color-cyan-hi), 0 0 15px var(--color-cyan-core);
     }
     100% {
       color: var(--color-text-primary);
@@ -685,24 +685,6 @@
       0 0 2px var(--color-cyan-core);
   }
 
-  @keyframes boot-start-glow-pulse {
-    0%,
-    100% {
-      opacity: 0.25;
-      transform: translate(-50%, -50%) scale(0.92);
-    }
-    50% {
-      opacity: 0.55;
-      transform: translate(-50%, -50%) scale(1.08);
-    }
-  }
-
-  /* 아이들 광휘 — 모션을 허용하지 않으면 아예 안 보인다(장식이라 최종
-     상태가 필요 없다). */
-  .boot-start-glow {
-    opacity: 0;
-  }
-
   /* 워드마크(이름)의 pre-boot opacity — data-wordmark-mode는 Navigation이
      이미 붙이는 속성이라 별도 클래스·matchMedia 없이 재사용한다. 기본
      규칙(모션 비허용 포함)은 항상 보인다. opacity — 터널 진입 브리프(3차)가
@@ -760,10 +742,6 @@
       opacity: 0;
     }
 
-    .boot-start-glow {
-      animation: boot-start-glow-pulse 3.6s ease-in-out infinite;
-    }
-
     /* START 호버 — 전기 충전 이펙트(HERO 재순서 브리프 4절, Magnet을
        대체한다. "호버 시 전기적 에너지가 글씨에 충전되는듯한" 사용자
        요청). 광휘가 위 .boot-start의 transition(0.5s)을 타고 0에서
@@ -792,8 +770,8 @@
        차오르고 매끄럽게 빠지는 것 하나면 된다. */
     .boot-start:hover {
       text-shadow:
-        0 0 16px var(--color-cyan-hi),
-        0 0 6px var(--color-cyan-core);
+        0 0 24px var(--color-cyan-hi),
+        0 0 9px var(--color-cyan-core);
     }
   }
 
