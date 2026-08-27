@@ -64,7 +64,6 @@ const ROLE_REVEAL_AT = 1.05;
 const ROLE_REVEAL_DURATION = 0.25; // 종료 시각 1.30초
 const START_REVEAL_AT = 1.3;
 const START_REVEAL_DURATION = 0.25; // 종료 시각 1.55초
-const UNDERLINE_DRAW_DURATION = 0.35; // 종료 시각 1.90초(버퍼 구간까지 살짝 걸친다)
 
 export default function BootSequence({
   active,
@@ -77,7 +76,6 @@ export default function BootSequence({
 }: BootSequenceProps) {
   const roleRef = useRef<HTMLSpanElement>(null);
   const startRef = useRef<HTMLButtonElement>(null);
-  const underlineRef = useRef<HTMLSpanElement>(null);
   const hasDecidedRef = useRef(false);
   // 이름 파티클 형성(ParticleText)의 재생 트리거. GSAP 타임라인이 t=0에
   // tl.call()로 이 ref의 play()를 부른다. 아래 eligible 게이트가 tier를
@@ -163,7 +161,6 @@ export default function BootSequence({
     const wordmarkEl = wordmarkRef.current;
     const roleEl = roleRef.current;
     const startEl = startRef.current;
-    const underlineEl = underlineRef.current;
 
     // 이 effect가 아직 살아있는지 — 언마운트·조건 변화로 정리된 뒤에 동적
     // import promise가 늦게 도착해도 죽은 노드에 timeline을 걸지 않는다.
@@ -188,9 +185,6 @@ export default function BootSequence({
       }
       if (wordmarkEl) {
         wordmarkEl.style.opacity = '1';
-      }
-      if (underlineEl) {
-        underlineEl.style.transform = 'scaleX(1)';
       }
       onNameRevealed?.();
     }
@@ -284,17 +278,6 @@ export default function BootSequence({
           );
         }
 
-        if (underlineEl) {
-          // 좌→우로 한 번 그어진다(scaleX 0→1, origin-left는 CSS가 건다).
-          // START 자체보다 살짝 길게(0.35s) 그어 텍스트가 나타난 뒤에도
-          // 잠깐 더 그려지는 느낌을 준다 — 버퍼 구간(1.80–2.00)까지 걸친다.
-          tl.fromTo(
-            underlineEl,
-            { scaleX: 0 },
-            { scaleX: 1, duration: UNDERLINE_DRAW_DURATION, ease: SITE_EASE },
-            START_REVEAL_AT
-          );
-        }
 
         // 2초 지점을 타임라인 길이로 고정한다 — "2초 안에 완료" 계약의 경계.
         tl.set({}, {}, BOOT_DURATION_SECONDS);
@@ -399,17 +382,6 @@ export default function BootSequence({
         >
           START
         </span>
-        {/* 밑줄 — GSAP이 좌→우로 한 번 그린 뒤(scaleX), 이후는 순수 CSS
-            루프로 opacity만 0.55↔1 호흡한다(글자는 건드리지 않는다).
-            모바일엔 hover가 없으므로 이 draw·호흡이 START가 클릭 가능함을
-            알리는 유일한 정지 상태 신호로 남는다 — 전기 충전 호버는 데스크톱
-            보너스일 뿐이다(파티클 형성 브리프 2절과 같은 원칙). */}
-        <span
-          ref={underlineRef}
-          data-testid="boot-start-underline"
-          aria-hidden="true"
-          className="boot-start-underline absolute bottom-0 left-0 h-px w-full origin-left bg-[var(--color-cyan-core)]"
-        />
       </span>
     </button>
   );

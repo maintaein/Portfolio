@@ -413,26 +413,6 @@ describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨
     expect(wordmarkEl.style.opacity).toBe('');
   });
 
-  it('밑줄이 실제로 그려진다(scaleX 트윈이 존재하고 진행된다) — 뮤테이션 (j)', async () => {
-    render(<Harness />);
-    await flushGsapImport();
-    const tl = capturedTimeline();
-    const underline = screen.getByTestId('boot-start-underline');
-
-    // fromTo의 immediateRender가 생성 즉시 from 값(scaleX 0)을 적용한다 —
-    // 뮤테이션 (j)로 draw 트윈 자체를 지우면 이 값이 계속 빈 문자열로
-    // 남아 FAIL한다.
-    const atStart = underline.style.transform;
-    expect(atStart, '밑줄 트윈의 from 값이 즉시 렌더돼 있어야 한다').not.toBe('');
-
-    act(() => {
-      tl.seek(1.9); // UNDERLINE_DRAW_DURATION 종료 시각
-    });
-    const atEnd = underline.style.transform;
-    expect(atEnd).not.toBe('');
-    expect(atEnd, '좌→우로 그려지는 중이므로 시작 값과 달라야 한다').not.toBe(atStart);
-  });
-
   // HERO 재순서의 표제 계약 — 파티클 이음매 브리프(5차)로 좁혀졌다. 파티클이
   // 뭉치는 동안 DOM 이름이 함께 페이드인하면 "따로 등장하는 두 컴포넌트"로
   // 읽힌다(3차 실기기 피드백, 0.55초 병렬 페이드가 거부된 이유). 크로스페이드는
@@ -832,35 +812,6 @@ describe('BootSequence 구도 — 중앙 정렬·간격·CTA 위계', () => {
     }
   });
 
-  it('밑줄은 START 버튼 안의 별도 span이다 — CSS border가 아니라 GSAP이 scaleX로 그을 수 있어야 한다', () => {
-    // 뮤테이션 (i) — 이 span 자체를 지우면 밑줄 draw 자체가 불가능해진다.
-    render(<Harness />);
-    const start = screen.getByTestId('boot-start');
-    const underline = screen.getByTestId('boot-start-underline');
-
-    expect(start).toContainElement(underline);
-    expect(underline.className).toContain('bg-[var(--color-cyan-core)]');
-    expect(underline.className).toContain('origin-left');
-    expect(underline).toHaveAttribute('aria-hidden', 'true');
-  });
-
-  it('밑줄은 버튼 박스가 아니라 텍스트를 감싸는 relative span의 자손이다 — 뮤테이션 (i)', () => {
-    // 컨트롤러가 코드에서 확정한 원인: 버튼이 min-h-11(44px 터치 타깃)이고
-    // items-center로 글자가 그 안에서 수직 중앙에 놓이는데, 밑줄이 버튼
-    // 바로 아래 absolute bottom-0 자식이면 글자가 아니라 버튼 박스
-    // 바닥에 그어진다. 텍스트를 relative span으로 감싸 밑줄을 그 안에
-    // 두면 밑줄이 글자 자신의 박스 바닥에 붙는다.
-    render(<Harness />);
-    const start = screen.getByTestId('boot-start');
-    const underline = screen.getByTestId('boot-start-underline');
-
-    // 뮤테이션 (i) — 밑줄을 다시 버튼 바로 아래 자식으로 옮기면(텍스트
-    // wrapper 없이) parentElement가 start 자신이 되어 FAIL한다.
-    expect(underline.parentElement).not.toBe(start);
-    expect(underline.parentElement?.className).toContain('relative');
-    expect(underline.parentElement?.textContent).toBe('START');
-  });
-
   it('START 버튼은 44px 터치 타깃(min-h-11)을 유지한다 — 뮤테이션 (r)', () => {
     render(<Harness />);
     const start = screen.getByTestId('boot-start');
@@ -989,18 +940,65 @@ describe('BootSequence 호버는 광휘만 남는다(색은 반응하지 않는�
   // 호버 깜빡임. filter를 text-shadow로 옮겨도 실기기 증상이 그대로였다.
   // 비용이 아니라 연출 자체가 문제였다. 글자 전체가 0.55까지 흐려졌다
   // 돌아오는 것이 "재렌더링 되는 느낌"의 정체였다.
-  it('호버에 opacity를 건드리는 애니메이션이 없다, 깜빡임이 되살아나면 FAIL', () => {
+  it('호버는 정지 상태의 반짝임을 끄고 고정된 세기로 간다, 깜빡임이 되살아나면 FAIL', () => {
     const hover = noPreferenceOverrideBody('.boot-start:hover');
     expect(hover, '.boot-start:hover 규칙을 찾지 못했다').toBeDefined();
 
     // 광휘는 남아 있어야 한다.
     expect(hover).toMatch(/text-shadow\s*:/);
-    // 깜빡임을 되살리면 여기서 FAIL한다.
-    expect(hover).not.toMatch(/animation\s*:/);
-    // 키프레임 자체도 고아로 남기지 않는다.
+
+    // 호버에서 허용되는 animation은 none뿐이다. 정지 상태의 반짝임을 끄지
+    // 않으면 키프레임이 호버 선언을 계속 덮어써 호버가 반영되지 않는다.
+    // 이름 있는 애니메이션(예전 깜빡임)이 되살아나면 여기서 FAIL한다.
+    const animationDecl = hover!.match(/animation\s*:\s*([^;]+);/)?.[1]?.trim();
+    expect(animationDecl, '호버가 정지 상태 반짝임을 끄지 않는다').toBe('none');
+
+    // 예전 깜빡임 키프레임은 고아로도 남기지 않는다.
     expect(DESIGN_TOKENS_CSS).not.toMatch(
       /@keyframes\s+boot-start-charge-flicker/
     );
+  });
+
+  // 계약이 뒤집혔다. 예전에는 "글자 상시 맥동 금지"였고 호버와 클릭 반응만
+  // 예외였는데, 사용자가 정지 상태에서도 느리게 반짝이기를 요청했다. 밑줄을
+  // 걷어내면서 모바일에서 START가 누를 수 있음을 알리던 정지 신호가
+  // 사라졌으므로 이 반짝임이 그 자리를 대신한다.
+  it('정지 상태에서 느리게 반짝인다, reduce에서는 재생되지 않는다', () => {
+    const base = noPreferenceOverrideBody('.boot-start');
+    expect(base, '.boot-start의 no-preference 오버라이드를 찾지 못했다').toBeDefined();
+
+    // 반짝임을 지우면 FAIL한다.
+    expect(base).toMatch(/animation\s*:\s*boot-start-idle-glow/);
+    expect(DESIGN_TOKENS_CSS).toMatch(/@keyframes\s+boot-start-idle-glow/);
+
+    // 미디어쿼리 밖 기본 규칙에는 없어야 한다. 있으면 reduce에서도 돌아
+    // 접근성 계약이 깨진다.
+    const unconditional = unconditionalRuleBody('.boot-start');
+    expect(unconditional).toBeDefined();
+    expect(unconditional).not.toMatch(/animation\s*:/);
+  });
+
+  it('세기가 정지 상태보다 호버, 호버보다 클릭 순으로 커진다', () => {
+    const maxBlur = (css: string) =>
+      Math.max(...[...css.matchAll(/0 0 (\d+)px/g)].map((m) => Number(m[1])));
+
+    const idle = DESIGN_TOKENS_CSS.match(
+      /@keyframes boot-start-idle-glow \{([\s\S]*?)\n {4}\}/
+    )?.[1];
+    expect(idle, 'boot-start-idle-glow 키프레임을 찾지 못했다').toBeDefined();
+    const hover = noPreferenceOverrideBody('.boot-start:hover');
+    const flash = DESIGN_TOKENS_CSS.match(
+      /@keyframes boot-start-flash \{([\s\S]*?)\n {2}\}/
+    )?.[1];
+    expect(flash, 'boot-start-flash 키프레임을 찾지 못했다').toBeDefined();
+
+    const idleBlur = maxBlur(idle!);
+    const hoverBlur = maxBlur(hover!);
+    const flashBlur = maxBlur(flash!);
+
+    // 셋을 비슷하게 만들면 단계가 뭉개져 여기서 잡힌다.
+    expect(hoverBlur).toBeGreaterThan(idleBlur);
+    expect(flashBlur).toBeGreaterThan(hoverBlur);
   });
 
   // 사용자 요청으로 호버 광휘를 두 배로 키웠다(6px/2px에서 12px/4px). 그러면
@@ -1506,12 +1504,14 @@ describe('BootSequence 파티클 경합 브리프(등급 판정이 느린 쪽)',
 // 이음매 브리프(5차)에서 걷어냈다. 여기서는 BootSequence가 START 버튼을
 // 올바르게 배선하고, 둘 다 더 이상 쓰이지 않는지를 본다.
 describe('BootSequence — START 배선(Magnet·ClickSpark 부재)', () => {
-  it('START 버튼이 여전히 boot-start testid·44px 터치 타깃·밑줄을 갖는다', () => {
+  it('START 버튼이 여전히 boot-start testid와 44px 터치 타깃을 갖는다', () => {
     render(<Harness />);
     const start = screen.getByTestId('boot-start');
     expect(start.tagName).toBe('BUTTON');
     expect(start.className).toContain('min-h-11');
-    expect(screen.getByTestId('boot-start-underline')).toBeInTheDocument();
+    // 밑줄은 사용자 요청으로 걷어냈다. 정지 상태의 반짝임이 그 역할을
+    // 대신한다(위 '정지 상태에서 느리게 반짝인다' 참고).
+    expect(screen.queryByTestId('boot-start-underline')).not.toBeInTheDocument();
   });
 
   // ClickSpark 제거를 뒤집어 못박는다(브리프 "계약을 뒤집어 못박아라") —
