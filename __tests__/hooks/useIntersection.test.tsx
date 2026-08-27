@@ -59,7 +59,6 @@ const decorations = [
 }>;
 
 const WHILE_IN_VIEW_DEBT = {
-  'components/sections/AboutSection/index.tsx': { plan: 4, count: 2 },
   'components/blocks/SectionHeader/index.tsx': { plan: 5, count: 1 },
   'components/sections/SkillsSection/index.tsx': { plan: 5, count: 1 },
   'components/sections/ExperienceSection/index.tsx': {
@@ -434,7 +433,15 @@ describe('섹션 진입 애니메이션 트리거', { timeout: 30_000 }, () => {
     });
   }
 
-  it('production AboutSection wiring latches decoration entry state across a revisit', async () => {
+  // 아래 셋은 About의 장식이 WhenVisible을 통과하는지 보는 통합 테스트다.
+  // 계획 4 Task 1이 About을 인덱스와 상세 구조로 다시 쓰면서 예전 장식
+  // (TechParticleStorm, EmpathyRadar, CollaborationMesh)의 배선을 걷어냈고,
+  // 자리를 대신할 Cubes와 Orbit과 LogoLoop은 Task 2부터 4에서 들어온다.
+  // 지금은 통합할 장식이 없다. 게이팅 계약 자체는 WhenVisible.test.tsx의
+  // 열한 개가 컴포넌트와 무관하게 덮고 있으므로 계약에 구멍이 나지는
+  // 않는다. 지우지 않고 갚아야 할 몫으로 남긴다. Task 4가 끝나면 새 세
+  // 장식으로 되살린다.
+  it.todo('production AboutSection wiring latches decoration entry state across a revisit', async () => {
     const { container } = render(<AboutHarness />);
 
     expect(findElementWithClasses(container, decorations[0].finalClasses)).toBeUndefined();
@@ -451,7 +458,7 @@ describe('섹션 진입 애니메이션 트리거', { timeout: 30_000 }, () => {
     });
   });
 
-  it('production AboutSection wiring pauses all decorations while inactive and resumes them', async () => {
+  it.todo('production AboutSection wiring pauses all decorations while inactive and resumes them', async () => {
     const { container } = render(<AboutHarness />);
 
     fireEvent.click(screen.getByRole('button', { name: 'About' }));
@@ -483,7 +490,7 @@ describe('섹션 진입 애니메이션 트리거', { timeout: 30_000 }, () => {
     });
   });
 
-  it('production AboutSection wiring mounts reduced-motion decorations in their final state', async () => {
+  it.todo('production AboutSection wiring mounts reduced-motion decorations in their final state', async () => {
     const { container } = render(<AboutHarness reducedMotion />);
 
     fireEvent.click(screen.getByRole('button', { name: 'About' }));
