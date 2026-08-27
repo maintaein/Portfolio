@@ -334,11 +334,15 @@ const ParticleText = forwardRef<ParticleTextHandle, ParticleTextProps>(
               const targetRadius = targetRadiusRef.current;
               ctx.clearRect(0, 0, box.width, box.height);
               ctx.fillStyle = color;
+              // 경로 하나에 전부 모아 한 번만 채운다(아래 프레임 루프와 같은
+              // 이유). moveTo가 없으면 직전 원의 끝점에서 다음 원의 시작점까지
+              // 선이 그어져 글자가 거미줄처럼 이어진다.
+              ctx.beginPath();
               for (const p of particles) {
-                ctx.beginPath();
+                ctx.moveTo(p.targetX + targetRadius, p.targetY);
                 ctx.arc(p.targetX, p.targetY, targetRadius, 0, Math.PI * 2);
-                ctx.fill();
               }
+              ctx.fill();
 
               rafRef.current = null;
               // linear. 예전 per-frame 갱신이 elapsed에 정비례해 선형으로
@@ -361,6 +365,12 @@ const ParticleText = forwardRef<ParticleTextHandle, ParticleTextProps>(
             ctx.clearRect(0, 0, box.width, box.height);
             ctx.fillStyle = color;
             const targetRadius = targetRadiusRef.current;
+            // 입자마다 beginPath와 fill을 따로 부르면 high tier에서 프레임당
+            // 480번의 독립 채우기 연산이 된다. 경로 하나에 전부 모아 마지막에
+            // 한 번만 채운다. 겹치지 않는 도형들의 합집합이라 non-zero winding
+            // 결과가 개별로 채운 것과 같고, 겹치는 이웃도 같은 색 불투명이라
+            // 보이는 결과가 달라지지 않는다.
+            ctx.beginPath();
             for (const p of particles) {
               const span = Math.max(1, durationMs - p.delay);
               const local = Math.min(1, Math.max(0, (elapsed - p.delay) / span));
@@ -370,10 +380,10 @@ const ParticleText = forwardRef<ParticleTextHandle, ParticleTextProps>(
               // 반지름도 eased를 따라 커진다(파티클 이음매 브리프 (가)) —
               // 작은 조각으로 출발해 수렴할수록 최종 반지름까지 자란다.
               const radius = targetRadius * (START_RADIUS_RATIO + (1 - START_RADIUS_RATIO) * eased);
-              ctx.beginPath();
+              ctx.moveTo(x + radius, y);
               ctx.arc(x, y, radius, 0, Math.PI * 2);
-              ctx.fill();
             }
+            ctx.fill();
 
             rafRef.current = requestAnimationFrame(frame);
           };

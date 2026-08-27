@@ -40,6 +40,7 @@ interface StubContext {
   clearRect: ReturnType<typeof vi.fn>;
   setTransform: ReturnType<typeof vi.fn>;
   beginPath: ReturnType<typeof vi.fn>;
+  moveTo: ReturnType<typeof vi.fn>;
   arc: ReturnType<typeof vi.fn>;
   fill: ReturnType<typeof vi.fn>;
   fillText: ReturnType<typeof vi.fn>;
@@ -55,6 +56,7 @@ function createStubContext(): StubContext {
     clearRect: vi.fn(),
     setTransform: vi.fn(),
     beginPath: vi.fn(),
+    moveTo: vi.fn(),
     arc: vi.fn(),
     fill: vi.fn(),
     fillText: vi.fn(),
@@ -254,6 +256,41 @@ describe('ParticleText — 파티클 수 상한(tier별)', () => {
     // 뮤테이션 (g) — 상한을 제거하면 이 값이 수천 개로 치솟아 FAIL한다.
     expect(ctx.arc.mock.calls.length).toBeGreaterThan(0);
     expect(ctx.arc.mock.calls.length).toBeLessThanOrEqual(480);
+  });
+
+  // 입자마다 beginPath와 fill을 따로 부르면 프레임당 수백 번의 독립 채우기가
+  // 된다. 경로 하나에 모아 한 번만 채우는 것이 남아 있던 끊김의 마지막 원인
+  // 이었다. 되돌리면 fill 횟수가 입자 수만큼 늘어 FAIL한다.
+  it('한 프레임에 fill을 한 번만 부른다(입자 수에 비례하지 않는다)', () => {
+    const ctx = mockWorkingCanvas();
+    mockWordmarkRect(400, 150);
+    const wordmarkRef = renderWithSpan();
+    const ref = createRef<ParticleTextHandle>();
+
+    render(
+      <ParticleText
+        ref={ref}
+        wordmarkRef={wordmarkRef}
+        tier="high"
+        durationMs={550}
+      />
+    );
+
+    act(() => {
+      ref.current?.play();
+    });
+    ctx.arc.mockClear();
+    ctx.fill.mockClear();
+    ctx.beginPath.mockClear();
+    flushOneFrame(0);
+
+    // 입자는 여럿 그렸는데
+    expect(ctx.arc.mock.calls.length).toBeGreaterThan(1);
+    // 경로를 여는 것도 채우는 것도 한 번씩이다.
+    expect(ctx.beginPath).toHaveBeenCalledTimes(1);
+    expect(ctx.fill).toHaveBeenCalledTimes(1);
+    // moveTo가 빠지면 원들이 선으로 이어져 글자가 거미줄이 된다.
+    expect(ctx.moveTo.mock.calls.length).toBe(ctx.arc.mock.calls.length);
   });
 
   it('medium tier는 220개를 넘지 않는다 — high보다 보수적이다', () => {

@@ -796,28 +796,16 @@
        텍스처 없이 글리프 자체에 그림자 사본을 겹쳐 그리는 것뿐이라
        똑같이 비싼 재계산이 없다. 이 요소는 텍스트만 담고 있어(글자
        주위로 삐져나가는 도형이 없다) 두 기법이 만드는 광휘의 보이는
-       결과 차이는 실질적으로 없다. 반지름 값(6px/2px)은 그대로
-       옮겼다. 깜빡임(boot-start-charge-flicker)은 그대로 남긴다. opacity
-       하나만 바꾸는 합성 전용 애니메이션이라 원래도 저렴했고, "끊김"의
-       실제 원인은 그 아래서 매 프레임 다시 계산되던 필터 체인이었다. */
+       결과 차이는 실질적으로 없다. 반지름 값(6px/2px)은 그대로 옮겼다.
+
+       그 라운드에서 깜빡임(boot-start-charge-flicker)은 남겼는데, opacity
+       하나만 바꾸는 합성 전용 애니메이션이라 저렴하다는 것이 근거였다.
+       실기기에서 증상이 그대로였다. 비용이 아니라 연출 자체가 문제였다.
+       호버할 때마다 글자 전체가 0.55까지 흐려졌다 돌아오니 사용자에게는
+       "재렌더링 되는 느낌"으로 읽혔다. 걷어냈다. 호버는 광휘가 매끄럽게
+       차오르고 매끄럽게 빠지는 것 하나면 된다. */
     .boot-start:hover {
       text-shadow: 0 0 6px var(--color-cyan-hi), 0 0 2px var(--color-cyan-core);
-      animation: boot-start-charge-flicker 0.18s ease-out;
-    }
-
-    @keyframes boot-start-charge-flicker {
-      0% {
-        opacity: 1;
-      }
-      30% {
-        opacity: 0.55;
-      }
-      60% {
-        opacity: 1;
-      }
-      100% {
-        opacity: 1;
-      }
     }
   }
 

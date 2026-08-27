@@ -66,16 +66,6 @@ const START_REVEAL_AT = 1.3;
 const START_REVEAL_DURATION = 0.25; // 종료 시각 1.55초
 const UNDERLINE_DRAW_DURATION = 0.35; // 종료 시각 1.90초(버퍼 구간까지 살짝 걸친다)
 
-// START 클릭 후 실제 섹션 전환(onStart)까지의 지연(ms). 클릭 링은 터널
-// 진입 브리프(3차)에서 제거됐다 — 대신 글자가 --color-cyan-hi로 반짝이며
-// 호버와 같은 필터(drop-shadow) 충전이 함께 걸린다(.boot-start-flash,
-// 0.42s, design-tokens.css). 파티클 이음매 브리프(5차)가 ClickSpark(캔버스
-// 스파크)를 걷어내고 이 반짝임 자체를 "충전"으로 강화했다 — 스파크가 실기기에서
-// 안 보인다는 피드백에 스파크를 고치는 대신 걷어내고, 이미 있던 충전 언어를
-// 더 세게 재사용했다. 지연은 키프레임 전체 길이(0.42s)와 맞춰 충전이 다
-// 보인 뒤에 전환이 시작되게 한다(이전 230ms에서 상향).
-const START_TRANSITION_DELAY_MS = 420;
-
 export default function BootSequence({
   active,
   routeResolved,
@@ -88,7 +78,7 @@ export default function BootSequence({
   const roleRef = useRef<HTMLSpanElement>(null);
   const startRef = useRef<HTMLButtonElement>(null);
   const underlineRef = useRef<HTMLSpanElement>(null);
-  const hasStartedRef = useRef(false);
+  const hasDecidedRef = useRef(false);
   // 이름 파티클 형성(ParticleText)의 재생 트리거. GSAP 타임라인이 t=0에
   // tl.call()로 이 ref의 play()를 부른다. 아래 eligible 게이트가 tier를
   // 포함하므로 "기기 등급 미확정"은 더 이상 null의 이유가 아니다(파티클
@@ -102,9 +92,13 @@ export default function BootSequence({
   // 애니메이션(.boot-start-flash)을 처음부터 재생한다. 0이면 아직 한 번도
   // 누르지 않은 것이라 클래스를 걸지 않는다(상시 맥동이 아니다).
   const [flashKey, setFlashKey] = useState(0);
-  // 클릭 후 실제 onStart()까지의 지연 예약. null이면 예약이 없다 — 이
-  // 값의 존재 자체가 "이미 예약됨" 가드다(중복 클릭 방지).
-  const startTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 이미 눌렀는가. 사용자가 "누르는 효과와 동시에 이동"으로 바꾸면서 클릭과
+  // 전환 사이의 지연이 사라졌고, 지연 예약의 존재 자체가 맡던 중복 클릭
+  // 가드도 함께 근거를 잃었다. 그것을 이 불리언이 대신한다. 같은 태스크에서
+  // 두 번 눌러도 React가 아직 다시 그리기 전이므로 두 번째 클릭은 여기서
+  // 걸린다. 아래 active를 보는 effect가 이동이 끝나면 풀어 줘서 overview로
+  // 돌아왔을 때 START가 다시 눌린다.
+  const startPressedRef = useRef(false);
 
   // 기기 등급(low/medium/high) — 파티클 형성을 돌릴지, 돌린다면 어떤
   // 파라미터로 돌릴지의 단일 출처(lib/deviceQuality.ts). null은 "아직
@@ -148,18 +142,31 @@ export default function BootSequence({
     tier === 'high' || tier === 'medium' ? tier : null;
 
   useLayoutEffect(() => {
-    // tier !== null. 등급 판정 전에는 시작하지 않는다(파티클 경합 브리프
-    // (나)). readBattery()의 상한((가))이 이 조건을 영원히 막지 않게 하는
-    // 안전장치다.
-    const eligible =
-      routeResolved &&
-      motionReady &&
-      !reducedMotion &&
-      active === OVERVIEW &&
-      tier !== null;
+    // 부팅 여부는 최초 라우트가 정해지는 그 순간 한 번만 판정한다. active는
+    // 이 조건에 들어가지 않는다. 예전에는 active === OVERVIEW를 함께 요구해서
+    // #projects 같은 딥링크로 들어오면 빗장이 잠기지 않은 채로 남았고, 나중에
+    // 워드마크를 눌러 overview로 갈 때 조건이 그제야 전부 참이 되면서 부팅이
+    // 처음부터 재생됐다(좌상단에서 파티클이 뭉친 뒤에야 overview로 넘어갔다).
+    // tier가 조건에 있는 이유는 파티클 경합 브리프 (나)이고, readBattery()의
+    // 상한이 이 조건을 영원히 막지 않게 하는 안전장치다.
+    const decidable = routeResolved && motionReady && tier !== null;
 
-    if (!eligible || hasStartedRef.current) return;
-    hasStartedRef.current = true;
+    if (!decidable || hasDecidedRef.current) return;
+    hasDecidedRef.current = true;
+
+    // 모션을 끈 경우. CSS의 pre-boot 은닉 자체가 no-preference 안에만 있어
+    // 이미 최종 상태로 보인다. 예전과 같이 아무것도 하지 않는다.
+    if (reducedMotion) return;
+
+    // 최초 라우트가 overview가 아니었다. 부팅은 영영 재생되지 않는다. 다만
+    // 배경은 heroRevealed가 참이어야 보이는데, 여기서 알리지 않으면 나중에
+    // 워드마크로 overview에 갈 때 heroPending이 다시 참이 되어 배경이 영원히
+    // 숨는다. 이름은 이미 보인다(워드마크가 compact 모드라 hero 은닉을 타지
+    // 않는다). 그래서 여기서는 배경만 열어 주면 된다.
+    if (active !== OVERVIEW) {
+      onNameRevealed?.();
+      return;
+    }
 
     // cleanup 시점엔 ref.current가 이미 바뀌어 있을 수 있으므로(린트가 경고하는
     // 그대로) 이 effect가 실제로 다룰 노드를 지금 스냅샷으로 고정해 둔다.
@@ -304,7 +311,7 @@ export default function BootSequence({
       // 부팅 도중 이탈(active가 overview를 벗어남·reducedMotion으로 전환 등) —
       // 역할 라벨·START·워드마크·wrapper·밑줄을 중간 프레임이 아니라 최종
       // 안정 상태로 맞춘다. 재방문 시 이 최종 상태가 그대로 유지되고
-      // 타임라인은 다시 만들어지지 않는다(hasStartedRef가 이미 true).
+      // 타임라인은 다시 만들어지지 않는다(hasDecidedRef가 이미 true).
       // timeline이 아직 없으면(로드 대기 중 이탈) 곧바로 최종 상태로 둔다.
       timeline?.kill();
       revealFinalState();
@@ -312,43 +319,30 @@ export default function BootSequence({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, motionReady, reducedMotion, routeResolved, tier]);
 
-  // 지연 중 active가 다른 곳으로 바뀌면(다른 네비게이션이 먼저 이겼다는
-  // 뜻) 예약된 onStart()가 그걸 덮어쓰면 안 된다 — 이 effect의 cleanup이
-  // active가 바뀔 때마다(그리고 unmount 시에도) 남은 예약을 정리한다.
+  // active가 바뀌면(START로 이동했든 다른 네비가 이겼든) 눌림 빗장을 푼다.
+  // 그래야 overview로 돌아왔을 때 START가 다시 눌린다. cleanup이라 언마운트도
+  // 같은 자리에서 처리된다.
   useEffect(() => {
     return () => {
-      if (startTimeoutRef.current !== null) {
-        clearTimeout(startTimeoutRef.current);
-        startTimeoutRef.current = null;
-      }
+      startPressedRef.current = false;
     };
   }, [active]);
 
   // START를 누르면 글자를 새로 마운트해 반짝임(.boot-start-flash)을 재생하고
-  // START_TRANSITION_DELAY_MS 뒤에 섹션 전환을 시작한다 — "에너지가
-  // 차올랐다 돌아오는" 반짝임을 볼 시간을 준다(터널 진입 브리프 4절, 클릭
-  // 링은 이 라운드에서 제거했다). 배경의 fov 펀치("임팩트")는 이 전환이
-  // 만드는 isTransitioning edge를 HyperspeedBackground가 이미 boost()로
-  // 받는다(기존 계약) — 여기서 handle을 따로 참조하지 않는다.
+  // 곧바로 섹션 전환을 시작한다. 예전에는 반짝임을 다 보여주려고 420ms를
+  // 기다렸는데, 사용자가 "누르는 효과와 동시에 이동"으로 바꿨다. 버튼이 곧
+  // 사라지므로 충전이 끝까지 보이지는 않는다. 그것이 요청한 결과다.
+  // 배경의 fov 펀치("임팩트")는 이 전환이 만드는 isTransitioning edge를
+  // HyperspeedBackground가 이미 boost()로 받는다(기존 계약).
   //
-  // 가드 네 가지: (1) 이미 예약돼 있으면(startTimeoutRef가 non-null) 재클릭을
-  // 무시한다 — 전환이 두 번 예약되지 않는다. (2) 지연 중 다른 네비가 이기면
-  // 위 effect의 cleanup이 이 예약을 정리한다. (3) 언마운트도 같은 cleanup이
-  // 처리한다. (4) reducedMotion이면 지연 없이 즉시 이동한다.
+  // reducedMotion 분기는 사라졌다. 예전에는 그쪽만 즉시 이동이었는데 이제
+  // 두 경로가 같아졌다.
   function handleStartClick() {
-    if (startTimeoutRef.current !== null) return;
+    if (startPressedRef.current) return;
+    startPressedRef.current = true;
 
     setFlashKey((key) => key + 1);
-
-    if (reducedMotion) {
-      onStart();
-      return;
-    }
-
-    startTimeoutRef.current = setTimeout(() => {
-      startTimeoutRef.current = null;
-      onStart();
-    }, START_TRANSITION_DELAY_MS);
+    onStart();
   }
 
   // 워드마크와 마찬가지로 이 컴포넌트는 HomeClient에서 overview 섹션 밖(셸

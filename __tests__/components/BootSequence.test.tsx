@@ -510,28 +510,17 @@ describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨
     expect(wordmark.style.opacity).toBe('1');
   });
 
-  it('START 클릭은 충전이 보일 지연(420ms) 뒤 onStart를 호출한다 — 뮤테이션 (m)', () => {
-    // 터널 진입 브리프 4절 — 클릭 즉시 전환되면 "에너지가 차오르는" 반짝임을
-    // 볼 시간이 없다. 파티클 이음매 브리프(5차)가 ClickSpark를 걷어내고
-    // 반짝임을 필터 충전으로 강화하며 지연을 키프레임 전체 길이(0.42s)에
-    // 맞춰 420ms로 올렸다. onStart는 지연 뒤에만 불려야 한다(뮤테이션 (k)·(m)).
+  // 계약이 뒤집혔다. 예전에는 충전을 다 보여주려고 420ms를 기다렸는데
+  // 사용자가 "누르는 효과와 동시에 이동"으로 바꿨다. 지연을 되살리면
+  // 이 테스트가 FAIL한다.
+  it('START 클릭은 지연 없이 곧바로 onStart를 호출한다', () => {
     const onStart = vi.fn();
     render(<Harness onStart={onStart} />);
 
     act(() => {
       screen.getByTestId('boot-start').click();
     });
-    expect(onStart, '클릭 즉시 불리면 안 된다').not.toHaveBeenCalled();
-
-    act(() => {
-      vi.advanceTimersByTime(419);
-    });
-    expect(onStart, '420ms 전에 불리면 안 된다').not.toHaveBeenCalled();
-
-    act(() => {
-      vi.advanceTimersByTime(1); // 총 420ms
-    });
-    expect(onStart, '420ms 뒤에는 불려야 한다').toHaveBeenCalledTimes(1);
+    expect(onStart, '클릭과 동시에 불려야 한다').toHaveBeenCalledTimes(1);
   });
 
   // 터널 진입 브리프 3절, 7경로 표 — "부팅 도중 언마운트·이탈 → 최종
@@ -552,6 +541,41 @@ describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨
     // 공용)를 겨눈 자가 발견 뮤테이션이다. revealFinalState()에서
     // wordmarkEl.style.opacity 대입을 지우면 이 값이 ''로 남아 FAIL한다.
     expect(wordmark.style.opacity).toBe('1');
+  });
+});
+
+// 딥링크 버그. 예전 게이트는 active === OVERVIEW를 함께 요구해서 #projects
+// 같은 딥링크로 들어오면 빗장이 잠기지 않은 채 남았고, 나중에 워드마크를
+// 눌러 overview로 갈 때 부팅이 처음부터 재생됐다. 좌상단 워드마크 자리에서
+// 파티클이 뭉친 뒤에야 overview로 넘어가는 것이 사용자가 본 증상이다.
+describe('BootSequence 부팅 판정은 최초 라우트에서 한 번만 내려진다', () => {
+  it('딥링크로 다른 섹션에서 시작하면 overview로 이동해도 부팅이 재생되지 않는다', async () => {
+    const onNameRevealed = vi.fn();
+    const { rerender } = render(
+      <Harness active="projects" onNameRevealed={onNameRevealed} />
+    );
+    await flushGsapImport();
+
+    // 딥링크에서는 판정만 하고 재생하지 않는다.
+    expect(timelineSpy).not.toHaveBeenCalled();
+    // 배경은 열어 준다. 이것을 빠뜨리면 overview로 갔을 때 heroPending이
+    // 다시 참이 되어 배경이 영원히 숨는다.
+    expect(onNameRevealed).toHaveBeenCalledTimes(1);
+
+    // 워드마크를 눌러 overview로 돌아가는 경로. 빗장을 "시작했을 때만"
+    // 잠그게 되돌리면 여기서 타임라인이 만들어져 FAIL한다.
+    rerender(<Harness active="overview" onNameRevealed={onNameRevealed} />);
+    await flushGsapImport();
+
+    expect(timelineSpy).not.toHaveBeenCalled();
+    expect(rafSpy).not.toHaveBeenCalled();
+  });
+
+  it('overview에서 시작하면 부팅은 예전대로 재생된다(반대 방향)', async () => {
+    render(<Harness active="overview" />);
+    await flushGsapImport();
+
+    expect(timelineSpy).toHaveBeenCalled();
   });
 });
 
@@ -940,6 +964,23 @@ describe('BootSequence 호버는 광휘만 남는다(색은 반응하지 않는�
     expect(start.className).not.toMatch(/\bduration-\d+\b/);
   });
 
+  // 호버 깜빡임. filter를 text-shadow로 옮겨도 실기기 증상이 그대로였다.
+  // 비용이 아니라 연출 자체가 문제였다. 글자 전체가 0.55까지 흐려졌다
+  // 돌아오는 것이 "재렌더링 되는 느낌"의 정체였다.
+  it('호버에 opacity를 건드리는 애니메이션이 없다, 깜빡임이 되살아나면 FAIL', () => {
+    const hover = noPreferenceOverrideBody('.boot-start:hover');
+    expect(hover, '.boot-start:hover 규칙을 찾지 못했다').toBeDefined();
+
+    // 광휘는 남아 있어야 한다.
+    expect(hover).toMatch(/text-shadow\s*:/);
+    // 깜빡임을 되살리면 여기서 FAIL한다.
+    expect(hover).not.toMatch(/animation\s*:/);
+    // 키프레임 자체도 고아로 남기지 않는다.
+    expect(DESIGN_TOKENS_CSS).not.toMatch(
+      /@keyframes\s+boot-start-charge-flicker/
+    );
+  });
+
   it('.boot-start의 transition은 text-shadow만 쓰고 color는 쓰지 않는다, 뮤테이션 (d)', () => {
     const override = noPreferenceOverrideBody('.boot-start');
     expect(override, '.boot-start의 no-preference 오버라이드를 찾지 못했다').toBeDefined();
@@ -1001,64 +1042,46 @@ describe('BootSequence — 캡션 컨테인먼트 점프 회피(active 기반 �
 // 터널 진입 브리프 4절이 클릭 링을 대체했다)을 볼 시간이 없었다. onStart를
 // START_TRANSITION_DELAY_MS만큼 늦추되 네 가드(중복 클릭·다른 네비 경합·
 // 언마운트 정리·reducedMotion)를 지킨다.
-describe('BootSequence — START 클릭 지연(반짝임 가시성 확보)과 가드', () => {
-  it('지연 중 두 번 클릭해도 onStart는 한 번만 예약된다 — 뮤테이션 (l)', () => {
+describe('BootSequence — START 클릭 가드', () => {
+  // 지연이 사라지면서 "예약의 존재"가 맡던 중복 클릭 가드도 근거를 잃었다.
+  // 눌림 빗장이 그것을 대신한다. 같은 태스크에서 두 번 눌러도 React가 아직
+  // 다시 그리기 전이라 두 번째는 빗장에 걸린다.
+  it('연달아 두 번 클릭해도 onStart는 한 번만 불린다', () => {
     const onStart = vi.fn();
     render(<Harness onStart={onStart} />);
     const start = screen.getByTestId('boot-start');
 
     act(() => {
       start.click();
-    });
-    act(() => {
-      vi.advanceTimersByTime(50);
-    });
-    act(() => {
-      start.click(); // 지연 중 재클릭 — 무시돼야 한다
+      start.click();
     });
 
-    act(() => {
-      vi.advanceTimersByTime(450); // 두 지연 모두 끝났을 시간(420ms 지연)
-    });
     expect(onStart).toHaveBeenCalledTimes(1);
   });
 
-  it('지연 중 active가 다른 곳으로 바뀌면(다른 네비게이션이 이김) 예약된 onStart를 부르지 않는다 — 뮤테이션 (m)', () => {
+  // 지연이 사라지면서 "예약된 전환이 다른 네비게이션을 덮어쓴다"와 "언마운트
+  // 시 타이머를 정리한다"는 두 계약도 함께 의미를 잃었다. 예약할 것이 없기
+  // 때문이다. 대신 눌림 빗장이 제때 풀리는지가 새 계약이다. 빗장이 안 풀리면
+  // overview로 돌아왔을 때 START가 영영 죽는다.
+  it('이동한 뒤 overview로 돌아오면 START가 다시 눌린다(눌림 빗장이 풀린다)', () => {
     const onStart = vi.fn();
-    const { rerender } = render(<Harness onStart={onStart} active="overview" />);
+    const { rerender } = render(
+      <Harness onStart={onStart} active="overview" />
+    );
 
     act(() => {
       screen.getByTestId('boot-start').click();
     });
-    act(() => {
-      vi.advanceTimersByTime(50);
-    });
+    expect(onStart).toHaveBeenCalledTimes(1);
 
-    // 다른 경로(예: 해시 변경)로 이미 다른 섹션으로 이동했다고 가정한다.
+    // 이동했다가 돌아온다.
     rerender(<Harness onStart={onStart} active="about" />);
-
-    act(() => {
-      vi.advanceTimersByTime(300);
-    });
-    expect(
-      onStart,
-      '예약된 전환이 다른 네비게이션 결과를 덮어쓰면 안 된다'
-    ).not.toHaveBeenCalled();
-  });
-
-  it('언마운트 시 예약된 onStart 타이머를 정리한다 — 뮤테이션 (n)', () => {
-    const onStart = vi.fn();
-    const { unmount } = render(<Harness onStart={onStart} />);
+    rerender(<Harness onStart={onStart} active="overview" />);
 
     act(() => {
       screen.getByTestId('boot-start').click();
     });
-    unmount();
-
-    act(() => {
-      vi.advanceTimersByTime(300);
-    });
-    expect(onStart).not.toHaveBeenCalled();
+    expect(onStart, '빗장이 풀리지 않으면 두 번째가 삼켜진다').toHaveBeenCalledTimes(2);
   });
 
   it('reducedMotion에서는 지연 없이 즉시 onStart를 부른다 — 뮤테이션 (o)', () => {
