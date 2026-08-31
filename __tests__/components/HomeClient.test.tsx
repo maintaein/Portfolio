@@ -423,7 +423,12 @@ describe('HomeClient SSR 셸 구조', () => {
   });
 });
 
-describe('HomeClient section 상태', () => {
+// render(<HomeClient />)는 전 섹션을 한 번에 마운트한다. About이 계획 4에서
+// dynamic 장식을 붙이기 시작하면서 이 렌더가 무거워졌고, 39개 파일을 병렬로
+// 돌리는 전체 스위트에서 기본 5초를 넘겨 여덟 번에 한 번꼴로 붉었다. 수행
+// 시간이 아니라 CPU 경합에 따른 대기가 원인이라 같은 파일의
+// HyperspeedBackground 배선 describe와 같은 방식으로 여유를 준다.
+describe('HomeClient section 상태', { timeout: 30_000 }, () => {
   it('projects가 활성일 때만 stage에 가로 스크롤 클래스를 붙인다', () => {
     const { container } = render(<HomeClient />);
     const stage = container.querySelector<HTMLElement>('.section-stage');

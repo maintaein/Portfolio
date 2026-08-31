@@ -19,8 +19,13 @@ const alphaMailAward = awards[0];
 // 있을 이유가 없기 때문이다. 기술명은 AboutSection이 sr-only로 직접 낸다.
 const Cubes = dynamic(() => import('@/components/blocks/Cubes'), { ssr: false });
 
-// 비주얼 중 01(tech-stack)은 Cubes가 채운다. 02(ux-focus)·03(collaboration)은
-// Orbit·LogoLoop이 채울 자리로 아직 빈 컨테이너다(Task 3·4).
+// 궤도도 같은 이유로 dynamic이다. Orbit 전체가 aria-hidden이라(눈·커서·손
+// 아이콘은 고유명사가 아니라 은유일 뿐) sr-only로 대신 낼 텍스트가 없다.
+// "Flat ↔ Compound"와 설명 문단이 이미 이 상세의 증거를 텍스트로 낸다.
+const Orbit = dynamic(() => import('@/components/blocks/Orbit'), { ssr: false });
+
+// 비주얼 중 01(tech-stack)은 Cubes, 02(ux-focus)는 Orbit이 채운다.
+// 03(collaboration)은 LogoLoop이 채울 자리로 아직 빈 컨테이너다(Task 4).
 export default function AboutSection() {
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -102,7 +107,7 @@ export default function AboutSection() {
               {/* 본문: lg 이상에서 하단 80%를 비주얼 | 텍스트로 나눈다.
                   Compact는 비주얼 위 / 텍스트 아래의 세로 스택이다. */}
               <div className="flex flex-1 flex-col lg:h-[80%] lg:flex-row">
-                {value.imagePlaceholder === 'tech-stack' ? (
+                {value.imagePlaceholder === 'tech-stack' && (
                   <div className="aspect-square shrink-0 border-b border-[var(--color-hairline)] lg:aspect-auto lg:h-full lg:w-1/2 lg:border-b-0 lg:border-r">
                     <WhenVisible section="about" index={index} activeIndex={activeIndex}>
                       {({ paused, shouldLoad }) =>
@@ -129,8 +134,26 @@ export default function AboutSection() {
                       ))}
                     </ul>
                   </div>
-                ) : (
-                  // 비주얼 자리. Orbit(02)·LogoLoop(03)이 Task 3·4에서 채운다.
+                )}
+
+                {value.imagePlaceholder === 'ux-focus' && (
+                  <div className="aspect-square shrink-0 border-b border-[var(--color-hairline)] lg:aspect-auto lg:h-full lg:w-1/2 lg:border-b-0 lg:border-r">
+                    <WhenVisible section="about" index={index} activeIndex={activeIndex}>
+                      {({ paused, shouldLoad }) =>
+                        // 궤도도 shouldLoad 뒤로 청크를 미룬다. Orbit
+                        // 전체가 aria-hidden이고 대신 낼 sr-only 텍스트가
+                        // 없다(컴포넌트 주석 참고). "Flat ↔ Compound"와
+                        // 아래 설명 문단이 이미 이 상세의 증거다.
+                        shouldLoad ? (
+                          <Orbit paused={paused} shouldLoad={shouldLoad} />
+                        ) : null
+                      }
+                    </WhenVisible>
+                  </div>
+                )}
+
+                {value.imagePlaceholder === 'collaboration' && (
+                  // 비주얼 자리. LogoLoop이 Task 4에서 채운다.
                   <div
                     aria-hidden="true"
                     className="aspect-square shrink-0 border-b border-[var(--color-hairline)] lg:aspect-auto lg:h-full lg:w-1/2 lg:border-b-0 lg:border-r"
