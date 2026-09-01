@@ -248,6 +248,31 @@ describe('AboutSection', () => {
     }
   });
 
+  // 스크림이 .section-stage 안에 있으면 헤더 72px와 푸터 45px 띠가 빠져
+  // 그 부분만 배경이 밝게 남는다. 사용자가 배포본에서 본 것이다.
+  // fixed로 띄워 뷰포트 전체를 덮는다. Task 4가 섹션 래퍼에 transform을
+  // 상시로 남기지 않는 이유가 이것이다.
+  it('스크림이 뷰포트 전체를 덮는다(무대 안에 갇히지 않는다)', () => {
+    const { container } = renderAboutSection();
+    const scrims = container.querySelectorAll('[data-about-scrim]');
+    expect(scrims.length).toBeGreaterThan(0);
+    for (const scrim of scrims) {
+      expect(scrim.className, '스크림이 absolute면 무대에 갇힌다').toMatch(
+        /\bfixed\b/
+      );
+      expect(scrim.className).toMatch(/\binset-0\b/);
+    }
+  });
+
+  // fixed는 positioned라 그냥 두면 흐름 안의 본문 위에 그려진다.
+  // 음수 z로 내려 배경(-z-10)과 본문 사이에 둔다.
+  it('스크림이 본문 아래에 깔린다', () => {
+    const { container } = renderAboutSection();
+    for (const scrim of container.querySelectorAll('[data-about-scrim]')) {
+      expect(scrim.className).toMatch(/-z-\[1\]/);
+    }
+  });
+
   // 레이아웃이 통일되면서 개별성이 콘텐츠와 배경에만 남았다. 셋이 같으면
   // 세 화면이 같아 보인다.
   it('세 문항의 스크림이 서로 다르다', () => {

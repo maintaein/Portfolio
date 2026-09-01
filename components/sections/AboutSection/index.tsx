@@ -115,9 +115,11 @@ export default function AboutSection() {
           lg 이상에서는 기존처럼 전부 absolute로 겹쳐 크로스페이드한다. */}
       <div className="relative flex-1 lg:h-full">
         {/* 문항별 배경 스크림. 레일은 이 컨테이너 바깥(별도 flex 자식)이라
-            겹치지 않지만, DOM 순서상 상세 콘텐츠보다 먼저 둬 텍스트 아래에
-            깔리게 한다. 이 컨테이너 자체가 배경(HyperspeedBackground, fixed
-            -z-10)보다 위 레이어라 스크림도 언제나 배경 위에 그려진다.
+            겹치지 않는다. .section-stage(fixed, header/footer만큼 inset)
+            안에 있으면 그 여백만큼 배경이 빠져 밝게 남으므로 fixed로 띄워
+            뷰포트 전체를 덮는다. fixed는 DOM 순서가 아니라 -z-[1]로
+            쌓임을 정한다: 배경(HyperspeedBackground, fixed -z-10)보다는
+            위, 상세 콘텐츠(z-index 없음)보다는 아래로 깔린다.
             평평한 검은 막이 아니라 그라데이션을 써서 광선이 그대로 흐르게
             한다(scrim.ts).
 
@@ -138,7 +140,7 @@ export default function AboutSection() {
             data-about-scrim
             data-about-scrim-index={index}
             aria-hidden="true"
-            className={`pointer-events-none absolute inset-0 hidden transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] lg:block ${
+            className={`pointer-events-none fixed inset-0 -z-[1] hidden transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] lg:block ${
               index === activeIndex ? 'opacity-100' : 'opacity-0'
             }`}
             style={{ background: scrim }}
@@ -150,7 +152,7 @@ export default function AboutSection() {
             data-about-scrim
             data-about-scrim-index={index}
             aria-hidden="true"
-            className={`pointer-events-none absolute inset-0 transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] lg:hidden ${
+            className={`pointer-events-none fixed inset-0 -z-[1] transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] lg:hidden ${
               index === activeIndex ? 'opacity-100' : 'opacity-0'
             }`}
             style={{ background: scrim }}
