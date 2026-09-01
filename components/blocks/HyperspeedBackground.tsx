@@ -98,7 +98,10 @@ const DynamicHyperspeed = dynamic(
 );
 
 const BASE_OPACITY_OVERVIEW = 1;
-const BASE_OPACITY_SECTION = 0.3;
+// About 재설계에서 배경이 구도의 일부가 됐다. 0.3에서는 광선이 사실상
+// 보이지 않았다. 전 섹션 공통값이라 나머지 다섯 섹션의 본문 대비도 함께
+// 내려간다. Task 8이 전 섹션을 확인한다.
+const BASE_OPACITY_SECTION = 0.55;
 // obscured(ProjectModal 열림) 동안 배경에서 초점을 빼는 블러 반경.
 // 감광(0.4배)에서 블러로 바꿨다 — 어둡게 하면 배경이 남색 덩어리로 죽는데,
 // 블러는 밝기를 유지한 채 시선만 모달로 보낸다. 대비는 모달 자신의 불투명

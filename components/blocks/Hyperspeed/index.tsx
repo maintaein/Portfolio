@@ -932,6 +932,12 @@ class App {
   }
 
   init() {
+    // loadAssets()가 비동기라 그 사이에 언마운트되면 dispose()가 먼저 끝난다.
+    // 그 뒤 도착한 init()이 죽은 객체 위에서 돌면 composer가 null이라 던진다.
+    // 개발 StrictMode의 이중 마운트에서 매번 재현되고, 로드 중 이탈에서도
+    // 같은 일이 난다.
+    if (this.disposed) return;
+
     this.initPasses();
     this.road.init();
     this.setQuality('high');
