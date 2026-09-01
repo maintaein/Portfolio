@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import AboutSection from '@/components/sections/AboutSection';
 import { SectionActivityProvider } from '@/components/common/SectionActivityContext';
 import { coreValues } from '@/lib/data';
+import { ABOUT_SCRIMS } from '@/components/sections/AboutSection/scrim';
 
 beforeEach(() => {
   vi.stubGlobal(
@@ -234,6 +235,28 @@ describe('AboutSection', () => {
     const id = section?.getAttribute('aria-labelledby');
     expect(id, 'aria-labelledby 속성 자체가 없다').toBeTruthy();
     expect(container.querySelector(`#${id}`), `#${id} 요소가 없다`).not.toBeNull();
+  });
+
+  // 평평한 검은 막은 배경을 통째로 죽여 어우러짐이 사라진다. 글자가 놓인
+  // 오른쪽만 덮고 왼쪽으로는 광선이 흐른다.
+  it('스크림이 평평한 막이 아니라 그라데이션이다', () => {
+    expect(ABOUT_SCRIMS).toHaveLength(3);
+    for (const s of ABOUT_SCRIMS) {
+      expect(s).toMatch(/linear-gradient/);
+      expect(s).toMatch(/rgb\(0 0 0 \/ 0\)/);
+    }
+  });
+
+  // 레이아웃이 통일되면서 개별성이 콘텐츠와 배경에만 남았다. 셋이 같으면
+  // 세 화면이 같아 보인다.
+  it('세 문항의 스크림이 서로 다르다', () => {
+    expect(new Set(ABOUT_SCRIMS).size).toBe(3);
+  });
+
+  it('활성 문항의 스크림만 걸린다', () => {
+    const { container } = renderAboutSection();
+    const scrim = container.querySelector('[data-about-scrim]');
+    expect(scrim).toHaveStyle({ background: ABOUT_SCRIMS[0] });
   });
 });
 

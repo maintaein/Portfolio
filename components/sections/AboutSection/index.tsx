@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { coreValues } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
 import AboutRail from './rail';
+import { ABOUT_SCRIMS } from './scrim';
 
 // 증거 블록. 자리는 셋이 같고 내용만 다르다. 콘텐츠가 확정되면 이 배열만
 // 바꾼다. 라벨은 t8, 값은 크게 둬서 대충 봐도 값이 먼저 읽힌다.
@@ -77,6 +78,18 @@ export default function AboutSection() {
           자식을 하나도 못 봐서 자체 높이가 0으로 무너진다(Task 7 조사).
           lg 이상에서는 기존처럼 전부 absolute로 겹쳐 크로스페이드한다. */}
       <div className="relative flex-1 lg:h-full">
+        {/* 문항별 배경 스크림. 레일은 이 컨테이너 바깥(별도 flex 자식)이라
+            겹치지 않지만, DOM 순서상 상세 콘텐츠보다 먼저 둬 텍스트 아래에
+            깔리게 한다. 이 컨테이너 자체가 배경(HyperspeedBackground, fixed
+            -z-10)보다 위 레이어라 스크림도 언제나 배경 위에 그려진다.
+            평평한 검은 막이 아니라 그라데이션을 써서 왼쪽으로는 광선이
+            그대로 흐르게 한다(scrim.ts). */}
+        <div
+          data-about-scrim
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 transition-[background] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
+          style={{ background: ABOUT_SCRIMS[activeIndex] }}
+        />
         {coreValues.map((value, index) => {
           const isActive = index === activeIndex;
 
