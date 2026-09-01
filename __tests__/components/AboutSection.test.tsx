@@ -1,11 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AboutSection from '@/components/sections/AboutSection';
 import { SectionActivityProvider } from '@/components/common/SectionActivityContext';
-import { coreValues, techStack } from '@/lib/data';
+import { coreValues } from '@/lib/data';
 
 beforeEach(() => {
   vi.stubGlobal(
@@ -16,13 +16,9 @@ beforeEach(() => {
   );
 });
 
-// WhenVisible(Cubes가 01 상세에서 쓴다)이 useSectionActivity()로 이 컨텍스트를
-// 읽는다. HomeClient는 항상 이 Provider로 전 섹션을 감싸므로 실제 운영에서는
-// 문제가 없지만, 이 파일은 AboutSection을 단독으로 렌더한다. Provider 없이는
-// useSectionActivity()가 던진다. active를 'about'이 아닌 'overview'로 둬 이
-// 파일의 테스트들(인덱스·상세 구조 검증)이 Cubes의 GSAP 동적 로드와 얽히지
-// 않게 한다. WhenVisible이 넘긴 실제 paused/shouldLoad가 Cubes까지 그대로
-// 전달되는지는 아래 "AboutSection production 배선" describe가 따로 본다.
+// HomeClient는 항상 이 Provider로 전 섹션을 감싼다. AboutSection은 장식을
+// 폐기해(Task 2) 더는 useSectionActivity()를 직접 쓰지 않지만, 실제 배선과
+// 같은 모양을 유지하려고 이 파일도 Provider로 감싼다.
 function renderAboutSection() {
   return render(
     <SectionActivityProvider
@@ -39,42 +35,16 @@ function renderAboutSection() {
 }
 
 describe('AboutSection', () => {
-  // 격자는 aria-hidden이고 청크도 늦게 온다. 기술명 15개는 AboutSection이
-  // sr-only로 항상 내보내야 스크린리더와 페이지 내 찾기에서 살아남는다.
-  // Cubes 안에 두면 청크가 오기 전까지 통째로 사라진다.
-  it('기술명 15개가 접근 가능한 텍스트로 존재한다', () => {
-    renderAboutSection();
-    for (const tech of techStack) {
-      expect(screen.getByText(tech.name)).toBeInTheDocument();
-    }
-  });
-
-  // 격자는 next/dynamic으로 갈라 두고 shouldLoad가 열려야 렌더한다. 열어
-  // 보기 전까지 청크를 내려받을 이유가 없다. 기술명은 위 sr-only가 이미
-  // 덮으므로 청크가 늦거나 실패해도 의미는 완결된다.
-  //
-  // jsdom에서는 이것을 행동으로 증명할 수 없다. Vitest 환경의 next/dynamic은
-  // 청크를 실제로 해석하지 않아 게이트가 있든 없든 격자가 DOM에 나타나지
-  // 않는다. 아무리 기다려도 마찬가지라 "없다"는 단언은 아무것도 잡지 못한다.
-  // 실제로 게이트를 벗기는 뮤테이션이 그 방식으로는 통과했다. 그래서 이
-  // 저장소가 CSS와 BootSequence에 이미 쓰는 소스 검사 방식으로 고정한다.
-  // 번들이 실제로 갈라졌는지는 check-bundle의 firstLoadJs가 증거다.
-  // Orbit(02 ux-focus)도 같은 이유로 같은 방식이다. 이 격자를 next/dynamic
-  // 으로 가르고 shouldLoad 뒤에만 렌더한다.
-  it('격자·궤도를 next/dynamic으로 가르고 shouldLoad 뒤에만 렌더한다', () => {
+  // Cubes와 Orbit은 폐기했다. 배경이 이미 있는데 별도 도형을 얹으면 경쟁한다.
+  // 되살리면 이 테스트가 FAIL한다.
+  it('장식 컴포넌트를 쓰지 않는다', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'components/sections/AboutSection/index.tsx'),
       'utf8'
     );
-
-    // 정적 import로 되돌리면 FAIL한다(뮤테이션 a).
-    expect(source).toMatch(/dynamic\(\s*\(\)\s*=>\s*import\('@\/components\/blocks\/Cubes'\)/);
-    expect(source).toMatch(/dynamic\(\s*\(\)\s*=>\s*import\('@\/components\/blocks\/Orbit'\)/);
-    // 게이트를 하나만 벗기면(둘 중 하나가 항상 렌더하면) FAIL한다(뮤테이션 b).
-    // shouldLoad ? ( 패턴이 Cubes·Orbit 각각 한 번씩, 최소 2번 나와야 한다 —
-    // 한쪽만 세면 다른 쪽 게이트가 벗겨져도 못 잡는다.
-    const shouldLoadGateCount = (source.match(/shouldLoad\s*\?\s*\(/g) ?? []).length;
-    expect(shouldLoadGateCount).toBeGreaterThanOrEqual(2);
+    expect(source).not.toMatch(/blocks\/Cubes/);
+    expect(source).not.toMatch(/blocks\/Orbit/);
+    expect(source).not.toMatch(/next\/dynamic/);
   });
 
   it('인덱스 항목 3개를 렌더한다', () => {
@@ -182,110 +152,7 @@ describe('AboutSection', () => {
   });
 });
 
-// AboutSection이 WhenVisible의 render prop에서 받은 paused/shouldLoad를
-// Cubes와 Orbit에 곧이곧대로 넘기는지를 보는 production 배선 테스트다. 이
-// 파일의 다른 테스트들은 active="overview"라 이 배선이 아예 발동하지 않는다.
-// Cubes.test.tsx와 Orbit.test.tsx는 각 컴포넌트 자체에 paused/shouldLoad를
-// 직접 주입해서 보므로, AboutSection이 그 사이에서 값을 놓치거나
-// 하드코딩해도 잡아내지 못한다. 뮤테이션으로 실제 확인했다
-// (paused={false}/shouldLoad={true}로 하드코딩해도 전체 스위트가 그대로
-// 통과했다. Cubes 때 뚫렸던 구멍이고, Orbit도 같은 방식으로 확인했다). 이
-// describe가 그 구멍을 막는다.
-// 전체 스위트를 병렬로 돌리면 CPU 경합만으로 waitFor 기본 1초를 넘긴다.
-// next/dynamic이 Cubes·Orbit 청크를 해석하고 그 안에서 GSAP을 다시 동적으로
-// 부르는 두 단계라 특히 길다. 수행 시간이 아니라 대기가 원인이므로
-// useIntersection.test.tsx와 같은 방식으로 여유를 준다.
-describe('AboutSection production 배선: WhenVisible이 Cubes·Orbit에 실제 paused/shouldLoad를 준다', { timeout: 30_000 }, () => {
-  // Orbit.test.tsx·Cubes.test.tsx와 같은 패턴이다. 밖에서 미리 선언해 둔
-  // vi.fn()을 목 팩토리가 참조하게 한다. 처음에는 `const { gsap } = await
-  // import('@/lib/gsap')`로 스파이를 얻었는데, 39개 파일 전체 병렬 실행에서만
-  // 간헐적으로 "0번 호출"로 FAIL했다(단독·소규모 배치 실행에서는 재현되지
-  // 않았다. waitFor 타임아웃을 45_000까지 올려도 재현됐다 — 대기가 아니라
-  // 다른 원인이라는 뜻이었다). 팩토리 안에서 매번 새 vi.fn()을 만드는
-  // 인라인 방식이라, 그 factory가 재실행될 때마다 다른 vi.fn() 인스턴스가
-  // 생겨 이 테스트가 캡처한 참조와 Orbit이 실제로 받는 gsap.to 참조가
-  // 어긋났을 가능성이 있다. 미리 선언해 항상 같은 참조를 쓰는 이 방식으로
-  // 바꾼 뒤 전체 스위트 반복 실행에서 재현되지 않았다(아래 검증 절 참고).
-  const orbitToFn = vi.fn();
-  const orbitKillFn = vi.fn();
-  const orbitSetFn = vi.fn();
-  const orbitRegisterGsapFn = vi.fn();
-
-  beforeEach(() => {
-    vi.resetModules();
-    orbitToFn.mockReset();
-    orbitToFn.mockImplementation(() => ({ kill: orbitKillFn }));
-    orbitKillFn.mockReset();
-    orbitSetFn.mockReset();
-    orbitRegisterGsapFn.mockReset();
-    vi.doMock('@/lib/gsap', () => ({
-      // Orbit은 tween을 kill해서 정지한다(Cubes의 rAF 취소와 같은 역할).
-      // 반환값에 kill이 없으면 paused 전환 클린업에서 던진다.
-      gsap: { to: orbitToFn, set: orbitSetFn },
-      registerGsap: orbitRegisterGsapFn,
-      Flip: {},
-      SITE_EASE: 'site',
-    }));
-    // jsdom에는 ResizeObserver가 없다. Orbit의 responsive 스케일링
-    // (Orbit.test.tsx와 같은 이유)이 여기서도 필요하다.
-    class StubResizeObserver {
-      observe = vi.fn();
-      disconnect = vi.fn();
-    }
-    vi.stubGlobal('ResizeObserver', StubResizeObserver);
-  });
-
-  afterEach(() => {
-    vi.doUnmock('@/lib/gsap');
-    vi.unstubAllGlobals();
-  });
-
-  function renderActiveAbout() {
-    return render(
-      <SectionActivityProvider
-        active="about"
-        entryAnimationTarget={null}
-        pageVisible
-        routeResolved
-        motionReady
-        reducedMotion={false}
-      >
-        <AboutSection />
-      </SectionActivityProvider>
-    );
-  }
-
-  it('01(tech-stack)에서 02로 옮기면 Cubes의 idle 루프가 멈춘다(paused가 실제로 전달된다는 증거)', async () => {
-    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 1);
-    const cancelSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
-
-    renderActiveAbout();
-    // About이 활성이고 01이 기본 선택이라 Cubes의 shouldLoad가 곧바로 열려
-    // GSAP 청크를 불러오고, idle 루프가 첫 rAF를 건다.
-    await waitFor(() => expect(rafSpy).toHaveBeenCalled(), { timeout: 15_000 });
-
-    // paused={false}로 하드코딩돼 있었다면 02로 옮겨도 취소가 일어나지
-    // 않는다. 이 클릭이 곧 뮤테이션을 잡아내는 지점이다.
-    await userEvent.click(
-      screen.getByRole('button', { name: new RegExp(coreValues[1].title) })
-    );
-    expect(cancelSpy).toHaveBeenCalled();
-  });
-
-  it('02(ux-focus)에서 03으로 옮기면 Orbit의 궤도 tween이 kill된다(paused가 실제로 전달된다는 증거)', async () => {
-    renderActiveAbout();
-    // 01이 기본 선택이라 먼저 02로 옮겨야 Orbit의 shouldLoad가 열린다.
-    await userEvent.click(
-      screen.getByRole('button', { name: new RegExp(coreValues[1].title) })
-    );
-    // Orbit은 아이콘 3개, 즉 tween 3개를 만든다(Orbit.test.tsx와 같은 계약).
-    await waitFor(() => expect(orbitToFn).toHaveBeenCalledTimes(3), { timeout: 15_000 });
-
-    // paused={false}로 하드코딩돼 있었다면 03으로 옮겨도 kill이 일어나지
-    // 않는다. 이 클릭이 곧 뮤테이션을 잡아내는 지점이다.
-    await userEvent.click(
-      screen.getByRole('button', { name: new RegExp(coreValues[2].title) })
-    );
-    expect(orbitKillFn).toHaveBeenCalledTimes(3);
-  });
-});
+// AboutSection이 WhenVisible의 paused/shouldLoad를 Cubes·Orbit에 곧이곧대로
+// 넘기는지를 보던 production 배선 describe를 지웠다. About 재설계가 장식
+// 컴포넌트 자체를 폐기해(Task 2) 넘길 대상이 없다. 배경이 이미 있는데 별도
+// 도형을 얹으면 경쟁한다.

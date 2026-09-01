@@ -4,7 +4,6 @@ import { lazy, Suspense, useLayoutEffect, useRef, type ComponentType } from 'rea
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CollaborationMesh from '@/components/blocks/CollaborationMesh';
-import AboutSection from '@/components/sections/AboutSection';
 import {
   SectionActivityProvider,
 } from '@/components/common/SectionActivityContext';
@@ -185,25 +184,6 @@ function DecorationHarness({
   );
 }
 
-function AboutHarness({ reducedMotion = false }: { reducedMotion?: boolean }) {
-  const nav = useSectionNav();
-
-  return (
-    <SectionActivityProvider
-      active={nav.active}
-      entryAnimationTarget={nav.entryAnimationTarget}
-      pageVisible
-      routeResolved={nav.routeResolved}
-      motionReady
-      reducedMotion={reducedMotion}
-    >
-      <button onClick={() => nav.setActive('about')}>About</button>
-      <button onClick={() => nav.setActive('projects')}>Projects</button>
-      <AboutSection />
-    </SectionActivityProvider>
-  );
-}
-
 function BlockedDecorationHarness({ Component }: { Component: Decoration }) {
   return (
     <SectionActivityProvider
@@ -228,9 +208,10 @@ function BlockedDecorationHarness({ Component }: { Component: Decoration }) {
   );
 }
 
-// 실제 AboutSection을 렌더하고 IntersectionObserver 전이를 여러 번 돌린다.
-// 전체 스위트(35+ 파일 병렬)에서는 CPU 경합만으로 기본 5초를 넘겨 플레이키가
-// 됐다 — checkBundle.test.ts와 같은 부류다. 수행 시간이 아니라 대기가 원인이다.
+// CollaborationMesh와 여러 하네스를 렌더하고 IntersectionObserver 전이를
+// 여러 번 돌린다. 전체 스위트(35+ 파일 병렬)에서는 CPU 경합만으로 기본 5초를
+// 넘겨 플레이키가 됐다(checkBundle.test.ts와 같은 부류다). 수행 시간이 아니라
+// 대기가 원인이다.
 describe('섹션 진입 애니메이션 트리거', { timeout: 30_000 }, () => {
   it('useIntersection을 사용하는 컴포넌트의 IntersectionObserver 진입 판정을 차단한다', () => {
     const componentRoot = resolve(process.cwd(), 'components');
@@ -426,80 +407,8 @@ describe('섹션 진입 애니메이션 트리거', { timeout: 30_000 }, () => {
     });
   }
 
-  // 아래 셋은 About의 장식이 WhenVisible을 통과하는지 보는 통합 테스트다.
-  // 계획 4 Task 1이 About을 인덱스와 상세 구조로 다시 쓰면서 예전 장식
-  // (TechParticleStorm, EmpathyRadar, CollaborationMesh)의 배선을 걷어냈고,
-  // 자리를 대신할 Cubes와 Orbit과 LogoLoop은 Task 2부터 4에서 들어온다.
-  //
-  // Task 2가 Cubes를 01 상세에, Task 3이 Orbit을 02 상세에 물렸지만 이
-  // 셋은 여전히 되살리지 않는다. 셋 다 decorations[0](CollaborationMesh,
-  // 03 상세·LogoLoop·Task 4의 몫)의 finalClasses나 CSS `infinite`/
-  // `radar-sweep` 애니메이션 클래스를 찾는데, Cubes와 Orbit은 둘 다 GSAP
-  // 트윈만 쓰고 CSS 클래스로 상태를 드러내지 않아 이 판정 방식 자체가
-  // 성립하지 않는다(decorations 배열 위 주석 참고). Cubes와 Orbit 각자의
-  // production 배선 계약(paused→rAF 또는 tween 미예약, shouldLoad 게이팅)은
-  // Cubes.test.tsx와 Orbit.test.tsx가 이미 본다. AboutSection이 WhenVisible의
-  // 실제 값을 Cubes·Orbit에 곧이곧대로 넘기는지(하드코딩하지 않는지)는
-  // AboutSection.test.tsx의 "production 배선" describe가 본다(계획 4 Task 2가
-  // 뚫었던 구멍, 이 파일 아래 참고). 게이팅 계약 자체는 WhenVisible.test.tsx의
-  // 열한 개가 컴포넌트와 무관하게 덮고 있으므로 계약에 구멍이 나지는
-  // 않는다. Task 4가 끝나 CollaborationMesh 자리에 LogoLoop이 들어오면 그때
-  // 새 장식으로 되살린다.
-  it.todo('production AboutSection wiring latches decoration entry state across a revisit', async () => {
-    const { container } = render(<AboutHarness />);
-
-    expect(findElementWithClasses(container, decorations[0].finalClasses)).toBeUndefined();
-
-    fireEvent.click(screen.getByRole('button', { name: 'About' }));
-    await waitFor(() => {
-      expect(findElementWithClasses(container, decorations[0].finalClasses)).not.toBeUndefined();
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Projects' }));
-    fireEvent.click(screen.getByRole('button', { name: 'About' }));
-    await waitFor(() => {
-      expect(findElementWithClasses(container, decorations[0].finalClasses)).not.toBeUndefined();
-    });
-  });
-
-  it.todo('production AboutSection wiring pauses all decorations while inactive and resumes them', async () => {
-    const { container } = render(<AboutHarness />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'About' }));
-    await waitFor(() => {
-      expect(
-        Array.from(container.querySelectorAll<HTMLElement>('*')).some((element) =>
-          /infinite|radar-sweep/.test(element.getAttribute('class') ?? '') ||
-          /infinite|radar-sweep/.test(element.style.animation)
-        )
-      ).toBe(true);
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Projects' }));
-    expect(
-      Array.from(container.querySelectorAll<HTMLElement>('*')).some((element) =>
-        /infinite|radar-sweep/.test(element.getAttribute('class') ?? '') ||
-        /infinite|radar-sweep/.test(element.style.animation)
-      )
-    ).toBe(false);
-
-    fireEvent.click(screen.getByRole('button', { name: 'About' }));
-    await waitFor(() => {
-      expect(
-        Array.from(container.querySelectorAll<HTMLElement>('*')).some((element) =>
-          /infinite|radar-sweep/.test(element.getAttribute('class') ?? '') ||
-          /infinite|radar-sweep/.test(element.style.animation)
-        )
-      ).toBe(true);
-    });
-  });
-
-  it.todo('production AboutSection wiring mounts reduced-motion decorations in their final state', async () => {
-    const { container } = render(<AboutHarness reducedMotion />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'About' }));
-    await waitFor(() => {
-      expect(findElementWithClasses(container, decorations[0].finalClasses)).not.toBeUndefined();
-    });
-  });
+  // About 장식의 WhenVisible 통합 테스트 셋을 지웠다. About 재설계가 장식
+  // 컴포넌트 자체를 폐기했다. 배경이 이미 있는데 별도 도형을 얹으면 경쟁한다.
+  // WhenVisible의 게이팅 계약은 WhenVisible.test.tsx가 컴포넌트와 무관하게
+  // 덮는다.
 });
