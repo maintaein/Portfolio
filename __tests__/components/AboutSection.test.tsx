@@ -61,10 +61,13 @@ describe('AboutSection', () => {
     expect(container.querySelectorAll('[data-detail]')).toHaveLength(3);
   });
 
+  // Task 4가 상세 내부를 12칸 격자로 다시 짜면서 증거 콘텐츠도 함께
+  // 바뀌었다(EVIDENCE 배열, components/sections/AboutSection/index.tsx).
+  // AlphaMail 수상 인용과 Flat/Compound 대비는 더 이상 나오지 않는다.
   it('증거 문자열이 전부 DOM에 있다', () => {
     const { container } = renderAboutSection();
     const html = container.textContent ?? '';
-    for (const needle of ['91%', 'AlphaMail', 'Flat', 'Compound']) {
+    for (const needle of ['91%', 'Tree-shaking', 'Prompt', 'Ship']) {
       expect(html, `${needle}이 없다`).toContain(needle);
     }
   });
@@ -149,6 +152,54 @@ describe('AboutSection', () => {
     for (const cls of ['bg-white', 'text-gray-900', 'text-grey-500', 'from-blue-600', 'shadow-sm', 'rounded-2xl']) {
       expect(html, `${cls}가 남아 있다`).not.toContain(cls);
     }
+  });
+
+  // 데스크톱 스크롤의 정체는 텍스트가 폭의 절반만 받아 넘친 것이었다.
+  // 50/50 분할을 버렸으므로 스크롤 유틸리티가 있으면 안 된다.
+  it('데스크톱에서 스크롤 유틸리티를 쓰지 않는다', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'components/sections/AboutSection/index.tsx'),
+      'utf8'
+    );
+    expect(source).not.toMatch(/overflow-y-auto/);
+    expect(source).not.toMatch(/lg:w-1\/2/);
+    expect(source).not.toMatch(/min-h-\[\d+px\]/);
+  });
+
+  // 칸을 나누는 경계선이 와이어프레임을 만들었다. 헤어라인으로 박스를 그리지
+  // 않는다.
+  it('상세 안에 칸을 나누는 경계선이 없다', () => {
+    const { container } = renderAboutSection();
+    const detail = container.querySelector('[data-detail="0"]');
+    expect(detail?.innerHTML).not.toMatch(/\bborder-r\b/);
+    expect(detail?.innerHTML).not.toMatch(/\bborder-b\b/);
+  });
+
+  it('세 문항이 같은 격자 자리를 쓴다', () => {
+    const { container } = renderAboutSection();
+    const titles = container.querySelectorAll('[data-about-title]');
+    expect(titles).toHaveLength(3);
+    const classes = [...titles].map((t) => t.className);
+    expect(new Set(classes).size, '세 제목의 배치가 서로 달라졌다').toBe(1);
+  });
+
+  it('격자가 12칸 6줄이다', () => {
+    const { container } = renderAboutSection();
+    const grid = container.querySelector('[data-about-grid]');
+    expect(grid?.className).toMatch(/grid-cols-12/);
+    expect(grid?.className).toMatch(/grid-rows-6/);
+  });
+
+  // 리뷰 발견 2: 옛 인덱스 nav 안에 있던 about-heading h2를 레일과
+  // 분리하면서 sr-only로 다시 심었다. 스크린리더가 실제로 읽는지는 jsdom이
+  // 증명하지 못하지만, aria-labelledby가 가리키는 id를 가진 요소가 실제로
+  // 존재하는지는 잡을 수 있다. h2를 지우면 FAIL한다.
+  it('섹션의 aria-labelledby가 가리키는 id가 실제로 존재한다', () => {
+    const { container } = renderAboutSection();
+    const section = container.querySelector('section[aria-labelledby]');
+    const id = section?.getAttribute('aria-labelledby');
+    expect(id, 'aria-labelledby 속성 자체가 없다').toBeTruthy();
+    expect(container.querySelector(`#${id}`), `#${id} 요소가 없다`).not.toBeNull();
   });
 });
 
