@@ -80,6 +80,21 @@ describe('AboutRail', () => {
     expect(rule).toMatch(/border-radius/);
   });
 
+  // Task 7 조사: 버튼 세 개가 전부 absolute로 top: %에 걸려 있으면 nav
+  // 자체가 흐름 안 자식을 하나도 못 봐서 높이가 0으로 무너지고, top: %
+  // 값도 0을 기준으로 계산돼 세 버튼이 전부 같은 자리에 겹친다. lg
+  // 미만에서는 버튼을 흐름에 두고 쌓아 실제 높이를 만든 뒤, lg부터
+  // absolute + top: %로 되돌려 깊이 배치를 쓴다.
+  it('lg 미만에서 버튼이 흐름에 남아 nav에 실제 높이를 준다 (0px 붕괴 방지)', () => {
+    const { container } = render(<AboutRail activeIndex={0} onSelect={vi.fn()} />);
+    const buttons = container.querySelectorAll('button');
+    for (const b of buttons) {
+      const tokens = b.className.split(/\s+/);
+      expect(tokens).not.toContain('absolute');
+      expect(tokens).toContain('lg:absolute');
+    }
+  });
+
   it('활성 눈금에 광휘가 있다', () => {
     const rule = DESIGN_TOKENS_CSS.match(
       /\n {2}\.about-rail-tick-active\s*\{([\s\S]*?)\n {2}\}/

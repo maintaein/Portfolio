@@ -48,9 +48,8 @@ const EVIDENCE = [
 ];
 
 // Cubes와 Orbit은 폐기했다. 배경이 이미 있는데 별도 도형을 얹으면 경쟁한다.
-// 순번 인덱스는 라벨 레일(AboutRail)로 바뀌었다. 상세 내부는 12칸 6줄
-// 격자 한 배치를 쓴다. 데스크톱 전용이고, 반응형 접두사는 뒤 태스크가
-// 붙인다.
+// 순번 인덱스는 라벨 레일(AboutRail)로 바뀌었다. 상세 내부는 lg부터 12칸
+// 6줄 격자를 쓰고, 그 미만에서는 4칸으로 줄여 세로로 쌓는다(Task 7).
 export default function AboutSection() {
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -71,8 +70,13 @@ export default function AboutSection() {
       {/* 상세 3개: 전부 DOM에 상주한다. 활성 하나만 보이고 나머지는 inert.
           .section-hidden과 같은 방식(opacity + pointer-events)으로 감춘다.
           활성 하나만 렌더하면 계획 2가 고친 SEO 조건부 렌더 결함을 이
-          레벨에서 재생산한다. */}
-      <div className="relative flex-1 lg:h-full lg:min-h-0">
+          레벨에서 재생산한다.
+
+          lg 미만에서는 활성 하나만 흐름 안에 두고 나머지를 absolute로
+          빼낸다. 셋 다 absolute로 겹쳐두면(desktop 방식) 부모가 in-flow
+          자식을 하나도 못 봐서 자체 높이가 0으로 무너진다(Task 7 조사).
+          lg 이상에서는 기존처럼 전부 absolute로 겹쳐 크로스페이드한다. */}
+      <div className="relative flex-1 lg:h-full">
         {coreValues.map((value, index) => {
           const isActive = index === activeIndex;
 
@@ -82,29 +86,31 @@ export default function AboutSection() {
               data-detail={index}
               inert={!isActive}
               aria-hidden={!isActive}
-              className={`absolute inset-0 transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                isActive ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+              className={`transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] lg:absolute lg:inset-0 ${
+                isActive
+                  ? 'opacity-100 pointer-events-auto'
+                  : 'absolute inset-0 opacity-0 pointer-events-none'
               }`}
             >
               <div
                 data-about-grid
-                className="grid h-full grid-cols-12 grid-rows-6 gap-x-6 gap-y-2 px-10 py-8"
+                className="grid grid-cols-4 gap-x-4 gap-y-6 px-5 py-6 lg:h-full lg:grid-cols-12 lg:grid-rows-6 lg:gap-x-6 lg:gap-y-2 lg:px-10 lg:py-8"
               >
                 <h3
                   data-about-title
-                  className="col-span-5 col-start-7 row-start-2 self-center text-t2 font-bold leading-tight text-[var(--color-text-primary)] lg:text-t1"
+                  className="col-span-4 col-start-1 text-t3 font-bold leading-tight text-[var(--color-text-primary)] sm:text-t2 lg:col-span-5 lg:col-start-7 lg:row-start-2 lg:self-center lg:text-t1"
                 >
                   {value.title}
                 </h3>
                 <div
                   data-about-evidence
-                  className="col-span-4 col-start-7 row-span-2 row-start-3 self-center"
+                  className="col-span-4 col-start-1 lg:col-span-4 lg:col-start-7 lg:row-span-2 lg:row-start-3 lg:self-center"
                 >
                   {EVIDENCE[index]}
                 </div>
                 <p
                   data-about-description
-                  className="col-span-5 col-start-7 row-start-5 self-center text-t6 leading-relaxed text-[var(--color-text-secondary)]"
+                  className="col-span-4 col-start-1 text-t7 leading-relaxed text-[var(--color-text-secondary)] sm:text-t6 lg:col-span-5 lg:col-start-7 lg:row-start-5 lg:self-center"
                 >
                   {value.description}
                 </p>

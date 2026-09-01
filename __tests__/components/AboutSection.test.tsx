@@ -190,6 +190,40 @@ describe('AboutSection', () => {
     expect(grid?.className).toMatch(/grid-rows-6/);
   });
 
+  // Task 7: 폭이 좁아 열두 칸 배치가 의미를 잃는다. 넷으로 줄이고 세로로
+  // 쌓는다. 스크롤 없음은 데스크톱 요구였다. 모바일은 허용한다.
+  it('좁은 화면에서 격자가 넷으로 줄고 세로로 쌓인다', () => {
+    const { container } = renderAboutSection();
+    const grid = container.querySelector('[data-about-grid]');
+    expect(grid?.className).toMatch(/grid-cols-4/);
+    expect(grid?.className).toMatch(/lg:grid-cols-12/);
+  });
+
+  it('좁은 화면에서 요소가 첫 칸부터 폭 전체를 쓴다', () => {
+    const { container } = renderAboutSection();
+    const title = container.querySelector('[data-about-title]');
+    expect(title?.className).toMatch(/col-span-4/);
+    expect(title?.className).toMatch(/lg:col-span-5/);
+  });
+
+  // Task 7 조사: 상세 3개가 전부 absolute로 겹쳐 있으면 부모(.relative
+  // flex-1)에 흐름 안 자식이 하나도 없어 자체 높이가 0으로 무너진다(Task 2가
+  // min-h-[640px]를 걷어낸 뒤 lg 미만에서 About 전체가 안 보이던 원인).
+  // 활성 상세만 lg 미만에서 흐름에 남기고 비활성은 absolute로 빼내 해결한다.
+  it('lg 미만에서 활성 상세만 흐름에 남고 비활성은 absolute로 빠진다 (0px 붕괴 방지)', () => {
+    const { container } = renderAboutSection();
+    const activeTokens = container.querySelector('[data-detail="0"]')?.className.split(/\s+/) ?? [];
+    const inactiveTokens = container.querySelector('[data-detail="1"]')?.className.split(/\s+/) ?? [];
+
+    // 활성: lg 미만 기본 클래스에 absolute가 없어야 흐름에 남아 부모에 실제
+    // 콘텐츠 높이를 물려준다. lg부터는 여전히 absolute로 겹쳐 크로스페이드한다.
+    expect(activeTokens).not.toContain('absolute');
+    expect(activeTokens).toContain('lg:absolute');
+
+    // 비활성: lg 미만에서도 absolute로 빼내야 자리가 두 배로 늘어나지 않는다.
+    expect(inactiveTokens).toContain('absolute');
+  });
+
   // 리뷰 발견 2: 옛 인덱스 nav 안에 있던 about-heading h2를 레일과
   // 분리하면서 sr-only로 다시 심었다. 스크린리더가 실제로 읽는지는 jsdom이
   // 증명하지 못하지만, aria-labelledby가 가리키는 id를 가진 요소가 실제로
