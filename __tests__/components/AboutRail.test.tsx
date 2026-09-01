@@ -45,6 +45,20 @@ describe('AboutRail', () => {
     expect(onSelect).toHaveBeenCalledWith(2);
   });
 
+  // 리뷰 발견 1: 브리프 테스트 주석은 "순번을 11px 회색으로 뒀더니 안
+  // 보였다"고 경고했는데 코드 예시는 text-t8(11px)을 그대로 썼다. 가독성이
+  // 레일 폭보다 우선이라 활성 t6(15px)·비활성 t7(13px)로 올렸고, 활성과
+  // 비활성의 크기 차이도 이걸로 생긴다. 최소값 t8로 되돌리면 FAIL한다.
+  it('활성 라벨은 t6, 비활성 라벨은 t7이다 (t8로 되돌리면 FAIL)', () => {
+    render(<AboutRail activeIndex={0} onSelect={vi.fn()} />);
+    const active = screen.getByText(coreValues[0].label);
+    const inactive = screen.getByText(coreValues[1].label);
+    expect(active.className).toMatch(/\btext-t6\b/);
+    expect(active.className).not.toMatch(/\btext-t8\b/);
+    expect(inactive.className).toMatch(/\btext-t7\b/);
+    expect(inactive.className).not.toMatch(/\btext-t8\b/);
+  });
+
   // 모바일에 hover가 없다. 정지 상태에서 눌린다는 것이 드러나야 한다.
   it('세 항목 전부 44px 터치 타깃을 갖는다', () => {
     const { container } = render(<AboutRail activeIndex={0} onSelect={vi.fn()} />);
