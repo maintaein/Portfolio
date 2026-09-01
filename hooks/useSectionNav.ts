@@ -33,6 +33,10 @@ export interface UseSectionNavReturn {
   seen: ReadonlySet<NavId>;
   isSeen: (id: NavId) => boolean;
   entryAnimationTarget: NavId | null;
+  sectionTransition: {
+    direction: 'forward' | 'backward' | 'none';
+    from: NavId | null;
+  };
 }
 
 export type OnBeforeActiveChange = (from: NavId, to: NavId) => void;
@@ -68,6 +72,10 @@ export function useSectionNav(
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [seen, setSeen] = useState<ReadonlySet<NavId>>(() => new Set<NavId>());
   const [entryAnimationTarget, setEntryAnimationTarget] = useState<NavId | null>(null);
+  const [sectionTransition, setSectionTransition] = useState<{
+    direction: 'forward' | 'backward' | 'none';
+    from: NavId | null;
+  }>({ direction: 'none', from: null });
   const activeRef = useRef(active);
   const seenRef = useRef<ReadonlySet<NavId>>(new Set<NavId>());
   const didResolveInitialRouteRef = useRef(false);
@@ -102,16 +110,30 @@ export function useSectionNav(
     setRouteResolved(true);
   }, [captureFirstEntry]);
 
+  // overview가 터널 입구이고 섹션이 더 안쪽이다. NAV_SEQUENCE 순서상 뒤로
+  // 가면 전진이다. from은 CSS가 나가는 섹션 하나에만 이탈 애니메이션을
+  // 걸기 위한 것이다. 이것 없이 .section-hidden에 걸면 비활성 여섯 개가
+  // 전부 뛴다.
+  const recordTransition = useCallback((from: NavId, to: NavId) => {
+    const fromIndex = NAV_SEQUENCE.indexOf(from);
+    const toIndex = NAV_SEQUENCE.indexOf(to);
+    setSectionTransition({
+      direction: toIndex > fromIndex ? 'forward' : 'backward',
+      from,
+    });
+  }, []);
+
   const setActive = useCallback((id: NavId) => {
     if (activeRef.current === id) return;
 
+    recordTransition(activeRef.current, id);
     onBeforeActiveChangeRef.current?.(activeRef.current, id);
     activeRef.current = id;
     setActiveState(id);
     setIsTransitioning(true);
     captureFirstEntry(id);
     window.history.pushState(null, '', `#${id}`);
-  }, [captureFirstEntry]);
+  }, [captureFirstEntry, recordTransition]);
 
   const completeTransition = useCallback((id: NavId) => {
     // 연타로 목적지가 바뀐 뒤 도착한 과거 transitionend는 무시한다.
@@ -138,6 +160,7 @@ export function useSectionNav(
       // 같은 해시는 섹션 이동이 아니므로 전환·Hyperspeed를 다시 열지 않는다.
       if (activeRef.current === next) return;
 
+      recordTransition(activeRef.current, next);
       onBeforeActiveChangeRef.current?.(activeRef.current, next);
       activeRef.current = next;
       setActiveState(next);
@@ -147,7 +170,7 @@ export function useSectionNav(
 
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
-  }, [captureFirstEntry]);
+  }, [captureFirstEntry, recordTransition]);
 
   const isSeen = useCallback((id: NavId) => seen.has(id), [seen]);
 
@@ -162,5 +185,6 @@ export function useSectionNav(
     seen,
     isSeen,
     entryAnimationTarget,
+    sectionTransition,
   };
 }

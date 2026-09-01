@@ -162,6 +162,7 @@ export default function HomeClient() {
     completeTransition,
     entryAnimationTarget,
     routeResolved,
+    sectionTransition,
   } = useSectionNav(handleBeforeActiveChange);
   const swipeHandlers = useSectionSwipe({
     onNext: goNext,
@@ -314,6 +315,24 @@ export default function HomeClient() {
     completeTransition(id);
   };
 
+  // 전환 표식은 들어오는 섹션 하나와 나가는 섹션 하나에만 단다. 그래야
+  // 매 전환마다 그 둘의 animation-name이 반드시 바뀌어 같은 방향으로
+  // 연속 이동해도 애니메이션이 다시 재생된다. 전부에 달면 비활성 여섯 개가
+  // 함께 뛴다. reducedMotion이면 아예 달지 않아 CSS가 걸릴 자리가 없다.
+  function transitionAttributes(id: NavId) {
+    if (reducedMotion || sectionTransition.direction === 'none') return {};
+    if (id === active) {
+      return { 'data-section-direction': sectionTransition.direction };
+    }
+    if (id === sectionTransition.from) {
+      return {
+        'data-section-direction': sectionTransition.direction,
+        'data-section-leaving': '',
+      };
+    }
+    return {};
+  }
+
   return (
     <SectionActivityProvider
       active={active}
@@ -383,6 +402,7 @@ export default function HomeClient() {
           }`}
           inert={active !== OVERVIEW}
           aria-hidden={active !== OVERVIEW}
+          {...transitionAttributes(OVERVIEW)}
           onTransitionRun={(event) =>
             handleSectionTransitionRun(OVERVIEW, event)
           }
@@ -422,6 +442,7 @@ export default function HomeClient() {
               // 비활성 섹션은 보이지 않아도 Tab으로 들어갈 수 있으므로 inert가 필요하다.
               inert={!isActive}
               aria-hidden={!isActive}
+              {...transitionAttributes(id)}
               onTransitionRun={(event) =>
                 handleSectionTransitionRun(id, event)
               }

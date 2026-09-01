@@ -962,3 +962,37 @@ describe('HomeClient 다음 섹션 예열(전환 끊김 완화)', () => {
     }
   });
 });
+
+// Task 4의 CSS가 .section-visible[data-section-direction]과
+// .section-hidden[data-section-leaving][data-section-direction]으로 깊이
+// 애니메이션을 건다. 표식이 관련된 둘(들어오는 섹션·나가는 섹션)에만 붙어야
+// 비활성 여섯 개가 함께 뛰지 않는다.
+describe('HomeClient 전환 방향 표식', () => {
+  it('들어오는 섹션과 나가는 섹션에만 방향 표식이 붙는다', () => {
+    const { container } = render(<HomeClient />);
+    navigateTo(/about/i);
+
+    expect(getSection(container, 'about')).toHaveAttribute(
+      'data-section-direction',
+      'forward'
+    );
+    expect(getSection(container, 'overview')).toHaveAttribute(
+      'data-section-leaving'
+    );
+
+    // 나머지는 깨끗해야 한다. 안 그러면 이탈 애니메이션이 여섯 개에서 뛴다.
+    expect(getSection(container, 'projects')).not.toHaveAttribute(
+      'data-section-direction'
+    );
+  });
+
+  it('모션을 끄면 표식을 달지 않는다', () => {
+    installMatchMedia(true);
+    const { container } = render(<HomeClient />);
+    navigateTo(/about/i);
+
+    expect(getSection(container, 'about')).not.toHaveAttribute(
+      'data-section-direction'
+    );
+  });
+});

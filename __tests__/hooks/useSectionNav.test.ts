@@ -361,6 +361,60 @@ describe('useSectionNav', () => {
     expect(secondObserver).toHaveBeenCalledWith('about', 'overview');
   });
 
+  // overview가 터널 입구이고 섹션이 더 안쪽이다. NAV_SEQUENCE 순서상 뒤로
+  // 가면 전진이고 앞으로 오면 후진이다.
+  it('뒤 섹션으로 가면 forward, 앞으로 오면 backward다', () => {
+    const { result } = renderHook(() => useSectionNav());
+
+    act(() => result.current.setActive('about'));
+    expect(result.current.sectionTransition.direction).toBe('forward');
+
+    act(() => result.current.setActive('overview'));
+    expect(result.current.sectionTransition.direction).toBe('backward');
+  });
+
+  // CSS가 나가는 섹션 하나에만 이탈 애니메이션을 건다. 어느 것이 나가는지
+  // 훅이 알려주지 않으면 여섯 개가 전부 뛴다.
+  it('출발지를 함께 낸다', () => {
+    const { result } = renderHook(() => useSectionNav());
+
+    act(() => result.current.setActive('about'));
+    expect(result.current.sectionTransition.from).toBe('overview');
+
+    act(() => result.current.setActive('projects'));
+    expect(result.current.sectionTransition.from).toBe('about');
+  });
+
+  it('첫 렌더에는 출발지가 없다', () => {
+    const { result } = renderHook(() => useSectionNav());
+    expect(result.current.sectionTransition.from).toBeNull();
+    expect(result.current.sectionTransition.direction).toBe('none');
+  });
+
+  it('같은 섹션을 다시 고르면 아무것도 바뀌지 않는다', () => {
+    const { result } = renderHook(() => useSectionNav());
+    act(() => result.current.setActive('about'));
+    act(() => result.current.setActive('about'));
+    expect(result.current.sectionTransition.from).toBe('overview');
+  });
+
+  // active를 바꾸는 경로가 setActive만이 아니다. 브라우저 뒤로가기도 바꾼다.
+  // 그쪽을 빠뜨리면 뒤로가기로 돌아올 때 방향이 직전 값 그대로 남아
+  // 애니메이션이 반대로 돈다.
+  it('popstate로 돌아와도 방향이 나온다', () => {
+    const { result } = renderHook(() => useSectionNav());
+
+    act(() => result.current.setActive('about'));
+    act(() => {
+      window.history.replaceState(null, '', '/');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+
+    expect(result.current.active).toBe('overview');
+    expect(result.current.sectionTransition.direction).toBe('backward');
+    expect(result.current.sectionTransition.from).toBe('about');
+  });
+
   it('NAV_SEQUENCE가 HOME_SECTION_CONFIG 순서에서 파생된다', async () => {
     const reversedConfig = [...HOME_SECTION_CONFIG].reverse();
     const expected = ['overview', ...reversedConfig.map(({ id }) => id)];
