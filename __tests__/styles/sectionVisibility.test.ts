@@ -196,4 +196,118 @@ describe('section visibility utilities', () => {
     expect(allowed).not.toContain('pan-x'); // 가로는 useSectionSwipe 몫
     expect(allowed).not.toContain('auto'); // auto면 브라우저가 전부 가져간다
   });
+
+  // 전환의 확대 원점이다. 터널의 수렴 지점은 도로가 휘면서 프레임마다
+  // 움직이므로(컨트롤러 측정: y가 42%에서 65% 사이) 정확한 한 점이 없다.
+  // 평균값을 토큰으로 두고 실기기에서 조정한다.
+  it('소실점 좌표가 토큰으로 있다', () => {
+    const theme = css.match(/@theme \{([\s\S]*?)\n\}/)?.[1];
+    expect(theme, '@theme 블록을 찾지 못했다').toBeDefined();
+    expect(theme).toMatch(/--tunnel-vanishing-x:\s*[\d.]+%/);
+    expect(theme).toMatch(/--tunnel-vanishing-y:\s*[\d.]+%/);
+  });
+
+  // 나가는 것과 들어오는 것이 같은 500ms를 쓰고 크기도 같아 중간 지점에서
+  // 구분할 단서가 없었다. 그래서 두 화면이 포개진 것으로 보였다.
+  // 나가는 쪽을 base(300ms)로, 들어오는 쪽을 slow(500ms)로 벌린다.
+  it('나가는 쪽이 들어오는 쪽보다 빨리 끝난다', () => {
+    const theme = css.match(/@theme \{([\s\S]*?)\n\}/)?.[1] ?? '';
+    const base = Number(
+      theme.match(/--animate-duration-base:\s*(\d+)ms/)?.[1]
+    );
+    const slow = Number(
+      theme.match(/--animate-duration-slow:\s*(\d+)ms/)?.[1]
+    );
+    expect(base).toBeLessThan(slow);
+
+    expect(
+      ruleBody(".section-visible[data-section-direction='forward']")
+    ).toMatch(/animation-duration:\s*var\(--animate-duration-slow\)/);
+    expect(
+      ruleBody(
+        ".section-hidden[data-section-leaving][data-section-direction='forward']"
+      )
+    ).toMatch(/animation-duration:\s*var\(--animate-duration-base\)/);
+  });
+
+  // fill-mode가 forwards나 both면 애니메이션이 끝난 뒤에도 transform이
+  // 남는다. transform이 있는 조상은 position: fixed의 기준이 되므로
+  // About 스크림(Task 1)이 다시 무대 안에 갇힌다.
+  it('애니메이션이 끝난 뒤 transform을 남기지 않는다', () => {
+    const transitionRules = css.slice(css.indexOf('@keyframes section-enter-forward'));
+    expect(transitionRules).not.toMatch(
+      /animation-fill-mode:\s*(forwards|both)/
+    );
+  });
+
+  // 확대 원점이 요소 중심이면 제자리 줌이 된다.
+  it('확대 원점이 소실점 토큰이다', () => {
+    expect(css).toMatch(
+      /transform-origin:\s*var\(--tunnel-vanishing-x\)\s+var\(--tunnel-vanishing-y\)/
+    );
+  });
+
+  // 이탈 키프레임은 from을 반드시 적어야 한다. 키프레임이 opacity를
+  // 건드리지 않으므로(아래 "전환 키프레임이 opacity를 건드리지 않는다"
+  // 참고) 시작 상태(scale(1))를 명시해야 이탈이 제자리에서 커지기
+  // 시작한다는 것이 코드로 드러난다.
+  it('이탈 키프레임이 시작값을 명시한다', () => {
+    for (const name of ['section-leave-forward', 'section-leave-backward']) {
+      const frames = css.match(
+        new RegExp(`@keyframes ${name} \\{([\\s\\S]*?)\\n {2}\\}`)
+      )?.[1];
+      expect(frames, `${name}을 찾지 못했다`).toBeDefined();
+      expect(frames).toMatch(/from \{/);
+      expect(frames).toMatch(/transform:\s*scale\(1\)/);
+    }
+  });
+
+  // 전진과 후진의 배율 방향이 반대여야 한다. 같으면 방향이 안 읽힌다.
+  it('전진과 후진의 키프레임이 서로 다르다', () => {
+    const frames = (name: string) =>
+      css.match(new RegExp(`@keyframes ${name} \\{([\\s\\S]*?)\\n {2}\\}`))?.[1];
+
+    expect(frames('section-enter-forward')).toBeDefined();
+    expect(frames('section-enter-backward')).toBeDefined();
+    expect(frames('section-enter-forward')).not.toBe(
+      frames('section-enter-backward')
+    );
+    expect(frames('section-leave-forward')).not.toBe(
+      frames('section-leave-backward')
+    );
+  });
+
+  it('reduce에서 전환 애니메이션이 끊긴다', () => {
+    const reduceBlocks =
+      css.match(
+        /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\n {2}\}/g
+      )?.join('\n') ?? '';
+    expect(reduceBlocks).toMatch(/\[data-section-direction\]/);
+    expect(reduceBlocks).toMatch(/animation:\s*none/);
+  });
+
+  // 키프레임이 opacity를 건드리면 안 된다. .section-hidden도 진입
+  // 애니메이션의 0% 지점도 opacity 0이라, 클래스가 바뀌는 순간의 전후
+  // 계산값이 같아진다. CSS 전환은 값이 바뀌어야 시작하므로 transitionend가
+  // 오지 않고, 그것으로 닫히는 completeTransition이 영영 안 불려
+  // isTransitioning이 true로 굳는다. 배경 가속이 안 꺼지고 예열도 멈춘다.
+  // 페이드는 .section-hidden과 .section-visible의 transition: opacity가
+  // 이미 맡고 있다.
+  it('전환 키프레임이 opacity를 건드리지 않는다', () => {
+    for (const name of [
+      'section-enter-forward',
+      'section-enter-backward',
+      'section-leave-forward',
+      'section-leave-backward',
+    ]) {
+      const frames = css.match(
+        new RegExp(`@keyframes ${name} \\{([\\s\\S]*?)\\n {2}\\}`)
+      )?.[1];
+      expect(frames, `${name}을 찾지 못했다`).toBeDefined();
+      expect(
+        frames,
+        `${name}이 opacity를 건드리면 transitionend가 오지 않는다`
+      ).not.toMatch(/opacity/);
+    }
+  });
 });

@@ -108,6 +108,13 @@
   --animate-duration-base: 300ms;
   --animate-duration-slow: 500ms;
 
+  /* 터널이 수렴하는 지점. 섹션 전환의 확대 원점이다. 도로가 휘면서 먼 끝이
+     프레임마다 움직여 고정된 한 점이 없다. 네 프레임에서 잰 y가 42%에서
+     65% 사이였고 그 평균이 아래 값이다. 정확한 좌표라기보다 조정 손잡이다.
+     실기기에서 다가오는 느낌이 약하면 여기만 고친다. */
+  --tunnel-vanishing-x: 53%;
+  --tunnel-vanishing-y: 52%;
+
   /* 워드마크 FLIP 지속(세 이음매 브리프 3절) — HomeClient의
      Flip.from({ duration: WORDMARK_FLIP_DURATION_MS / 1000 })과 반드시 같은
      값이어야 한다. 워드마크가 hero→compact로 착지하는 시간과 정확히 같은
@@ -586,10 +593,111 @@
     content-visibility: visible;
   }
 
+  /* 섹션 전환. overview가 터널 입구이고 섹션이 더 안쪽이다. 전진은 나가는
+     쪽이 커지며 카메라를 지나치고 들어오는 쪽이 소실점에서 자란다. 후진은
+     반대다. 확대 원점이 소실점이라 제자리 줌이 아니라 다가오는 것으로
+     읽힌다.
+     크로스페이드였을 때는 나가는 것과 들어오는 것이 같은 크기라 중간
+     지점에서 두 화면이 포개진 것으로 보였다. 크기를 벌리고 나가는 쪽을
+     먼저 보내 그 구간을 없앤다.
+     이 키프레임들은 transform과 filter만 맡고 opacity는 건드리지 않는다.
+     페이드는 .section-hidden과 .section-visible의 transition: opacity가
+     이미 하고 있다. 처음에는 진입 키프레임에도 opacity: 0을 넣었는데,
+     .section-hidden의 opacity도 0이고 진입 애니메이션 0% 지점의 opacity도
+     0이라 클래스가 바뀌는 순간의 전후 계산값이 둘 다 0이었다. CSS 전환은
+     값이 바뀌어야 시작하므로 opacity 전환이 아예 시작되지 않았고,
+     transitionend가 오지 않아 그것으로 닫히는 completeTransition이 영영
+     안 불려 isTransitioning이 true로 굳었다. 배경 가속이 안 꺼지고 예열도
+     멈췄다. 그래서 opacity는 transition에만 맡기고 키프레임에서 뺐다. */
+  @keyframes section-enter-forward {
+    from {
+      transform: scale(0.62);
+      filter: blur(5px);
+    }
+  }
+
+  @keyframes section-enter-backward {
+    from {
+      transform: scale(1.45);
+      filter: blur(5px);
+    }
+  }
+
+  @keyframes section-leave-forward {
+    from {
+      transform: scale(1);
+    }
+    to {
+      transform: scale(1.5);
+      filter: blur(7px);
+    }
+  }
+
+  @keyframes section-leave-backward {
+    from {
+      transform: scale(1);
+    }
+    to {
+      transform: scale(0.62);
+      filter: blur(7px);
+    }
+  }
+
+  /* fill-mode는 backwards만 쓴다. forwards나 both를 쓰면 애니메이션이
+     끝난 뒤에도 transform이 남는데, transform이 걸린 조상은
+     position: fixed의 기준이 되므로 About 스크림이 뷰포트가 아니라 이
+     섹션 안에 갇힌다. 전환 중 잠깐 갇히는 것은 화면이 통째로 움직이는
+     동안이라 보이지 않는다. */
+  .section-visible[data-section-direction='forward'],
+  .section-visible[data-section-direction='backward'],
+  .section-hidden[data-section-leaving][data-section-direction='forward'],
+  .section-hidden[data-section-leaving][data-section-direction='backward'] {
+    transform-origin: var(--tunnel-vanishing-x) var(--tunnel-vanishing-y);
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    animation-fill-mode: backwards;
+  }
+
+  /* 나가는 쪽은 300ms에 끝나 들어오는 쪽과 동시에 또렷한 구간이 없다.
+     opacity 전환도 같이 줄인다. 애니메이션만 300ms로 줄이면 그 시점에
+     transform이 scale(1)로 되돌아가는데 opacity 전환은 아직 500ms 중이라
+     반쯤 보이는 상태에서 크기가 튄다. */
+  .section-hidden[data-section-leaving][data-section-direction='forward'],
+  .section-hidden[data-section-leaving][data-section-direction='backward'] {
+    transition-duration: var(--animate-duration-base);
+  }
+
+  /* 아래 네 규칙은 선택자 하나짜리로 둔다. 테스트의 ruleBody 도우미가
+     `^  <선택자> {` 형태만 찾으므로 쉼표로 묶으면 본문을 읽지 못한다.
+     그래서 animation-duration이 네 번 반복된다. 의도된 중복이다. */
+  .section-visible[data-section-direction='forward'] {
+    animation-name: section-enter-forward;
+    animation-duration: var(--animate-duration-slow);
+  }
+
+  .section-visible[data-section-direction='backward'] {
+    animation-name: section-enter-backward;
+    animation-duration: var(--animate-duration-slow);
+  }
+
+  .section-hidden[data-section-leaving][data-section-direction='forward'] {
+    animation-name: section-leave-forward;
+    animation-duration: var(--animate-duration-base);
+  }
+
+  .section-hidden[data-section-leaving][data-section-direction='backward'] {
+    animation-name: section-leave-backward;
+    animation-duration: var(--animate-duration-base);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .section-hidden,
     .section-visible {
       transition: none;
+    }
+
+    .section-visible[data-section-direction],
+    .section-hidden[data-section-direction] {
+      animation: none;
     }
   }
 
