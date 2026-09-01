@@ -72,7 +72,11 @@ describe('Hyperspeed ref API — WebGL 부재 시 안전성', () => {
       await Promise.resolve();
     });
 
-    // 가드가 없으면 unhandled rejection으로 이 테스트가 붉어진다.
+    // 이 파일 환경(WebGL 없음)에서는 new App() 생성 자체가
+    // WebGLRenderer 생성자에서 항상 먼저 던지므로, dispose→init 경합이
+    // 재현되지 않는다 — 가드 유무와 무관하게 이 테스트는 통과한다(아래
+    // 80행 부근 설명과 같다). 진짜 가드 계약은 아래 App.prototype.init
+    // 직접 호출 테스트가 양방향으로 고정한다.
     expect(true).toBe(true);
   });
 });

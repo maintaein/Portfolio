@@ -260,6 +260,30 @@ describe('AboutSection', () => {
     expect(scrim).toHaveStyle({ background: ABOUT_SCRIMS[0] });
   });
 
+  // 최종 리뷰 발견 4: 위 테스트는 초기 상태에서 ABOUT_SCRIMS[0]만 보므로
+  // 구현을 ABOUT_SCRIMS[0] 하드코딩으로 바꿔도 통과했다. 문항별 배선
+  // 자체(레이어마다 다른 배경, 클릭 뒤 활성 레이어 교체)를 여기서 고정한다.
+  it('세 스크림 레이어가 문항별로 다른 배경을 갖고, 클릭하면 활성 레이어가 바뀐다', async () => {
+    const { container } = renderAboutSection();
+    const layerFor = (index: number) =>
+      container.querySelector(`[data-about-scrim][data-about-scrim-index="${index}"]`) as HTMLElement;
+
+    // 배선: 인덱스마다 고정된 배경을 받는다 (하드코딩이면 layerFor(2)가
+    // ABOUT_SCRIMS[0]와 같아진다).
+    expect(layerFor(0)).toHaveStyle({ background: ABOUT_SCRIMS[0] });
+    expect(layerFor(2)).toHaveStyle({ background: ABOUT_SCRIMS[2] });
+
+    // 초기: 0만 보이고 2는 숨겨져 있다.
+    expect(layerFor(0).className).toMatch(/\bopacity-100\b/);
+    expect(layerFor(2).className).toMatch(/\bopacity-0\b/);
+
+    await userEvent.click(screen.getByRole('button', { name: /TEAMWORK/ }));
+
+    // 클릭 뒤: 활성이 2로 넘어간다.
+    expect(layerFor(2).className).toMatch(/\bopacity-100\b/);
+    expect(layerFor(0).className).toMatch(/\bopacity-0\b/);
+  });
+
   // 슬라이드도 크로스페이드도 아니다. 카메라가 터널을 지나간다. 앞으로 갈
   // 때 나가는 요소가 커지며 벌어지고 새 요소가 소실점에서 자란다.
   it('앞으로 갈 때와 뒤로 갈 때 방향이 반대다', async () => {
@@ -282,6 +306,25 @@ describe('AboutSection', () => {
     await userEvent.click(screen.getByRole('button', { name: /TEAMWORK/ }));
     const grid = container.querySelector('[data-about-grid]') as HTMLElement;
     expect(grid.dataset.aboutDistance).toBe('2');
+  });
+
+  // 최종 리뷰 발견 1: 01→02는 direction/distance가 none/0에서 forward/1로
+  // 바뀌어 재생되지만, 이어서 02→03으로 가면 값이 그대로 forward/1이라
+  // key 없이는 React가 DOM 속성을 다시 쓰지 않아 CSS 애니메이션이
+  // 재시작하지 않는다. 03(TEAMWORK)의 격자는 첫 클릭(0→1) 시점에 이미
+  // forward/1 값을 공유 상태로부터 받으므로, 그 직후 노드 참조와 두 번째
+  // 클릭(1→2, 같은 방향) 직후 노드 참조가 같으면 리마운트가 없었다는
+  // 뜻이다.
+  it('같은 방향으로 두 번 연속 이동해도 격자 노드가 매번 교체된다 (전환 재생 보장)', async () => {
+    const { container } = renderAboutSection();
+
+    await userEvent.click(screen.getByRole('button', { name: /AI WORKFLOW/ })); // 0 -> 1, forward
+    const gridAfterFirstMove = container.querySelector('[data-detail="2"] [data-about-grid]');
+
+    await userEvent.click(screen.getByRole('button', { name: /TEAMWORK/ })); // 1 -> 2, forward 그대로
+    const gridAfterSecondMove = container.querySelector('[data-detail="2"] [data-about-grid]');
+
+    expect(gridAfterSecondMove).not.toBe(gridAfterFirstMove);
   });
 
   // 실제 이동은 CSS의 animation-delay가 만든다. TS 쪽에 같은 값을 상수로

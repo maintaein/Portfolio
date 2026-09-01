@@ -5,7 +5,7 @@ import { coreValues } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
 import { useSectionActivity } from '@/components/common/SectionActivityContext';
 import AboutRail from './rail';
-import { ABOUT_SCRIMS } from './scrim';
+import { ABOUT_SCRIMS, ABOUT_SCRIMS_MOBILE } from './scrim';
 
 // 문항 전환의 방향과 거리. 클릭 시점에 정해 상태로 들고 있는다. 렌더 중에
 // ref로 직전 값과 비교하면 StrictMode 이중 렌더에서 두 번째 렌더의 차가
@@ -15,6 +15,12 @@ import { ABOUT_SCRIMS } from './scrim';
 // animation-delay로만 존재한다. TS 쪽에 같은 값을 상수로 복제하면 CSS가
 // 바뀌어도 아무도 모르게 어긋나므로, 그 계약은 CSS 자체를 읽는 테스트로
 // 고정한다(__tests__/components/AboutSection.test.tsx).
+//
+// 같은 방향으로 연속 이동하면(01→02→03) direction/distance 값이 문자열로
+// 그대로라 React가 속성을 다시 쓰지 않고 CSS 애니메이션도 재시작하지
+// 않는다(최종 리뷰 발견 1). transitionSeq를 클릭마다 늘려 격자의 key로
+// 걸면 값이 같아도 매 전환마다 노드를 새로 만들어 애니메이션이 항상
+// 재생된다.
 type AboutTransition = {
   direction: 'forward' | 'backward' | 'none';
   distance: number;
@@ -51,8 +57,8 @@ const EVIDENCE = [
   <div key="team" className="flex flex-col gap-4 font-mono">
     {[
       ['ROLE', '프론트엔드 리더'],
-      ['CONVENTION', 'git  jira'],
-      ['ARCHITECTURE', 'FSD  Atomic'],
+      ['CONVENTION', 'git · jira'],
+      ['ARCHITECTURE', 'FSD · Atomic'],
     ].map(([label, value]) => (
       <div key={label}>
         <div className="text-t8 tracking-[0.2em] text-[var(--color-text-secondary)]">{label}</div>
@@ -71,6 +77,7 @@ export default function AboutSection() {
     direction: 'none',
     distance: 0,
   });
+  const [transitionSeq, setTransitionSeq] = useState(0);
   const { reducedMotion } = useSectionActivity();
 
   function handleSelect(next: number) {
@@ -79,6 +86,7 @@ export default function AboutSection() {
       direction: reducedMotion ? 'none' : delta > 0 ? 'forward' : delta < 0 ? 'backward' : 'none',
       distance: Math.abs(delta),
     });
+    setTransitionSeq((seq) => seq + 1);
     setActiveIndex(next);
   }
 
@@ -110,14 +118,44 @@ export default function AboutSection() {
             겹치지 않지만, DOM 순서상 상세 콘텐츠보다 먼저 둬 텍스트 아래에
             깔리게 한다. 이 컨테이너 자체가 배경(HyperspeedBackground, fixed
             -z-10)보다 위 레이어라 스크림도 언제나 배경 위에 그려진다.
-            평평한 검은 막이 아니라 그라데이션을 써서 왼쪽으로는 광선이
-            그대로 흐르게 한다(scrim.ts). */}
-        <div
-          data-about-scrim
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 transition-[background] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
-          style={{ background: ABOUT_SCRIMS[activeIndex] }}
-        />
+            평평한 검은 막이 아니라 그라데이션을 써서 광선이 그대로 흐르게
+            한다(scrim.ts).
+
+            문항 수만큼 레이어를 겹쳐 opacity로 교차시킨다. background
+            트랜지션은 transform·opacity·filter만 쓴다는 제약 위반이라
+            (최종 리뷰 발견 2), 배경 값 자체는 고정하고 활성 레이어만
+            opacity로 드러낸다 — reduce 방어([data-about-scrim],
+            design-tokens.css)도 opacity 전환 하나만 끊으면 끝난다.
+
+            lg 미만은 글자가 col-start-1부터 폭 전체를 쓴다. 가로
+            그라데이션(ABOUT_SCRIMS, to left)을 그대로 쓰면 본문이 시작하는
+            왼쪽 끝의 알파가 0이라 그 뒤로 광선이 그대로 지나간다(최종
+            리뷰 발견 3). lg 미만 전용으로 세로 그라데이션(ABOUT_SCRIMS_
+            MOBILE, to top)을 별도 레이어로 두고 lg부터는 숨긴다. */}
+        {ABOUT_SCRIMS.map((scrim, index) => (
+          <div
+            key={`desktop-${index}`}
+            data-about-scrim
+            data-about-scrim-index={index}
+            aria-hidden="true"
+            className={`pointer-events-none absolute inset-0 hidden transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] lg:block ${
+              index === activeIndex ? 'opacity-100' : 'opacity-0'
+            }`}
+            style={{ background: scrim }}
+          />
+        ))}
+        {ABOUT_SCRIMS_MOBILE.map((scrim, index) => (
+          <div
+            key={`mobile-${index}`}
+            data-about-scrim
+            data-about-scrim-index={index}
+            aria-hidden="true"
+            className={`pointer-events-none absolute inset-0 transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] lg:hidden ${
+              index === activeIndex ? 'opacity-100' : 'opacity-0'
+            }`}
+            style={{ background: scrim }}
+          />
+        ))}
         {coreValues.map((value, index) => {
           const isActive = index === activeIndex;
 
@@ -134,6 +172,7 @@ export default function AboutSection() {
               }`}
             >
               <div
+                key={transitionSeq}
                 data-about-grid
                 data-about-direction={transition.direction}
                 data-about-distance={String(transition.distance)}
