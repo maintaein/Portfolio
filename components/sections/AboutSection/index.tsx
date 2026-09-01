@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import { awards, coreValues } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
+import AboutRail from './rail';
 
-// 인덱스 레일과 상세 제목이 함께 쓰는 순번 표기. coreValues 길이(3)와 짝을
-// 이룬다. 늘어나면 이 배열도 함께 늘려야 한다.
+// 상세 제목이 쓰는 순번 표기. coreValues 길이(3)와 짝을 이룬다. 늘어나면
+// 이 배열도 함께 늘려야 한다.
 const ORDINALS = ['01', '02', '03'];
 
 // AlphaMail 프로젝트 수상 이력. coreValues[2]의 "Alphamail 프로젝트에서
@@ -13,8 +14,8 @@ const ORDINALS = ['01', '02', '03'];
 const alphaMailAward = awards[0];
 
 // Cubes와 Orbit은 폐기했다. 배경이 이미 있는데 별도 도형을 얹으면 경쟁한다.
-// 이 태스크가 끝난 뒤 About에 남는 것은 제목과 증거와 설명뿐이다. 격자와
-// 레일은 뒤 태스크가 이 위에 붙인다.
+// 순번 인덱스는 라벨 레일(AboutRail)로 바뀌었다. 격자는 뒤 태스크가 이 위에
+// 붙인다.
 export default function AboutSection() {
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -24,43 +25,13 @@ export default function AboutSection() {
       aria-labelledby="about-heading"
       className="flex flex-col lg:h-full lg:flex-row"
     >
-      {/* 인덱스 레일: lg 이상 좌측 18%, 미만은 상단 가로 레일로 눕는다 */}
-      <nav
-        aria-label="핵심 가치 목록"
-        className="shrink-0 border-b border-[var(--color-hairline)] px-4 py-6 sm:px-6 lg:h-full lg:w-[18%] lg:border-b-0 lg:border-r lg:py-10"
-      >
-        <h2
-          id="about-heading"
-          className="mb-4 text-t8 uppercase tracking-[0.3em] text-[var(--color-text-secondary)] lg:mb-8"
-        >
-          About
-        </h2>
-        <ol className="flex gap-6 overflow-x-auto lg:flex-col lg:gap-3 lg:overflow-visible">
-          {coreValues.map((value, index) => {
-            const isActive = index === activeIndex;
-
-            return (
-              <li key={value.id} className="shrink-0">
-                <button
-                  type="button"
-                  aria-current={isActive ? 'true' : undefined}
-                  onClick={() => setActiveIndex(index)}
-                  className={`flex items-baseline gap-2 whitespace-nowrap border-b pb-2 text-left transition-colors duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)] lg:whitespace-normal lg:border-b-0 lg:border-l lg:pb-0 lg:pl-4 ${
-                    isActive
-                      ? 'border-[var(--color-cyan-core)] text-[var(--color-text-primary)]'
-                      : 'border-[var(--color-hairline)] text-[var(--color-text-secondary)]'
-                  }`}
-                >
-                  <span aria-hidden="true" className="text-t8 tabular-nums">
-                    {ORDINALS[index]}
-                  </span>
-                  <span className="text-t6 lg:text-t5">{value.title}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-      </nav>
+      {/* about-heading: 섹션 aria-labelledby가 참조하는 시각적으로 숨긴
+          제목. AboutRail은 라벨 레일 자체만 그리므로 여기서 섹션 이름을
+          별도로 붙잡아 둔다. */}
+      <h2 id="about-heading" className="sr-only">
+        About
+      </h2>
+      <AboutRail activeIndex={activeIndex} onSelect={setActiveIndex} />
 
       {/* 상세 3개: 전부 DOM에 상주한다. 활성 하나만 보이고 나머지는 inert.
           .section-hidden과 같은 방식(opacity + pointer-events)으로 감춘다.

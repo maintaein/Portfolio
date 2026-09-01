@@ -7,6 +7,8 @@ export interface Contact {
 export interface CoreValue {
   id: string;
   title: string;
+  // 레일에 쓰는 짧은 라벨. 순번(01, 02, 03)보다 뜻이 먼저 읽힌다.
+  label: string;
   description: string;
   imagePlaceholder: string;
 }

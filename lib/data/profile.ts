@@ -4,18 +4,21 @@ export const coreValues: CoreValue[] = [
     {
       id: '1',
       title: '새로움을 즐기는 개발자',
+      label: 'BASICS',
       description: '처음 접하는 개념도 직접 만들며 이해합니다. 디자인 시스템을 밑바닥부터 구축해 번들러·접근성·타입 시스템을 익히고 Tree-shaking 91% 감소를 실측 검증했으며, 포트폴리오 프로젝트에서는 SSR/Hydration 원리를 파고들어 렌더링 에러를 0건으로 잡았습니다.',
       imagePlaceholder: 'tech-stack'
     },
     {
       id: '2',
       title: '사용자의 눈과 마음으로',
+      label: 'AI WORKFLOW',
       description: '쓰는 사람의 입장에서 성능과 사용 방식을 다듬습니다. 디자인 시스템에서 단순한 컴포넌트는 Flat, 레이아웃 조합 컴포넌트는 Compound로 API를 나눠 단순한 경우는 props 하나로, 복잡한 경우는 자유롭게 조합하도록 설계했습니다.',
       imagePlaceholder: 'ux-focus'
     },
     {
       id: '3',
       title: '원활한 소통과 협업 역량',
+      label: 'TEAMWORK',
       description: '팀이 효율적인 방식으로 일할 구조를 고민합니다. Alphamail 프로젝트에서 프론트엔드 리더를 맡아 git과 jira 컨벤션을 설정하여 팀의 협업 효율성을 끌어올리고, FSD·Atomic 기반 구조를 잡아 기능별 독립 개발 환경을 만든 경험이 있습니다.',
       imagePlaceholder: 'collaboration'
     }

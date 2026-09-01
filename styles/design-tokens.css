@@ -712,6 +712,41 @@
     transform: none;
   }
 
+  /* About 레일의 구분선. 선 하나만 있으면 멋이 없다는 피드백에 굵기와
+     둥근 끝과 광휘를 넣었다. 가운데로 갈수록 진해지고 양 끝에서 사라진다. */
+  .about-rail-line {
+    width: 3px;
+    border-radius: 9999px;
+    background: linear-gradient(
+      to bottom,
+      rgb(3 179 195 / 0) 0%,
+      rgb(3 179 195 / 0.45) 22%,
+      rgb(3 179 195 / 0.55) 50%,
+      rgb(3 179 195 / 0.45) 78%,
+      rgb(3 179 195 / 0) 100%
+    );
+  }
+
+  .about-rail-tick {
+    width: 3px;
+    height: 8px;
+    border-radius: 9999px;
+    background: var(--color-cyan-core);
+    opacity: 0.45;
+  }
+
+  /* 활성 눈금. START 버튼의 광휘와 같은 언어다. */
+  .about-rail-tick-active {
+    width: 5px;
+    height: 24px;
+    border-radius: 9999px;
+    background: var(--color-cyan-hi);
+    opacity: 1;
+    box-shadow:
+      0 0 14px var(--color-cyan-hi),
+      0 0 5px var(--color-cyan-core);
+  }
+
   @media (prefers-reduced-motion: no-preference) {
     .boot-role {
       opacity: 0;

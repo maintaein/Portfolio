@@ -50,7 +50,7 @@ describe('AboutSection', () => {
   it('인덱스 항목 3개를 렌더한다', () => {
     renderAboutSection();
     for (const v of coreValues) {
-      expect(screen.getByRole('button', { name: new RegExp(v.title) })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: new RegExp(v.label) })).toBeInTheDocument();
     }
   });
 
@@ -88,7 +88,7 @@ describe('AboutSection', () => {
 
   it('인덱스를 누르면 활성 상세가 바뀐다', async () => {
     const { container } = renderAboutSection();
-    await userEvent.click(screen.getByRole('button', { name: new RegExp(coreValues[1].title) }));
+    await userEvent.click(screen.getByRole('button', { name: new RegExp(coreValues[1].label) }));
 
     const second = container.querySelector('[data-detail="1"]');
     expect(second?.hasAttribute('inert')).toBe(false);
@@ -96,8 +96,8 @@ describe('AboutSection', () => {
 
   it('활성 항목에 aria-current를 준다', async () => {
     renderAboutSection();
-    await userEvent.click(screen.getByRole('button', { name: new RegExp(coreValues[2].title) }));
-    expect(screen.getByRole('button', { name: new RegExp(coreValues[2].title) }))
+    await userEvent.click(screen.getByRole('button', { name: new RegExp(coreValues[2].label) }));
+    expect(screen.getByRole('button', { name: new RegExp(coreValues[2].label) }))
       .toHaveAttribute('aria-current', 'true');
   });
 
@@ -105,7 +105,7 @@ describe('AboutSection', () => {
   it('선택 전에는 01(index 0)이 활성이다', () => {
     const { container } = renderAboutSection();
     expect(container.querySelector('[data-detail="0"]')?.hasAttribute('inert')).toBe(false);
-    expect(screen.getByRole('button', { name: new RegExp(coreValues[0].title) }))
+    expect(screen.getByRole('button', { name: new RegExp(coreValues[0].label) }))
       .toHaveAttribute('aria-current', 'true');
   });
 
