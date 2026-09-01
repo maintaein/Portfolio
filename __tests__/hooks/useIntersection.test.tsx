@@ -31,19 +31,15 @@ vi.mock('next/dynamic', () => ({
 
 // TechParticleStorm 항목은 뺐다(계획 4 Task 2가 컴포넌트를 삭제하고 Cubes로
 // 대체했다). EmpathyRadar 항목도 뺐다(계획 4 Task 3이 컴포넌트를 삭제하고
-// Orbit으로 대체했다). 이 배열의 계약은 "장식이 CSS 트랜지션 클래스로
-// 진입·일시정지 상태를 드러낸다"이고(initialClasses/finalClasses, 아래
-// collectInfiniteAnimations가 CSS `animation: ...infinite` 클래스나 인라인
-// style.animation을 찾는다), Cubes와 Orbit은 둘 다 이 계약이 애초에 성립하지
-// 않는 성격이다. Cubes는 개별 큐브를 gsap.to(cube, { rotateX, rotateY })로
-// 트윈하고, Orbit은 GSAP MotionPathPlugin의 tween(motionPath + onUpdate로
-// scale·opacity·zIndex 직접 계산)으로 아이콘을 움직인다. 둘 다 CSS 키프레임
-// 애니메이션도 진입 트랜지션 클래스도 쓰지 않는다. Cubes의 paused→rAF
-// 미예약 계약은 __tests__/components/Cubes.test.tsx가 rAF spy로 직접 본다
-// (계획 4 Task 2 브리프가 요구하는 여섯 테스트 중 하나). Orbit의
-// paused→tween 미생성·kill 계약은 __tests__/components/Orbit.test.tsx가
-// gsap.to/kill spy로 직접 본다. WhenVisible 자체의 게이팅 계약은 컴포넌트와
-// 무관하게 WhenVisible.test.tsx가 덮는다.
+// Orbit으로 대체했다). Cubes와 Orbit도 About 재설계 Task 2가 곧이어
+// 폐기해 지금은 둘 다 존재하지 않는다(장식 자체를 걷어냈다). 이 배열의
+// 계약은 "장식이 CSS 트랜지션 클래스로 진입·일시정지 상태를 드러낸다"이고
+// (initialClasses/finalClasses, 아래 collectInfiniteAnimations가 CSS
+// `animation: ...infinite` 클래스나 인라인 style.animation을 찾는다),
+// Cubes와 Orbit은 존재하던 동안에도 이 계약이 애초에 성립하지 않는
+// 성격이었다(GSAP 트윈만으로 상태를 움직이고 CSS 키프레임 애니메이션도
+// 진입 트랜지션 클래스도 쓰지 않았다). WhenVisible 자체의 게이팅 계약은
+// 컴포넌트와 무관하게 WhenVisible.test.tsx가 덮는다.
 const decorations = [
   {
     name: 'CollaborationMesh',
