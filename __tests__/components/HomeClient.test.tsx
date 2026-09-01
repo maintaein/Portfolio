@@ -171,9 +171,12 @@ vi.mock('@/components/sections', async () => {
     // 관심사는 HomeClient가 단일 matchMedia listener로 motion 소비자
     // 여럿(WhenVisible 3개)을 함께 정지·재개시키는지이지 BootSequence 자체
     // 구현이 아니다(그건 BootSequence.test.tsx·WordmarkFlip.test.tsx가 실제
-    // 컴포넌트로 직접 검증한다). props는 무시해도 안전하다.
-    BootSequence: () => (
-      <section>
+    // 컴포넌트로 직접 검증한다). 대부분의 props는 무시해도 안전하다.
+    // transitionAttributes(최종 리뷰 I1)만은 예외다. HomeClient가
+    // transitionAttributes(OVERVIEW) 호출 결과를 이 컴포넌트에도 그대로
+    // 내려보내는지가 여기서 볼 계약이므로 루트에 그대로 편다.
+    BootSequence: (props: { transitionAttributes?: Record<string, string> }) => (
+      <section data-testid="boot-sequence-probe" {...props.transitionAttributes}>
         <h1>Overview profile</h1>
         <button>Overview content action</button>
         <MotionProbe label="boot-sequence" section="overview" />
@@ -970,6 +973,8 @@ describe('HomeClient 다음 섹션 예열(전환 끊김 완화)', () => {
 describe('HomeClient 전환 방향 표식', () => {
   it('들어오는 섹션과 나가는 섹션에만 방향 표식이 붙는다', () => {
     const { container } = render(<HomeClient />);
+    const stage = container.querySelector('.section-stage');
+    expect(stage).not.toBeNull();
     navigateTo(/about/i);
 
     expect(getSection(container, 'about')).toHaveAttribute(
@@ -984,6 +989,16 @@ describe('HomeClient 전환 방향 표식', () => {
     expect(getSection(container, 'projects')).not.toHaveAttribute(
       'data-section-direction'
     );
+
+    // 이월 1(Important로 승격): 위는 표본 하나(projects)만 본다. .section-scroll
+    // 래퍼 일곱 개(overview + 여섯 섹션) 전체에서 표식이 정확히 둘인지
+    // 센다. 이 설계 전체가 서 있는 불변식이다. .section-stage로 범위를
+    // 좁히는 이유는 BootSequence(최종 리뷰 I1)가 overview가 관련된 전환에서
+    // 같은 transitionAttributes(OVERVIEW)를 받아 자기 루트(.section-stage
+    // 밖 셸 레벨)에도 같은 표식을 펴기 때문이다. 그 표식까지 한 카운터에
+    // 세면 이 불변식이 ".section-scroll 일곱 중 둘"이 아니라 DOM 전체
+    // 얘기로 흐려진다. BootSequence 쪽 배선은 아래 별도 테스트가 고정한다.
+    expect(stage!.querySelectorAll('[data-section-direction]')).toHaveLength(2);
   });
 
   it('모션을 끄면 표식을 달지 않는다', () => {
@@ -993,6 +1008,54 @@ describe('HomeClient 전환 방향 표식', () => {
 
     expect(getSection(container, 'about')).not.toHaveAttribute(
       'data-section-direction'
+    );
+  });
+
+  // 최종 리뷰 I1: overview의 실제 화면(FRONTEND DEVELOPER 캡션, START)은
+  // .section-scroll 빈 wrapper가 아니라 BootSequence가 그린다. overview가
+  // 관련된 전환에서는 BootSequence 루트도 같은 표식을 받아야 그 화면에도
+  // 깊이 애니메이션이 그려진다.
+  it('overview를 떠나면 BootSequence 루트가 이탈 표식을 받는다', () => {
+    render(<HomeClient />);
+    navigateTo(/about/i);
+
+    const bootProbe = screen.getByTestId('boot-sequence-probe');
+    expect(bootProbe).toHaveAttribute('data-section-direction', 'forward');
+    expect(bootProbe).toHaveAttribute('data-section-leaving');
+  });
+
+  it('overview로 돌아오면 BootSequence 루트가 진입 표식을 받는다', () => {
+    render(<HomeClient />);
+    navigateTo(/about/i);
+    fireEvent.click(screen.getByTestId('wordmark'));
+
+    const bootProbe = screen.getByTestId('boot-sequence-probe');
+    expect(bootProbe).toHaveAttribute('data-section-direction', 'backward');
+    expect(bootProbe).not.toHaveAttribute('data-section-leaving');
+  });
+
+  // 최종 리뷰 I2: sectionTransition은 다음 이동 전까지 초기화되지 않는다.
+  // isTransitioning 게이트가 없으면 reducedMotion을 끄는 것만으로(이동
+  // 없이) 표식이 새로 붙어 진입 애니메이션이 재생된다. 전환이 끝난 뒤
+  // (transitionend) 표식이 사라지는지로 이 게이트를 고정한다.
+  it('전환이 끝나면 방향 표식이 사라진다', () => {
+    const { container } = render(<HomeClient />);
+    navigateTo(/about/i);
+    const about = getSection(container, 'about');
+
+    expect(about).toHaveAttribute('data-section-direction', 'forward');
+    expect(getSection(container, 'overview')).toHaveAttribute(
+      'data-section-leaving'
+    );
+
+    fireOpacityTransition(about, 'transitionrun');
+    fireOpacityTransition(about, 'transitionend');
+
+    // 뮤테이션: isTransitioning 게이트를 지우면(sectionTransition.direction만
+    // 보면) 전환이 끝난 뒤에도 이 값들이 그대로 남아 FAIL한다.
+    expect(about).not.toHaveAttribute('data-section-direction');
+    expect(getSection(container, 'overview')).not.toHaveAttribute(
+      'data-section-leaving'
     );
   });
 });

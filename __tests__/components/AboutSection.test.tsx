@@ -7,6 +7,8 @@ import AboutSection from '@/components/sections/AboutSection';
 import { SectionActivityProvider } from '@/components/common/SectionActivityContext';
 import { coreValues } from '@/lib/data';
 import { ABOUT_SCRIMS } from '@/components/sections/AboutSection/scrim';
+import { SECTION_IDS } from '@/lib/constants';
+import type { NavId } from '@/hooks/useSectionNav';
 
 beforeEach(() => {
   vi.stubGlobal(
@@ -21,10 +23,12 @@ beforeEach(() => {
 // 전환의 방향(direction)을 정할 때 useSectionActivity().reducedMotion을
 // 읽는다(Task 6). reducedMotion을 matchMedia 스텁 값으로 계산해 넘겨야
 // 아래 'reducedMotion이면...' 테스트의 stubGlobal 재정의가 실제로 전달된다.
-function renderAboutSection() {
+// active는 스크림 포털(C1)의 활성 게이트다. 스크림 동작을 보는 테스트는
+// About이 실제로 활성이어야 하므로 기본값을 about으로 둔다.
+function renderAboutSection(active: NavId = SECTION_IDS.ABOUT) {
   return render(
     <SectionActivityProvider
-      active="overview"
+      active={active}
       entryAnimationTarget={null}
       pageVisible
       routeResolved
@@ -253,8 +257,10 @@ describe('AboutSection', () => {
   // fixed로 띄워 뷰포트 전체를 덮는다. Task 4가 섹션 래퍼에 transform을
   // 상시로 남기지 않는 이유가 이것이다.
   it('스크림이 뷰포트 전체를 덮는다(무대 안에 갇히지 않는다)', () => {
-    const { container } = renderAboutSection();
-    const scrims = container.querySelectorAll('[data-about-scrim]');
+    renderAboutSection();
+    // 스크림은 document.body로 포털된다(C1). container(About의 section
+    // 서브트리) 기준으로는 찾을 수 없다.
+    const scrims = document.body.querySelectorAll('[data-about-scrim]');
     expect(scrims.length).toBeGreaterThan(0);
     for (const scrim of scrims) {
       expect(scrim.className, '스크림이 absolute면 무대에 갇힌다').toMatch(
@@ -267,8 +273,8 @@ describe('AboutSection', () => {
   // fixed는 positioned라 그냥 두면 흐름 안의 본문 위에 그려진다.
   // 음수 z로 내려 배경(-z-10)과 본문 사이에 둔다.
   it('스크림이 본문 아래에 깔린다', () => {
-    const { container } = renderAboutSection();
-    for (const scrim of container.querySelectorAll('[data-about-scrim]')) {
+    renderAboutSection();
+    for (const scrim of document.body.querySelectorAll('[data-about-scrim]')) {
       expect(scrim.className).toMatch(/-z-\[1\]/);
     }
   });
@@ -280,8 +286,8 @@ describe('AboutSection', () => {
   });
 
   it('활성 문항의 스크림만 걸린다', () => {
-    const { container } = renderAboutSection();
-    const scrim = container.querySelector('[data-about-scrim]');
+    renderAboutSection();
+    const scrim = document.body.querySelector('[data-about-scrim]');
     expect(scrim).toHaveStyle({ background: ABOUT_SCRIMS[0] });
   });
 
@@ -289,9 +295,9 @@ describe('AboutSection', () => {
   // 구현을 ABOUT_SCRIMS[0] 하드코딩으로 바꿔도 통과했다. 문항별 배선
   // 자체(레이어마다 다른 배경, 클릭 뒤 활성 레이어 교체)를 여기서 고정한다.
   it('세 스크림 레이어가 문항별로 다른 배경을 갖고, 클릭하면 활성 레이어가 바뀐다', async () => {
-    const { container } = renderAboutSection();
+    renderAboutSection();
     const layerFor = (index: number) =>
-      container.querySelector(`[data-about-scrim][data-about-scrim-index="${index}"]`) as HTMLElement;
+      document.body.querySelector(`[data-about-scrim][data-about-scrim-index="${index}"]`) as HTMLElement;
 
     // 배선: 인덱스마다 고정된 배경을 받는다 (하드코딩이면 layerFor(2)가
     // ABOUT_SCRIMS[0]와 같아진다).
@@ -307,6 +313,39 @@ describe('AboutSection', () => {
     // 클릭 뒤: 활성이 2로 넘어간다.
     expect(layerFor(2).className).toMatch(/\bopacity-100\b/);
     expect(layerFor(0).className).toMatch(/\bopacity-0\b/);
+  });
+
+  // C1: 스크림이 About의 <section> 서브트리 안에 있으면 조상(.section-scroll)의
+  // 전환 transform이 fixed의 기준을 바꿔 무대 안에 갇힌다(진입 500ms 동안
+  // 정지했다가 마지막에 튀는 결함). document.body로 포털해 서브트리 밖에
+  // 둬야 한다. 포털을 되돌려 섹션 안에서 렌더하게 하면 이 테스트가 FAIL한다.
+  it('스크림이 About의 section 서브트리 밖에 있다 (C1, 무대 갇힘 회귀 방지)', () => {
+    const { container } = renderAboutSection();
+    const section = container.querySelector('section');
+    expect(section, 'About section을 찾지 못했다').not.toBeNull();
+
+    expect(section!.querySelectorAll('[data-about-scrim]')).toHaveLength(0);
+    expect(document.body.querySelectorAll('[data-about-scrim]').length).toBeGreaterThan(0);
+  });
+
+  // C1 재수정: 포털은 .section-hidden의 opacity:0 상속을 벗어나므로 About이
+  // 비활성일 때 스스로 감춰야 한다. 처음엔 언마운트(active를 마운트 조건에
+  // 넣음)로 했는데, 그러면 About을 떠나는 첫 프레임에 스크림 여섯이 통째로
+  // 사라지는 반면 About 본문은 .section-hidden의 opacity transition을 타고
+  // 300ms에 걸쳐서만 사라져, 그 사이 글자가 어두워지지 않은 배경 위에 놓이는
+  // 새 결함을 냈다(컨트롤러 실측: 130ms 동안 본문 opacity 0.4 이상인데
+  // 스크림은 이미 사라짐). 언마운트 대신 불투명도로 감춰야 본문과 나란히
+  // 페이드한다. 그래서 이 테스트는 "스크림이 DOM에 없다"가 아니라 "DOM에
+  // 있고 opacity-0이다"를 단언한다. 언마운트로 되돌리면 FAIL한다.
+  it('About이 비활성이면 스크림이 DOM에 남아 있되 불투명도가 0이다 (C1 재수정, 활성 게이트)', () => {
+    renderAboutSection('overview');
+    const scrims = document.body.querySelectorAll('[data-about-scrim]');
+
+    expect(scrims.length).toBeGreaterThan(0);
+    for (const scrim of scrims) {
+      expect(scrim.className).toMatch(/\bopacity-0\b/);
+      expect(scrim.className).not.toMatch(/\bopacity-100\b/);
+    }
   });
 
   // 슬라이드도 크로스페이드도 아니다. 카메라가 터널을 지나간다. 앞으로 갈

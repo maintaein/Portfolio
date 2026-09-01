@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { coreValues } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
 import { useSectionActivity } from '@/components/common/SectionActivityContext';
@@ -78,7 +79,15 @@ export default function AboutSection() {
     distance: 0,
   });
   const [transitionSeq, setTransitionSeq] = useState(0);
-  const { reducedMotion } = useSectionActivity();
+  const { reducedMotion, active } = useSectionActivity();
+
+  // 스크림을 body로 포털하기 전 게이트. 서버 렌더에는 document가 없다.
+  // 마운트된 뒤에만 포털한다(스크림은 aria-hidden 장식이라 클라이언트
+  // 전용이어도 SEO 계약을 깨지 않는다). About 비활성일 때 숨기는 것은
+  // 이 마운트 게이트가 아니라 아래 각 레이어의 불투명도가 맡는다(이유는
+  // 포털 JSX 바로 위 주석 참고, C1 재수정).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   function handleSelect(next: number) {
     const delta = next - activeIndex;
@@ -134,30 +143,61 @@ export default function AboutSection() {
             왼쪽 끝의 알파가 0이라 그 뒤로 광선이 그대로 지나간다(최종
             리뷰 발견 3). lg 미만 전용으로 세로 그라데이션(ABOUT_SCRIMS_
             MOBILE, to top)을 별도 레이어로 두고 lg부터는 숨긴다. */}
-        {ABOUT_SCRIMS.map((scrim, index) => (
-          <div
-            key={`desktop-${index}`}
-            data-about-scrim
-            data-about-scrim-index={index}
-            aria-hidden="true"
-            className={`pointer-events-none fixed inset-0 -z-[1] hidden transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] lg:block ${
-              index === activeIndex ? 'opacity-100' : 'opacity-0'
-            }`}
-            style={{ background: scrim }}
-          />
-        ))}
-        {ABOUT_SCRIMS_MOBILE.map((scrim, index) => (
-          <div
-            key={`mobile-${index}`}
-            data-about-scrim
-            data-about-scrim-index={index}
-            aria-hidden="true"
-            className={`pointer-events-none fixed inset-0 -z-[1] transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] lg:hidden ${
-              index === activeIndex ? 'opacity-100' : 'opacity-0'
-            }`}
-            style={{ background: scrim }}
-          />
-        ))}
+        {/* 스크림은 document.body로 포털한다(components/atoms/Modal/index.tsx와
+            같은 선례). 이 컨테이너의 조상인 .section-scroll은 진입/이탈
+            전환 동안 잠깐 transform이 걸리는데, transform이 걸린 조상은
+            position: fixed의 기준이 되어 버려 스크림이 뷰포트가 아니라 그
+            조상 박스 안에 갇힌다(최종 리뷰 C1). 서브트리 밖 body로 내보내면
+            그 영향을 받지 않는다. mounted 게이트는 서버 렌더에 document가
+            없어서다.
+
+            포털은 .section-hidden의 opacity: 0 상속을 벗어나므로 About이
+            비활성일 때 스스로 감춰야 한다. 그것을 언마운트가 아니라
+            불투명도로 한다(아래 각 레이어의 className 조건). 언마운트로
+            하면(active를 마운트 조건에 넣으면) About을 떠나는 첫 프레임에
+            스크림 여섯이 통째로 사라지는데, About 본문은 .section-hidden의
+            opacity transition을 타고 300ms에 걸쳐서만 사라진다. 그 사이
+            글자가 어두워지지 않은 배경 위에 그대로 놓인다(컨트롤러 실측:
+            About에서 워드마크로 overview 이동 시 130ms 동안 본문 opacity가
+            0.4 이상인데 스크림은 이미 0). 대신 불투명도로 감추면 아래
+            transition-opacity duration-500이 본문과 나란히 페이드해
+            포털 이전 동작(스크림이 .section-hidden의 opacity: 0을 전환과
+            함께 상속하던 것)과 같아진다. */}
+        {mounted
+          ? createPortal(
+              <>
+                {ABOUT_SCRIMS.map((scrim, index) => (
+                  <div
+                    key={`desktop-${index}`}
+                    data-about-scrim
+                    data-about-scrim-index={index}
+                    aria-hidden="true"
+                    className={`pointer-events-none fixed inset-0 -z-[1] hidden transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] lg:block ${
+                      active === SECTION_IDS.ABOUT && index === activeIndex
+                        ? 'opacity-100'
+                        : 'opacity-0'
+                    }`}
+                    style={{ background: scrim }}
+                  />
+                ))}
+                {ABOUT_SCRIMS_MOBILE.map((scrim, index) => (
+                  <div
+                    key={`mobile-${index}`}
+                    data-about-scrim
+                    data-about-scrim-index={index}
+                    aria-hidden="true"
+                    className={`pointer-events-none fixed inset-0 -z-[1] transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] lg:hidden ${
+                      active === SECTION_IDS.ABOUT && index === activeIndex
+                        ? 'opacity-100'
+                        : 'opacity-0'
+                    }`}
+                    style={{ background: scrim }}
+                  />
+                ))}
+              </>,
+              document.body
+            )
+          : null}
         {coreValues.map((value, index) => {
           const isActive = index === activeIndex;
 

@@ -57,6 +57,7 @@ function Harness({
   reducedMotion = false,
   onStart = vi.fn(),
   onNameRevealed,
+  transitionAttributes,
 }: Partial<BootSequenceProps>) {
   const wordmarkRef = useRef<HTMLButtonElement>(null);
   return (
@@ -77,6 +78,7 @@ function Harness({
         wordmarkRef={wordmarkRef}
         onStart={onStart}
         onNameRevealed={onNameRevealed}
+        transitionAttributes={transitionAttributes}
       />
     </>
   );
@@ -1092,6 +1094,38 @@ describe('BootSequence — 캡션 컨테인먼트 점프 회피(active 기반 �
     expect(container).toHaveAttribute('aria-hidden', 'true');
     expect(container.className).toContain('boot-caption-hidden');
     expect(container.className).not.toContain('boot-caption-visible');
+  });
+});
+
+// 최종 리뷰 I1: overview의 실제 화면(FRONTEND DEVELOPER 캡션, START)은
+// data-section='overview' wrapper가 아니라 이 컴포넌트가 그린다. 그
+// wrapper는 빈 div라 전환 표식을 걸어도 그릴 픽셀이 없으므로, HomeClient가
+// 같은 표식을 이 컴포넌트에도 내려 자기 루트에 편다.
+describe('BootSequence 전환 표식(transitionAttributes prop)', () => {
+  it('transitionAttributes prop을 루트에 그대로 편다', () => {
+    render(
+      <Harness
+        active="about"
+        transitionAttributes={{
+          'data-section-direction': 'forward',
+          'data-section-leaving': '',
+        }}
+      />
+    );
+    const container = screen.getByTestId('boot-sequence');
+
+    expect(container).toHaveAttribute('data-section-direction', 'forward');
+    expect(container).toHaveAttribute('data-section-leaving');
+  });
+
+  // 뮤테이션: prop을 무시하거나 spread를 지우면 이 값이 하나도 안 붙어
+  // FAIL한다.
+  it('transitionAttributes를 생략하면(기본값 {}) 표식이 없다', () => {
+    render(<Harness active="overview" />);
+    const container = screen.getByTestId('boot-sequence');
+
+    expect(container).not.toHaveAttribute('data-section-direction');
+    expect(container).not.toHaveAttribute('data-section-leaving');
   });
 });
 

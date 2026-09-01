@@ -319,8 +319,18 @@ export default function HomeClient() {
   // 매 전환마다 그 둘의 animation-name이 반드시 바뀌어 같은 방향으로
   // 연속 이동해도 애니메이션이 다시 재생된다. 전부에 달면 비활성 여섯 개가
   // 함께 뛴다. reducedMotion이면 아예 달지 않아 CSS가 걸릴 자리가 없다.
-  function transitionAttributes(id: NavId) {
-    if (reducedMotion || sectionTransition.direction === 'none') return {};
+  //
+  // isTransitioning 게이트(최종 리뷰 I2). sectionTransition은 한 번
+  // 기록되면 다음 이동 전까지 초기화되지 않는다. 이 게이트가 없으면
+  // reducedMotion이 켜진 채로 이동해 표식 없이 도착한 뒤(아무 애니메이션도
+  // 없음), 한참 뒤 OS 모션 설정이 꺼져 재렌더가 일어나면 표식이 새로
+  // 붙어 아무 데도 가지 않았는데 진입 애니메이션이 재생된다. setActive가
+  // setActiveState와 setIsTransitioning(true)를 같은 배치에서 부르므로
+  // 전환 첫 렌더에는 이미 표식이 붙어 있어 안전하다.
+  function transitionAttributes(id: NavId): Record<string, string> {
+    if (reducedMotion || !isTransitioning || sectionTransition.direction === 'none') {
+      return {};
+    }
     if (id === active) {
       return { 'data-section-direction': sectionTransition.direction };
     }
@@ -378,6 +388,7 @@ export default function HomeClient() {
         wordmarkRef={wordmarkRef}
         onStart={() => setActive(SECTION_IDS.ABOUT)}
         onNameRevealed={handleNameRevealed}
+        transitionAttributes={transitionAttributes(OVERVIEW)}
       />
 
       <main

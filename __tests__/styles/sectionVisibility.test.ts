@@ -9,6 +9,17 @@ function ruleBody(selector: string): string | undefined {
   return css.match(new RegExp(`^  ${escapedSelector}\\s*\\{([\\s\\S]*?)^  \\}`, 'm'))?.[1];
 }
 
+// ruleBody는 selector 바로 뒤에 '{'가 오는 단일 selector 규칙만 찾는다.
+// fill-mode 공유 규칙(위 섹션 전환 주석 참고)은 selector 넷을 쉼표로 묶은
+// 규칙 하나라 각 selector 줄이 '{'가 아니라 ','로 끝난다. selector가 그
+// 목록의 멤버로만 등장하는 경우를 잡는다.
+function memberRuleBody(selector: string): string | undefined {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return css.match(
+    new RegExp(`^  ${escapedSelector},[\\s\\S]*?\\{([\\s\\S]*?)^  \\}`, 'm')
+  )?.[1];
+}
+
 // .site-footer 높이와 .section-stage 하단 여백은 320px 폭에서 같은 값으로
 // 함께 늘어나야 한다(footer-jank-report H4). 두 규칙이 각각 자기만의
 // @media (max-width: 479px) 블록 안에 있으므로, 그 블록 하나 안에서
@@ -232,12 +243,47 @@ describe('section visibility utilities', () => {
 
   // fill-mode가 forwards나 both면 애니메이션이 끝난 뒤에도 transform이
   // 남는다. transform이 있는 조상은 position: fixed의 기준이 되므로
-  // About 스크림(Task 1)이 다시 무대 안에 갇힌다.
+  // About 스크림(최종 리뷰 C1)이 다시 무대 안에 갇힌다.
+  //
+  // 최종 리뷰 I3: 예전 버전은 css.indexOf(...)가 -1이면 slice(-1)로
+  // 무너져 사실상 마지막 한 글자만 봤고(selector가 존재하지 않아도 통과),
+  // longhand(animation-fill-mode)만 찾아 shorthand(animation: ... both;)로
+  // 다시 쓰이면 못 잡았으며, 범위가 파일 끝까지라 무관한 규칙까지 함께
+  // 봤다. 이제 관련 규칙마다 ruleBody(선택자 하나짜리 규칙)나
+  // memberRuleBody(콤마로 묶인 규칙의 대표 selector 하나)로 본문을 직접
+  // 집어 shorthand·longhand 둘 다 검사한다. 섹션과 BootSequence(I1) 양쪽을
+  // 다 본다.
   it('애니메이션이 끝난 뒤 transform을 남기지 않는다', () => {
-    const transitionRules = css.slice(css.indexOf('@keyframes section-enter-forward'));
-    expect(transitionRules).not.toMatch(
-      /animation-fill-mode:\s*(forwards|both)/
-    );
+    // 콤마로 묶인 fill-mode 공유 규칙. 대표로 forward 하나만 찾아도
+    // 같은 본문을 넷이 공유한다(위 섹션 전환 주석).
+    for (const selector of [
+      ".section-visible[data-section-direction='forward']",
+      ".boot-caption-visible[data-section-direction='forward']",
+    ]) {
+      const body = memberRuleBody(selector);
+      expect(body, `${selector}가 속한 콤마 규칙을 찾지 못했다`).toBeDefined();
+      expect(body).not.toMatch(/animation-fill-mode:\s*(forwards|both)/);
+      expect(body).not.toMatch(/animation:\s*[^;]*\b(forwards|both)\b/);
+    }
+
+    // 이름·길이만 정하는 단일 selector 규칙 넷(섹션 둘, boot-caption 둘).
+    // 지금은 fill-mode를 선언하지 않지만, 나중에 shorthand로 합쳐지면
+    // 여기서 잡는다.
+    for (const selector of [
+      ".section-visible[data-section-direction='forward']",
+      ".section-visible[data-section-direction='backward']",
+      ".section-hidden[data-section-leaving][data-section-direction='forward']",
+      ".section-hidden[data-section-leaving][data-section-direction='backward']",
+      ".boot-caption-visible[data-section-direction='forward']",
+      ".boot-caption-visible[data-section-direction='backward']",
+      ".boot-caption-hidden[data-section-leaving][data-section-direction='forward']",
+      ".boot-caption-hidden[data-section-leaving][data-section-direction='backward']",
+    ]) {
+      const body = ruleBody(selector);
+      expect(body, `${selector} 규칙을 찾지 못했다`).toBeDefined();
+      expect(body).not.toMatch(/animation-fill-mode:\s*(forwards|both)/);
+      expect(body).not.toMatch(/animation:\s*[^;]*\b(forwards|both)\b/);
+    }
   });
 
   // 확대 원점이 요소 중심이면 제자리 줌이 된다.
@@ -277,13 +323,29 @@ describe('section visibility utilities', () => {
     );
   });
 
+  // 최종 리뷰 I4: 예전 버전은 파일 안의 reduce 블록 다섯 개를 전부 이어붙여
+  // 검사했다. [data-section-direction]과 animation: none이 서로 다른
+  // 블록에서 각각 만족돼도 통과했다(나머지 네 블록엔 [data-section-direction]도,
+  // animation: none과 무관한 다른 규칙도 섞여 있다). [data-section-direction]을
+  // 포함하는 그 블록 하나만 뽑아 그 안에서 검사한다.
   it('reduce에서 전환 애니메이션이 끊긴다', () => {
-    const reduceBlocks =
-      css.match(
-        /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\n {2}\}/g
-      )?.join('\n') ?? '';
-    expect(reduceBlocks).toMatch(/\[data-section-direction\]/);
-    expect(reduceBlocks).toMatch(/animation:\s*none/);
+    const reduceBlock = css.match(
+      /@media \(prefers-reduced-motion: reduce\) \{\n {4}\.section-hidden,[\s\S]*?\n {2}\}/
+    )?.[0];
+    expect(reduceBlock, '[data-section-direction]을 포함하는 reduce 블록을 찾지 못했다').toBeDefined();
+    expect(reduceBlock).toMatch(/\[data-section-direction\]/);
+    expect(reduceBlock).toMatch(/animation:\s*none/);
+
+    // I1: BootSequence(boot-caption-*)도 같은 블록 안에서 함께 끊겨야 한다.
+    expect(reduceBlock).toMatch(/boot-caption-visible\[data-section-direction\]/);
+    expect(reduceBlock).toMatch(/boot-caption-hidden\[data-section-direction\]/);
+
+    // I4 부수 발견: leaving 선택자의 transition-duration(특이도 0-0-3-0)이
+    // 위 .section-hidden{transition:none}(0-0-1-0)을 특이도로 이긴다. 같은
+    // 특이도(0-0-3-0)로 한 번 더 끊는 규칙이 이 블록 안에 있어야 한다.
+    expect(reduceBlock).toMatch(
+      /\.section-hidden\[data-section-leaving\]\[data-section-direction='forward'\],[\s\S]*?transition:\s*none;/
+    );
   });
 
   // 키프레임이 opacity를 건드리면 안 된다. .section-hidden도 진입

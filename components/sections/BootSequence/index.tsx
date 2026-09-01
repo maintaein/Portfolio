@@ -23,6 +23,11 @@ export interface BootSequenceProps {
   // 타임라인이 도는 정상 경로뿐 아니라 실패·이탈 등 모든 폴백 경로에서도
   // revealFinalState()가 함께 불러 배경이 영원히 숨은 채로 남지 않는다.
   onNameRevealed?: () => void;
+  // 최종 리뷰 I1. overview의 data-section wrapper는 빈 div라 섹션 전환
+  // 키프레임이 걸려도 그릴 픽셀이 없다. 실제 overview 화면은 이 컴포넌트가
+  // 그리므로, HomeClient가 자신의 transitionAttributes(OVERVIEW) 호출
+  // 결과를 그대로 여기로 내려 같은 표식을 이 컴포넌트의 루트에도 편다.
+  transitionAttributes?: Record<string, string>;
 }
 
 // HERO 재순서 브리프 — "아무것도 없는 배경 → 이름이 파티클로 뭉쳐 만들어짐 →
@@ -73,6 +78,7 @@ export default function BootSequence({
   wordmarkRef,
   onStart,
   onNameRevealed,
+  transitionAttributes = {},
 }: BootSequenceProps) {
   const roleRef = useRef<HTMLSpanElement>(null);
   const startRef = useRef<HTMLButtonElement>(null);
@@ -411,6 +417,7 @@ export default function BootSequence({
         className={`fixed top-1/2 left-1/2 z-40 mt-[var(--boot-caption-gap)] flex -translate-x-1/2 flex-col items-center gap-2 ${
           hiddenFromOverview ? 'boot-caption-hidden' : 'boot-caption-visible'
         }`}
+        {...transitionAttributes}
       >
         {/* 역할 라벨 — 정체성 진술. 보조 정보라 START보다 작고 흐리다. */}
         <span
