@@ -823,7 +823,7 @@
   /* 상세 크로스페이드(.transition-opacity, index.tsx의 [data-detail])와
      스크림 레이어(.transition-opacity, [data-about-scrim])는 Tailwind
      유틸리티 조합이라 이 파일에 자체 클래스 선언이 없다. 모션을 끈
-     사용자에게는 transition 자체를 끊어야 즉시 전환된다 — 이 저장소가
+     사용자에게는 transition 자체를 끊어야 즉시 전환된다. 이 저장소가
      .section-hidden/.section-visible(위)부터 매번 짝지어 온 방어다
      (최종 리뷰 발견 2). */
   @media (prefers-reduced-motion: reduce) {
@@ -912,7 +912,7 @@
     /* direction이 'none'이라 위 애니메이션 자체가 안 걸리지만, 선택자가
        나중에 바뀌어도 안전하도록 여기서도 끊는다. 명시도를 forward·
        backward 선택자([data-about-direction='...'] [data-about-title]
-       등, 속성 선택자 두 개, 위 767행 부근)와 맞춰야 한다 — 속성 선택자
+       등, 속성 선택자 두 개, 위 767행 부근)와 맞춰야 한다. 속성 선택자
        하나짜리였을 때는 명시도가 밀려 이 규칙이 절대 못 이겼다(최종
        리뷰 발견 7). [data-about-grid]를 조상으로 얹어 속성 선택자 두
        개로 맞추고, 이 블록이 소스 순서상 더 뒤에 있어 동점을 이긴다. */
