@@ -3,8 +3,22 @@
 import { useState } from 'react';
 import { coreValues } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
+import { useSectionActivity } from '@/components/common/SectionActivityContext';
 import AboutRail from './rail';
 import { ABOUT_SCRIMS } from './scrim';
+
+// 문항 전환의 방향과 거리. 클릭 시점에 정해 상태로 들고 있는다. 렌더 중에
+// ref로 직전 값과 비교하면 StrictMode 이중 렌더에서 두 번째 렌더의 차가
+// 0이 되어 방향이 사라진다. 실제 이동량(배율·투명도)은 CSS의
+// [data-about-direction], [data-about-distance] 선택자가 만든다
+// (styles/design-tokens.css). 시차(증거가 먼저, 제목·설명이 늦게)도 거기
+// animation-delay로만 존재한다. TS 쪽에 같은 값을 상수로 복제하면 CSS가
+// 바뀌어도 아무도 모르게 어긋나므로, 그 계약은 CSS 자체를 읽는 테스트로
+// 고정한다(__tests__/components/AboutSection.test.tsx).
+type AboutTransition = {
+  direction: 'forward' | 'backward' | 'none';
+  distance: number;
+};
 
 // 증거 블록. 자리는 셋이 같고 내용만 다르다. 콘텐츠가 확정되면 이 배열만
 // 바꾼다. 라벨은 t8, 값은 크게 둬서 대충 봐도 값이 먼저 읽힌다.
@@ -53,6 +67,20 @@ const EVIDENCE = [
 // 6줄 격자를 쓰고, 그 미만에서는 4칸으로 줄여 세로로 쌓는다(Task 7).
 export default function AboutSection() {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [transition, setTransition] = useState<AboutTransition>({
+    direction: 'none',
+    distance: 0,
+  });
+  const { reducedMotion } = useSectionActivity();
+
+  function handleSelect(next: number) {
+    const delta = next - activeIndex;
+    setTransition({
+      direction: reducedMotion ? 'none' : delta > 0 ? 'forward' : delta < 0 ? 'backward' : 'none',
+      distance: Math.abs(delta),
+    });
+    setActiveIndex(next);
+  }
 
   return (
     <section
@@ -66,7 +94,7 @@ export default function AboutSection() {
       <h2 id="about-heading" className="sr-only">
         About
       </h2>
-      <AboutRail activeIndex={activeIndex} onSelect={setActiveIndex} />
+      <AboutRail activeIndex={activeIndex} onSelect={handleSelect} />
 
       {/* 상세 3개: 전부 DOM에 상주한다. 활성 하나만 보이고 나머지는 inert.
           .section-hidden과 같은 방식(opacity + pointer-events)으로 감춘다.
@@ -107,6 +135,8 @@ export default function AboutSection() {
             >
               <div
                 data-about-grid
+                data-about-direction={transition.direction}
+                data-about-distance={String(transition.distance)}
                 className="grid grid-cols-4 gap-x-4 gap-y-6 px-5 py-6 lg:h-full lg:grid-cols-12 lg:grid-rows-6 lg:gap-x-6 lg:gap-y-2 lg:px-10 lg:py-8"
               >
                 <h3

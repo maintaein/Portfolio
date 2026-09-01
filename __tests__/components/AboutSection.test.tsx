@@ -17,9 +17,10 @@ beforeEach(() => {
   );
 });
 
-// HomeClient는 항상 이 Provider로 전 섹션을 감싼다. AboutSection은 장식을
-// 폐기해(Task 2) 더는 useSectionActivity()를 직접 쓰지 않지만, 실제 배선과
-// 같은 모양을 유지하려고 이 파일도 Provider로 감싼다.
+// HomeClient는 항상 이 Provider로 전 섹션을 감싼다. AboutSection은 문항
+// 전환의 방향(direction)을 정할 때 useSectionActivity().reducedMotion을
+// 읽는다(Task 6). reducedMotion을 matchMedia 스텁 값으로 계산해 넘겨야
+// 아래 'reducedMotion이면...' 테스트의 stubGlobal 재정의가 실제로 전달된다.
 function renderAboutSection() {
   return render(
     <SectionActivityProvider
@@ -28,7 +29,7 @@ function renderAboutSection() {
       pageVisible
       routeResolved
       motionReady
-      reducedMotion={false}
+      reducedMotion={matchMedia('(prefers-reduced-motion: reduce)').matches}
     >
       <AboutSection />
     </SectionActivityProvider>
@@ -257,6 +258,70 @@ describe('AboutSection', () => {
     const { container } = renderAboutSection();
     const scrim = container.querySelector('[data-about-scrim]');
     expect(scrim).toHaveStyle({ background: ABOUT_SCRIMS[0] });
+  });
+
+  // 슬라이드도 크로스페이드도 아니다. 카메라가 터널을 지나간다. 앞으로 갈
+  // 때 나가는 요소가 커지며 벌어지고 새 요소가 소실점에서 자란다.
+  it('앞으로 갈 때와 뒤로 갈 때 방향이 반대다', async () => {
+    const { container } = renderAboutSection();
+    const grid = () => container.querySelector('[data-about-grid]') as HTMLElement;
+
+    await userEvent.click(screen.getByRole('button', { name: /AI WORKFLOW/ }));
+    const forward = grid().dataset.aboutDirection;
+
+    await userEvent.click(screen.getByRole('button', { name: /BASICS/ }));
+    const backward = grid().dataset.aboutDirection;
+
+    expect(forward).toBe('forward');
+    expect(backward).toBe('backward');
+  });
+
+  // 건너뛰면 깊이 차가 둘이다. 이동 거리와 배율 변화가 그만큼 커진다.
+  it('건너뛰면 깊이 차가 커진다', async () => {
+    const { container } = renderAboutSection();
+    await userEvent.click(screen.getByRole('button', { name: /TEAMWORK/ }));
+    const grid = container.querySelector('[data-about-grid]') as HTMLElement;
+    expect(grid.dataset.aboutDistance).toBe('2');
+  });
+
+  // 실제 이동은 CSS의 animation-delay가 만든다. TS 쪽에 같은 값을 상수로
+  // 복제하면 아무 데서도 쓰이지 않아 lint가 잡거나, 잡히지 않으면 CSS와
+  // 조용히 어긋난다. design-tokens.css 원문을 정규식으로 읽어 계약을
+  // 고정한다(BootSequence.test.tsx와 같은 관례). 동시에 같은 양으로
+  // 움직이면 화면 전체가 줌하는 것으로 보여 깊이감이 사라진다. 증거가
+  // 먼저 움직이고 제목과 설명이 늦게 따라온다.
+  it('증거가 제목과 설명보다 먼저 움직인다 (design-tokens.css의 animation-delay)', () => {
+    const css = readFileSync(
+      resolve(process.cwd(), 'styles/design-tokens.css'),
+      'utf8'
+    );
+    const evidenceDelay = css.match(
+      /\[data-about-evidence\]\s*\{\s*animation-delay:\s*(\d+)ms;/
+    )?.[1];
+    const titleDelay = css.match(
+      /\[data-about-title\]\s*\{\s*animation-delay:\s*(\d+)ms;/
+    )?.[1];
+    expect(evidenceDelay, '[data-about-evidence]의 animation-delay를 찾지 못했다').toBeDefined();
+    expect(titleDelay, '[data-about-title]의 animation-delay를 찾지 못했다').toBeDefined();
+    expect(Number(evidenceDelay)).toBeLessThan(Number(titleDelay));
+  });
+
+  it('reducedMotion이면 전환 없이 즉시 바뀐다', async () => {
+    // 이 파일의 beforeEach가 matchMedia를 matches:false로 stub한다. 여기서만
+    // true로 덮는다.
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockReturnValue({
+        matches: true,
+        media: '',
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      })
+    );
+    const { container } = renderAboutSection();
+    await userEvent.click(screen.getByRole('button', { name: /TEAMWORK/ }));
+    const grid = container.querySelector('[data-about-grid]') as HTMLElement;
+    expect(grid.dataset.aboutDirection).toBe('none');
   });
 });
 

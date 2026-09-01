@@ -747,6 +747,79 @@
       0 0 5px var(--color-cyan-core);
   }
 
+  /* 문항 전환. 슬라이드도 크로스페이드도 아니고, 카메라가 터널을 지나가는
+     느낌을 낸다. 앞으로 갈 때는 나가는 요소가 커지며 벌어지고 새 요소가
+     소실점에서 자란다. 뒤로 갈 때는 반대다. transform과 opacity만 쓴다. */
+  @keyframes about-enter-forward {
+    from {
+      opacity: 0;
+      transform: scale(0.82) translateX(2%);
+    }
+  }
+
+  @keyframes about-enter-backward {
+    from {
+      opacity: 0;
+      transform: scale(1.18) translateX(-2%);
+    }
+  }
+
+  [data-about-direction='forward'] [data-about-title],
+  [data-about-direction='forward'] [data-about-evidence],
+  [data-about-direction='forward'] [data-about-description] {
+    animation: about-enter-forward var(--animate-duration-slow) cubic-bezier(0.22, 1, 0.36, 1)
+      both;
+  }
+
+  [data-about-direction='backward'] [data-about-title],
+  [data-about-direction='backward'] [data-about-evidence],
+  [data-about-direction='backward'] [data-about-description] {
+    animation: about-enter-backward var(--animate-duration-slow) cubic-bezier(0.22, 1, 0.36, 1)
+      both;
+  }
+
+  /* 건너뛰면 깊이 차가 둘이라 더 멀리서 온다. 배율 변화를 그만큼 키운다. */
+  @keyframes about-enter-forward-far {
+    from {
+      opacity: 0;
+      transform: scale(0.68) translateX(4%);
+    }
+  }
+
+  @keyframes about-enter-backward-far {
+    from {
+      opacity: 0;
+      transform: scale(1.34) translateX(-4%);
+    }
+  }
+
+  [data-about-distance='2'][data-about-direction='forward'] [data-about-title],
+  [data-about-distance='2'][data-about-direction='forward'] [data-about-evidence],
+  [data-about-distance='2'][data-about-direction='forward'] [data-about-description] {
+    animation-name: about-enter-forward-far;
+  }
+
+  [data-about-distance='2'][data-about-direction='backward'] [data-about-title],
+  [data-about-distance='2'][data-about-direction='backward'] [data-about-evidence],
+  [data-about-distance='2'][data-about-direction='backward'] [data-about-description] {
+    animation-name: about-enter-backward-far;
+  }
+
+  /* 시차. 동시에 같은 양으로 움직이면 화면 전체가 줌하는 것으로 보여
+     깊이감이 사라진다. 증거가 먼저 움직이고 제목과 설명이 늦게 따라와야
+     서로 다른 거리에 놓인 것처럼 보인다. */
+  [data-about-evidence] {
+    animation-delay: 0ms;
+  }
+
+  [data-about-title] {
+    animation-delay: 60ms;
+  }
+
+  [data-about-description] {
+    animation-delay: 90ms;
+  }
+
   @media (prefers-reduced-motion: no-preference) {
     .boot-role {
       opacity: 0;
@@ -820,6 +893,14 @@
     .animate-radar-fast,
     .animate-float,
     .animate-bob {
+      animation: none;
+    }
+
+    /* direction이 'none'이라 위 애니메이션 자체가 안 걸리지만, 선택자가
+       나중에 바뀌어도 안전하도록 여기서도 끊는다. */
+    [data-about-title],
+    [data-about-evidence],
+    [data-about-description] {
       animation: none;
     }
   }
