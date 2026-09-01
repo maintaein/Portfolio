@@ -124,7 +124,7 @@ export default function AboutSection() {
             문항 수만큼 레이어를 겹쳐 opacity로 교차시킨다. background
             트랜지션은 transform·opacity·filter만 쓴다는 제약 위반이라
             (최종 리뷰 발견 2), 배경 값 자체는 고정하고 활성 레이어만
-            opacity로 드러낸다 — reduce 방어([data-about-scrim],
+            opacity로 드러낸다. reduce 방어([data-about-scrim],
             design-tokens.css)도 opacity 전환 하나만 끊으면 끝난다.
 
             lg 미만은 글자가 col-start-1부터 폭 전체를 쓴다. 가로
