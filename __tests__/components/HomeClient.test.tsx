@@ -785,6 +785,10 @@ describe('HomeClient → HyperspeedBackground 배선', { timeout: 30_000 }, () =
     expect(probe).toHaveAttribute('data-route-resolved', 'true');
   });
 
+  // 제한 시간을 테스트 자체에 준다. 아래 findByRole에 5000ms를 줬는데
+  // vitest의 기본 테스트 제한도 5000ms라, 대기가 끝나기 전에 테스트가 먼저
+  // 죽었다. 예산이 애초에 성립하지 않았고 전체 스위트(40개 파일 병렬)에서
+  // CPU가 경합할 때 그것이 드러났다. 테스트 예산을 대기 예산보다 크게 둔다.
   it('ProjectModal이 열리면 obscured가 true, 닫히면 다시 false다', async () => {
     window.history.replaceState(null, '', '/#projects');
     const { container } = render(<HomeClient />);
@@ -815,10 +819,10 @@ describe('HomeClient → HyperspeedBackground 배선', { timeout: 30_000 }, () =
     // ProjectModal 자체의 청크 로드와 겹쳐 기본 1000ms 예산을 종종 넘는다
     // (실측: 최대 ~1.7초) — 로직 문제가 아니라 타이밍 여유를 넉넉히 준다.
     fireEvent.click(
-      await screen.findByRole('button', { name: '닫기' }, { timeout: 5000 })
+      await screen.findByRole('button', { name: '닫기' }, { timeout: 20_000 })
     );
     expect(probe).toHaveAttribute('data-obscured', 'false');
-  });
+  }, 30_000);
 
   it('섹션을 연속 전환해도 HyperspeedBackground는 재마운트되지 않는다', () => {
     render(<HomeClient />);
@@ -986,7 +990,16 @@ describe('HomeClient 다음 섹션 예열(전환 끊김 완화)', () => {
 // 확인했다) HomeClient는 항상 setTimeout 폴백 경로를 탄다. 각 섹션은
 // 한 번에 하나씩 예약되므로 waitFor로 실 타이머가 순서대로 흘러가길
 // 기다린다.
-describe('HomeClient 유휴 예열', () => {
+//
+// 제한 시간을 넉넉히 준 이유가 있다. 섹션 여섯을 데우려면
+// effect에서 setTimeout, setState, 다시 effect를 여섯 번 순차로 돌아야
+// 한다. waitFor의 기본 1초는 이 파일 하나만 돌릴 때는 충분하지만 전체
+// 스위트(40개 파일 병렬)에서는 CPU 경합만으로 넘긴다. 실제로 그렇게
+// 깨졌다. 수행 시간이 아니라 대기가 원인이라
+// useIntersection.test.tsx가 같은 이유로 쓰는 처방을 따른다.
+describe('HomeClient 유휴 예열', { timeout: 30_000 }, () => {
+  const IDLE_WARM_WAIT = { timeout: 20_000 } as const;
+
   it('유휴 시간이 지나면 비활성 섹션 전부가 section-prewarm을 받는다', async () => {
     const { container } = render(<HomeClient />);
 
@@ -997,7 +1010,7 @@ describe('HomeClient 유휴 예열', () => {
       for (const { id } of HOME_SECTION_CONFIG) {
         expect(getSection(container, id), id).toHaveClass('section-prewarm');
       }
-    });
+    }, IDLE_WARM_WAIT);
   });
 
   // 이 예열의 가장 중요한 불변식이다. content-visibility만 올리고
@@ -1011,7 +1024,7 @@ describe('HomeClient 유휴 예열', () => {
 
     await waitFor(() => {
       expect(contact).toHaveClass('section-prewarm');
-    });
+    }, IDLE_WARM_WAIT);
 
     // 뮤테이션: 유휴 예열이 opacity나 pointer-events까지 함께 열어주는
     // 구현으로 바뀌면(section-hidden을 걷어내거나 inert를 벗기면) 아래
