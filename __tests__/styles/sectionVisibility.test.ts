@@ -372,4 +372,30 @@ describe('section visibility utilities', () => {
       ).not.toMatch(/opacity/);
     }
   });
+
+  // 흐림이 고정 px이면 화면이 커질수록 안 보인다. 컨트롤러 측정으로
+  // 사람이 보는 순간(40ms)의 적용값이 3.5px이었고 글자 영역 픽셀이 거의
+  // 바뀌지 않았다. 뷰포트 상대 단위를 써야 큰 화면에서도 읽힌다.
+  it('전환 키프레임의 흐림이 뷰포트 상대 단위다', () => {
+    for (const name of [
+      'section-enter-forward',
+      'section-enter-backward',
+      'section-leave-forward',
+      'section-leave-backward',
+    ]) {
+      const frames = css.match(
+        new RegExp(`@keyframes ${name} \\{([\\s\\S]*?)\\n {2}\\}`)
+      )?.[1];
+      expect(frames, `${name}을 찾지 못했다`).toBeDefined();
+      expect(frames, `${name}에 blur가 없다`).toMatch(/filter:\s*blur\(/);
+      // blur(0)은 시작값이라 예외다. 나머지 blur는 vmin을 써야 한다.
+      const blurs = [...frames!.matchAll(/filter:\s*blur\(([^;]*)\);/g)]
+        .map((m) => m[1])
+        .filter((v) => !/^0(px)?$/.test(v.trim()));
+      expect(blurs.length, `${name}에 검사할 blur가 없다`).toBeGreaterThan(0);
+      for (const b of blurs) {
+        expect(b, `${name}의 blur가 고정 px이다: ${b}`).toMatch(/vmin/);
+      }
+    }
+  });
 });
