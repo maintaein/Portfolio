@@ -8,10 +8,10 @@ export interface TechStackIcon {
 // 함께 쓴다. gridX·gridY·direction·distance는 파티클이 사방에서 날아와
 // 모이는 연출 전용 값이라 격자에는 필요 없어 옮기지 않았다.
 //
-// lib/data/skills.tsx에 이미 있는 skillCategories와 합치지 않았다. 그쪽은
-// Skills 섹션(계획 5)이 쓰는 다른 목록이다. 항목 구성이 다르고(HTML·CSS·
-// Vite가 없고 Linux·Github·Figma·Notion·Jira가 있다) experience 설명까지
-// 딸려 있어, 합치면 원본에 없는 매핑을 지어내야 한다.
+// lib/data/skills.tsx에 이미 있는 skillLedger·skillInventory와 합치지
+// 않았다. 그쪽은 Skills 섹션(계획 5)이 쓰는 다른 목록이다. 항목 구성이
+// 다르고(HTML·CSS·Vite가 없고 Linux·GitHub·Figma·Notion·Jira가 있다) 증거
+// 문구까지 딸려 있어, 합치면 원본에 없는 매핑을 지어내야 한다.
 export const techStack: TechStackIcon[] = [
   { name: 'JavaScript', path: '/icons/JS.webp' },
   { name: 'TypeScript', path: '/icons/TS.webp' },

@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 
 const WHILE_IN_VIEW_DEBT = {
   'components/blocks/SectionHeader/index.tsx': { plan: 5, count: 1 },
-  'components/sections/SkillsSection/index.tsx': { plan: 5, count: 1 },
   'components/sections/ExperienceSection/index.tsx': {
     plan: 5,
     count: 3,
