@@ -888,7 +888,14 @@ describe('HomeClient CONTACT 섹션 등록', () => {
 // 클래스가 붙는가"라는 구조만 고정한다. 실제 프레임 비용 절감 여부는
 // 실기기 몫이다.
 describe('HomeClient 다음 섹션 예열(전환 끊김 완화)', () => {
-  it('overview에서는 about 하나만 예열되고 나머지는 예열되지 않는다, 뮤테이션 (a)·(c)', () => {
+  // 계약 갱신: 유휴 예열(브리프 "유휴 시간에 모든 섹션을 한 번씩 데운다")이
+  // 추가되기 전에는 "about만 예열되고 나머지는 절대 예열되지 않는다"가
+  // 영구적인 계약이었다. 지금은 다르다. 유휴 콜백(jsdom엔 requestIdleCallback이
+  // 없으므로 폴백 setTimeout)은 render() 직후 예약될 뿐 이 동기 테스트
+  // 안에서는 아직 발화하지 않으므로, 아래 어서션은 "커밋 직후 그 프레임"의
+  // 상태만 고정한다. 유휴 시간이 실제로 지나면 나머지도 하나씩 데워진다.
+  // 그 새 계약은 아래 "HomeClient 유휴 예열" describe가 별도로 고정한다.
+  it('overview에서 마운트 직후에는 about 하나만 예열되고 나머지는 아직 예열되지 않는다, 뮤테이션 (a)·(c)', () => {
     const { container } = render(<HomeClient />);
     const about = getSection(container, 'about');
 
@@ -897,8 +904,11 @@ describe('HomeClient 다음 섹션 예열(전환 끊김 완화)', () => {
     expect(about).toHaveClass('section-scroll', 'section-hidden', 'section-prewarm');
     expect(about).not.toHaveClass('section-visible');
 
-    // 뮤테이션 (c): 비활성 섹션 전부를 예열하도록 게이트를 지우면 아래
-    // 나머지 다섯 곳 중 하나 이상이 section-prewarm을 갖게 되어 FAIL한다.
+    // 뮤테이션 (c): 다음 섹션 하나만 예열하는 게이트를 지우고 마운트하는
+    // 그 프레임에 비활성 섹션 전부를 한 번에 예열하도록 바꾸면 아래
+    // 나머지 다섯 곳 중 하나 이상이 이 시점에 이미 section-prewarm을 갖게
+    // 되어 FAIL한다. 유휴 예열은 하나씩만 예약되므로 아직 발화 전인 이
+    // 시점에는 여전히 about 하나뿐이어야 한다.
     for (const { id } of HOME_SECTION_CONFIG) {
       if (id === 'about') continue;
       expect(getSection(container, id), id).not.toHaveClass('section-prewarm');
@@ -956,13 +966,108 @@ describe('HomeClient 다음 섹션 예열(전환 끊김 완화)', () => {
     expect(getSection(container, 'about')).toHaveClass('section-visible');
   });
 
-  it('reducedMotion에서는 예열하지 않는다, 애니메이션이 없으므로 프레임 비용을 뺄 이유도 없다', () => {
+  // 계약 갱신: 여기서 보는 prewarmId(다음 하나) 경로는 reducedMotion에서
+  // 여전히 꺼진다(변경 없음). 다만 유휴 예열 경로는 reducedMotion과
+  // 무관하게 계속 도는데, 이 테스트는 마운트 직후 동기 시점만 보므로 아직
+  // 발화 전이라 결과가 같다. reducedMotion에서도 유휴 예열이 실제로
+  // 진행되는지는 아래 "HomeClient 유휴 예열" describe가 별도로 고정한다.
+  it('reducedMotion에서 마운트 직후에는 예열되지 않는다, 애니메이션이 없으므로 프레임 비용을 뺄 이유도 없다', () => {
     installMatchMedia(true);
     const { container } = render(<HomeClient />);
 
     for (const { id } of HOME_SECTION_CONFIG) {
       expect(getSection(container, id), id).not.toHaveClass('section-prewarm');
     }
+  });
+});
+
+// 유휴 예열의 새 계약이다(위 describe의 "마운트 직후" 테스트들과 짝을
+// 이룬다). jsdom엔 requestIdleCallback이 없으므로(전역에 없다는 것을
+// 확인했다) HomeClient는 항상 setTimeout 폴백 경로를 탄다. 각 섹션은
+// 한 번에 하나씩 예약되므로 waitFor로 실 타이머가 순서대로 흘러가길
+// 기다린다.
+describe('HomeClient 유휴 예열', () => {
+  it('유휴 시간이 지나면 비활성 섹션 전부가 section-prewarm을 받는다', async () => {
+    const { container } = render(<HomeClient />);
+
+    // 뮤테이션: 유휴 예열 effect 자체를 지우면(또는 routeResolved 게이트를
+    // 반대로 뒤집으면) about을 제외한 다섯 섹션이 끝까지 section-prewarm을
+    // 받지 못해 waitFor가 기본 제한 시간 안에 timeout으로 FAIL한다.
+    await waitFor(() => {
+      for (const { id } of HOME_SECTION_CONFIG) {
+        expect(getSection(container, id), id).toHaveClass('section-prewarm');
+      }
+    });
+  });
+
+  // 이 예열의 가장 중요한 불변식이다. content-visibility만 올리고
+  // opacity·pointer-events·inert는 .section-hidden 값 그대로 둬야 한다.
+  it('유휴로 데워진 섹션도 여전히 보이지 않는다, section-hidden·inert·aria-hidden 유지', async () => {
+    const { container } = render(<HomeClient />);
+    // contact는 HOME_SECTION_CONFIG 마지막이라 prewarmId가 아니라 유휴
+    // 경로로만 데워진다. 이 테스트가 실제로 유휴 경로를 관측하고 있음을
+    // 보장한다.
+    const contact = getSection(container, 'contact');
+
+    await waitFor(() => {
+      expect(contact).toHaveClass('section-prewarm');
+    });
+
+    // 뮤테이션: 유휴 예열이 opacity나 pointer-events까지 함께 열어주는
+    // 구현으로 바뀌면(section-hidden을 걷어내거나 inert를 벗기면) 아래
+    // 셋 중 하나가 FAIL한다.
+    expect(contact).toHaveClass('section-hidden');
+    expect(contact).toHaveAttribute('inert');
+    expect(contact).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('전환 중에는 유휴 예열이 새로 진행되지 않는다', async () => {
+    const { container } = render(<HomeClient />);
+    // isTransitioning이 true가 되는 순간 렌더가 커밋되므로, 유휴 콜백이
+    // 아직 한 번도 발화하지 않은 상태에서 곧바로 전환을 시작한다.
+    navigateTo(/about/i);
+
+    const projects = getSection(container, 'projects');
+    expect(projects).not.toHaveClass('section-prewarm');
+
+    // transitionend를 보내지 않아 isTransitioning은 계속 true다. 실 시간을
+    // 흘려보내도(폴백 setTimeout 여러 틱이 지날 만큼 충분히) 새 유휴
+    // 예약이 생기지 않아야 한다.
+    // 뮤테이션: isTransitioning 게이트를 지우면 about이 먼저 warmedSectionIds에
+    // 쌓이고(활성이라 눈에 보이지 않는다) 이어서 다음 순번인 projects가
+    // section-prewarm을 받아 FAIL한다.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(projects).not.toHaveClass('section-prewarm');
+  });
+
+  it('reducedMotion에서도 유휴 예열은 계속된다, 애니메이션이 없어도 150ms 정지는 그대로 느껴진다', async () => {
+    installMatchMedia(true);
+    const { container } = render(<HomeClient />);
+
+    // 뮤테이션: 유휴 예열 effect에 reducedMotion 게이트를 새로 걸면
+    // section-prewarm이 끝까지 붙지 않아 waitFor가 timeout으로 FAIL한다.
+    await waitFor(() => {
+      expect(getSection(container, 'about')).toHaveClass('section-prewarm');
+    });
+  });
+
+  it('언마운트하면 예약해 둔 유휴(폴백 setTimeout) 콜백을 취소한다', () => {
+    const setTimeoutSpy = vi.spyOn(window, 'setTimeout');
+    const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout');
+    const { unmount } = render(<HomeClient />);
+
+    const scheduledHandle = setTimeoutSpy.mock.results.at(-1)?.value;
+    expect(scheduledHandle).toBeDefined();
+
+    unmount();
+
+    // 뮤테이션: cleanup에서 clearTimeout(handle) 호출을 지우면 이 handle로
+    // clearTimeout이 불리지 않아 FAIL한다. 취소하지 않고 언마운트하면
+    // 나중에 발화하는 콜백이 이미 사라진 컴포넌트의 setState를 부른다.
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(scheduledHandle);
   });
 });
 

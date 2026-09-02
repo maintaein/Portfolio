@@ -206,6 +206,53 @@ export default function HomeClient() {
       ? NAV_SEQUENCE[NAV_SEQUENCE.indexOf(active) + 1]
       : undefined;
 
+  // 유휴 예열. 위 prewarmId는 NAV_SEQUENCE의 "다음 하나"만 덮어 건너뛰는
+  // 이동(예: about에서 experience로)은 놓친다. 컨트롤러가 프로덕션
+  // 빌드·실제 GPU로 실측한 값이 이 구멍을 그대로 보여준다. about에서
+  // experience로 처음 이동할 때 긴 작업(long task)이 138ms·102ms 뛰고
+  // 프레임 간격이 최대 150ms까지 벌어졌다. 재방문에서는 둘 다 0에 가깝다.
+  // content-visibility: auto가 비활성 섹션의 첫 렌더를 미뤄 두는데, 그
+  // 비용이 전환이 시작되는 바로 그 프레임에 몰려 메인 스레드를 막기
+  // 때문이다. 그래서 300ms 이탈 애니메이션의 절반이 그려지지 않고,
+  // 떠나는 섹션이 확대도 흐려짐도 없이 선명한 채로 멈췄다가 툭 사라진다.
+  //
+  // 그래서 유휴 시간에 아직 안 데운 섹션을 하나씩 데워 이 비용을 전환
+  // 밖으로 옮긴다. 한 번 데운 섹션은 절대 다시 식히지 않는다(warmed 상태는
+  // 늘기만 한다). 이게 이 수정의 요점이다. 한 프레임에 전부 데우면 그
+  // 자체가 유휴 시간에 긴 작업을 만들므로 반드시 하나씩 예약한다.
+  const [warmedSectionIds, setWarmedSectionIds] = useState<
+    ReadonlySet<HomeSectionId>
+  >(() => new Set());
+
+  useEffect(() => {
+    // 전환 중에 데우면 지금 고치려는 문제를 그 프레임에 그대로 재현하므로
+    // routeResolved가 아직이거나 전환이 진행 중이면 예약하지 않는다.
+    if (!routeResolved || isTransitioning) return;
+
+    const nextId = HOME_SECTION_CONFIG.map(({ id }) => id).find(
+      (id) => !warmedSectionIds.has(id)
+    );
+    if (!nextId) return;
+
+    // requestIdleCallback이 없는 브라우저(Safari 구버전)는 setTimeout으로
+    // 대체한다.
+    const hasIdleCallback = typeof window.requestIdleCallback === 'function';
+    const warm = () => {
+      setWarmedSectionIds((prev) => {
+        if (prev.has(nextId)) return prev;
+        return new Set(prev).add(nextId);
+      });
+    };
+    const handle = hasIdleCallback
+      ? window.requestIdleCallback(warm)
+      : window.setTimeout(warm, 0);
+
+    return () => {
+      if (hasIdleCallback) window.cancelIdleCallback(handle);
+      else window.clearTimeout(handle);
+    };
+  }, [isTransitioning, routeResolved, warmedSectionIds]);
+
   const sectionRefs = useRef<
     Partial<Record<NavId, HTMLDivElement | null>>
   >({});
@@ -431,7 +478,11 @@ export default function HomeClient() {
         {HOME_SECTION_CONFIG.map(({ id, label }) => {
           const Section = SECTION_COMPONENTS[id];
           const isActive = active === id;
-          const isPrewarm = !isActive && id === prewarmId;
+          // id === prewarmId는 전환 직후 다음 섹션을 즉시 덮고, warmedSectionIds는
+          // 유휴 시간에 하나씩 쌓인 데워진 섹션 전체를 덮는다. 활성 섹션에는
+          // 붙이지 않는다(!isActive). 이미 section-visible이라 예열이 필요 없다.
+          const isPrewarm =
+            !isActive && (id === prewarmId || warmedSectionIds.has(id));
 
           return (
             <div
