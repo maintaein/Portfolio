@@ -1,5 +1,5 @@
 // app/layout.tsx
-import { Metadata } from 'next';
+import { Metadata, Viewport } from 'next';
 import { pretendardCore, pretendardExtended } from '@/lib/fonts';
 import JsonLd from '@/components/seo/JsonLd';
 import '@/styles/design-tokens.css';
@@ -7,6 +7,18 @@ import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { siteConfig } from '@/lib/siteConfig';
 import { CRITICAL_CSS } from '@/lib/criticalCss';
+
+// styles/design-tokens.css가 env(safe-area-inset-bottom)으로 .section-stage의
+// 하단 여백과 .site-footer의 높이를 계산한다. 그런데 Next의 기본 viewport에는
+// viewport-fit=cover가 없고, 그 선언이 없으면 iOS에서 env()가 언제나 0으로
+// 잡혀 그 계산이 조용히 무의미해진다. 푸터가 홈 인디케이터에 깔린다.
+// 두 파일이 같은 계약을 공유하므로 __tests__/docs/designCanon.test.ts가
+// CSS의 safe area 사용과 이 선언을 짝지어 지킨다.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
