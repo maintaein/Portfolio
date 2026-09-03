@@ -1,11 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { renderToString } from 'react-dom/server';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import SkillsSection from '@/components/sections/SkillsSection';
 import { findTailwindPaletteColorUtilities } from '@/__tests__/helpers/tailwindPalette';
-import { skillLedger, skillInventory } from '@/lib/data';
+import { skillCategories } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
 
 const SOURCE = readFileSync(
@@ -13,204 +14,387 @@ const SOURCE = readFileSync(
   'utf8'
 );
 
-// SectionHeader(T5 소유)가 framer-motion whileInView로 IntersectionObserver를
-// 쓴다. jsdom에는 없어 HomeClient.test.tsx와 같은 방식으로 스텁한다.
-beforeEach(() => {
-  vi.stubGlobal(
-    'IntersectionObserver',
-    vi.fn(() => ({
-      disconnect: vi.fn(),
-      observe: vi.fn(),
-      takeRecords: vi.fn(() => []),
-      unobserve: vi.fn(),
-    }))
-  );
-});
+// 브리프 카테고리 표. 카테고리 넷과 각 소속 기술, 순서까지 이 모양
+// 그대로다.
+const EXPECTED_CATEGORIES = [
+  { label: 'LANGUAGES', names: ['JavaScript', 'TypeScript', 'Python', 'Java'] },
+  {
+    label: 'FRAMEWORK',
+    names: ['Node.js', 'React', 'Next.js', 'Tailwind CSS', 'React Query', 'Zustand', 'Spring'],
+  },
+  { label: 'SERVER', names: ['MySQL', 'Linux'] },
+  { label: 'DEVTOOLS', names: ['GitHub', 'Figma', 'Notion', 'Jira'] },
+];
 
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
+// 17개 전부의 아이콘 파일명. public/icons-mono/의 실제 파일명과 다르면
+// mask-image가 빈 사각형을 그린다.
+const EXPECTED_ICON_BY_NAME: Record<string, string> = {
+  JavaScript: 'javascript',
+  TypeScript: 'typescript',
+  Python: 'python',
+  Java: 'java',
+  'Node.js': 'nodejs',
+  React: 'react',
+  'Next.js': 'nextjs',
+  'Tailwind CSS': 'tailwind',
+  'React Query': 'react-query',
+  Zustand: 'zustand',
+  Spring: 'spring',
+  MySQL: 'mysql',
+  Linux: 'linux',
+  GitHub: 'github',
+  Figma: 'figma',
+  Notion: 'notion',
+  Jira: 'jira',
+};
 
-describe('SkillsSection — 증거 우선 레저', () => {
+// 디자인 리뷰 D23이 정본이다. 이름·증거·연결 프로젝트를 리터럴로 고정한다.
+const D23_SKILLS = [
+  {
+    name: 'React',
+    description: '컴포넌트 구독 범위를 Profiler로 진단하고 불필요한 연쇄 렌더를 제거',
+    projects: 'AlphaMail · TDS · Ttabong',
+  },
+  {
+    name: 'TypeScript',
+    description:
+      'strict/no-any와 타입 기반 디자인 토큰으로 잘못된 참조를 컴파일 단계에서 차단',
+    projects: 'TDS · AlphaMail · Portfolio · Ttabong',
+  },
+  {
+    name: 'Next.js',
+    description: 'SSG/SSR·SEO를 적용하고 hydration 경고를 0건으로 정리',
+    projects: 'Portfolio',
+  },
+  {
+    name: 'React Query',
+    description:
+      '중복 폴링을 단일 20초 전략으로 통합하고 사용자 액션 완료 시 캐시를 즉시 무효화',
+    projects: 'AlphaMail',
+  },
+  {
+    name: 'Zustand',
+    description: '입력 한 번당 4~5회 연쇄 렌더를 해당 필드 구독 컴포넌트 1회로 축소',
+    projects: 'AlphaMail · Ttabong',
+  },
+  {
+    name: 'Tailwind CSS',
+    description: '세 웹 프로젝트에서 반응형 UI와 공통 스타일 규칙을 일관되게 적용',
+    projects: 'AlphaMail · Portfolio · Ttabong',
+  },
+];
+
+const ALL_SKILLS = skillCategories.flatMap((category) => category.skills);
+
+function iconSpanOf(button: HTMLElement): HTMLElement {
+  const icon = button.querySelector('.skill-icon');
+  if (!icon) throw new Error('아이콘 span(.skill-icon)이 없다');
+  return icon as HTMLElement;
+}
+
+describe('SkillsSection 카테고리 아이콘 그리드', () => {
   it('id를 SECTION_IDS.SKILLS로 렌더한다', () => {
     const { container } = render(<SkillsSection />);
     expect(container.querySelector(`#${SECTION_IDS.SKILLS}`)).not.toBeNull();
   });
 
-  // 이 섹션이 존재하는 이유. 채용 담당자가 기술 이름이 아니라 증거를
-  // 먼저 읽어야 한다. D23 표의 이름·증거·연결 프로젝트 문구를 하나라도
-  // 바꾸거나 행을 지우면 FAIL한다.
-  it('핵심 6개의 이름·증거·연결 프로젝트가 D23 표 그대로 각자 행에 있다', () => {
-    const { container } = render(<SkillsSection />);
-    expect(skillLedger).toHaveLength(6);
+  // 이 섹션이 존재하는 이유. 카테고리 넷과 소속 기술이 브리프 표와
+  // 정확히 같아야 한다. 카테고리가 통째로 바뀌거나, 기술이 다른
+  // 카테고리로 새거나, 순서가 바뀌면 이 테스트가 잡는다.
+  it('카테고리 넷과 각 소속 기술이 브리프 표 그대로다', () => {
+    const actual = skillCategories.map((category) => ({
+      label: category.label,
+      names: category.skills.map((skill) => skill.name),
+    }));
+    expect(actual).toEqual(EXPECTED_CATEGORIES);
+  });
 
-    for (const entry of skillLedger) {
-      const row = container.querySelector(
-        `[data-skill-ledger-entry="${entry.name}"]`
-      );
-      expect(row, `${entry.name} 행이 없다`).not.toBeNull();
-      expect(row?.textContent, `${entry.name}의 증거가 없다`).toContain(
-        entry.evidence
-      );
+  it('기술이 17개다', () => {
+    expect(ALL_SKILLS).toHaveLength(17);
+  });
+
+  // 17개 전부 버튼으로 렌더되고, 각자의 mask-image 소스가 정확한
+  // public/icons-mono 파일을 가리킨다. 아이콘 파일명이 하나라도 틀리면
+  // mask-image가 빈 사각형을 그리는데 jsdom은 그 실패를 스스로 드러내지
+  // 않으므로 소스 문자열을 직접 대조한다.
+  it('17개 전부 렌더되고 아이콘 mask 경로가 맞다', () => {
+    render(<SkillsSection />);
+
+    for (const [name, icon] of Object.entries(EXPECTED_ICON_BY_NAME)) {
+      const button = screen.getByRole('button', { name });
+      const span = iconSpanOf(button);
       expect(
-        row?.textContent,
-        `${entry.name}의 연결 프로젝트가 없다`
-      ).toContain(entry.projects);
+        span.style.getPropertyValue('--skill-icon-src'),
+        `${name}의 mask 경로가 없다`
+      ).toBe(`url(/icons-mono/${icon}.svg)`);
     }
   });
 
-  // D23 표 자체를 문자열로 고정한다. 위 테스트는 렌더가 데이터를 그대로
-  // 옮기는지만 보므로 데이터 자체가 D23과 다르게 바뀌어도 못 잡는다.
-  // 여섯 행 전부를 리터럴로 고정해야 어느 한 행만 조용히 바뀌는 것도
-  // 잡힌다.
-  it('D23 표 문구 자체가 여섯 행 전부 정확하다', () => {
-    expect(skillLedger).toEqual([
-      {
-        name: 'React',
-        evidence:
-          '컴포넌트 구독 범위를 Profiler로 진단하고 불필요한 연쇄 렌더를 제거',
-        projects: 'AlphaMail · TDS · Ttabong',
-      },
-      {
-        name: 'TypeScript',
-        evidence:
-          'strict/no-any와 타입 기반 디자인 토큰으로 잘못된 참조를 컴파일 단계에서 차단',
-        projects: 'TDS · AlphaMail · Portfolio · Ttabong',
-      },
-      {
-        name: 'Next.js',
-        evidence: 'SSG/SSR·SEO를 적용하고 hydration 경고를 0건으로 정리',
-        projects: 'Portfolio',
-      },
-      {
-        name: 'React Query',
-        evidence:
-          '중복 폴링을 단일 20초 전략으로 통합하고 사용자 액션 완료 시 캐시를 즉시 무효화',
-        projects: 'AlphaMail',
-      },
-      {
-        name: 'Zustand',
-        evidence:
-          '입력 한 번당 4~5회 연쇄 렌더를 해당 필드 구독 컴포넌트 1회로 축소',
-        projects: 'AlphaMail · Ttabong',
-      },
-      {
-        name: 'Tailwind CSS',
-        evidence:
-          '세 웹 프로젝트에서 반응형 UI와 공통 스타일 규칙을 일관되게 적용',
-        projects: 'AlphaMail · Portfolio · Ttabong',
-      },
-    ]);
-  });
-
-  // 목록 하나가 다른 항목으로 조용히 바뀌어도 길이(11)는 그대로일 수
-  // 있다. 순서까지 포함해 브리프의 11개 그대로인지 리터럴로 고정한다.
-  it('Inventory 11개가 브리프 목록 그대로이고 GitHub 표기가 정상화됐다', () => {
-    expect(skillInventory).toEqual([
-      'JavaScript',
-      'Python',
-      'Java',
-      'Node.js',
-      'Spring Framework',
-      'MySQL',
-      'Linux',
-      'GitHub',
-      'Figma',
-      'Notion',
-      'Jira',
-    ]);
-
-    const { container } = render(<SkillsSection />);
-    const inventory = container.querySelector('[data-skill-inventory]');
-    expect(inventory, 'Inventory 컨테이너가 없다').not.toBeNull();
-    const inventoryText = inventory?.textContent ?? '';
-
-    for (const item of skillInventory) {
-      expect(inventoryText, `${item}이 Inventory에 없다`).toContain(item);
+  it('핵심 6개의 D23 문구와 연결 프로젝트가 리터럴 그대로다', () => {
+    for (const expected of D23_SKILLS) {
+      const skill = ALL_SKILLS.find((s) => s.name === expected.name);
+      expect(skill, `${expected.name}이 데이터에 없다`).toBeDefined();
+      expect(skill?.description).toBe(expected.description);
+      expect(skill?.projects).toBe(expected.projects);
     }
   });
 
-  // Inventory는 핵심 6개와 달리 설명·숙련도·아이콘이 없는 낮은 위계다.
-  // 개별 아이콘(next/image)이나 핵심 6개와 같은 행 강조가 새어 들어오면
-  // 이 계약이 깨진다.
-  it('Inventory 항목에는 설명도 숙련도도 아이콘도 없다', () => {
+  // 설명 슬롯은 한 번에 기술 하나만 보여준다. 인터랙션 전에도 17개 전부의
+  // 설명이 어딘가 텍스트로 있어야 크롤러와 스크린리더 사용자가 나머지
+  // 16개를 놓치지 않는다.
+  it('인터랙션 전에도 17개 전부의 설명이 문서에 있다(sr-only)', () => {
     const { container } = render(<SkillsSection />);
-    expect(container.querySelectorAll('img')).toHaveLength(0);
+    const text = container.textContent ?? '';
 
-    const inventory = container.querySelector('[data-skill-inventory]');
-    // 핵심 6개 행과 같은 강조(border-b 헤어라인 행)를 Inventory 안에
-    // 만들면 이 계약이 깨진다.
-    expect(inventory?.querySelectorAll('[data-skill-ledger-entry]')).toHaveLength(
-      0
+    for (const skill of ALL_SKILLS) {
+      expect(text, `${skill.name}의 설명이 없다`).toContain(skill.description);
+    }
+  });
+
+  it('아이콘이 버튼이고 접근 가능한 이름을 가진다', () => {
+    render(<SkillsSection />);
+    for (const name of Object.keys(EXPECTED_ICON_BY_NAME)) {
+      expect(screen.getByRole('button', { name })).toBeInTheDocument();
+    }
+  });
+
+  // 기본은 React다. 호버·포커스·클릭 각각이 설명 슬롯을 바꾸고, 서로
+  // 다른 기술로 두 번 옮겨봐야 한쪽 방향만 동작하는 구멍을 잡는다.
+  it('기본 설명 슬롯은 React다', () => {
+    render(<SkillsSection />);
+    const slot = document.querySelector('[data-skill-description-slot]');
+    expect(slot).toHaveAttribute('data-active-skill', 'React');
+    expect(slot?.textContent).toContain(
+      '컴포넌트 구독 범위를 Profiler로 진단하고 불필요한 연쇄 렌더를 제거'
     );
   });
 
-  // 컨트롤러가 프로덕션 빌드 1920x1080에서 실측: Hyperspeed 광선이 정확히
-  // Inventory 줄 높이를 지나가 GitHub·Figma·Notion·Jira 뒷부분과
-  // INVENTORY 라벨의 대비가 무너졌다. 스크림이 없어지거나 전면 카드(불투명
-  // 단색 배경)로 바뀌면 이 테스트가 잡는다.
-  it('Inventory 텍스트 뒤에 스크림이 있고 평평한 막이 아니라 그라데이션이다', () => {
-    const { container } = render(<SkillsSection />);
-    const scrim = container.querySelector('[data-skill-inventory-scrim]');
-    expect(scrim, 'Inventory 스크림이 없다').not.toBeNull();
+  it('아이콘 호버가 설명 슬롯을 바꾸고, 다른 아이콘으로 옮기면 다시 바뀐다', async () => {
+    render(<SkillsSection />);
+    const slot = document.querySelector('[data-skill-description-slot]') as HTMLElement;
 
-    // 장식이라 스크린리더에서 빠지고 클릭을 가로채지 않아야 한다.
+    await userEvent.hover(screen.getByRole('button', { name: 'Python' }));
+    expect(slot).toHaveAttribute('data-active-skill', 'Python');
+    expect(slot.textContent).toContain(
+      '기본 문법 및 자료구조 활용, pandas, numpy 활용한 데이터 분석 경험'
+    );
+
+    await userEvent.hover(screen.getByRole('button', { name: 'Java' }));
+    expect(slot).toHaveAttribute('data-active-skill', 'Java');
+    expect(slot.textContent).not.toContain(
+      '기본 문법 및 자료구조 활용, pandas, numpy 활용한 데이터 분석 경험'
+    );
+  });
+
+  it('아이콘 포커스가 설명 슬롯을 바꾼다(키보드 접근)', () => {
+    render(<SkillsSection />);
+    const slot = document.querySelector('[data-skill-description-slot]') as HTMLElement;
+
+    fireEvent.focus(screen.getByRole('button', { name: 'GitHub' }));
+    expect(slot).toHaveAttribute('data-active-skill', 'GitHub');
+
+    fireEvent.focus(screen.getByRole('button', { name: 'Figma' }));
+    expect(slot).toHaveAttribute('data-active-skill', 'Figma');
+  });
+
+  it('아이콘 클릭이 설명 슬롯을 바꾼다(모바일에는 호버가 없다)', async () => {
+    render(<SkillsSection />);
+    const slot = document.querySelector('[data-skill-description-slot]') as HTMLElement;
+
+    await userEvent.click(screen.getByRole('button', { name: 'Notion' }));
+    expect(slot).toHaveAttribute('data-active-skill', 'Notion');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Jira' }));
+    expect(slot).toHaveAttribute('data-active-skill', 'Jira');
+  });
+
+  // 활성 아이콘에만 skill-icon-active가 붙는다. 붙였다 뗐다 둘 다 봐야
+  // "누르면 켜진다"만 확인하고 "떠나면 꺼진다"가 새는 것을 잡는다.
+  it('활성 아이콘에만 skill-icon-active 클래스가 붙는다', async () => {
+    render(<SkillsSection />);
+    const reactIcon = iconSpanOf(screen.getByRole('button', { name: 'React' }));
+    const pythonButton = screen.getByRole('button', { name: 'Python' });
+    const pythonIcon = iconSpanOf(pythonButton);
+
+    expect(reactIcon.className).toMatch(/\bskill-icon-active\b/);
+    expect(pythonIcon.className).not.toMatch(/\bskill-icon-active\b/);
+
+    await userEvent.click(pythonButton);
+
+    expect(iconSpanOf(screen.getByRole('button', { name: 'React' })).className).not.toMatch(
+      /\bskill-icon-active\b/
+    );
+    expect(iconSpanOf(pythonButton).className).toMatch(/\bskill-icon-active\b/);
+  });
+
+  // 레이아웃이 흔들리면 안 된다. 가장 짧은 문구(Linux, 20자)와 가장 긴
+  // 문구(JavaScript, 65자)를 오가도 슬롯의 높이 클래스는 똑같아야 한다.
+  // min-h가 아니라 고정 h를 쓰는지도 함께 고정한다. min-h로 바뀌면
+  // className 동일성 검사만으로는 안 잡히므로 클래스 이름 자체도 본다.
+  it('설명 슬롯 높이가 고정이다', async () => {
+    render(<SkillsSection />);
+    const slot = document.querySelector('[data-skill-description-slot]') as HTMLElement;
+    const classNameAtDefault = slot.className;
+
+    expect(classNameAtDefault).toMatch(/\bh-36\b/);
+    expect(classNameAtDefault).toMatch(/\blg:h-28\b/);
+    expect(classNameAtDefault).not.toMatch(/\bmin-h-/);
+
+    await userEvent.hover(screen.getByRole('button', { name: 'Linux' }));
+    expect(slot.className).toBe(classNameAtDefault);
+
+    await userEvent.hover(screen.getByRole('button', { name: 'JavaScript' }));
+    expect(slot.className).toBe(classNameAtDefault);
+  });
+
+  // 카테고리 라벨을 누르면 그 레인만 남고 나머지는 흐려진다. 다시 누르면
+  // 해제된다. 양방향 다 확인한다.
+  it('카테고리 라벨 클릭이 다른 레인을 흐리게 하고, 다시 누르면 해제한다', async () => {
+    render(<SkillsSection />);
+    const languagesLabel = screen.getByRole('button', { name: 'LANGUAGES' });
+
+    expect(document.querySelector('[data-skill-category="LANGUAGES"]')).toHaveAttribute(
+      'data-skill-category-dimmed',
+      'false'
+    );
+    expect(document.querySelector('[data-skill-category="FRAMEWORK"]')).toHaveAttribute(
+      'data-skill-category-dimmed',
+      'false'
+    );
+
+    await userEvent.click(languagesLabel);
+
+    expect(languagesLabel).toHaveAttribute('aria-pressed', 'true');
+    expect(document.querySelector('[data-skill-category="LANGUAGES"]')).toHaveAttribute(
+      'data-skill-category-dimmed',
+      'false'
+    );
+    expect(document.querySelector('[data-skill-category="FRAMEWORK"]')).toHaveAttribute(
+      'data-skill-category-dimmed',
+      'true'
+    );
+    expect(document.querySelector('[data-skill-category="SERVER"]')).toHaveAttribute(
+      'data-skill-category-dimmed',
+      'true'
+    );
+    expect(document.querySelector('[data-skill-category="DEVTOOLS"]')).toHaveAttribute(
+      'data-skill-category-dimmed',
+      'true'
+    );
+
+    await userEvent.click(languagesLabel);
+
+    expect(languagesLabel).toHaveAttribute('aria-pressed', 'false');
+    expect(document.querySelector('[data-skill-category="FRAMEWORK"]')).toHaveAttribute(
+      'data-skill-category-dimmed',
+      'false'
+    );
+  });
+
+  // 아이콘의 기본과 활성 사이 전환은 즉시다. transition이 없으므로
+  // prefers-reduced-motion 방어가 필요 없다. 이 저장소는 언제나
+  // transition과 reduce 방어를 짝지어 왔으므로, 누가 여기 transition을
+  // 붙이면 이 테스트가 막아서 방어도 함께 넣게 만든다.
+  it('아이콘 상태 전환에 transition이 없다, 그래서 reduce 방어도 필요 없다', () => {
+    const css = readFileSync(
+      resolve(process.cwd(), 'styles/design-tokens.css'),
+      'utf8'
+    );
+    for (const sel of ['.skill-icon', '.skill-icon-active']) {
+      const body = css.match(
+        new RegExp(`^  \\${sel}\\s*\\{([\\s\\S]*?)^  \\}`, 'm')
+      )?.[1];
+      expect(body, `${sel} 규칙을 찾지 못했다`).toBeDefined();
+      expect(
+        body,
+        `${sel}에 transition이 생겼다. reduce 블록에 transition: none을 짝지어라`
+      ).not.toMatch(/transition/);
+    }
+  });
+
+  // 아이콘 하나만 보면 구멍이 남는다. 처음 이 테스트가 React 버튼만 봤고,
+  // 그 사이 카테고리 라벨 버튼 넷이 112x28px로 빠져 있었다. 컨트롤러가
+  // 브라우저에서 재고 나서야 발견했다. 그래서 섹션 안 모든 버튼을 센다.
+  it('섹션 안의 모든 버튼이 44px 터치 타깃을 지킨다', () => {
+    const { container } = render(<SkillsSection />);
+    const buttons = [...container.querySelectorAll('button')];
+    expect(buttons.length, '버튼을 하나도 찾지 못했다').toBeGreaterThan(0);
+
+    const tooSmall = buttons
+      .filter((b) => !/\bmin-h-11\b/.test(b.className))
+      .map((b) => (b.textContent ?? '').trim().slice(0, 20));
+    expect(
+      tooSmall,
+      `44px 최소 높이가 없는 버튼: ${tooSmall.join(', ')}`
+    ).toEqual([]);
+
+    // 아이콘 버튼은 가로도 좁아질 수 있어 폭까지 본다. 카테고리 라벨은
+    // 글자가 길어 가로는 자연히 넉넉하다.
+    const iconButton = screen.getByRole('button', { name: 'React' });
+    expect(iconButton.className).toMatch(/\bmin-w-11\b/);
+  });
+
+  // Hyperspeed 광선이 설명 슬롯 뒤를 지나간다. 전면 카드(불투명 단색)로
+  // 덮으면 안 되고 텍스트 영역에만 국소 그라데이션을 깔아야 한다(브리프
+  // "배경과 대비" 절, About의 scrim.ts와 같은 처방).
+  it('설명 슬롯 뒤에 스크림이 있고 평평한 막이 아니라 그라데이션이다', () => {
+    const { container } = render(<SkillsSection />);
+    const scrim = container.querySelector('[data-skill-description-scrim]');
+    expect(scrim, '설명 슬롯 스크림이 없다').not.toBeNull();
+
     expect(scrim).toHaveAttribute('aria-hidden', 'true');
     expect(scrim?.className).toMatch(/\bpointer-events-none\b/);
-    // 콘텐츠보다 아래에 깔려야 텍스트를 가리지 않는다. absolute 없이
-    // -z만 있으면 문서 흐름이 무너지고, -z 없이 absolute만 있으면
-    // z-index:auto라 뒤에 오는 정적 배치 문단 위로 올라온다(같은 z-index
-    // auto에서는 나중에 그려지는 비배치 콘텐츠가 이긴다).
     expect(scrim?.className).toMatch(/\babsolute\b/);
     expect(scrim?.className).toMatch(/-z-\[1\]/);
 
     const background = (scrim as HTMLElement).style.background;
-    expect(background, '평평한 단색이 아니라 그라데이션이어야 한다').toMatch(
-      /gradient/
-    );
+    expect(background, '평평한 단색이 아니라 그라데이션이어야 한다').toMatch(/gradient/);
   });
 
-  it('탭과 AnimatePresence와 아이콘 격자를 쓰지 않는다 (framer-motion import가 0개)', () => {
+  it('Github가 아니라 GitHub다', () => {
+    render(<SkillsSection />);
+    expect(screen.getByRole('button', { name: 'GitHub' })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\bGithub\b/);
+  });
+
+  it('탭과 AnimatePresence와 next/image, framer-motion을 쓰지 않는다', () => {
     expect(SOURCE).not.toMatch(/framer-motion/);
     expect(SOURCE).not.toMatch(/AnimatePresence/);
-    expect(SOURCE).not.toMatch(/SegmentedControl/);
     expect(SOURCE).not.toMatch(/next\/image/);
     expect(SOURCE).not.toMatch(/whileInView/);
   });
 
-  it('증거가 line-clamp나 말줄임으로 잘리지 않는다', () => {
+  it('<img> 태그를 쓰지 않는다(mask-image 전용)', () => {
+    const { container } = render(<SkillsSection />);
+    expect(container.querySelectorAll('img')).toHaveLength(0);
+  });
+
+  it('설명이 line-clamp나 말줄임으로 잘리지 않는다', () => {
     expect(SOURCE).not.toMatch(/line-clamp/);
     expect(SOURCE).not.toMatch(/truncate/);
     expect(SOURCE).not.toMatch(/text-ellipsis/);
   });
 
-  // SectionHeader(T5 소유, 아직 라이트 팔레트)는 이 검사 범위에서 뺀다.
-  // 이 태스크가 새로 쓴 레저·Inventory 마크업만 다크 팔레트를 지키면 된다.
-  it('레저와 Inventory 마크업에 팔레트 위반이 0건이다', () => {
+  it('마크업에 라이트 팔레트 유틸리티가 0건이다', () => {
     const { container } = render(<SkillsSection />);
-    const rows = Array.from(
-      container.querySelectorAll('[data-skill-ledger-entry]')
-    );
-    const inventory = container.querySelector('[data-skill-inventory]');
-    const scopedHtml = [...rows, inventory]
-      .map((el) => el?.innerHTML ?? '')
-      .join('');
-
-    expect(scopedHtml.length, '검사 대상 마크업을 못 찾았다').toBeGreaterThan(0);
-    expect(findTailwindPaletteColorUtilities(scopedHtml)).toEqual([]);
+    expect(findTailwindPaletteColorUtilities(container.innerHTML)).toEqual([]);
   });
 
   // 이 저장소의 SEO 계약. 크롤러는 HTML을 읽지 Ctrl+F를 쓰지 않는다.
   it('의미 콘텐츠가 SSR HTML에 존재한다', () => {
     const html = renderToString(<SkillsSection />);
     expect(html).toContain(`id="${SECTION_IDS.SKILLS}"`);
-    for (const entry of skillLedger) {
-      expect(html).toContain(entry.name);
-      expect(html).toContain(entry.evidence);
-      expect(html).toContain(entry.projects);
+
+    for (const category of EXPECTED_CATEGORIES) {
+      expect(html).toContain(category.label);
+      for (const name of category.names) {
+        expect(html).toContain(name);
+      }
     }
-    for (const item of skillInventory) {
-      expect(html).toContain(item);
+
+    for (const skill of D23_SKILLS) {
+      expect(html).toContain(skill.description);
+      expect(html).toContain(skill.projects);
     }
   });
 });

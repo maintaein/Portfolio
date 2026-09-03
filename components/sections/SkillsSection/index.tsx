@@ -1,84 +1,160 @@
 'use client';
 
-import { SectionHeader } from '@/components/blocks';
+import { useState, type CSSProperties } from 'react';
 import { SECTION_IDS } from '@/lib/constants';
-import { skillLedger, skillInventory } from '@/lib/data';
+import { skillCategories } from '@/lib/data';
+import type { Skill } from '@/types';
 
-// Inventory 줄은 화면 아래쪽이라 Hyperspeed 광선이 정확히 그 높이를
-// 지나간다(컨트롤러가 프로덕션 빌드 1920x1080에서 실측). 전면 카드로
-// 덮지 않고 텍스트 영역 뒤에만 국소 그라데이션을 깐다(브리프 "배경과
-// 공존" 절, About의 scrim.ts와 같은 처방). About은 문항마다 세기가 다른
-// 스크림 6장이 필요해 별도 파일로 뺐지만 여기는 값이 하나뿐이라 파일을
-// 새로 만들지 않고 이름만 붙여 이 컴포넌트 위에 둔다. 평평한 검정이
-// 아니라 radial-gradient로 중심만 태우고 가장자리는 0까지 빠져야 광선이
-// 잘리지 않고 그대로 흐른다.
-const SKILL_INVENTORY_SCRIM =
+// 설명 슬롯 뒤로 Hyperspeed 광선이 지나간다(컨트롤러가 프로덕션 빌드에서
+// 실측, SkillsSection이 원래 쓰던 SKILL_INVENTORY_SCRIM과 같은 값이다).
+// 전면 카드로 덮지 않고 텍스트 영역 뒤에만 국소 그라데이션을 깐다(브리프
+// "배경과 대비" 절, About의 scrim.ts와 같은 처방).
+const SKILL_DESCRIPTION_SCRIM =
   'radial-gradient(ellipse at center, rgb(0 0 0 / 0.78) 0%, rgb(0 0 0 / 0.55) 45%, rgb(0 0 0 / 0) 85%)';
 
-// 증거 우선 레저(계획 5 T3). 탭·아이콘 격자·숙련도 막대·hover 툴팁을
-// 걷어내고 기술 / 증거 / 연결 프로젝트 3열을 그대로 스캔하게 한다. 문구는
-// 디자인 리뷰 D23에서 확정된 값을 lib/data/skills.tsx에서 그대로 가져온다.
-export default function SkillsSection() {
-  return (
-    <section id={SECTION_IDS.SKILLS} className="py-8 lg:py-10">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6">
-        {/* 부제를 두지 않는다. 아래 열 머리(기술 / 증거 / 연결 프로젝트)가
-            이미 무엇을 보는 화면인지 말하고 있어, "증거를 먼저 스캔하게
-            정리했다"처럼 배치를 설명하는 문장은 같은 말을 한 번 더 하면서
-            읽을 것만 늘린다. */}
-        <SectionHeader title="SKILLS" />
+const ALL_SKILLS = skillCategories.flatMap((category) => category.skills);
+const TOTAL_SKILL_COUNT = ALL_SKILLS.length;
+// 기본 설명 슬롯은 React다(브리프 "상호작용" 절).
+const DEFAULT_SKILL = ALL_SKILLS.find((skill) => skill.name === 'React')!;
 
-        {/* 핵심 6개. 데스크톱은 12칸 그리드를 3·6·3으로 나눠 기술 / 증거 /
-            연결 프로젝트를 한 행에 둔다. 1024px 미만은 같은 의미 순서로
-            세로 배치한다(공통 Ledger Rhythm, 디자인 리뷰 D18). */}
-        <div className="hidden text-t7 font-medium uppercase tracking-widest text-[var(--color-text-secondary)] lg:grid lg:grid-cols-12 lg:gap-6 lg:pb-2">
-          <span className="lg:col-span-3">기술</span>
-          <span className="lg:col-span-6">증거</span>
-          <span className="lg:col-span-3 lg:text-right">연결 프로젝트</span>
+// mask-image 소스. <img>로 쓰면 CSS로 색을 못 바꾸고 JS 번들에 경로 문자열이
+// 들어간다. --skill-icon-src는 커스텀 프로퍼티라 style 타입에 없어 캐스팅한다.
+function iconMaskStyle(icon: string): CSSProperties {
+  return { '--skill-icon-src': `url(/icons-mono/${icon}.svg)` } as CSSProperties;
+}
+
+export default function SkillsSection() {
+  const [activeSkill, setActiveSkill] = useState<Skill>(DEFAULT_SKILL);
+  const [pinnedCategory, setPinnedCategory] = useState<string | null>(null);
+
+  function toggleCategory(label: string) {
+    setPinnedCategory((current) => (current === label ? null : label));
+  }
+
+  return (
+    <section id={SECTION_IDS.SKILLS} className="py-6 lg:py-8">
+      <div className="mx-auto max-w-4xl px-4 sm:px-6">
+        <div className="mb-5 flex items-baseline justify-between lg:mb-6">
+          <h2 className="text-t2 font-bold uppercase tracking-widest text-[var(--color-text-primary)]">
+            Skills
+          </h2>
+          <span className="text-t5 font-semibold text-[var(--color-text-primary)]">
+            {TOTAL_SKILL_COUNT}
+          </span>
         </div>
 
-        {skillLedger.map((entry) => (
-          <div
-            key={entry.name}
-            data-skill-ledger-entry={entry.name}
-            className="flex flex-col gap-2 border-b border-[var(--color-hairline)] py-4 lg:grid lg:grid-cols-12 lg:items-baseline lg:gap-6"
-          >
-            <span className="text-t4 font-semibold text-[var(--color-text-primary)] lg:col-span-3">
-              {entry.name}
-            </span>
-            <p className="text-t5 text-[var(--color-text-secondary)] lg:col-span-6">
-              {entry.evidence}
+        {/* 설명 슬롯은 한 번에 기술 하나의 설명만 보여준다(아래). 나머지
+            16개의 설명은 인터랙션 전에는 화면 어디에도 텍스트로 없어
+            SSR HTML만으로는 크롤러도 스크린리더 사용자도 못 읽는다.
+            시각적으로는 숨기되 HTML과 접근성 트리에는 항상 있는 sr-only
+            블록으로 17개 전부의 설명을 둔다(SEO 계약, "크롤러는 HTML을
+            읽지 Ctrl+F를 쓰지 않는다"). 키보드로 아이콘을 훑지 않아도
+            스크린리더 사용자가 전체 목록을 바로 읽을 수 있다는 접근성
+            이점도 겸한다. */}
+        <div className="sr-only">
+          {skillCategories.map((category) => (
+            <p key={category.label}>
+              {category.label}.{' '}
+              {category.skills
+                .map(
+                  (skill) =>
+                    `${skill.name}: ${skill.description}${
+                      skill.projects ? ` (${skill.projects})` : ''
+                    }`
+                )
+                .join(' ')}
             </p>
-            {/* 프로젝트 이름에는 uppercase를 걸지 않는다. AlphaMail,
-                Ttabong, PoseTive처럼 대소문자가 이름의 일부다. 메타 라벨과
-                달리 이건 값이다. */}
-            <p className="text-t6 text-[var(--color-text-secondary)] lg:col-span-3 lg:text-right">
-              {entry.projects}
-            </p>
-          </div>
-        ))}
+          ))}
+        </div>
 
-        {/* Inventory 11개. 설명·숙련도·아이콘 없는 조용한 한 줄 목록이다.
-            핵심 6개와 같은 강조나 행 높이를 주지 않는다. relative·isolate로
-            이 블록만의 쌓임 맥락을 만들어, 아래 스크림의 음수 z-index가
-            Hyperspeed 배경(-z-10)이나 다른 형제와 뒤섞이지 않고 이 두 문단
-            바로 뒤에만 머물게 한다. */}
-        <div
-          data-skill-inventory
-          className="relative isolate mt-10 lg:mt-12"
-        >
+        <div className="flex flex-col gap-4 lg:gap-3">
+          {skillCategories.map((category) => {
+            const dimmed = pinnedCategory !== null && pinnedCategory !== category.label;
+
+            return (
+              <div
+                key={category.label}
+                data-skill-category={category.label}
+                data-skill-category-dimmed={dimmed}
+                className={`flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-5 ${
+                  dimmed ? 'opacity-25' : 'opacity-100'
+                }`}
+              >
+                {/* min-h-11은 44px 터치 타깃이다. 상자만 아래로 늘어나고
+                    글자 위치는 sm:pt-2가 그대로 잡고 있어 레인의 광학 정렬은
+                    바뀌지 않는다. 레인 높이는 더 큰 아이콘 행이 정하므로
+                    배치에도 영향이 없다. */}
+                <button
+                  type="button"
+                  onClick={() => toggleCategory(category.label)}
+                  aria-pressed={pinnedCategory === category.label}
+                  className="min-h-11 shrink-0 text-left text-t7 font-medium uppercase tracking-widest text-[var(--color-text-secondary)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)] sm:w-28 sm:pt-2"
+                >
+                  {category.label}
+                </button>
+
+                <div className="flex flex-wrap gap-x-4 gap-y-3">
+                  {category.skills.map((skill) => {
+                    const isActive = activeSkill.name === skill.name;
+
+                    return (
+                      <button
+                        key={skill.name}
+                        type="button"
+                        data-skill-icon={skill.name}
+                        onMouseEnter={() => setActiveSkill(skill)}
+                        onFocus={() => setActiveSkill(skill)}
+                        onClick={() => setActiveSkill(skill)}
+                        className="flex min-w-11 min-h-11 flex-col items-center gap-1 rounded-md p-1 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)]"
+                      >
+                        <span
+                          aria-hidden="true"
+                          style={iconMaskStyle(skill.icon)}
+                          className={`skill-icon ${isActive ? 'skill-icon-active' : ''}`}
+                        />
+                        <span className="text-t8 leading-none text-[var(--color-text-secondary)]">
+                          {skill.name}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* 설명 슬롯. 아이콘 호버·포커스·탭이 이 안의 내용만 바꾼다. 높이를
+            고정해 짧은 문구와 긴 문구를 오가도 레이아웃이 흔들리지 않는다
+            (브리프 "레이아웃이 흔들리면 안 된다" 절). relative·isolate로
+            이 블록만의 쌓임 맥락을 만들어 스크림의 음수 z-index가
+            Hyperspeed 배경이나 다른 형제와 뒤섞이지 않게 한다. */}
+        <div className="relative isolate mt-6 border-t border-[var(--color-hairline)] pt-4 lg:mt-7 lg:pt-5">
           <div
-            data-skill-inventory-scrim
+            data-skill-description-scrim
             aria-hidden="true"
             className="pointer-events-none absolute -inset-x-4 -inset-y-3 -z-[1]"
-            style={{ background: SKILL_INVENTORY_SCRIM }}
+            style={{ background: SKILL_DESCRIPTION_SCRIM }}
           />
-          <p className="text-t7 font-medium uppercase tracking-widest text-[var(--color-text-secondary)]">
-            Inventory
-          </p>
-          <p className="mt-3 text-t6 leading-relaxed text-[var(--color-text-secondary)]">
-            {skillInventory.join(' · ')}
-          </p>
+          <div
+            data-skill-description-slot
+            data-active-skill={activeSkill.name}
+            className="flex h-36 flex-col justify-center gap-2 lg:h-28"
+          >
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="text-t5 font-semibold text-[var(--color-text-primary)]">
+                {activeSkill.name}
+              </span>
+              {activeSkill.projects ? (
+                <span className="text-t7 text-[var(--color-text-secondary)]">
+                  {activeSkill.projects}
+                </span>
+              ) : null}
+            </div>
+            <p className="text-t6 leading-relaxed text-[var(--color-text-secondary)]">
+              {activeSkill.description}
+            </p>
+          </div>
         </div>
       </div>
     </section>

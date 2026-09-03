@@ -71,6 +71,16 @@
   --color-elevation-near: rgb(3 179 195 / 0.6);
   --color-elevation-far: rgb(3 179 195 / 0.15);
 
+  /* Skills 아이콘 호버/포커스 글로우(계획 5 T3 브리프). cyan-core·cyan-hi와는
+     다른 값이다. 컨트롤러가 브라우저에서 여러 번 확정했다. 그라데이션의
+     어두운 끝을 #2563eb로 뒀더니 호버한 아이콘의 오른쪽 아래가 오히려
+     어두워졌다. 호버는 밝아지는 것이어야 해서 이 두 값으로 고쳤다. */
+  --color-skill-icon-bright: #a5f3fc;
+  --color-skill-icon-core: #22d3ee;
+  --color-skill-icon-glow: rgb(34 211 238 / 0.5);
+  --color-skill-icon-glow-strong: rgb(34 211 238 / 0.8);
+  --color-skill-icon-glow-soft: rgb(34 211 238 / 0.45);
+
   /* Typography */
   --font-family-pretendard: var(--font-pretendard), -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   
@@ -931,6 +941,33 @@
     box-shadow:
       0 0 14px var(--color-cyan-hi),
       0 0 5px var(--color-cyan-core);
+  }
+
+  /* Skills 아이콘(계획 5 T3). mask-image로 SVG를 색칠한다. <img>로 쓰면
+     CSS로 색을 못 바꾸고, filter: brightness(0) invert(1)로 흰 실루엣을
+     만들면 JavaScript·TypeScript 로고처럼 글자를 파낸 구멍이 래스터에서
+     메워져 속이 꽉 찬 사각형이 된다. mask는 알파 채널만 읽어 그 구멍이
+     그대로 남는다. --skill-icon-src는 각 요소가 인라인 style로 준다.
+     -webkit- 접두는 구버전 Safari를 위해 남긴다. 전환은 걸지 않는다.
+     상태가 클래스 교체로 즉시 바뀌므로 reduce에서도 원래 움직임이 없다. */
+  .skill-icon {
+    display: inline-block;
+    width: 40px;
+    height: 40px;
+    background: var(--color-cyan-core);
+    filter: drop-shadow(0 0 5px var(--color-skill-icon-glow));
+    -webkit-mask: var(--skill-icon-src) center / contain no-repeat;
+    mask: var(--skill-icon-src) center / contain no-repeat;
+  }
+
+  .skill-icon-active {
+    background: linear-gradient(
+      135deg,
+      var(--color-skill-icon-bright) 0%,
+      var(--color-skill-icon-core) 100%
+    );
+    filter: drop-shadow(0 0 4px var(--color-skill-icon-glow-strong))
+      drop-shadow(0 0 13px var(--color-skill-icon-glow-soft));
   }
 
   /* 문항 전환. 슬라이드도 크로스페이드도 아니고, 카메라가 터널을 지나가는

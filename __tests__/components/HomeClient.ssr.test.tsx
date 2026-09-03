@@ -7,7 +7,7 @@ import {
   coreValues,
   experiences,
   projects,
-  skillLedger,
+  skillCategories,
 } from '@/lib/data';
 import {
   HOME_SECTION_CONFIG,
@@ -16,11 +16,14 @@ import {
 } from '@/lib/constants';
 
 const alphaMail = projects.find(({ title }) => title === 'AlphaMail')!;
+const reactSkill = skillCategories
+  .flatMap((category) => category.skills)
+  .find((skill) => skill.name === 'React')!;
 const semanticMarkerBySection = {
   [SECTION_IDS.ABOUT]: coreValues[0].description,
   [SECTION_IDS.PROJECTS]: alphaMail.title,
   [SECTION_IDS.EXPERIENCE]: experiences[0].position,
-  [SECTION_IDS.SKILLS]: skillLedger[0].name,
+  [SECTION_IDS.SKILLS]: reactSkill.description,
   [SECTION_IDS.AWARDS_CERTIFICATES]: awards[0].title,
   [SECTION_IDS.CONTACT]: contact.email,
 } satisfies Record<HomeSectionId, string>;

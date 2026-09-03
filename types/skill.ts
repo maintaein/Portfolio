@@ -1,9 +1,15 @@
 
-// 증거 우선 레저(Skills 재작성, 계획 5 T3). 기술명·증거·연결 프로젝트가
-// 한 행이다. Inventory 11개는 이 모양이 필요 없어 string[]로 둔다
-// (lib/data/skills.tsx).
-export interface SkillLedgerEntry {
+// Skills 재작성(계획 5 T3 개정). 증거 우선 레저를 폐기하고 카테고리별
+// 아이콘 그리드로 되돌아간다. icon은 public/icons-mono/의 파일명이다
+// (확장자 제외, 예: 'react' -> /icons-mono/react.svg).
+export interface Skill {
   name: string;
-  evidence: string;
-  projects: string;
+  icon: string;
+  description: string;
+  projects?: string;
+}
+
+export interface SkillCategory {
+  label: string;
+  skills: Skill[];
 }
