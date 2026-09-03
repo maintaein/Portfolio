@@ -64,7 +64,6 @@ portfolio/
 ├── types/                  # TypeScript 타입 정의
 └── public/
     ├── fonts/              # Pretendard 웹폰트
-    ├── icons/              # 기술 스택 아이콘
     └── projects/           # 프로젝트 이미지 및 영상
 ```
 
