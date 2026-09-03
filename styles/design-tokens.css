@@ -82,7 +82,6 @@
   --color-skill-icon-glow: rgb(34 211 238 / 0.35);
   --color-skill-icon-glow-strong: rgb(34 211 238 / 0.85);
   --color-skill-icon-glow-soft: rgb(34 211 238 / 0.55);
-  --color-skill-icon-bloom: rgb(255 255 255 / 0.22);
 
   /* Typography */
   --font-family-pretendard: var(--font-pretendard), -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
@@ -982,45 +981,79 @@
       drop-shadow(0 0 24px var(--color-skill-icon-glow-soft));
   }
 
-  /* 호버·포커스의 광휘. 아이콘 자체의 drop-shadow는 획을 따라가서 획이
-     가는 로고일수록 번짐이 얇게 나온다. 그래서 번짐을 아이콘이 아니라
-     버튼 뒤의 원반 하나로 따로 깐다. 17개가 아니라 지금 가리킨 하나만
-     피어오르므로 배경 광선과 섞이는 문제가 없다. 흰 심지를 조금 섞는
-     이유는 활성 아이콘과 같다. 배경에 없는 색이라 종류가 다른 신호가
-     된다. 끝을 transparent가 아니라 알파 0인 같은 시안으로 두는 것은
-     transparent가 검은색의 알파 0이라 중간이 회색으로 뜨기 때문이다.
-     전환은 걸지 않는다. 아이콘 상태와 같은 프레임에 같이 튀어야 하고,
-     아이콘 쪽이 클래스 교체로 즉시 바뀐다. reduce 방어가 필요 없는
-     이유도 같다. */
+  /* 광휘. 아이콘 실루엣을 두 겹 깔아 번짐이 로고 모양을 따라간다.
+     둥근 원반은 어느 로고를 가리켜도 같은 동그라미가 떠서 모양으로는
+     아무것도 알려주지 못했다. mask로 실루엣을 뜬 다음 blur를 걸면
+     Chrome은 마스크 바깥까지 번지게 그린다. 컨트롤러가 네 후보를
+     브라우저에서 비교해 확인했다. ::before가 넓고 옅은 바깥 번짐,
+     ::after가 좁고 밝은 안쪽 심지다.
+     --skill-icon-src는 버튼이 인라인 style로 쥐고 아이콘 span이
+     상속받는다. 한 곳에서만 정의해야 세 겹의 마스크가 어긋날 수 없다. */
   .skill-icon-button {
     position: relative;
   }
 
-  .skill-icon-button::before {
+  .skill-icon-button::before,
+  .skill-icon-button::after {
     content: "";
     position: absolute;
     /* p-1(4px) + 아이콘 40px의 절반. 캡션이 아니라 아이콘에 중심을 맞춘다. */
     top: 24px;
     left: 50%;
-    width: 88px;
-    height: 88px;
-    transform: translate(-50%, -50%);
-    border-radius: 50%;
-    background: radial-gradient(
-      closest-side,
-      var(--color-skill-icon-bloom) 0%,
-      var(--color-skill-icon-glow-soft) 30%,
-      var(--color-skill-icon-glow) 55%,
-      rgb(34 211 238 / 0) 100%
-    );
+    width: 40px;
+    height: 40px;
     opacity: 0;
     pointer-events: none;
     z-index: -1;
+    -webkit-mask: var(--skill-icon-src) center / contain no-repeat;
+    mask: var(--skill-icon-src) center / contain no-repeat;
   }
 
-  .skill-icon-button:hover::before,
-  .skill-icon-button:focus-visible::before {
-    opacity: 1;
+  .skill-icon-button::before {
+    background: var(--color-skill-icon-core);
+    filter: blur(15px);
+    transform: translate(-50%, -50%) scale(1.6);
+  }
+
+  .skill-icon-button::after {
+    background: var(--color-skill-icon-bright);
+    filter: blur(5px);
+    transform: translate(-50%, -50%) scale(1.15);
+  }
+
+  /* :hover가 아니라 활성 상태를 따라간다. 마우스를 떼도 설명 슬롯은 그
+     기술을 계속 보여주므로, 광휘만 꺼지면 어느 아이콘 이야기인지 끊긴다.
+     :has로 아이콘의 활성 클래스를 그대로 읽어 둘이 어긋날 수 없게 한다.
+     클래스를 하나 더 두면 언젠가 한쪽만 붙는 날이 온다. */
+  .skill-icon-button:has(.skill-icon-active)::before {
+    opacity: 0.9;
+    animation: skill-bloom var(--animate-duration-base)
+      cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+
+  .skill-icon-button:has(.skill-icon-active)::after {
+    opacity: 0.95;
+    animation: skill-bloom var(--animate-duration-base)
+      cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+
+  /* 아이콘 크기에서 시작해 밖으로 뻗는다. from 프레임 하나만 둔다.
+     to는 각 겹의 규칙이 쥔 값이라 최종 배율이 서로 달라도 keyframes
+     하나로 쓸 수 있고, fill-mode도 backwards만 쓰면 된다. forwards는
+     끝난 뒤에도 transform을 남겨 position: fixed 자손의 컨테이닝
+     블록이 되어버린다(섹션 전환 브리프에서 한 번 데었다). */
+  @keyframes skill-bloom {
+    from {
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(1);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .skill-icon-button:has(.skill-icon-active)::before,
+    .skill-icon-button:has(.skill-icon-active)::after {
+      animation: none;
+    }
   }
 
   /* 문항 전환. 슬라이드도 크로스페이드도 아니고, 카메라가 터널을 지나가는

@@ -122,9 +122,11 @@ describe('SkillsSection 카테고리 아이콘 그리드', () => {
 
     for (const [name, icon] of Object.entries(EXPECTED_ICON_BY_NAME)) {
       const button = screen.getByRole('button', { name });
-      const span = iconSpanOf(button);
+      expect(iconSpanOf(button), `${name}의 아이콘 span이 없다`).toBeTruthy();
+      // 마스크 소스는 버튼이 쥔다. 아이콘 span과 광휘 두 겹이 상속으로
+      // 같은 실루엣을 읽어야 세 겹이 어긋날 수 없다.
       expect(
-        span.style.getPropertyValue('--skill-icon-src'),
+        button.style.getPropertyValue('--skill-icon-src'),
         `${name}의 mask 경로가 없다`
       ).toBe(`url(/icons-mono/${icon}.svg)`);
     }
@@ -316,42 +318,160 @@ describe('SkillsSection 카테고리 아이콘 그리드', () => {
     }
   });
 
-  // 호버 광휘. 원반은 버튼 뒤에 깔리므로 z-index가 음수여야 하고, 버튼에
+  // 광휘 두 겹은 버튼 뒤에 깔리므로 z-index가 음수여야 하고, 버튼에
   // 클래스가 붙어야 CSS가 살아 있다. 둘 중 하나만 빠져도 눈으로는 "그냥
-  // 좀 약하네"로 보여 넘어가기 쉬운데, z-index가 뒤집히면 원반이 아이콘을
-  // 덮어 로고가 시안 원반으로 뭉개진다. 그래서 셋을 따로 못 박는다.
-  it('호버 광휘 원반이 아이콘 뒤에 깔리고 버튼이 그 클래스를 갖는다', () => {
+  // 좀 약하네"로 보여 넘어가기 쉬운데, z-index가 뒤집히면 번짐이 아이콘을
+  // 덮어 로고가 시안 덩어리로 뭉개진다. 그래서 따로따로 못 박는다.
+  it('광휘 두 겹이 아이콘 뒤에 깔리고 버튼이 그 클래스를 갖는다', () => {
     const css = readFileSync(
       resolve(process.cwd(), 'styles/design-tokens.css'),
       'utf8'
     );
-    const bloom = css.match(
-      /^ {2}\.skill-icon-button::before\s*\{([\s\S]*?)^ {2}\}/m
+    const base = css.match(
+      /^ {2}\.skill-icon-button::before,\n {2}\.skill-icon-button::after\s*\{([\s\S]*?)^ {2}\}/m
     )?.[1];
-    expect(bloom, '.skill-icon-button::before 규칙이 없다').toBeDefined();
+    expect(base, '광휘 두 겹의 공통 규칙이 없다').toBeDefined();
     expect(
-      bloom,
-      '원반이 아이콘 앞으로 나오면 로고가 뭉개진다. z-index를 음수로 둬라'
+      base,
+      '번짐이 아이콘 앞으로 나오면 로고가 뭉개진다. z-index를 음수로 둬라'
     ).toMatch(/z-index:\s*-\d/);
-    expect(bloom, "기본 상태에서 원반이 보이면 안 된다").toMatch(
+    expect(base, '기본 상태에서 번짐이 보이면 안 된다').toMatch(
       /opacity:\s*0\s*;/
     );
 
-    // 호버·포커스에서 켜지는 규칙이 없으면 원반은 영원히 opacity 0이다.
+    // 둥근 원반이 아니라 아이콘 실루엣을 따라가야 한다는 것이 이 광휘의
+    // 전부다. 마스크가 빠지면 조용히 사각형 번짐으로 돌아간다.
     expect(
-      css,
-      '호버·포커스에서 원반을 켜는 규칙이 없다'
-    ).toMatch(
-      /\.skill-icon-button:hover::before[\s\S]{0,120}?opacity:\s*1/
-    );
-    expect(css).toMatch(
-      /\.skill-icon-button:focus-visible::before[\s\S]{0,120}?opacity:\s*1/
-    );
+      base,
+      '광휘가 아이콘 실루엣을 안 따라간다. mask에 --skill-icon-src를 줘라'
+    ).toMatch(/mask:\s*var\(--skill-icon-src\)/);
 
-    // 클래스가 버튼에 없으면 위 CSS는 전부 죽은 코드다.
+    // 각 겹은 서로 다른 배율과 흐림을 가져야 겹쳐서 번짐이 생긴다. 공통
+    // 규칙은 두 선택자를 한 줄씩 나열하므로, 색을 쥔 쪽이 그 겹의 고유
+    // 규칙이다. 그걸로 골라야 공통 규칙을 잘못 집지 않는다.
+    const scales: string[] = [];
+    for (const layer of ['before', 'after']) {
+      const body = [
+        ...css.matchAll(
+          new RegExp(
+            `^ {2}\\.skill-icon-button::${layer}\\s*\\{([\\s\\S]*?)^ {2}\\}`,
+            'gm'
+          )
+        ),
+      ]
+        .map((m) => m[1])
+        .find((b) => /background:/.test(b));
+      expect(body, `::${layer} 겹의 고유 규칙이 없다`).toBeDefined();
+      expect(body, `::${layer}에 흐림이 없다`).toMatch(/filter:\s*blur\(/);
+      const scale = body?.match(/scale\(([\d.]+)\)/)?.[1];
+      expect(scale, `::${layer}에 배율이 없다`).toBeDefined();
+      scales.push(scale!);
+    }
+    expect(
+      scales[0],
+      '두 겹의 배율이 같으면 겹칠 이유가 없다. 바깥이 더 넓어야 한다'
+    ).not.toBe(scales[1]);
+    expect(Number(scales[0])).toBeGreaterThan(Number(scales[1]));
+
+    // 클래스가 버튼에 없으면 위 CSS는 전부 죽은 코드다. 마스크 소스도
+    // 버튼이 쥐어야 가상 요소가 읽는다.
     render(<SkillsSection />);
     const iconButton = screen.getByRole('button', { name: 'React' });
     expect(iconButton.className).toMatch(/\bskill-icon-button\b/);
+    expect(iconButton.style.getPropertyValue('--skill-icon-src')).toBe(
+      'url(/icons-mono/react.svg)'
+    );
+  });
+
+  // 광휘가 :hover를 따라가면 마우스를 뗀 순간 꺼진다. 그런데 설명 슬롯은
+  // 그 기술을 계속 보여주고 있어서, 아래 글이 어느 아이콘 이야기인지
+  // 가리키는 것이 사라진다. 그래서 활성 클래스를 따라가야 한다. CSS의
+  // 선택자와 React의 상태 둘 다 봐야 이 계약이 지켜진다.
+  it('마우스를 떼도 광휘가 유지된다(활성 클래스를 따라간다)', async () => {
+    const css = readFileSync(
+      resolve(process.cwd(), 'styles/design-tokens.css'),
+      'utf8'
+    );
+    for (const layer of ['before', 'after']) {
+      expect(
+        css,
+        `::${layer} 광휘를 켜는 규칙이 활성 클래스를 따라가지 않는다`
+      ).toMatch(
+        new RegExp(
+          `\\.skill-icon-button:has\\(\\.skill-icon-active\\)::${layer}\\s*\\{`
+        )
+      );
+    }
+    expect(
+      css,
+      '광휘가 :hover로 켜지면 마우스를 떼는 순간 꺼진다'
+    ).not.toMatch(/\.skill-icon-button:hover/);
+
+    // React 상태 쪽. 떠난 뒤에도 활성 클래스가 남아 있어야 위 CSS가 켜진 채
+    // 유지된다.
+    const user = userEvent.setup();
+    render(<SkillsSection />);
+    const python = screen.getByRole('button', { name: 'Python' });
+
+    await user.hover(python);
+    expect(iconSpanOf(python).className).toMatch(/\bskill-icon-active\b/);
+
+    await user.unhover(python);
+    expect(
+      iconSpanOf(python).className,
+      '마우스를 떼자 활성 클래스가 사라졌다. 광휘도 같이 꺼진다'
+    ).toMatch(/\bskill-icon-active\b/);
+  });
+
+  // 광휘는 아이콘 크기에서 시작해 밖으로 뻗는다. 이 저장소는 언제나
+  // 움직임과 reduce 방어를 짝지어 왔다. fill-mode도 못 박는다. forwards는
+  // 끝난 뒤 transform을 남겨 position: fixed 자손의 컨테이닝 블록이 되는데,
+  // 섹션 전환에서 이미 한 번 데었다.
+  it('광휘 애니메이션에 backwards와 reduce 방어가 짝지어져 있다', () => {
+    const css = readFileSync(
+      resolve(process.cwd(), 'styles/design-tokens.css'),
+      'utf8'
+    );
+    const keyframes = css.match(
+      /@keyframes skill-bloom\s*\{([\s\S]*?)^ {2}\}/m
+    )?.[1];
+    expect(keyframes, 'skill-bloom keyframes가 없다').toBeDefined();
+    expect(
+      keyframes,
+      'to 프레임을 두면 각 겹의 최종 배율을 규칙에서 못 쥔다'
+    ).not.toMatch(/\bto\b|100%/);
+    expect(keyframes, '아이콘 크기에서 시작해야 뻗어 나온다').toMatch(
+      /scale\(1\)/
+    );
+
+    for (const layer of ['before', 'after']) {
+      const on = css.match(
+        new RegExp(
+          `\\.skill-icon-button:has\\(\\.skill-icon-active\\)::${layer}\\s*\\{([\\s\\S]*?)^ {2}\\}`,
+          'm'
+        )
+      )?.[1];
+      expect(on, `::${layer}를 켜는 규칙이 없다`).toBeDefined();
+      expect(on, `::${layer}에 광휘 애니메이션이 없다`).toMatch(
+        /animation:\s*skill-bloom/
+      );
+      expect(
+        on,
+        `::${layer}에 forwards나 both를 쓰면 transform이 남는다`
+      ).not.toMatch(/forwards|both/);
+      expect(on, `::${layer}에 backwards가 없다`).toMatch(/backwards/);
+    }
+
+    const reduce = css.match(
+      /@media \(prefers-reduced-motion: reduce\) \{\s*\n\s*\.skill-icon-button:has\([\s\S]*?\n {2}\}/
+    )?.[0];
+    expect(
+      reduce,
+      '광휘 애니메이션에 reduce 방어가 없다'
+    ).toBeDefined();
+    expect(reduce, 'reduce에서 애니메이션을 꺼야 한다').toMatch(
+      /animation:\s*none/
+    );
   });
   // 아이콘 하나만 보면 구멍이 남는다. 처음 이 테스트가 React 버튼만 봤고,
   // 그 사이 카테고리 라벨 버튼 넷이 112x28px로 빠져 있었다. 컨트롤러가

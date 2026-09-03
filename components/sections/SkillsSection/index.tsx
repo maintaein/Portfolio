@@ -23,7 +23,8 @@ const ALL_SKILLS = skillCategories.flatMap((category) => category.skills);
 const DEFAULT_SKILL = ALL_SKILLS.find((skill) => skill.name === 'React')!;
 
 // mask-image 소스. <img>로 쓰면 CSS로 색을 못 바꾸고 JS 번들에 경로 문자열이
-// 들어간다. --skill-icon-src는 커스텀 프로퍼티라 style 타입에 없어 캐스팅한다.
+// 들어간다. 버튼에 걸어 아이콘 span과 광휘 두 겹이 상속으로 같은 실루엣을
+// 읽게 한다. --skill-icon-src는 커스텀 프로퍼티라 style 타입에 없어 캐스팅한다.
 function iconMaskStyle(icon: string): CSSProperties {
   return { '--skill-icon-src': `url(/icons-mono/${icon}.svg)` } as CSSProperties;
 }
@@ -115,6 +116,7 @@ export default function SkillsSection() {
                         key={skill.name}
                         type="button"
                         data-skill-icon={skill.name}
+                        style={iconMaskStyle(skill.icon)}
                         onMouseEnter={() => setActiveSkill(skill)}
                         onFocus={() => setActiveSkill(skill)}
                         onClick={() => setActiveSkill(skill)}
@@ -122,7 +124,6 @@ export default function SkillsSection() {
                       >
                         <span
                           aria-hidden="true"
-                          style={iconMaskStyle(skill.icon)}
                           className={`skill-icon ${isActive ? 'skill-icon-active' : ''}`}
                         />
                         <span className="text-t8 leading-none text-[var(--color-text-secondary)]">
