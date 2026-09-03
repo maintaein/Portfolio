@@ -75,11 +75,13 @@
      다른 값이다. 컨트롤러가 브라우저에서 여러 번 확정했다. 그라데이션의
      어두운 끝을 #2563eb로 뒀더니 호버한 아이콘의 오른쪽 아래가 오히려
      어두워졌다. 호버는 밝아지는 것이어야 해서 이 두 값으로 고쳤다. */
+  --color-skill-icon-white: #ffffff;
+  --color-skill-icon-white-glow: rgb(255 255 255 / 0.95);
   --color-skill-icon-bright: #a5f3fc;
   --color-skill-icon-core: #22d3ee;
-  --color-skill-icon-glow: rgb(34 211 238 / 0.5);
-  --color-skill-icon-glow-strong: rgb(34 211 238 / 0.8);
-  --color-skill-icon-glow-soft: rgb(34 211 238 / 0.45);
+  --color-skill-icon-glow: rgb(34 211 238 / 0.35);
+  --color-skill-icon-glow-strong: rgb(34 211 238 / 0.85);
+  --color-skill-icon-glow-soft: rgb(34 211 238 / 0.55);
 
   /* Typography */
   --font-family-pretendard: var(--font-pretendard), -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
@@ -955,19 +957,28 @@
     width: 40px;
     height: 40px;
     background: var(--color-cyan-core);
-    filter: drop-shadow(0 0 5px var(--color-skill-icon-glow));
+    /* 기본 글로우를 일부러 좁고 옅게 둔다. 배경 광선도 빛나는 시안이라
+       17개가 함께 세게 빛나면 서로 섞여 아무것도 안 읽힌다. 조용히 두면
+       아래 활성 상태의 백열이 그만큼 크게 튄다. */
+    filter: drop-shadow(0 0 2px var(--color-skill-icon-glow));
     -webkit-mask: var(--skill-icon-src) center / contain no-repeat;
     mask: var(--skill-icon-src) center / contain no-repeat;
   }
 
+  /* 활성 상태는 흰 핵에서 시안으로 번지는 백열이다. 흰색을 섞는 이유는
+     시안만 더 세게 하면 배경 광선과 같은 색이라 세기 차이로만 구분해야
+     하기 때문이다. 흰색은 배경에 없는 색이라 종류가 다른 신호가 된다.
+     글로우도 세 겹으로 겹쳐 흰 심지에서 넓은 시안 번짐까지 만든다. */
   .skill-icon-active {
     background: linear-gradient(
       135deg,
-      var(--color-skill-icon-bright) 0%,
+      var(--color-skill-icon-white) 0%,
+      var(--color-skill-icon-bright) 45%,
       var(--color-skill-icon-core) 100%
     );
-    filter: drop-shadow(0 0 4px var(--color-skill-icon-glow-strong))
-      drop-shadow(0 0 13px var(--color-skill-icon-glow-soft));
+    filter: drop-shadow(0 0 2px var(--color-skill-icon-white-glow))
+      drop-shadow(0 0 9px var(--color-skill-icon-glow-strong))
+      drop-shadow(0 0 24px var(--color-skill-icon-glow-soft));
   }
 
   /* 문항 전환. 슬라이드도 크로스페이드도 아니고, 카메라가 터널을 지나가는
