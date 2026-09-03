@@ -76,12 +76,9 @@
      어두운 끝을 #2563eb로 뒀더니 호버한 아이콘의 오른쪽 아래가 오히려
      어두워졌다. 호버는 밝아지는 것이어야 해서 이 두 값으로 고쳤다. */
   --color-skill-icon-white: #ffffff;
-  --color-skill-icon-white-glow: rgb(255 255 255 / 0.95);
   --color-skill-icon-bright: #a5f3fc;
   --color-skill-icon-core: #22d3ee;
-  --color-skill-icon-glow: rgb(34 211 238 / 0.35);
-  --color-skill-icon-glow-strong: rgb(34 211 238 / 0.85);
-  --color-skill-icon-glow-soft: rgb(34 211 238 / 0.55);
+  --color-skill-icon-bloom: rgb(34 211 238 / 0.7);
 
   /* Typography */
   --font-family-pretendard: var(--font-pretendard), -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
@@ -957,10 +954,6 @@
     width: 40px;
     height: 40px;
     background: var(--color-cyan-core);
-    /* 기본 글로우를 일부러 좁고 옅게 둔다. 배경 광선도 빛나는 시안이라
-       17개가 함께 세게 빛나면 서로 섞여 아무것도 안 읽힌다. 조용히 두면
-       아래 활성 상태의 백열이 그만큼 크게 튄다. */
-    filter: drop-shadow(0 0 2px var(--color-skill-icon-glow));
     -webkit-mask: var(--skill-icon-src) center / contain no-repeat;
     mask: var(--skill-icon-src) center / contain no-repeat;
   }
@@ -968,7 +961,8 @@
   /* 활성 상태는 흰 핵에서 시안으로 번지는 백열이다. 흰색을 섞는 이유는
      시안만 더 세게 하면 배경 광선과 같은 색이라 세기 차이로만 구분해야
      하기 때문이다. 흰색은 배경에 없는 색이라 종류가 다른 신호가 된다.
-     글로우도 세 겹으로 겹쳐 흰 심지에서 넓은 시안 번짐까지 만든다. */
+     번짐은 여기서 만들지 않는다. 마스크가 filter를 잘라내기 때문이고,
+     아래 .skill-icon-button의 겹 둘이 그 일을 한다. */
   .skill-icon-active {
     background: linear-gradient(
       135deg,
@@ -976,29 +970,34 @@
       var(--color-skill-icon-bright) 45%,
       var(--color-skill-icon-core) 100%
     );
-    filter: drop-shadow(0 0 2px var(--color-skill-icon-white-glow))
-      drop-shadow(0 0 9px var(--color-skill-icon-glow-strong))
-      drop-shadow(0 0 24px var(--color-skill-icon-glow-soft));
   }
 
   /* 광휘. START 버튼과 같은 어법이다. 그쪽은 text-shadow로 글자 둘레에
      은은하게 번지는데, 아이콘은 글자가 아니라서 같은 일을 drop-shadow가
      한다. 알파에서 뽑아 흐린 사본을 겹치므로 번짐이 로고 모양을 대충
      따라가되 윤곽을 그대로 베끼지는 않는다.
-     실루엣을 확대해 깔아 봤다가 걷어냈다. 사각형 로고는 사각형 테두리가,
-     원형 로고는 원반이 눈에 보였다. 사용자가 "동그랗거나 네모나게 퍼지는
-     게 아니라"라고 정확히 그 지점을 짚었다. 컨트롤러가 네 후보를
-     브라우저에서 나란히 비교해 확인했다.
-     이 겹은 광휘만 담당한다. 몸통은 아이콘과 같은 실루엣·같은 크기라
-     아이콘에 완전히 가려지고, 바깥으로 나오는 것은 drop-shadow뿐이다.
-     그래서 배율을 애니메이션해도 도형이 비어져 나오지 않는다.
-     --skill-icon-src는 버튼이 인라인 style로 쥐고 아이콘 span과 이 겹이
-     상속받는다. 한 곳에서만 정의해야 둘이 어긋날 수 없다. */
+
+     이 겹에는 mask를 걸지 않는다. CSS 렌더링 순서가 filter 다음 clip,
+     그 다음 mask라서 마스크를 걸면 방금 만든 그림자를 마스크가 도로
+     잘라낸다. 아이콘 바깥으로 한 픽셀도 안 나간다. 컨트롤러가 아이콘
+     중심에서 거리별 밝기를 재서 확인했다. 겹을 켜고 꺼도 바깥 고리가
+     2.18에서 2.61로만 움직였고, 마스크를 배경 이미지로 바꾸자 22.99가
+     됐다. 같은 이유로 위 .skill-icon과 .skill-icon-active의 drop-shadow도
+     아무것도 그리지 않고 있어서 걷어냈다.
+     배경 이미지는 흰 실루엣이지만 몸통은 아이콘에 완전히 가려진다.
+
+     배율은 건드리지 않는다. 조금이라도 줄이면 파낸 구멍이 어긋나서
+     뒤의 흰 실루엣이 비친다. JavaScript의 JS 글자가 흰색으로 메워졌다.
+     이 저장소가 brightness(0) invert(1)로 한 번 겪은 실패와 같다.
+
+     --skill-icon-src는 버튼이 인라인 style로 쥐고 아이콘 span과 이 두
+     겹이 상속받는다. 한 곳에서만 정의해야 셋이 어긋날 수 없다. */
   .skill-icon-button {
     position: relative;
   }
 
-  .skill-icon-button::before {
+  .skill-icon-button::before,
+  .skill-icon-button::after {
     content: "";
     position: absolute;
     /* p-1(4px) + 아이콘 40px의 절반. 캡션이 아니라 아이콘에 중심을 맞춘다. */
@@ -1006,45 +1005,57 @@
     left: 50%;
     width: 40px;
     height: 40px;
-    /* 0.98은 가장자리 앤티에일리어싱이 아이콘 밖으로 1px 삐져나오지
-       않게 하는 여유다. 몸통은 끝까지 보이지 않아야 한다. */
-    transform: translate(-50%, -50%) scale(0.98);
-    background: var(--color-skill-icon-core);
-    filter: drop-shadow(0 0 16px var(--color-cyan-hi))
-      drop-shadow(0 0 30px var(--color-skill-icon-glow-soft));
+    transform: translate(-50%, -50%);
+    background: var(--skill-icon-src) center / contain no-repeat;
     opacity: 0;
     pointer-events: none;
     z-index: -1;
-    -webkit-mask: var(--skill-icon-src) center / contain no-repeat;
-    mask: var(--skill-icon-src) center / contain no-repeat;
+  }
+
+  /* 넓고 옅은 바깥 번짐. */
+  .skill-icon-button::before {
+    filter: drop-shadow(0 0 22px var(--color-skill-icon-bloom));
+  }
+
+  /* 좁고 밝은 안쪽 번짐. ::after라 위 겹 위에 얹힌다. */
+  .skill-icon-button::after {
+    filter: drop-shadow(0 0 9px var(--color-cyan-hi));
   }
 
   /* :hover가 아니라 활성 상태를 따라간다. 마우스를 떼도 설명 슬롯은 그
      기술을 계속 보여주므로, 광휘만 꺼지면 어느 아이콘 이야기인지 끊긴다.
      :has로 아이콘의 활성 클래스를 그대로 읽어 둘이 어긋날 수 없게 한다.
-     클래스를 하나 더 두면 언젠가 한쪽만 붙는 날이 온다. */
-  .skill-icon-button:has(.skill-icon-active)::before {
+     클래스를 하나 더 두면 언젠가 한쪽만 붙는 날이 온다.
+
+     좁은 겹이 먼저 켜지고 넓은 겹이 늦게 따라 붙는다. 그래서 번짐이
+     아이콘에서 바깥으로 자라는 것처럼 읽힌다. 움직이는 것은 opacity
+     하나뿐이다. drop-shadow의 반경을 전환하면 매 프레임 알파를 다시
+     흐리게 만드는데, 파티클 잔소음 브리프(6차)에서 START 호버가 끊긴
+     원인이 그것이었다. 같은 길을 두 번 가지 않는다. */
+  .skill-icon-button:has(.skill-icon-active)::after {
     opacity: 1;
-    animation: skill-bloom var(--animate-duration-base)
-      cubic-bezier(0.22, 1, 0.36, 1) backwards;
+    animation: skill-bloom var(--animate-duration-fast) ease-out backwards;
   }
 
-  /* 아이콘 안쪽에서 시작해 번짐이 밖으로 뻗는다. 움직이는 것은 transform과
-     opacity뿐이고 drop-shadow의 반경은 고정이다. 반경 자체를 전환하면
-     브라우저가 매 프레임 알파를 다시 흐리게 만드는데, 파티클 잔소음
-     브리프(6차)에서 START 호버가 끊긴 원인이 바로 그것이었다.
-     from 프레임 하나만 둔다. to는 위 규칙이 쥔 값이라 fill-mode도
-     backwards만 쓰면 된다. forwards는 끝난 뒤에도 transform을 남겨
+  .skill-icon-button:has(.skill-icon-active)::before {
+    opacity: 1;
+    animation: skill-bloom var(--animate-duration-base) ease-out
+      var(--animate-duration-fast) backwards;
+  }
+
+  /* from 프레임 하나만 둔다. to는 위 규칙들이 쥔 값이라 fill-mode도
+     backwards만 쓰면 된다. backwards는 지연 구간에서도 이 값을 물고
+     있어야 넓은 겹이 늦게 나타난다. forwards는 끝난 뒤에도 상태를 남겨
      position: fixed 자손의 컨테이닝 블록이 되어버린다(섹션 전환 브리프). */
   @keyframes skill-bloom {
     from {
       opacity: 0;
-      transform: translate(-50%, -50%) scale(0.72);
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .skill-icon-button:has(.skill-icon-active)::before {
+    .skill-icon-button:has(.skill-icon-active)::before,
+    .skill-icon-button:has(.skill-icon-active)::after {
       animation: none;
     }
   }
