@@ -300,7 +300,11 @@ describe('SkillsSection 카테고리 아이콘 그리드', () => {
       resolve(process.cwd(), 'styles/design-tokens.css'),
       'utf8'
     );
-    for (const sel of ['.skill-icon', '.skill-icon-active']) {
+    for (const sel of [
+      '.skill-icon',
+      '.skill-icon-active',
+      '.skill-icon-button::before',
+    ]) {
       const body = css.match(
         new RegExp(`^  \\${sel}\\s*\\{([\\s\\S]*?)^  \\}`, 'm')
       )?.[1];
@@ -312,6 +316,43 @@ describe('SkillsSection 카테고리 아이콘 그리드', () => {
     }
   });
 
+  // 호버 광휘. 원반은 버튼 뒤에 깔리므로 z-index가 음수여야 하고, 버튼에
+  // 클래스가 붙어야 CSS가 살아 있다. 둘 중 하나만 빠져도 눈으로는 "그냥
+  // 좀 약하네"로 보여 넘어가기 쉬운데, z-index가 뒤집히면 원반이 아이콘을
+  // 덮어 로고가 시안 원반으로 뭉개진다. 그래서 셋을 따로 못 박는다.
+  it('호버 광휘 원반이 아이콘 뒤에 깔리고 버튼이 그 클래스를 갖는다', () => {
+    const css = readFileSync(
+      resolve(process.cwd(), 'styles/design-tokens.css'),
+      'utf8'
+    );
+    const bloom = css.match(
+      /^ {2}\.skill-icon-button::before\s*\{([\s\S]*?)^ {2}\}/m
+    )?.[1];
+    expect(bloom, '.skill-icon-button::before 규칙이 없다').toBeDefined();
+    expect(
+      bloom,
+      '원반이 아이콘 앞으로 나오면 로고가 뭉개진다. z-index를 음수로 둬라'
+    ).toMatch(/z-index:\s*-\d/);
+    expect(bloom, "기본 상태에서 원반이 보이면 안 된다").toMatch(
+      /opacity:\s*0\s*;/
+    );
+
+    // 호버·포커스에서 켜지는 규칙이 없으면 원반은 영원히 opacity 0이다.
+    expect(
+      css,
+      '호버·포커스에서 원반을 켜는 규칙이 없다'
+    ).toMatch(
+      /\.skill-icon-button:hover::before[\s\S]{0,120}?opacity:\s*1/
+    );
+    expect(css).toMatch(
+      /\.skill-icon-button:focus-visible::before[\s\S]{0,120}?opacity:\s*1/
+    );
+
+    // 클래스가 버튼에 없으면 위 CSS는 전부 죽은 코드다.
+    render(<SkillsSection />);
+    const iconButton = screen.getByRole('button', { name: 'React' });
+    expect(iconButton.className).toMatch(/\bskill-icon-button\b/);
+  });
   // 아이콘 하나만 보면 구멍이 남는다. 처음 이 테스트가 React 버튼만 봤고,
   // 그 사이 카테고리 라벨 버튼 넷이 112x28px로 빠져 있었다. 컨트롤러가
   // 브라우저에서 재고 나서야 발견했다. 그래서 섹션 안 모든 버튼을 센다.

@@ -82,6 +82,7 @@
   --color-skill-icon-glow: rgb(34 211 238 / 0.35);
   --color-skill-icon-glow-strong: rgb(34 211 238 / 0.85);
   --color-skill-icon-glow-soft: rgb(34 211 238 / 0.55);
+  --color-skill-icon-bloom: rgb(255 255 255 / 0.22);
 
   /* Typography */
   --font-family-pretendard: var(--font-pretendard), -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
@@ -979,6 +980,47 @@
     filter: drop-shadow(0 0 2px var(--color-skill-icon-white-glow))
       drop-shadow(0 0 9px var(--color-skill-icon-glow-strong))
       drop-shadow(0 0 24px var(--color-skill-icon-glow-soft));
+  }
+
+  /* 호버·포커스의 광휘. 아이콘 자체의 drop-shadow는 획을 따라가서 획이
+     가는 로고일수록 번짐이 얇게 나온다. 그래서 번짐을 아이콘이 아니라
+     버튼 뒤의 원반 하나로 따로 깐다. 17개가 아니라 지금 가리킨 하나만
+     피어오르므로 배경 광선과 섞이는 문제가 없다. 흰 심지를 조금 섞는
+     이유는 활성 아이콘과 같다. 배경에 없는 색이라 종류가 다른 신호가
+     된다. 끝을 transparent가 아니라 알파 0인 같은 시안으로 두는 것은
+     transparent가 검은색의 알파 0이라 중간이 회색으로 뜨기 때문이다.
+     전환은 걸지 않는다. 아이콘 상태와 같은 프레임에 같이 튀어야 하고,
+     아이콘 쪽이 클래스 교체로 즉시 바뀐다. reduce 방어가 필요 없는
+     이유도 같다. */
+  .skill-icon-button {
+    position: relative;
+  }
+
+  .skill-icon-button::before {
+    content: "";
+    position: absolute;
+    /* p-1(4px) + 아이콘 40px의 절반. 캡션이 아니라 아이콘에 중심을 맞춘다. */
+    top: 24px;
+    left: 50%;
+    width: 88px;
+    height: 88px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: radial-gradient(
+      closest-side,
+      var(--color-skill-icon-bloom) 0%,
+      var(--color-skill-icon-glow-soft) 30%,
+      var(--color-skill-icon-glow) 55%,
+      rgb(34 211 238 / 0) 100%
+    );
+    opacity: 0;
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  .skill-icon-button:hover::before,
+  .skill-icon-button:focus-visible::before {
+    opacity: 1;
   }
 
   /* 문항 전환. 슬라이드도 크로스페이드도 아니고, 카메라가 터널을 지나가는

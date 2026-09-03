@@ -19,7 +19,6 @@ const SKILL_LANE_SCRIM =
   'radial-gradient(ellipse at center, rgb(0 0 0 / 0.72) 0%, rgb(0 0 0 / 0.5) 55%, rgb(0 0 0 / 0) 92%)';
 
 const ALL_SKILLS = skillCategories.flatMap((category) => category.skills);
-const TOTAL_SKILL_COUNT = ALL_SKILLS.length;
 // 기본 설명 슬롯은 React다(브리프 "상호작용" 절).
 const DEFAULT_SKILL = ALL_SKILLS.find((skill) => skill.name === 'React')!;
 
@@ -40,14 +39,9 @@ export default function SkillsSection() {
   return (
     <section id={SECTION_IDS.SKILLS} className="py-6 lg:py-8">
       <div className="mx-auto max-w-4xl px-4 sm:px-6">
-        <div className="mb-5 flex items-baseline justify-between lg:mb-6">
-          <h2 className="text-t2 font-bold uppercase tracking-widest text-[var(--color-text-primary)]">
-            Skills
-          </h2>
-          <span className="text-t5 font-semibold text-[var(--color-text-primary)]">
-            {TOTAL_SKILL_COUNT}
-          </span>
-        </div>
+        <h2 className="mb-5 text-t2 font-bold uppercase tracking-widest text-[var(--color-text-primary)] lg:mb-6">
+          Skills
+        </h2>
 
         {/* 설명 슬롯은 한 번에 기술 하나의 설명만 보여준다(아래). 나머지
             16개의 설명은 인터랙션 전에는 화면 어디에도 텍스트로 없어
@@ -107,7 +101,7 @@ export default function SkillsSection() {
                   type="button"
                   onClick={() => toggleCategory(category.label)}
                   aria-pressed={pinnedCategory === category.label}
-                  className="min-h-11 shrink-0 text-left text-t7 font-medium uppercase tracking-widest text-[var(--color-text-secondary)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)] sm:w-28 sm:pt-2"
+                  className="min-h-11 shrink-0 text-left text-t7 font-medium uppercase tracking-widest text-[var(--color-text-primary)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)] sm:w-28 sm:pt-2"
                 >
                   {category.label}
                 </button>
@@ -124,7 +118,7 @@ export default function SkillsSection() {
                         onMouseEnter={() => setActiveSkill(skill)}
                         onFocus={() => setActiveSkill(skill)}
                         onClick={() => setActiveSkill(skill)}
-                        className="flex min-w-11 min-h-11 flex-col items-center gap-1 rounded-md p-1 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)]"
+                        className="skill-icon-button flex min-w-11 min-h-11 flex-col items-center gap-1 rounded-md p-1 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)]"
                       >
                         <span
                           aria-hidden="true"
@@ -170,7 +164,7 @@ export default function SkillsSection() {
                 </span>
               ) : null}
             </div>
-            <p className="text-t6 leading-relaxed text-[var(--color-text-secondary)]">
+            <p className="text-t6 leading-relaxed text-[var(--color-text-primary)]">
               {activeSkill.description}
             </p>
           </div>
