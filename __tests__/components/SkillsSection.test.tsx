@@ -92,6 +92,20 @@ function iconSpanOf(button: HTMLElement): HTMLElement {
   return icon as HTMLElement;
 }
 
+function designTokensCss(): string {
+  return readFileSync(resolve(process.cwd(), 'styles/design-tokens.css'), 'utf8');
+}
+
+// 광휘 겹의 평상시 규칙 본문. 활성 규칙(:has)이 아니라 .skill-icon-button
+// ::before 쪽이다.
+function bloomLayerCss(): string {
+  const body = designTokensCss().match(
+    /^ {2}\.skill-icon-button::before\s*\{([\s\S]*?)^ {2}\}/m
+  )?.[1];
+  if (!body) throw new Error('광휘 겹(.skill-icon-button::before) 규칙이 없다');
+  return body;
+}
+
 describe('SkillsSection 카테고리 아이콘 그리드', () => {
   it('id를 SECTION_IDS.SKILLS로 렌더한다', () => {
     const { container } = render(<SkillsSection />);
@@ -302,6 +316,17 @@ describe('SkillsSection 카테고리 아이콘 그리드', () => {
       resolve(process.cwd(), 'styles/design-tokens.css'),
       'utf8'
     );
+    // .skill-icon의 마스크가 빠지면 17개가 전부 시안 사각형이 된다. 광휘
+    // 겹을 고치다 마스크를 지우는 변이가 여기서 안 잡히는 것을 봤다.
+    const iconRule = css.match(
+      /^ {2}\.skill-icon\s*\{([\s\S]*?)^ {2}\}/m
+    )?.[1];
+    expect(iconRule, '.skill-icon 규칙이 없다').toBeDefined();
+    expect(
+      iconRule,
+      '마스크가 빠지면 아이콘이 전부 시안 사각형이 된다'
+    ).toMatch(/mask:\s*var\(--skill-icon-src\)/);
+
     for (const sel of [
       '.skill-icon',
       '.skill-icon-active',
@@ -318,60 +343,46 @@ describe('SkillsSection 카테고리 아이콘 그리드', () => {
     }
   });
 
-  // 광휘 두 겹은 버튼 뒤에 깔리므로 z-index가 음수여야 하고, 버튼에
-  // 클래스가 붙어야 CSS가 살아 있다. 둘 중 하나만 빠져도 눈으로는 "그냥
-  // 좀 약하네"로 보여 넘어가기 쉬운데, z-index가 뒤집히면 번짐이 아이콘을
-  // 덮어 로고가 시안 덩어리로 뭉개진다. 그래서 따로따로 못 박는다.
-  it('광휘 두 겹이 아이콘 뒤에 깔리고 버튼이 그 클래스를 갖는다', () => {
-    const css = readFileSync(
-      resolve(process.cwd(), 'styles/design-tokens.css'),
-      'utf8'
-    );
-    const base = css.match(
-      /^ {2}\.skill-icon-button::before,\n {2}\.skill-icon-button::after\s*\{([\s\S]*?)^ {2}\}/m
-    )?.[1];
-    expect(base, '광휘 두 겹의 공통 규칙이 없다').toBeDefined();
+  // 광휘 겹은 버튼 뒤에 깔리므로 z-index가 음수여야 하고, 버튼에 클래스가
+  // 붙어야 CSS가 살아 있다. 둘 중 하나만 빠져도 눈으로는 "그냥 좀 약하네"로
+  // 보여 넘어가기 쉬운데, z-index가 뒤집히면 번짐이 아이콘을 덮어 로고가
+  // 시안 덩어리로 뭉개진다. 그래서 따로따로 못 박는다.
+  it('광휘 겹이 아이콘 뒤에 깔리고 버튼이 그 클래스를 갖는다', () => {
+    const glow = bloomLayerCss();
     expect(
-      base,
+      glow,
       '번짐이 아이콘 앞으로 나오면 로고가 뭉개진다. z-index를 음수로 둬라'
     ).toMatch(/z-index:\s*-\d/);
-    expect(base, '기본 상태에서 번짐이 보이면 안 된다').toMatch(
+    expect(glow, '기본 상태에서 번짐이 보이면 안 된다').toMatch(
       /opacity:\s*0\s*;/
     );
 
-    // 둥근 원반이 아니라 아이콘 실루엣을 따라가야 한다는 것이 이 광휘의
-    // 전부다. 마스크가 빠지면 조용히 사각형 번짐으로 돌아간다.
+    // 번짐이 로고 모양을 따라가야 한다. 마스크가 빠지면 조용히 사각형
+    // 번짐으로 돌아간다.
     expect(
-      base,
-      '광휘가 아이콘 실루엣을 안 따라간다. mask에 --skill-icon-src를 줘라'
+      glow,
+      '광휘가 로고 모양을 안 따라간다. mask에 --skill-icon-src를 줘라'
     ).toMatch(/mask:\s*var\(--skill-icon-src\)/);
 
-    // 각 겹은 서로 다른 배율과 흐림을 가져야 겹쳐서 번짐이 생긴다. 공통
-    // 규칙은 두 선택자를 한 줄씩 나열하므로, 색을 쥔 쪽이 그 겹의 고유
-    // 규칙이다. 그걸로 골라야 공통 규칙을 잘못 집지 않는다.
-    const scales: string[] = [];
-    for (const layer of ['before', 'after']) {
-      const body = [
-        ...css.matchAll(
-          new RegExp(
-            `^ {2}\\.skill-icon-button::${layer}\\s*\\{([\\s\\S]*?)^ {2}\\}`,
-            'gm'
-          )
-        ),
-      ]
-        .map((m) => m[1])
-        .find((b) => /background:/.test(b));
-      expect(body, `::${layer} 겹의 고유 규칙이 없다`).toBeDefined();
-      expect(body, `::${layer}에 흐림이 없다`).toMatch(/filter:\s*blur\(/);
-      const scale = body?.match(/scale\(([\d.]+)\)/)?.[1];
-      expect(scale, `::${layer}에 배율이 없다`).toBeDefined();
-      scales.push(scale!);
-    }
+    // 이 겹의 몸통은 아이콘에 완전히 가려져야 한다. 배율이 1을 넘으면
+    // 시안 도형이 비어져 나와, 사각형 로고는 사각형 테두리로 원형 로고는
+    // 원반으로 퍼진다. 사용자가 정확히 그걸 물렸다.
+    const rest = Number(glow.match(/scale\(([\d.]+)\)/)?.[1]);
+    expect(rest, '평상시 배율을 못 읽었다').not.toBeNaN();
     expect(
-      scales[0],
-      '두 겹의 배율이 같으면 겹칠 이유가 없다. 바깥이 더 넓어야 한다'
-    ).not.toBe(scales[1]);
-    expect(Number(scales[0])).toBeGreaterThan(Number(scales[1]));
+      rest,
+      `배율 ${rest}면 광휘 도형이 아이콘 밖으로 비어져 나온다`
+    ).toBeLessThanOrEqual(1);
+
+    // 바깥으로 나가는 것은 drop-shadow뿐이어야 한다. blur는 몸통 자체를
+    // 흐리게 만들어 도형이 그대로 커진 것처럼 보인다.
+    expect(glow, '광휘가 drop-shadow가 아니다').toMatch(
+      /filter:\s*drop-shadow\(/
+    );
+    expect(
+      glow,
+      'blur는 몸통을 통째로 번지게 해서 도형 티가 난다. drop-shadow를 써라'
+    ).not.toMatch(/blur\(/);
 
     // 클래스가 버튼에 없으면 위 CSS는 전부 죽은 코드다. 마스크 소스도
     // 버튼이 쥐어야 가상 요소가 읽는다.
@@ -388,20 +399,11 @@ describe('SkillsSection 카테고리 아이콘 그리드', () => {
   // 가리키는 것이 사라진다. 그래서 활성 클래스를 따라가야 한다. CSS의
   // 선택자와 React의 상태 둘 다 봐야 이 계약이 지켜진다.
   it('마우스를 떼도 광휘가 유지된다(활성 클래스를 따라간다)', async () => {
-    const css = readFileSync(
-      resolve(process.cwd(), 'styles/design-tokens.css'),
-      'utf8'
-    );
-    for (const layer of ['before', 'after']) {
-      expect(
-        css,
-        `::${layer} 광휘를 켜는 규칙이 활성 클래스를 따라가지 않는다`
-      ).toMatch(
-        new RegExp(
-          `\\.skill-icon-button:has\\(\\.skill-icon-active\\)::${layer}\\s*\\{`
-        )
-      );
-    }
+    const css = designTokensCss();
+    expect(
+      css,
+      '광휘를 켜는 규칙이 활성 클래스를 따라가지 않는다'
+    ).toMatch(/\.skill-icon-button:has\(\.skill-icon-active\)::before\s*\{/);
     expect(
       css,
       '광휘가 :hover로 켜지면 마우스를 떼는 순간 꺼진다'
@@ -423,52 +425,54 @@ describe('SkillsSection 카테고리 아이콘 그리드', () => {
     ).toMatch(/\bskill-icon-active\b/);
   });
 
-  // 광휘는 아이콘 크기에서 시작해 밖으로 뻗는다. 이 저장소는 언제나
-  // 움직임과 reduce 방어를 짝지어 왔다. fill-mode도 못 박는다. forwards는
-  // 끝난 뒤 transform을 남겨 position: fixed 자손의 컨테이닝 블록이 되는데,
-  // 섹션 전환에서 이미 한 번 데었다.
+  // 광휘는 아이콘 안쪽에서 시작해 밖으로 뻗는다. 이 저장소는 언제나 움직임과
+  // reduce 방어를 짝지어 왔다. fill-mode도 못 박는다. forwards는 끝난 뒤
+  // transform을 남겨 position: fixed 자손의 컨테이닝 블록이 되는데, 섹션
+  // 전환에서 이미 한 번 데었다.
   it('광휘 애니메이션에 backwards와 reduce 방어가 짝지어져 있다', () => {
-    const css = readFileSync(
-      resolve(process.cwd(), 'styles/design-tokens.css'),
-      'utf8'
-    );
+    const css = designTokensCss();
     const keyframes = css.match(
       /@keyframes skill-bloom\s*\{([\s\S]*?)^ {2}\}/m
     )?.[1];
     expect(keyframes, 'skill-bloom keyframes가 없다').toBeDefined();
     expect(
       keyframes,
-      'to 프레임을 두면 각 겹의 최종 배율을 규칙에서 못 쥔다'
+      'to 프레임을 두면 최종 배율을 규칙에서 못 쥔다'
     ).not.toMatch(/\bto\b|100%/);
-    expect(keyframes, '아이콘 크기에서 시작해야 뻗어 나온다').toMatch(
-      /scale\(1\)/
-    );
 
-    for (const layer of ['before', 'after']) {
-      const on = css.match(
-        new RegExp(
-          `\\.skill-icon-button:has\\(\\.skill-icon-active\\)::${layer}\\s*\\{([\\s\\S]*?)^ {2}\\}`,
-          'm'
-        )
-      )?.[1];
-      expect(on, `::${layer}를 켜는 규칙이 없다`).toBeDefined();
-      expect(on, `::${layer}에 광휘 애니메이션이 없다`).toMatch(
-        /animation:\s*skill-bloom/
-      );
-      expect(
-        on,
-        `::${layer}에 forwards나 both를 쓰면 transform이 남는다`
-      ).not.toMatch(/forwards|both/);
-      expect(on, `::${layer}에 backwards가 없다`).toMatch(/backwards/);
-    }
+    // 시작 배율이 평상시보다 작아야 번짐이 밖으로 뻗는다. 같거나 크면
+    // 그냥 켜지거나 오히려 오므라든다.
+    const from = Number(keyframes?.match(/scale\(([\d.]+)\)/)?.[1]);
+    const rest = Number(bloomLayerCss().match(/scale\(([\d.]+)\)/)?.[1]);
+    expect(from, '시작 배율을 못 읽었다').not.toBeNaN();
+    expect(
+      from,
+      `시작 ${from}이 평상시 ${rest}보다 작아야 밖으로 뻗는다`
+    ).toBeLessThan(rest);
+
+    const on = css.match(
+      /\.skill-icon-button:has\(\.skill-icon-active\)::before\s*\{([\s\S]*?)^ {2}\}/m
+    )?.[1];
+    expect(on, '광휘를 켜는 규칙이 없다').toBeDefined();
+    expect(on, '광휘 애니메이션이 없다').toMatch(/animation:\s*skill-bloom/);
+    expect(
+      on,
+      'forwards나 both를 쓰면 transform이 남는다'
+    ).not.toMatch(/forwards|both/);
+    expect(on, 'backwards가 없다').toMatch(/backwards/);
+
+    // 움직이는 것은 transform과 opacity뿐이어야 한다. drop-shadow 반경을
+    // 전환하면 매 프레임 알파를 다시 흐리게 만든다. START 호버가 끊겼던
+    // 원인이 그것이었다(파티클 잔소음 브리프 6차).
+    expect(
+      keyframes,
+      'keyframes에서 filter를 건드리면 매 프레임 다시 흐려진다'
+    ).not.toMatch(/filter|drop-shadow/);
 
     const reduce = css.match(
       /@media \(prefers-reduced-motion: reduce\) \{\s*\n\s*\.skill-icon-button:has\([\s\S]*?\n {2}\}/
     )?.[0];
-    expect(
-      reduce,
-      '광휘 애니메이션에 reduce 방어가 없다'
-    ).toBeDefined();
+    expect(reduce, '광휘 애니메이션에 reduce 방어가 없다').toBeDefined();
     expect(reduce, 'reduce에서 애니메이션을 꺼야 한다').toMatch(
       /animation:\s*none/
     );
