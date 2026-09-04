@@ -96,8 +96,8 @@ function designTokensCss(): string {
   return readFileSync(resolve(process.cwd(), 'styles/design-tokens.css'), 'utf8');
 }
 
-// 광휘 두 겹의 공통 규칙 본문. 겹마다 다른 것은 drop-shadow 반경뿐이라
-// 나머지 계약은 전부 여기 모여 있다.
+// 광휘 두 겹의 공통 규칙 본문. 위치와 켜고 끄는 계약이 여기 모여 있다.
+// 크기와 배경은 겹마다 다르다. 바깥 겹은 고정 원반, 안쪽 겹은 로고 실루엣.
 function bloomLayerCss(): string {
   const body = designTokensCss().match(
     /^ {2}\.skill-icon-button::before,\n {2}\.skill-icon-button::after\s*\{([\s\S]*?)^ {2}\}/m
@@ -107,7 +107,7 @@ function bloomLayerCss(): string {
 }
 
 // 겹 하나의 고유 규칙 본문. 공통 규칙이 두 선택자를 한 줄씩 나열하므로
-// 반경을 쥔 쪽을 골라야 공통 규칙을 잘못 집지 않는다.
+// 크기를 쥔 쪽을 골라야 공통 규칙을 잘못 집지 않는다.
 function bloomShadowCss(layer: 'before' | 'after'): string {
   const bodies = [
     ...designTokensCss().matchAll(
@@ -117,7 +117,7 @@ function bloomShadowCss(layer: 'before' | 'after'): string {
       )
     ),
   ].map((m) => m[1]);
-  const body = bodies.find((b) => /filter:/.test(b));
+  const body = bodies.find((b) => /width:/.test(b));
   if (!body) throw new Error(`::${layer} 겹의 고유 규칙이 없다`);
   return body;
 }
@@ -373,11 +373,22 @@ describe('SkillsSection 카테고리 아이콘 그리드', () => {
       /opacity:\s*0\s*;/
     );
 
-    // 번짐이 로고 모양을 따라가야 한다. 실루엣은 배경 이미지로 얻는다.
+    // 안쪽 겹만 로고 모양을 따라간다. 실루엣은 배경 이미지로 얻는다.
+    // 바깥 겹은 일부러 실루엣을 안 쓴다. drop-shadow는 알파 면적에 비례해
+    // 빛나서 원이 꽉 찬 Next.js와 획만 가는 MySQL이 몇 배씩 차이 났다.
+    // 여기에 --skill-icon-src가 되돌아오면 그 차이도 같이 돌아온다.
     expect(
-      glow,
-      '광휘가 로고 모양을 안 따라간다. background에 --skill-icon-src를 줘라'
+      bloomShadowCss('after'),
+      '광휘가 로고 모양을 안 따라간다. ::after의 background에 --skill-icon-src를 줘라'
     ).toMatch(/background:\s*var\(--skill-icon-src\)/);
+    expect(
+      bloomShadowCss('before'),
+      '바깥 겹이 실루엣을 쓰면 아이콘마다 광휘 세기가 달라진다'
+    ).not.toMatch(/--skill-icon-src/);
+    expect(
+      bloomShadowCss('before'),
+      '바깥 겹은 17개가 공유하는 고정 원반이어야 한다'
+    ).toMatch(/background:\s*var\(--skill-icon-ambient\)/);
 
     // 이 겹에 마스크를 걸면 안 된다. CSS는 filter 다음에 mask를 적용하므로
     // 마스크가 방금 만든 그림자를 도로 잘라내고, 광휘가 아이콘 밖으로 한
@@ -395,27 +406,33 @@ describe('SkillsSection 카테고리 아이콘 그리드', () => {
       '배율을 바꾸면 파낸 구멍이 어긋나 로고 글자가 메워진다'
     ).not.toMatch(/scale\(/);
 
-    // 바깥으로 나가는 것은 drop-shadow뿐이어야 한다. blur는 몸통 자체를
-    // 흐리게 만들어 도형이 그대로 커진 것처럼 보인다.
-    for (const layer of ['before', 'after'] as const) {
-      const shadow = bloomShadowCss(layer);
-      expect(shadow, `::${layer}가 drop-shadow가 아니다`).toMatch(
-        /filter:\s*drop-shadow\(/
-      );
-      expect(
-        shadow,
-        `::${layer}의 blur는 몸통을 통째로 번지게 해서 도형 티가 난다`
-      ).not.toMatch(/blur\(/);
-    }
-
-    // 두 겹의 반경이 같으면 겹칠 이유가 없다. 넓은 쪽과 좁은 쪽이 있어야
-    // 심지에서 바깥까지 자연스럽게 떨어진다.
-    const radius = (layer: 'before' | 'after') =>
-      Number(bloomShadowCss(layer).match(/drop-shadow\(0 0 (\d+)px/)?.[1]);
+    // 실루엣에서 바깥으로 나가는 것은 drop-shadow뿐이어야 한다. blur는
+    // 몸통 자체를 흐리게 만들어 도형이 그대로 커진 것처럼 보인다.
+    const shadow = bloomShadowCss('after');
+    expect(shadow, '::after가 drop-shadow가 아니다').toMatch(
+      /filter:\s*drop-shadow\(/
+    );
     expect(
-      radius('before'),
+      shadow,
+      '::after의 blur는 몸통을 통째로 번지게 해서 도형 티가 난다'
+    ).not.toMatch(/blur\(/);
+
+    // 패스가 하나로 줄면 가는 획이 다시 어두워진다. 알파가 1에서 멈추므로
+    // 첫 패스가 획 사이를 메우는 동안 꽉 찬 로고는 더 밝아지지 못한다.
+    // 그 비대칭이 세기 차이를 좁히는 장치다.
+    expect(
+      shadow.match(/drop-shadow\(/g)?.length ?? 0,
+      '::after의 drop-shadow가 한 겹이면 가는 획 로고가 다시 어두워진다'
+    ).toBeGreaterThanOrEqual(2);
+
+    // 두 겹의 크기가 같으면 겹칠 이유가 없다. 넓은 원반과 좁은 실루엣이
+    // 있어야 심지에서 바깥까지 자연스럽게 떨어진다.
+    const size = (layer: 'before' | 'after') =>
+      Number(bloomShadowCss(layer).match(/width:\s*(\d+)px/)?.[1]);
+    expect(
+      size('before'),
       '::before가 넓은 겹이어야 한다'
-    ).toBeGreaterThan(radius('after'));
+    ).toBeGreaterThan(size('after'));
 
     // 클래스가 버튼에 없으면 위 CSS는 전부 죽은 코드다. 마스크 소스도
     // 버튼이 쥐어야 가상 요소가 읽는다.
