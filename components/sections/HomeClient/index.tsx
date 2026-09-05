@@ -440,7 +440,9 @@ export default function HomeClient() {
 
       <main
         className={`section-stage${
-          active === SECTION_IDS.PROJECTS ? ' section-stage-horizontal' : ''
+          active === SECTION_IDS.PROJECTS || active === SECTION_IDS.EXPERIENCE
+            ? ' section-stage-horizontal'
+            : ''
         }`}
         data-route-resolved={routeResolved}
         data-motion-ready={motionReady}

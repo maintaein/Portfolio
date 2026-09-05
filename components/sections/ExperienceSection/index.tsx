@@ -1,196 +1,131 @@
 'use client';
 
-import { motion, useInView } from 'framer-motion';
-import { useRef } from 'react';
-import Paragraph from '@/components/atoms/Paragraph/index';
-import Badge from '@/components/atoms/Badge/index';
-import { SectionHeader } from '@/components/blocks';
-import { Experience } from '@/types';
-import { typeLabels } from '@/types';
+import type { CSSProperties } from 'react';
 import { experiences } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
 
-const typeColors: Record<Experience['type'], { dot: string; ring: string; badge: string }> = {
-  'full-time': { dot: 'bg-blue-500',   ring: 'ring-blue-200',   badge: 'text-blue-500' },
-  'intern':    { dot: 'bg-violet-500', ring: 'ring-violet-200', badge: 'text-violet-500' },
-  'student':   { dot: 'bg-emerald-500',ring: 'ring-emerald-200',badge: 'text-emerald-500' },
+// 마스크 원본 크기. 슬롯 높이를 44px로 고정하고 폭은 여기서 비율로
+// 계산한다. contain 마스크는 폭이 남으면 그만큼 죽은 여백을 만들 뿐이라,
+// 정사각 타일에 넣으면 4:1 워드마크가 11px까지 줄어 읽히지 않는다.
+const LOGO_HEIGHT = 44;
+const LOGO_MAX_WIDTH = 120;
+const LOGOS: Record<string, { file: string; width: number; height: number }> = {
+  FASOO: { file: 'fasoo', width: 428, height: 104 },
+  SSAFY: { file: 'ssafy', width: 184, height: 145 },
+  KUA: { file: 'kua', width: 216, height: 176 },
 };
+
+// 노드 한 칸의 폭. 896px(max-w-4xl) 안에서 두 칸이 온전히 보이고 세 번째
+// 칸이 살짝 걸쳐 보여야 가로로 더 있다는 것이 읽힌다.
+const NODE_WIDTH = 'clamp(280px, 76vw, 380px)';
+
+function logoStyle(logo: string): CSSProperties {
+  const { file, width, height } = LOGOS[logo];
+  return {
+    '--org-logo-src': `url(/logos-mono/${file}.png)`,
+    width: Math.min(LOGO_MAX_WIDTH, Math.round((LOGO_HEIGHT * width) / height)),
+  } as CSSProperties;
+}
 
 export default function ExperienceSection() {
   return (
-    <section id={SECTION_IDS.EXPERIENCE} className="py-12 sm:py-16 lg:py-20">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6">
-        <SectionHeader
-          title="EXPERIENCES"
-          subtitle="실무와 교육을 통해 성장해왔습니다"
-        />
+    <section id={SECTION_IDS.EXPERIENCE} className="py-6 lg:py-8">
+      <div className="mx-auto max-w-4xl px-4 sm:px-6">
+        <h2 className="mb-5 text-t2 font-bold uppercase tracking-widest text-[var(--color-text-primary)] lg:mb-6">
+          Experience
+        </h2>
 
-        {/* 타임라인 컨테이너 */}
-        <div className="relative">
-          {/* 중앙 수직 라인 */}
-          <TimelineLine count={experiences.length} />
+        {/* data-section-swipe-ignore가 없으면 useSectionSwipe가 가로 스와이프를
+            먼저 집어 삼켜 섹션이 넘어간다. tabIndex는 스크롤 컨테이너를
+            키보드로도 움직이게 한다. */}
+        <div
+          role="region"
+          aria-label="경력 타임라인"
+          tabIndex={0}
+          data-section-swipe-ignore
+          className="section-horizontal-scroll overflow-x-auto pb-2 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)]"
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        >
+          <ol
+            className="experience-rail"
+            style={{ gridTemplateColumns: `repeat(${experiences.length}, ${NODE_WIDTH})` }}
+          >
+            <li aria-hidden className="experience-axis" />
 
-          <div className="space-y-10 sm:space-y-14">
-            {experiences.map((exp, index) => (
-              <TimelineItem key={exp.id} experience={exp} index={index} />
-            ))}
-          </div>
+            {experiences.map((experience, index) => {
+              const current = experience.period.endsWith('현재');
+
+              return (
+                <li
+                  key={experience.id}
+                  data-experience-node={experience.company}
+                  data-experience-side={index % 2 === 0 ? 'above' : 'below'}
+                  data-experience-current={current ? 'true' : undefined}
+                  className="experience-node pr-8"
+                  style={{ gridColumn: index + 1 }}
+                >
+                  <p
+                    data-experience-field="period"
+                    className="flex items-center gap-2 text-t7 font-medium uppercase tracking-widest text-[var(--color-text-secondary)]"
+                  >
+                    {experience.period}
+                    {current && (
+                      <span className="text-[var(--color-cyan-hi)]">CURRENT</span>
+                    )}
+                  </p>
+
+                  <div
+                    data-experience-field="company"
+                    className="mt-2 flex items-center gap-3"
+                  >
+                    <span
+                      aria-hidden
+                      data-experience-logo
+                      className="org-logo shrink-0"
+                      style={logoStyle(experience.logo ?? 'FASOO')}
+                    />
+                    <h3 className="text-t5 font-semibold text-[var(--color-text-primary)]">
+                      {experience.company}
+                    </h3>
+                  </div>
+
+                  <p
+                    data-experience-field="position"
+                    className="mt-1 text-t6 text-[var(--color-text-secondary)]"
+                  >
+                    {experience.position}
+                  </p>
+
+                  <ul
+                    data-experience-field="responsibilities"
+                    className="mt-3 space-y-1.5 border-t border-[var(--color-hairline)] pt-3"
+                  >
+                    {experience.responsibilities.map((item) => (
+                      <li
+                        key={item}
+                        className="text-t6 leading-relaxed text-[var(--color-text-secondary)]"
+                      >
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+
+                  <ul data-experience-field="skills" className="mt-3 flex flex-wrap gap-1.5">
+                    {(experience.skills ?? []).map((skill) => (
+                      <li
+                        key={skill}
+                        className="border border-[var(--color-hairline)] px-2 py-0.5 text-t8 text-[var(--color-text-secondary)]"
+                      >
+                        {skill}
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              );
+            })}
+          </ol>
         </div>
       </div>
     </section>
-  );
-}
-
-function TimelineLine({ count }: { count: number }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const isInView = useInView(ref, { once: true, amount: 0.1 });
-
-  return (
-    <div
-      ref={ref}
-      className="absolute left-4 sm:left-1/2 top-0 bottom-0 w-px -translate-x-1/2 bg-grey-100"
-      aria-hidden
-    >
-      <motion.div
-        className="w-full bg-gradient-to-b from-blue-400 via-violet-400 to-emerald-400 origin-top"
-        initial={{ scaleY: 0 }}
-        animate={isInView ? { scaleY: 1 } : { scaleY: 0 }}
-        transition={{ duration: count * 0.38, ease: 'easeOut', delay: 0.2 }}
-        style={{ height: '100%' }}
-      />
-    </div>
-  );
-}
-
-interface TimelineItemProps {
-  experience: Experience;
-  index: number;
-}
-
-function TimelineItem({ experience: exp, index }: TimelineItemProps) {
-  const colors = typeColors[exp.type];
-  // 짝수: 왼쪽, 홀수: 오른쪽 (데스크톱만 교차)
-  const isLeft = index % 2 === 0;
-
-  return (
-    <div className="relative flex items-start gap-0 sm:gap-0">
-      {/* 모바일: 좌측 dot + 우측 카드 */}
-      {/* 데스크톱: 교차 레이아웃 */}
-
-      {/* 데스크톱 왼쪽 영역 */}
-      <div className="hidden sm:flex flex-1 justify-end pr-8">
-        {isLeft && <CardContent exp={exp} colors={colors} index={index} />}
-      </div>
-
-      {/* 중앙 dot */}
-      <div className="relative z-10 flex-shrink-0">
-        <TimelineDot exp={exp} colors={colors} index={index} />
-      </div>
-
-      {/* 데스크톱 오른쪽 영역 */}
-      <div className="hidden sm:flex flex-1 pl-8">
-        {!isLeft && <CardContent exp={exp} colors={colors} index={index} />}
-      </div>
-
-      {/* 모바일 카드 */}
-      <div className="sm:hidden flex-1 pl-6">
-        <CardContent exp={exp} colors={colors} index={index} />
-      </div>
-    </div>
-  );
-}
-
-function TimelineDot({ colors, index }: { exp: Experience; colors: typeof typeColors[Experience['type']]; index: number }) {
-  return (
-    <motion.div
-      className={`w-4 h-4 rounded-full ${colors.dot} ring-4 ${colors.ring} shadow-sm`}
-      initial={{ scale: 0, opacity: 0 }}
-      whileInView={{ scale: 1, opacity: 1 }}
-      viewport={{ once: true, amount: 0.8 }}
-      transition={{ duration: 0.35, delay: index * 0.12 + 0.15, ease: [0.22, 1, 0.36, 1] }}
-    />
-  );
-}
-
-function CardContent({
-  exp,
-  colors,
-  index,
-}: {
-  exp: Experience;
-  colors: typeof typeColors[Experience['type']];
-  index: number;
-}) {
-  const isLeft = index % 2 === 0;
-
-  return (
-    <motion.div
-      className="w-full max-w-sm bg-white border border-grey-100 rounded-2xl p-5 shadow-sm"
-      initial={{ opacity: 0, x: isLeft ? -24 : 24 }}
-      whileInView={{ opacity: 1, x: 0 }}
-      viewport={{ once: true, amount: 0.2 }}
-      transition={{ duration: 0.48, delay: index * 0.1, ease: [0.22, 1, 0.36, 1] }}
-    >
-      {/* 헤더 */}
-      <div className="flex items-start gap-3 mb-3">
-        {/* 로고 박스 */}
-        <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-grey-50 border border-grey-100 flex items-center justify-center">
-          <span className="text-[10px] font-bold text-grey-500 tracking-tight text-center leading-tight px-1">
-            {exp.logo}
-          </span>
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap mb-0.5">
-            <span className="text-[15px] font-bold text-grey-900 leading-tight">
-              {exp.company}
-            </span>
-            <Badge color={typeLabels[exp.type].color} variant="weak" size="small">
-              {typeLabels[exp.type].label}
-            </Badge>
-          </div>
-          <p className="text-[12px] text-grey-600 mb-0.5">{exp.position}</p>
-          <p className={`text-[11px] font-medium ${colors.badge}`}>{exp.period}</p>
-        </div>
-      </div>
-
-      {/* 구분선 */}
-      <div className="h-px bg-grey-100 mb-3" />
-
-      {/* 설명 */}
-      <Paragraph variant="t6" color="grey-700" className="mb-3 leading-relaxed text-[12px]">
-        {exp.description}
-      </Paragraph>
-
-      {/* 책임 항목 */}
-      {exp.responsibilities.length > 0 && (
-        <ul className="space-y-1.5 mb-3">
-          {exp.responsibilities.map((resp, idx) => (
-            <motion.li
-              key={idx}
-              className="flex items-start gap-2"
-              initial={{ opacity: 0, x: -8 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true, amount: 0.5 }}
-              transition={{ duration: 0.28, delay: index * 0.1 + idx * 0.04 + 0.2, ease: 'easeOut' }}
-            >
-              <span className={`mt-[5px] w-1 h-1 rounded-full flex-shrink-0 ${colors.dot}`} />
-              <span className="text-[11px] text-grey-600 leading-relaxed">{resp}</span>
-            </motion.li>
-          ))}
-        </ul>
-      )}
-
-      {/* 스킬 태그 */}
-      {exp.skills && exp.skills.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {exp.skills.map((skill) => (
-            <Badge key={skill} color="gray" variant="weak" size="small">
-              {skill}
-            </Badge>
-          ))}
-        </div>
-      )}
-    </motion.div>
   );
 }

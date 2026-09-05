@@ -1264,4 +1264,98 @@
       animation: none;
     }
   }
+
+  /* Experience 지그재그 타임라인(계획 5 T4). 카드 상자를 걷어냈으니 노드를
+     묶어 주는 것은 축과 줄기뿐이다. 행을 auto 셋으로 두는 이유는 1fr이면
+     내용이 적은 행까지 큰 행 높이에 맞춰 늘어나서 축이 화면 한가운데로
+     내려앉기 때문이다. 열 너비는 컴포넌트가 인라인 style로 준다.
+     grid-column: 1 / -1인 축이 실제로 모든 열을 덮으려면 열이 정의돼
+     있어야 하는데, 열 개수는 데이터가 정하므로 CSS가 알 수 없다. */
+  .experience-rail {
+    display: grid;
+    grid-template-rows: auto 1px auto;
+  }
+
+  .experience-axis {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    background: var(--color-hairline);
+  }
+
+  /* 줄기(::before)와 점(::after)이 노드를 축에 붙인다. 점은 7px이라
+     왼쪽으로 3px 밀어야 중심이 1px 축의 한가운데에 온다. 위아래로도
+     4px 밀어 축 행을 반씩 물게 한다. */
+  .experience-node {
+    position: relative;
+  }
+
+  .experience-node::before,
+  .experience-node::after {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+  }
+
+  .experience-node::before {
+    left: 0;
+    width: 1px;
+    height: 24px;
+    background: var(--color-hairline);
+  }
+
+  .experience-node::after {
+    left: -3px;
+    width: 7px;
+    height: 7px;
+    border-radius: 9999px;
+    background: var(--color-hairline);
+  }
+
+  .experience-node[data-experience-side="above"] {
+    grid-row: 1;
+    align-self: end;
+    padding-bottom: 24px;
+  }
+
+  .experience-node[data-experience-side="above"]::before {
+    bottom: 0;
+  }
+
+  .experience-node[data-experience-side="above"]::after {
+    bottom: -4px;
+  }
+
+  .experience-node[data-experience-side="below"] {
+    grid-row: 3;
+    align-self: start;
+    padding-top: 24px;
+  }
+
+  .experience-node[data-experience-side="below"]::before {
+    top: 0;
+  }
+
+  .experience-node[data-experience-side="below"]::after {
+    top: -4px;
+  }
+
+  /* 진행 중인 노드의 점 하나만 시안이다. 계획 A-1에서 시안은 한 번에
+     한 상태만 쥔다. */
+  .experience-node[data-experience-current="true"]::after {
+    background: var(--color-cyan-core);
+    box-shadow: 0 0 8px var(--color-cyan-core);
+  }
+
+  /* 조직 로고. .skill-icon과 같은 마스크 방식이라 알파가 모양을 쥐고
+     있으면 래스터 PNG도 그대로 칠해진다. 높이만 44px로 고정하고 폭은
+     컴포넌트가 원본 비율로 계산해 인라인으로 준다. 정사각 타일에 넣으면
+     4:1 워드마크가 11px까지 줄어 읽히지 않는다. 색은 본문색이다.
+     시안은 위 CURRENT 점이 이미 쓰고 있다. */
+  .org-logo {
+    display: block;
+    height: 44px;
+    background: var(--color-text-primary);
+    -webkit-mask: var(--org-logo-src) center / contain no-repeat;
+    mask: var(--org-logo-src) center / contain no-repeat;
+  }
 }
