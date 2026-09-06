@@ -60,7 +60,7 @@ export default function ExperienceSection() {
                   key={experience.id}
                   data-experience-node={experience.company}
                   data-experience-current={current ? 'true' : undefined}
-                  className="experience-node pr-8"
+                  className="experience-node pl-4 pr-8"
                   style={{ gridColumn: index + 1 }}
                 >
                   <p

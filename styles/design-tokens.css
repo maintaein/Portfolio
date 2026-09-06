@@ -1299,9 +1299,11 @@
         no-repeat;
   }
 
-  /* 노드마다 큰눈금(::before)과 기준선 위의 점(::after)이 선다. 큰눈금은
-     축 높이를 통째로 쓰고 본문색이라 잔눈금과 한눈에 구별된다. 점은 7px이라
-     좌우로 3px, 위로 4px 밀어야 중심이 1px 기준선 한가운데에 온다. */
+  /* 노드마다 큰눈금 겸 구간선(::before)과 기준선 위의 점(::after)이 선다.
+     한 줄로 눕히고 나니 이웃한 경력의 경계가 32px 여백뿐이라 세 덩이가
+     한 문단처럼 읽혔다. ::before를 축 위 14px에서 노드 바닥까지 늘려
+     구간을 나누는 세로선으로 겸하게 한다. 점은 7px이라 좌우로 3px,
+     위로 4px 밀어야 중심이 1px 기준선 한가운데에 온다. */
   .experience-node {
     position: relative;
     grid-row: 2;
@@ -1316,12 +1318,20 @@
     pointer-events: none;
   }
 
+  /* 위 14px은 축 높이를 통째로 쓰는 큰눈금이라 본문색이고, 그 아래는
+     구간선이라 헤어라인이다. 끝까지 같은 굵기로 그으면 표의 칸막이처럼
+     보여서 마스크로 아래 30%를 흘려보낸다. */
   .experience-node::before {
     top: -14px;
+    bottom: 0;
     left: 0;
     width: 1px;
-    height: 14px;
-    background: var(--color-text-secondary);
+    background: linear-gradient(
+      var(--color-text-secondary) 0 14px,
+      var(--color-hairline) 14px
+    );
+    -webkit-mask: linear-gradient(#000 70%, transparent);
+    mask: linear-gradient(#000 70%, transparent);
   }
 
   .experience-node::after {
@@ -1335,7 +1345,10 @@
 
   /* 진행 중인 노드만 시안이다. 계획 A-1에서 시안은 한 번에 한 상태만 쥔다. */
   .experience-node[data-experience-current="true"]::before {
-    background: var(--color-cyan-core);
+    background: linear-gradient(
+      var(--color-cyan-core) 0 14px,
+      var(--color-hairline) 14px
+    );
   }
 
   .experience-node[data-experience-current="true"]::after {

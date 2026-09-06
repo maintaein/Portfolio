@@ -665,6 +665,7 @@ class App {
   // 쓰면 1배 고정이라 느리게 만들 수 없다.
   baseTime: number;
   idleScale: number;
+  idleScaleTarget: number;
   timeOffset: number;
   hasValidSize: boolean;
 
@@ -763,6 +764,7 @@ class App {
     this.speedUp = 0;
     this.baseTime = 0;
     this.idleScale = IDLE_TIME_SCALE;
+    this.idleScaleTarget = IDLE_TIME_SCALE;
     this.timeOffset = 0;
 
     this.tick = this.tick.bind(this);
@@ -970,10 +972,14 @@ class App {
     this.speedUpTarget = 0;
   }
 
-  // 체류 흐름만 바꾼다. boost가 쌓는 timeOffset은 건드리지 않으므로 전환
-  // 도중에 호출해도 진행 중인 가속이 끊기지 않는다.
+  // 목표만 옮긴다. 값을 즉시 갈아 끼우면 오버뷰와 섹션의 배율 차이(0.3 대
+  // 0.1)가 active가 바뀌는 프레임에서 한 번에 튄다. overview에서 섹션으로,
+  // 섹션에서 overview로 넘어갈 때만 나던 그 단차 때문에 두 방향의 전환이
+  // 섹션끼리의 전환과 다르게 느껴졌다. speedUp과 같은 상수로 수렴시키면
+  // 세 방향의 가속 체감이 같아진다. boost가 쌓는 timeOffset은 건드리지
+  // 않으므로 전환 도중에 호출해도 진행 중인 가속은 끊기지 않는다.
   setIdleScale(scale: number) {
-    this.idleScale = scale;
+    this.idleScaleTarget = scale;
   }
 
   onMouseDown(ev: MouseEvent) {
@@ -1007,6 +1013,7 @@ class App {
     // 1에 가까워져 한 프레임에 거의 다 메웠다 — 방향이 뒤집혀 있었다.
     const speedSmoothing = 1 - Math.exp(-SPEED_SMOOTHING_RATE * delta);
     this.speedUp += (this.speedUpTarget - this.speedUp) * speedSmoothing;
+    this.idleScale += (this.idleScaleTarget - this.idleScale) * speedSmoothing;
 
     this.baseTime += delta * this.idleScale;
     this.timeOffset += this.speedUp * delta;
