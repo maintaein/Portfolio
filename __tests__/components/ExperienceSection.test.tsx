@@ -232,6 +232,29 @@ describe('ExperienceSection', () => {
     expect(findTailwindPaletteColorUtilities(SOURCE)).toEqual([]);
   });
 
+  // 마름모의 광휘와 에너지 링은 순수 CSS라 jsdom이 실행하지 않는다.
+  // 선언이 사라지면 화면에서 조용히 멈출 뿐이므로 스타일시트를 읽어
+  // 확인한다. 모션을 줄이라고 한 사용자에게는 멈춰 있어야 한다.
+  it('마름모에 광휘와 에너지 링 애니메이션이 걸려 있다', () => {
+    const css = readFileSync(resolve(process.cwd(), 'styles/design-tokens.css'), 'utf8');
+
+    expect(css).toMatch(/@keyframes experience-node-charge/);
+    expect(css).toMatch(/@keyframes experience-node-ring/);
+    expect(css).toMatch(/animation: experience-node-charge/);
+    expect(css).toMatch(/animation: experience-node-ring/);
+
+    const block = css.slice(css.indexOf('.experience-node::before'));
+    const reduced = block.slice(block.indexOf('@media (prefers-reduced-motion: reduce)'));
+    expect(reduced).toContain('.experience-node::before');
+    expect(reduced).toContain('animation: none');
+    expect(reduced).toContain('.experience-node::after');
+  });
+
+  it('섹션이 어두운 판 위에 올라간다', () => {
+    const { container } = render(<ExperienceSection />);
+    expect(container.querySelector('section')!.className).toContain('section-plate');
+  });
+
   it('섹션 id를 유지한다', () => {
     const { container } = render(<ExperienceSection />);
     expect(container.querySelector(`#${SECTION_IDS.EXPERIENCE}`)).not.toBeNull();

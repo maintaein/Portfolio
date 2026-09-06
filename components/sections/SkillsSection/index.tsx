@@ -37,13 +37,17 @@ export default function SkillsSection() {
     setPinnedCategory((current) => (current === label ? null : label));
   }
 
+  // min-h-full과 자식의 m-auto가 세로 가운데 정렬이다. flex의
+  // items-center를 쓰면 내용이 상자보다 길 때 위쪽이 잘려 스크롤로도
+  // 닿지 못한다. margin auto는 그 경우 정렬을 포기하고 위에서부터
+  // 흐르므로 잘리지 않는다.
   return (
     <section
       id={SECTION_IDS.SKILLS}
       aria-labelledby="skills-heading"
-      className="py-6 lg:py-8"
+      className="flex min-h-full py-6 lg:py-8"
     >
-      <div className="mx-auto max-w-4xl px-4 sm:px-6">
+      <div className="section-plate m-auto w-full max-w-4xl px-4 py-6 sm:px-6">
         {/* 화면에서는 뺀 제목. 섹션 이름을 쥔 유일한 요소라 접근성 트리에는
             남긴다. AboutSection도 같은 방식이다. */}
         <h2 id="skills-heading" className="sr-only">

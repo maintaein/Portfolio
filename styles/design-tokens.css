@@ -574,6 +574,14 @@
     touch-action: pan-x pan-y pinch-zoom;
   }
 
+  /* 콘텐츠가 앉는 상자를 한 겹 더 어둡게 깐다. Hyperspeed가 섹션 체류
+     중 35%로 물러나도 광선이 본문 뒤를 지나가는 것은 그대로라, 글자와
+     배경을 떼어 놓으려면 검정을 한 장 더 넣어야 한다. 전 섹션 공통값이라
+     여기 한 군데서 쥔다. */
+  .section-plate {
+    background: rgb(0 0 0 / 0.55);
+  }
+
   .section-scroll {
     position: absolute;
     inset: 0;
@@ -1336,9 +1344,12 @@
     );
   }
 
-  /* 축 위의 마름모. 카드 왼쪽 바깥 28px에 중심이 온다. 카드가 세로 가운데
-     정렬이라 카드의 50%가 곧 축이 지나는 높이다. */
-  .experience-node::before {
+  /* 축 위의 마름모(::before)와 그 자리에서 퍼지는 에너지 링(::after).
+     카드 왼쪽 바깥 28px에 중심이 온다. 카드가 세로 가운데 정렬이라
+     카드의 50%가 곧 축이 지나는 높이다. 링은 같은 자리 같은 크기에서
+     출발해 밖으로 커지므로 위치 값을 둘이 공유한다. */
+  .experience-node::before,
+  .experience-node::after {
     content: "";
     position: absolute;
     top: 50%;
@@ -1346,14 +1357,87 @@
     width: 12px;
     height: 12px;
     transform: translate(-50%, -50%) rotate(45deg);
-    background: var(--color-cyan-core);
     pointer-events: none;
   }
 
-  /* 진행 중인 노드만 빛난다. 계획 A-1에서 시안 강조는 한 번에 한 상태다. */
+  /* 광휘가 차올랐다 터지는 한 주기가 3.2초다. 55%에서 정점을 찍고 링이
+     그 직후에 나간다. 링이 정점보다 먼저 나가면 에너지가 빠져나가는
+     것이 아니라 그냥 깜빡이는 것으로 읽힌다. */
+  .experience-node::before {
+    --exp-glow: 14px;
+    background: var(--color-cyan-core);
+    animation: experience-node-charge 3.2s ease-in-out infinite;
+  }
+
+  .experience-node::after {
+    border: 1px solid var(--color-cyan-hi);
+    animation: experience-node-ring 3.2s ease-out infinite;
+  }
+
+  /* 진행 중인 노드만 더 크게 빛난다. 계획 A-1에서 시안 강조는 한 번에
+     한 상태라, 주기는 같게 두고 광휘 반경만 벌린다. */
   .experience-node[data-experience-current="true"]::before {
-    background: var(--color-cyan-hi);
-    box-shadow: 0 0 14px var(--color-cyan-core);
+    --exp-glow: 26px;
+  }
+
+  /* 세 노드가 한꺼번에 깜빡이면 타임라인이 아니라 경고등으로 읽힌다.
+     음수 지연이라 첫 프레임부터 주기 중간에서 시작한다. 노드 개수는
+     데이터가 정하므로 3n으로 돌려 몇 개가 오든 어긋나게 둔다. */
+  .experience-node:nth-child(3n + 2)::before,
+  .experience-node:nth-child(3n + 2)::after {
+    animation-delay: -1.07s;
+  }
+
+  .experience-node:nth-child(3n + 3)::before,
+  .experience-node:nth-child(3n + 3)::after {
+    animation-delay: -2.13s;
+  }
+
+  @keyframes experience-node-charge {
+    0% {
+      background: var(--color-cyan-core);
+      box-shadow: 0 0 4px rgb(3 179 195 / 0.35);
+    }
+    55% {
+      background: var(--color-cyan-hi);
+      box-shadow: 0 0 var(--exp-glow) var(--color-cyan-hi);
+    }
+    72% {
+      background: var(--color-cyan-hi);
+      box-shadow: 0 0 8px var(--color-cyan-core);
+    }
+    100% {
+      background: var(--color-cyan-core);
+      box-shadow: 0 0 4px rgb(3 179 195 / 0.35);
+    }
+  }
+
+  @keyframes experience-node-ring {
+    0%,
+    55% {
+      opacity: 0;
+      transform: translate(-50%, -50%) rotate(45deg) scale(0.7);
+    }
+    62% {
+      opacity: 0.8;
+    }
+    100% {
+      opacity: 0;
+      transform: translate(-50%, -50%) rotate(45deg) scale(2.8);
+    }
+  }
+
+  /* 모션을 줄이라고 했으면 마름모는 켜진 채로 멈춘다. 링은 아예 없앤다.
+     정지 상태의 링은 카드 옆에 떠 있는 정체불명의 사각형일 뿐이다. */
+  @media (prefers-reduced-motion: reduce) {
+    .experience-node::before {
+      animation: none;
+      box-shadow: 0 0 8px var(--color-cyan-core);
+    }
+
+    .experience-node::after {
+      display: none;
+    }
   }
 
   /* 조직 로고. .skill-icon과 같은 마스크 방식이라 알파가 모양을 쥐고

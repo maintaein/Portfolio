@@ -606,6 +606,22 @@ describe('SkillsSection 카테고리 아이콘 그리드', () => {
     expect(findTailwindPaletteColorUtilities(container.innerHTML)).toEqual([]);
   });
 
+  // 세로 가운데 정렬은 min-h-full과 자식의 m-auto가 함께 만든다. flex의
+  // items-center로 바꾸면 내용이 상자보다 길 때 위쪽이 잘려 스크롤로도
+  // 닿지 못한다.
+  it('내용이 세로 가운데에 앉고 어두운 판 위에 올라간다', () => {
+    const { container } = render(<SkillsSection />);
+
+    const section = container.querySelector('section')!;
+    expect(section.className).toContain('min-h-full');
+    expect(section.className).toContain('flex');
+    expect(section.className).not.toContain('items-center');
+
+    const plate = section.querySelector('.section-plate')!;
+    expect(plate).not.toBeNull();
+    expect(plate.className).toContain('m-auto');
+  });
+
   // 이 저장소의 SEO 계약. 크롤러는 HTML을 읽지 Ctrl+F를 쓰지 않는다.
   it('의미 콘텐츠가 SSR HTML에 존재한다', () => {
     const html = renderToString(<SkillsSection />);
