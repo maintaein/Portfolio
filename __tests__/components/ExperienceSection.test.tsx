@@ -77,23 +77,35 @@ describe('ExperienceSection', () => {
     expect(fields).toEqual(['period', 'company', 'position', 'responsibilities', 'skills']);
   });
 
-  // 섹션이 화면 상자를 통째로 쓰게 된 뒤에야 지그재그가 가능해졌다.
-  // 위아래로 번갈아 앉아야 가장 높은 카드가 아래 행을 혼자 정한다.
-  it('노드가 축 위아래로 번갈아 앉고 각자 제 열에 있다', () => {
+  // 카드는 축 한 줄에 나란히 앉는다. 지그재그를 되살리면 카드가 축
+  // 중심에서 벗어나 마름모가 카드의 50%와 어긋난다.
+  it('노드가 축 한 줄에 나란히 앉고 번호가 순서대로 붙는다', () => {
     render(<ExperienceSection />);
 
     const nodes = [...document.querySelectorAll('[data-experience-node]')];
 
     expect(nodes.map((node) => node.getAttribute('data-experience-side'))).toEqual([
-      'above',
-      'below',
-      'above',
+      null,
+      null,
+      null,
     ]);
-    expect(nodes.map((node) => (node as HTMLElement).style.gridColumn)).toEqual([
-      '1',
-      '2',
-      '3',
-    ]);
+    expect(nodes.map((node) => (node as HTMLElement).style.gridColumn)).toEqual(['', '', '']);
+    for (const [index, node] of nodes.entries()) {
+      expect(node.textContent).toContain(`NODE_0${index + 1}`);
+    }
+  });
+
+  // 제목을 화면에서 뺐다. 섹션 이름을 쥔 유일한 요소라 접근성 트리에는
+  // 남아 있어야 한다.
+  it('제목은 화면에서 빠지되 접근성 이름으로 남는다', () => {
+    const { container } = render(<ExperienceSection />);
+
+    const heading = screen.getByRole('heading', { name: 'Experience', level: 2 });
+    expect(heading.className).toContain('sr-only');
+    expect(container.querySelector('section')).toHaveAttribute(
+      'aria-labelledby',
+      heading.id
+    );
   });
 
   it('휠 세로 회전을 가로 스크롤로 돌린다', () => {

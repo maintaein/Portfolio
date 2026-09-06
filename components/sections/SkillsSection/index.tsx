@@ -38,9 +38,15 @@ export default function SkillsSection() {
   }
 
   return (
-    <section id={SECTION_IDS.SKILLS} className="py-6 lg:py-8">
+    <section
+      id={SECTION_IDS.SKILLS}
+      aria-labelledby="skills-heading"
+      className="py-6 lg:py-8"
+    >
       <div className="mx-auto max-w-4xl px-4 sm:px-6">
-        <h2 className="mb-5 text-t2 font-bold uppercase tracking-widest text-[var(--color-text-primary)] lg:mb-6">
+        {/* 화면에서는 뺀 제목. 섹션 이름을 쥔 유일한 요소라 접근성 트리에는
+            남긴다. AboutSection도 같은 방식이다. */}
+        <h2 id="skills-heading" className="sr-only">
           Skills
         </h2>
 

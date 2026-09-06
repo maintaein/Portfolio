@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { experiences } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
@@ -16,11 +16,6 @@ const LOGOS: Record<string, { file: string; width: number; height: number }> = {
   KUA: { file: 'kua', width: 216, height: 176 },
 };
 
-// 노드 한 칸의 폭. 오른쪽 32px은 이웃과의 간격이라 카드 자체는 이보다
-// 그만큼 좁다. 1366px에서 세 칸이 다 들어오지는 않아야 가로로 더 있다는
-// 것이 읽힌다.
-const NODE_WIDTH = 'clamp(300px, 32vw, 400px)';
-
 function logoStyle(logo: string): CSSProperties {
   const { file, width, height } = LOGOS[logo];
   return {
@@ -29,16 +24,9 @@ function logoStyle(logo: string): CSSProperties {
   } as CSSProperties;
 }
 
-// 계기판 오른쪽 위 눈금. 데이터에서 뽑는다. 첫 항목이 최신이다.
-const RANGE = `${experiences.at(-1)?.period.split('~')[0].trim()} ~ ${experiences[0].period
-  .split('~')
-  .at(-1)
-  ?.trim()}`;
-
 export default function ExperienceSection() {
   const railRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ x: number; left: number } | null>(null);
-  const [offset, setOffset] = useState(0);
 
   // 휠은 세로 회전만 보내는 마우스가 대부분이라 deltaY를 가로로 돌린다.
   // 트랙패드가 가로 성분을 실어 보내면 그쪽을 그대로 쓴다. 리액트의
@@ -81,44 +69,19 @@ export default function ExperienceSection() {
     event.currentTarget.releasePointerCapture?.(event.pointerId);
   };
 
-  const handleScroll = (event: { currentTarget: HTMLDivElement }) => {
-    const { scrollLeft, scrollWidth, clientWidth } = event.currentTarget;
-    const max = scrollWidth - clientWidth;
-    setOffset(max > 0 ? (scrollLeft / max) * 100 : 0);
-  };
-
   return (
-    <section id={SECTION_IDS.EXPERIENCE} className="experience-hud">
-      <div aria-hidden className="experience-frame" />
+    <section
+      id={SECTION_IDS.EXPERIENCE}
+      aria-labelledby="experience-heading"
+      className="experience-hud"
+    >
+      {/* 화면에서는 뺀 제목. 섹션 이름을 쥐고 있는 유일한 요소라 접근성
+          트리에는 남긴다. AboutSection도 같은 방식이다. */}
+      <h2 id="experience-heading" className="sr-only">
+        Experience
+      </h2>
 
-      <div className="pointer-events-none absolute left-8 top-4 z-10">
-        <h2 className="text-t4 font-bold uppercase tracking-widest text-[var(--color-text-primary)]">
-          Experience
-        </h2>
-        <p className="mt-0.5 text-t8 uppercase tracking-widest text-[var(--color-text-secondary)]">
-          NODES: {String(experiences.length).padStart(2, '0')}
-        </p>
-      </div>
-
-      <div className="pointer-events-none absolute right-8 top-4 z-10 text-right">
-        <p className="text-t8 uppercase tracking-widest text-[var(--color-text-secondary)]">
-          RANGE: {RANGE}
-        </p>
-        <p className="mt-0.5 text-t8 uppercase tracking-widest text-[var(--color-text-secondary)]">
-          MODE: TIMELINE
-        </p>
-      </div>
-
-      <p className="pointer-events-none absolute bottom-4 left-8 z-10 text-t8 uppercase tracking-widest text-[var(--color-text-secondary)]">
-        휠 회전 또는 드래그로 이동
-      </p>
-
-      <p
-        data-experience-offset
-        className="pointer-events-none absolute bottom-4 right-8 z-10 text-t8 uppercase tracking-widest text-[var(--color-cyan-hi)]"
-      >
-        OFFSET: {offset.toFixed(2)}%
-      </p>
+      <div aria-hidden className="experience-axis" />
 
       {/* data-section-swipe-ignore가 없으면 useSectionSwipe가 가로 스와이프를
           먼저 집어 삼켜 섹션이 넘어간다. tabIndex는 스크롤 컨테이너를
@@ -133,16 +96,10 @@ export default function ExperienceSection() {
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        onScroll={handleScroll}
         className="section-horizontal-scroll absolute inset-0 cursor-grab overflow-x-auto active:cursor-grabbing focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)]"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
-        <ol
-          className="experience-rail"
-          style={{ gridTemplateColumns: `repeat(${experiences.length}, ${NODE_WIDTH})` }}
-        >
-          <li aria-hidden className="experience-axis" />
-
+        <ol className="experience-rail">
           {experiences.map((experience, index) => {
             const current = experience.period.endsWith('현재');
 
@@ -151,74 +108,67 @@ export default function ExperienceSection() {
                 key={experience.id}
                 data-experience-node={experience.company}
                 data-experience-current={current ? 'true' : undefined}
-                data-experience-side={index % 2 === 0 ? 'above' : 'below'}
                 className="experience-node"
-                style={{ gridColumn: index + 1 }}
               >
-                <article className="experience-card">
-                  <p
-                    data-experience-field="period"
-                    className="flex items-center gap-2 text-t7 font-medium uppercase tracking-widest text-[var(--color-text-secondary)]"
-                  >
-                    <span className="text-[var(--color-cyan-hi)]">
-                      [{String(index + 1).padStart(2, '0')}]
-                    </span>
+                <p
+                  data-experience-field="period"
+                  className="flex items-center justify-between gap-4 border-b border-[var(--color-hairline)] pb-2.5 text-t8 uppercase tracking-widest text-[var(--color-text-secondary)]"
+                >
+                  <span className="flex items-center gap-2">
                     {experience.period}
                     {current && <span className="text-[var(--color-cyan-hi)]">CURRENT</span>}
-                  </p>
+                  </span>
+                  <span>NODE_{String(index + 1).padStart(2, '0')}</span>
+                </p>
 
-                  <div
-                    data-experience-field="company"
-                    className="mt-2 flex items-center gap-3"
-                  >
-                    <span
-                      aria-hidden
-                      data-experience-logo
-                      className="org-logo shrink-0"
-                      style={logoStyle(experience.logo ?? 'FASOO')}
-                    />
-                    <h3 className="text-t5 font-semibold text-[var(--color-text-primary)]">
-                      {experience.company}
-                    </h3>
-                  </div>
+                <div data-experience-field="company" className="mt-4 flex items-center gap-3">
+                  <span
+                    aria-hidden
+                    data-experience-logo
+                    className="org-logo shrink-0"
+                    style={logoStyle(experience.logo ?? 'FASOO')}
+                  />
+                  <h3 className="text-t3 font-semibold text-[var(--color-text-primary)]">
+                    {experience.company}
+                  </h3>
+                </div>
 
-                  <p
-                    data-experience-field="position"
-                    className="mt-1 text-t7 uppercase tracking-widest text-[var(--color-text-secondary)]"
-                  >
-                    {experience.position}
-                  </p>
+                <p
+                  data-experience-field="position"
+                  className="mt-1.5 text-t7 font-medium uppercase tracking-widest text-[var(--color-cyan-hi)]"
+                >
+                  {experience.position}
+                </p>
 
-                  <ul
-                    data-experience-field="responsibilities"
-                    className="mt-3 space-y-1.5 border-t border-[var(--color-hairline)] pt-3"
-                  >
-                    {experience.responsibilities.map((item) => (
-                      <li
-                        key={item}
-                        className="text-t6 leading-relaxed text-[var(--color-text-secondary)]"
-                      >
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
+                <ul
+                  data-experience-field="responsibilities"
+                  className="mt-4 space-y-1.5 text-t6 leading-relaxed text-[var(--color-text-secondary)]"
+                >
+                  {experience.responsibilities.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
 
-                  <ul data-experience-field="skills" className="mt-3 flex flex-wrap gap-1.5">
-                    {(experience.skills ?? []).map((skill) => (
-                      <li
-                        key={skill}
-                        className="border border-[var(--color-hairline)] px-2 py-0.5 text-t8 uppercase tracking-wider text-[var(--color-text-secondary)]"
-                      >
-                        {skill}
-                      </li>
-                    ))}
-                  </ul>
-                </article>
+                <ul data-experience-field="skills" className="mt-5 flex flex-wrap gap-2">
+                  {(experience.skills ?? []).map((skill) => (
+                    <li
+                      key={skill}
+                      className="border border-[var(--color-hairline)] px-2.5 py-1 text-t8 uppercase tracking-wider text-[var(--color-cyan-hi)]"
+                    >
+                      {skill}
+                    </li>
+                  ))}
+                </ul>
               </li>
             );
           })}
         </ol>
       </div>
+
+      <p className="pointer-events-none absolute bottom-6 right-8 z-10 flex items-center gap-4 text-t8 uppercase tracking-widest text-[var(--color-cyan-hi)]">
+        휠 또는 드래그로 이동
+        <span aria-hidden className="block h-px w-10 bg-[var(--color-cyan-core)]" />
+      </p>
     </section>
   );
 }
