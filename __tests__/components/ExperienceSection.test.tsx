@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import ExperienceSection from '@/components/sections/ExperienceSection';
 import { findTailwindPaletteColorUtilities } from '@/__tests__/helpers/tailwindPalette';
 import { experiences } from '@/lib/data';
@@ -19,10 +19,40 @@ function pngSize(file: string): { width: number; height: number } {
   return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
 }
 
-// 슬롯은 높이 44px에 폭 상한 120px이다. 마스크가 contain이라 실제 렌더 폭은
+// 슬롯은 높이 32px에 폭 상한 96px이다. 마스크가 contain이라 실제 렌더 폭은
 // 원본 비율로 정해지고, 워드마크는 상한에 걸린다.
-const SLOT_HEIGHT = 44;
-const SLOT_MAX_WIDTH = 120;
+const SLOT_HEIGHT = 32;
+const SLOT_MAX_WIDTH = 96;
+
+// jsdom은 레이아웃을 하지 않아 scrollLeft가 늘 0이다. 휠과 드래그가 정말
+// 가로로 미는지 보려면 스크롤 가능한 요소를 흉내 내야 한다.
+function makeScrollable(element: HTMLElement, scrollWidth = 1200, clientWidth = 400) {
+  let left = 0;
+  Object.defineProperty(element, 'scrollLeft', {
+    configurable: true,
+    get: () => left,
+    set: (value: number) => {
+      left = Math.max(0, Math.min(value, scrollWidth - clientWidth));
+    },
+  });
+  Object.defineProperty(element, 'scrollWidth', { configurable: true, get: () => scrollWidth });
+  Object.defineProperty(element, 'clientWidth', { configurable: true, get: () => clientWidth });
+}
+
+// jsdom에는 PointerEvent 생성자가 없다. fireEvent.pointerDown은 그럴 때
+// 밋밋한 Event로 떨어져 clientX도 button도 실어 보내지 못한다. MouseEvent로
+// 만들고 포인터 전용 속성만 얹는다.
+function firePointer(
+  element: HTMLElement,
+  type: string,
+  init: MouseEventInit & { pointerType?: string } = {}
+) {
+  const { pointerType = 'mouse', ...mouse } = init;
+  const event = new MouseEvent(type, { bubbles: true, cancelable: true, ...mouse });
+  Object.defineProperty(event, 'pointerId', { value: 1 });
+  Object.defineProperty(event, 'pointerType', { value: pointerType });
+  fireEvent(element, event);
+}
 
 describe('ExperienceSection', () => {
   it('세 조직을 최신순 DOM 순서로 렌더한다', () => {
@@ -47,23 +77,79 @@ describe('ExperienceSection', () => {
     expect(fields).toEqual(['period', 'company', 'position', 'responsibilities', 'skills']);
   });
 
-  // 지그재그를 되살리면 세로 예산이 다시 터진다(1366x768에서 400px 초과).
-  // 노드는 전부 축 아래 한 줄, 각자 제 열에만 앉는다.
-  it('노드가 모두 축 아래 한 줄에 앉는다', () => {
+  // 섹션이 화면 상자를 통째로 쓰게 된 뒤에야 지그재그가 가능해졌다.
+  // 위아래로 번갈아 앉아야 가장 높은 카드가 아래 행을 혼자 정한다.
+  it('노드가 축 위아래로 번갈아 앉고 각자 제 열에 있다', () => {
     render(<ExperienceSection />);
 
     const nodes = [...document.querySelectorAll('[data-experience-node]')];
 
     expect(nodes.map((node) => node.getAttribute('data-experience-side'))).toEqual([
-      null,
-      null,
-      null,
+      'above',
+      'below',
+      'above',
     ]);
     expect(nodes.map((node) => (node as HTMLElement).style.gridColumn)).toEqual([
       '1',
       '2',
       '3',
     ]);
+  });
+
+  it('휠 세로 회전을 가로 스크롤로 돌린다', () => {
+    render(<ExperienceSection />);
+
+    const rail = screen.getByRole('region', { name: /타임라인/ });
+    makeScrollable(rail);
+
+    const wheel = new WheelEvent('wheel', { deltaY: 120, cancelable: true, bubbles: true });
+    rail.dispatchEvent(wheel);
+
+    expect(rail.scrollLeft).toBe(120);
+    expect(wheel.defaultPrevented).toBe(true);
+  });
+
+  // 오른쪽 끝에서까지 기본 동작을 막으면 카드가 세로로 넘칠 때 바깥
+  // 스크롤이 죽는다.
+  it('더 밀 수 없으면 휠의 기본 동작을 막지 않는다', () => {
+    render(<ExperienceSection />);
+
+    const rail = screen.getByRole('region', { name: /타임라인/ });
+    makeScrollable(rail);
+    rail.scrollLeft = 9999;
+
+    const wheel = new WheelEvent('wheel', { deltaY: 120, cancelable: true, bubbles: true });
+    rail.dispatchEvent(wheel);
+
+    expect(wheel.defaultPrevented).toBe(false);
+  });
+
+  it('마우스 클릭 드래그로 좌우를 민다', () => {
+    render(<ExperienceSection />);
+
+    const rail = screen.getByRole('region', { name: /타임라인/ });
+    makeScrollable(rail);
+
+    firePointer(rail, 'pointerdown', { button: 0, clientX: 300 });
+    firePointer(rail, 'pointermove', { clientX: 220 });
+    expect(rail.scrollLeft).toBe(80);
+
+    firePointer(rail, 'pointerup', {});
+    firePointer(rail, 'pointermove', { clientX: 100 });
+    expect(rail.scrollLeft).toBe(80);
+  });
+
+  // 터치는 브라우저의 관성 스크롤과 useSectionSwipe가 나눠 갖는다.
+  it('터치 포인터는 드래그로 잡지 않는다', () => {
+    render(<ExperienceSection />);
+
+    const rail = screen.getByRole('region', { name: /타임라인/ });
+    makeScrollable(rail);
+
+    firePointer(rail, 'pointerdown', { pointerType: 'touch', button: 0, clientX: 300 });
+    firePointer(rail, 'pointermove', { pointerType: 'touch', clientX: 100 });
+
+    expect(rail.scrollLeft).toBe(0);
   });
 
   it('진행 중인 경력 하나에만 CURRENT를 준다', () => {
@@ -127,7 +213,7 @@ describe('ExperienceSection', () => {
     }
   });
 
-  it('카드 박스와 팔레트 색을 쓰지 않는다', () => {
+  it('둥근 모서리와 팔레트 색을 쓰지 않는다', () => {
     expect(SOURCE).not.toMatch(/\bBadge\b/);
     expect(SOURCE).not.toMatch(/rounded-(?:xl|2xl|3xl)/);
     expect(SOURCE).not.toMatch(/\bshadow-/);
