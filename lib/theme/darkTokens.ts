@@ -9,7 +9,7 @@ export const darkTokens = {
   // 본문에 쓸 수 있는 색. 전부 검정 위 4.5:1 이상.
   text: {
     primary: '#eef4f5',   // 18.9:1
-    secondary: '#8b95a1', // 6.91:1  (기존 grey-500 재사용)
+    secondary: '#b0bac5', // 10.68:1 (grey-500 #8b95a1은 배경 광선 위에서 흐렸다)
     accent: '#03b3c3',    //  8.24:1
     highlight: '#7fe3ee', // 14.12:1
   },

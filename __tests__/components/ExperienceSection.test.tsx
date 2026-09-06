@@ -47,14 +47,23 @@ describe('ExperienceSection', () => {
     expect(fields).toEqual(['period', 'company', 'position', 'responsibilities', 'skills']);
   });
 
-  it('노드가 축 위아래로 번갈아 앉는다', () => {
+  // 지그재그를 되살리면 세로 예산이 다시 터진다(1366x768에서 400px 초과).
+  // 노드는 전부 축 아래 한 줄, 각자 제 열에만 앉는다.
+  it('노드가 모두 축 아래 한 줄에 앉는다', () => {
     render(<ExperienceSection />);
 
-    const sides = [...document.querySelectorAll('[data-experience-node]')].map((node) =>
-      node.getAttribute('data-experience-side')
-    );
+    const nodes = [...document.querySelectorAll('[data-experience-node]')];
 
-    expect(sides).toEqual(['above', 'below', 'above']);
+    expect(nodes.map((node) => node.getAttribute('data-experience-side'))).toEqual([
+      null,
+      null,
+      null,
+    ]);
+    expect(nodes.map((node) => (node as HTMLElement).style.gridColumn)).toEqual([
+      '1',
+      '2',
+      '3',
+    ]);
   });
 
   it('진행 중인 경력 하나에만 CURRENT를 준다', () => {

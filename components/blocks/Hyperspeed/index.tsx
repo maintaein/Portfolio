@@ -73,23 +73,25 @@ export interface HyperspeedHandle {
   resume(): void;
   boost(): void;
   settle(): void;
+  setIdleScale(scale: number): void;
   isLost(): boolean;
 }
 
-// 체류 중 기본 흐름 배율. 원본은 time = timer.getElapsed() + timeOffset이라
-// 기본 흐름이 항상 1배로 흘렀고 speedUp으로는 줄일 수 없었다. 배경은
-// 반응자이므로 체류 중에는 거의 멈춘 듯 흘러야 한다.
+// 체류 중 기본 흐름 배율의 초기값. 원본은 time = timer.getElapsed() +
+// timeOffset이라 기본 흐름이 항상 1배로 흘렀고 speedUp으로는 줄일 수 없었다.
+// 배경은 반응자이므로 체류 중에는 거의 멈춘 듯 흘러야 한다. 오버뷰와 섹션은
+// 요구가 다르다. 섹션에서는 본문을 읽으므로 setIdleScale로 더 낮춰 끼운다.
 const IDLE_TIME_SCALE = 0.3;
 
-// boost가 더하는 시간 배속의 목표치. 원본 2에서 낮춘다 — 최고 속도가 너무
-// 빨라 전환이 튀었다.
-const BOOST_TIME_SCALE = 1.15;
+// boost가 더하는 시간 배속의 목표치. 원본 2에서 두 번 낮췄다. 1.15에서도
+// 전환 순간의 흐름이 눈에 튀어 본문으로 시선이 돌아오는 데 시간이 걸렸다.
+const BOOST_TIME_SCALE = 0.7;
 
 // speedUp이 목표로 수렴하는 시간 상수의 역수(1/초). 원본은
 // Math.exp(-k*delta)를 그대로 비율로 써서 60fps에서 한 프레임에 간극의 86%를
 // 메웠다 — 사실상 즉시 도달이라 가속도 감속도 보이지 않았다. 프레임률과
 // 무관한 1 - exp(-rate*delta) 형태로 바로잡는다. 값이 작을수록 완만하다.
-const SPEED_SMOOTHING_RATE = 1.6;
+const SPEED_SMOOTHING_RATE = 1.0;
 
 const defaultOptions: HyperspeedOptions = {
   onSpeedUp: () => {},
@@ -662,6 +664,7 @@ class App {
   // 체류 중 흐름을 직접 제어하기 위한 누적기. timer.getElapsed()를 그대로
   // 쓰면 1배 고정이라 느리게 만들 수 없다.
   baseTime: number;
+  idleScale: number;
   timeOffset: number;
   hasValidSize: boolean;
 
@@ -759,6 +762,7 @@ class App {
     this.speedUpTarget = 0;
     this.speedUp = 0;
     this.baseTime = 0;
+    this.idleScale = IDLE_TIME_SCALE;
     this.timeOffset = 0;
 
     this.tick = this.tick.bind(this);
@@ -966,6 +970,12 @@ class App {
     this.speedUpTarget = 0;
   }
 
+  // 체류 흐름만 바꾼다. boost가 쌓는 timeOffset은 건드리지 않으므로 전환
+  // 도중에 호출해도 진행 중인 가속이 끊기지 않는다.
+  setIdleScale(scale: number) {
+    this.idleScale = scale;
+  }
+
   onMouseDown(ev: MouseEvent) {
     if (this.options.onSpeedUp) this.options.onSpeedUp(ev);
     this.boost();
@@ -998,7 +1008,7 @@ class App {
     const speedSmoothing = 1 - Math.exp(-SPEED_SMOOTHING_RATE * delta);
     this.speedUp += (this.speedUpTarget - this.speedUp) * speedSmoothing;
 
-    this.baseTime += delta * IDLE_TIME_SCALE;
+    this.baseTime += delta * this.idleScale;
     this.timeOffset += this.speedUp * delta;
     const time = this.baseTime + this.timeOffset;
 
@@ -1224,6 +1234,7 @@ const Hyperspeed = forwardRef<HyperspeedHandle, HyperspeedProps>(function Hypers
       resume: () => appRef.current?.resume(),
       boost: () => appRef.current?.boost(),
       settle: () => appRef.current?.settle(),
+      setIdleScale: (scale: number) => appRef.current?.setIdleScale(scale),
       isLost: () => appRef.current?.isLost() ?? false
     }),
     []

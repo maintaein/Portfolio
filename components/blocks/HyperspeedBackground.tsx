@@ -98,10 +98,16 @@ const DynamicHyperspeed = dynamic(
 );
 
 const BASE_OPACITY_OVERVIEW = 1;
-// About 재설계에서 배경이 구도의 일부가 됐다. 0.3에서는 광선이 사실상
-// 보이지 않았다. 전 섹션 공통값이라 나머지 다섯 섹션의 본문 대비도 함께
-// 내려간다. Task 8이 전 섹션을 확인한다.
-const BASE_OPACITY_SECTION = 0.55;
+// 0.3에서는 광선이 사실상 보이지 않아 0.55까지 올렸는데, 이번엔 반대로
+// 배경이 본문을 이겼다. 0.35는 광선의 흐름은 남기면서 본문 뒤를 다시
+// 검정에 가깝게 되돌리는 자리다. 전 섹션 공통값이다.
+const BASE_OPACITY_SECTION = 0.35;
+
+// 체류 중 배경 흐름 배율. 오버뷰 값은 엔진 기본값(IDLE_TIME_SCALE)과 같다.
+// 섹션에서는 본문을 읽는 동안 시야 가장자리가 계속 움직이면 눈이 끌려가므로
+// 3분의 1로 줄인다. 멈추지는 않는다. 배경이 죽으면 화면이 정지 이미지가 된다.
+const IDLE_SCALE_OVERVIEW = 0.3;
+const IDLE_SCALE_SECTION = 0.1;
 // obscured(ProjectModal 열림) 동안 배경에서 초점을 빼는 블러 반경.
 // 감광(0.4배)에서 블러로 바꿨다 — 어둡게 하면 배경이 남색 덩어리로 죽는데,
 // 블러는 밝기를 유지한 채 시선만 모달로 보낸다. 대비는 모달 자신의 불투명
@@ -148,6 +154,12 @@ export default function HyperspeedBackground({
   // 같은 패턴.
   const isTransitioningRef = useRef(isTransitioning);
   isTransitioningRef.current = isTransitioning;
+
+  const idleScale = active === OVERVIEW ? IDLE_SCALE_OVERVIEW : IDLE_SCALE_SECTION;
+  // 핸들은 next/dynamic 청크가 풀린 뒤에야 도착한다. 이 effect가 먼저 돌 수도
+  // 있으므로 값을 ref에도 남겨 setHandle이 도착 시점에 다시 걸어준다.
+  const idleScaleRef = useRef(idleScale);
+  idleScaleRef.current = idleScale;
   const [contextLost, setContextLost] = useState(false);
   const contextRetriesRef = useRef(0);
 
@@ -206,6 +218,12 @@ export default function HyperspeedBackground({
     }
   }, [isTransitioning]);
 
+  // 섹션에 머무는 동안의 흐름 속도. boost/settle과 독립이라 전환 중에 섹션이
+  // 바뀌어도 가속이 끊기지 않는다.
+  useEffect(() => {
+    handleRef.current?.setIdleScale(idleScale);
+  }, [idleScale]);
+
   // pageVisible의 실제 edge에서만 pause/resume한다. resume 직후에는 hidden
   // 중 쌓인 과거 완료 신호를 재생하지 않고, 그 순간의 현재 isTransitioning을
   // ref로 다시 읽어 boost/settle 중 하나로 상태를 재동기화한다. 의존성 배열에
@@ -237,6 +255,7 @@ export default function HyperspeedBackground({
   // (Hyperspeed/index.tsx 주석 참고) 기기 상한을 setQuality로 걸어준다.
   const setHandle = useCallback((handle: HyperspeedHandle | null) => {
     handleRef.current = handle;
+    handle?.setIdleScale(idleScaleRef.current);
     if (handle && !appliedInitialQualityRef.current) {
       appliedInitialQualityRef.current = true;
       void detectQuality().then((tier) => {
