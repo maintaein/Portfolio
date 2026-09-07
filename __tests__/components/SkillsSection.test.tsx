@@ -619,6 +619,10 @@ describe('SkillsSection 카테고리 아이콘 그리드', () => {
 
     for (const lane of lanes) {
       expect(lane.className).toContain('section-plate');
+      // 판을 깔면 아이콘 광휘가 먹힌다. 광휘는 z-index -1 겹 둘로 그려지는데
+      // 레인이 쌓임 맥락을 만들지 않으면 그 겹이 레인 배경보다 뒤로 밀린다.
+      // 브라우저에서 넓은 바깥 번짐이 통째로 사라지는 것을 확인했다.
+      expect(lane.className).toContain('isolate');
     }
   });
 

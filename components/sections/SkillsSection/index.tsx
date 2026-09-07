@@ -82,11 +82,15 @@ export default function SkillsSection() {
             const dimmed = pinnedCategory !== null && pinnedCategory !== category.label;
 
             return (
+              // isolate가 이 레인만의 쌓임 맥락을 만든다. 아이콘 광휘는
+              // z-index -1 겹 둘로 그려지는데, 맥락이 없으면 그 겹이 레인
+              // 배경보다 뒤로 밀려 판의 검정에 먹힌다. 맥락을 여기 두면
+              // 배경 바로 위, 아이콘 바로 뒤에 그려진다.
               <div
                 key={category.label}
                 data-skill-category={category.label}
                 data-skill-category-dimmed={dimmed}
-                className={`section-plate flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:gap-5 ${
+                className={`section-plate isolate flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:gap-5 ${
                   dimmed ? 'opacity-25' : 'opacity-100'
                 }`}
               >
