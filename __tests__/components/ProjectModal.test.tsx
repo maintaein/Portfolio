@@ -66,11 +66,13 @@ describe('프로젝트 섹션과 모달의 어두운 테마', () => {
 
 // 다섯 단계가 똑같은 상자 다섯 개였다. 순서만 있고 흐름이 없었고,
 // 라벨이 내용보다 크고 밝아서 이미 아는 단어가 증거보다 크게 읽혔다.
-describe('리뷰는 상자가 아니라 한 줄기로 읽힌다', () => {
-  it('다섯 단계가 축 하나 위의 마디로 놓인다', () => {
-    // 단계마다 두르던 면이 사라졌다.
+describe('리뷰는 P/A/A/R 네 단으로 읽힌다', () => {
+  it('네 단계가 축 하나 위의 마디로 놓인다', () => {
+    // 단계마다 두르던 면이 사라졌고, 트레이드오프는 실행 밑으로 들어가
+    // 축이 문제·분석·실행·결과 네 단이 됐다.
     expect(MODAL).not.toContain('rounded-lg border-l border-[rgb(255_255_255_/_0.14)]');
-    expect(MODAL.match(/<Stage(?=[\s>])/g)).toHaveLength(5);
+    expect(MODAL.match(/<Stage(?=[\s>])/g)).toHaveLength(4);
+    expect(MODAL.indexOf('<TradeOffBlock')).toBeLessThan(MODAL.indexOf('<ResultBlock'));
   });
 
   it('단계 라벨은 내용보다 작고 흐리다', () => {
@@ -83,9 +85,19 @@ describe('리뷰는 상자가 아니라 한 줄기로 읽힌다', () => {
     );
   });
 
+  it('분석 항목을 제목 줄과 근거 줄로 가른다', () => {
+    // 데이터가 "**머리**: 본문" 꼴이라 훑는 사람은 제목만 읽으면 된다.
+    expect(MODAL).toContain('function splitHead(');
+    expect(MODAL).toContain('function parseAnalysis(');
+  });
+
   it('분석에서 채워진 선택지는 고른 것 하나뿐이다', () => {
     // 탈락한 대안은 테두리만 남는다. 시안은 고른 순간과 도착한 순간에만 붙는다.
-    expect(MODAL).toContain("      : 'border border-[rgb(255_255_255_/_0.12)]'");
+    expect(MODAL).toContain(": 'border border-[rgb(255_255_255_/_0.12)]'");
     expect(MODAL.match(/bg-\[var\(--color-cyan-core\)\]/g)?.length ?? 0).toBeGreaterThan(0);
+  });
+
+  it('섹션에 상주하던 조작 설명서를 없앤다', () => {
+    expect(SECTION).not.toContain('click again for detail');
   });
 });

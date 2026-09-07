@@ -33,47 +33,35 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 function ResultBlock({ metrics }: { metrics: KeyMetric[] }) {
   return (
     <div className="rounded-lg overflow-hidden border border-[var(--color-hairline)] text-[11px]">
-      {/* 상단 바 */}
-      <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[rgb(3_179_195_/_0.12)] border-b border-[var(--color-hairline)]">
-        <span className="w-2 h-2 rounded-full bg-[var(--color-cyan-hi)]" />
-        <span className="w-2 h-2 rounded-full bg-[var(--color-cyan-core)]" />
-        <span className="w-2 h-2 rounded-full bg-[rgb(3_179_195_/_0.4)]" />
-        <span className="ml-2 text-[10px] font-semibold uppercase tracking-widest text-[var(--color-cyan-hi)]">
-          결과
-        </span>
-      </div>
-
       {/* 항목 목록 */}
       <div className="divide-y divide-[rgb(255_255_255_/_0.07)]">
         {metrics.map((m, i) => (
-          <div key={i} className="px-3 py-3 space-y-1.5">
-            {/* 레이블 */}
+          <div key={i} className="px-3.5 py-3">
             <span className="text-[11px] font-bold text-[var(--color-text-primary)]">{m.label}</span>
 
-            {/* before 줄 */}
-            {m.before && (
-              <div className="flex items-start gap-2 pl-1">
-                <span className="text-[rgb(255_255_255_/_0.3)] select-none mt-px font-bold shrink-0">−</span>
-                <RichText text={m.before} className="text-[rgb(255_255_255_/_0.42)] line-through leading-snug text-[11px]" />
-              </div>
-            )}
-
-            {/* after 줄 — delta가 있으면 줄 끝에 인라인으로 표시 */}
-            <div className="flex items-start gap-2 pl-1">
-              <span className="text-[var(--color-cyan-hi)] select-none font-bold mt-px shrink-0">+</span>
-              <span className="text-[var(--color-text-primary)] font-semibold leading-snug text-[11px]">
+            {/* 이전 → 이후. 값이 짧으면 한 줄, 길면 자연히 접힌다 */}
+            <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              {m.before && (
+                <span className="text-[11px] text-[rgb(255_255_255_/_0.42)] leading-snug">
+                  <RichText text={m.before} className="line-through" />
+                  <span className="ml-2 text-[rgb(255_255_255_/_0.35)] no-underline">→</span>
+                </span>
+              )}
+              <span className="text-[12px] font-semibold text-[var(--color-text-primary)] leading-snug">
                 <RichText text={m.after} />
                 {m.delta && (
-                  <span className="ml-2 text-[10px] font-bold text-[var(--color-cyan-hi)]">({m.delta})</span>
+                  <span className="ml-2 text-[11px] font-bold text-[var(--color-cyan-hi)]">({m.delta})</span>
                 )}
               </span>
             </div>
 
-            {/* measuredBy */}
-            <div className="flex items-center gap-1.5 pl-1 pt-0.5">
-              <span className="text-[9px] font-bold uppercase tracking-wider text-[rgb(255_255_255_/_0.35)] shrink-0">측정</span>
-              <RichText text={m.measuredBy ?? ''} className="text-[10px] text-[rgb(255_255_255_/_0.42)] leading-snug" />
-            </div>
+            {/* 어떤 지표로 검증했는가 */}
+            {m.measuredBy && (
+              <div className="mt-1.5 flex items-start gap-1.5">
+                <span className="text-[10px] font-bold text-[rgb(255_255_255_/_0.35)] shrink-0">측정 ·</span>
+                <RichText text={m.measuredBy} className="text-[10px] text-[rgb(255_255_255_/_0.42)] leading-snug" />
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -157,56 +145,85 @@ function OverviewBlock({ project }: { project: NonNullable<Parameters<typeof Pro
   );
 }
 
-// 분석 블록 — **진단 —** 으로 시작하면 진단, **선택지N으로 시작하면 선택지 항목으로 파싱
-function AnalysisBlock({ items }: { items: string[] }) {
-  const diagnosisItems: string[] = [];
-  const choiceItems: { text: string; chosen: boolean }[] = [];
+// 데이터는 "**머리**: 본문" 꼴로 들어온다. 제목 줄과 근거 줄로 갈라야
+// 훑는 사람은 제목만 읽고, 파고드는 사람은 아래를 읽는다.
+function splitHead(text: string): { head: string; body: string } {
+  const m = text.match(/^\*\*([^*]+)\*\*\s*:\s*([\s\S]*)$/);
+  return m ? { head: m[1].trim(), body: m[2].trim() } : { head: '', body: text };
+}
+
+// **진단으로 시작하면 진단, **선택지N으로 시작하면 선택지 항목으로 파싱
+function parseAnalysis(items: string[]) {
+  const diagnosis: string[] = [];
+  const choices: { head: string; body: string; chosen: boolean }[] = [];
 
   for (const item of items) {
     const stripped = item.replace(/^\*\*/, '');
-    if (stripped.startsWith('진단')) {
-      diagnosisItems.push(item);
-    } else if (stripped.startsWith('선택지') || stripped.startsWith('전체 도구')) {
+    if (stripped.startsWith('선택지') || stripped.startsWith('전체 도구')) {
       const chosen = item.includes('(선택)');
-      const cleaned = item.replace(/\s*\(선택\)/g, '');
-      choiceItems.push({ text: cleaned, chosen });
+      const { head, body } = splitHead(item.replace(/\s*\(선택\)/g, ''));
+      // 번호는 왼쪽 배지가 달고 있으니 머리에서 뺀다.
+      choices.push({ head: head.replace(/^선택지\s*\d+\s*[^\s]?\s*/, ''), body, chosen });
     } else {
-      diagnosisItems.push(item);
+      diagnosis.push(item);
     }
   }
+  return { diagnosis, choices };
+}
+
+function AnalysisBlock({ items }: { items: string[] }) {
+  const { diagnosis, choices } = parseAnalysis(items);
 
   return (
-    <div className="space-y-3">
-      {diagnosisItems.length > 0 && (
-        <ul className="space-y-2">
-          {diagnosisItems.map((a, i) => (
-            <li key={i} className="flex items-start gap-2.5">
-              <span className="mt-[6px] w-1.5 h-1.5 rounded-full bg-[rgb(255_255_255_/_0.3)] flex-shrink-0" />
-              <RichText text={a} className="text-[12px] text-[var(--color-text-secondary)] leading-relaxed" />
-            </li>
-          ))}
-        </ul>
-      )}
+    <div className="space-y-4">
+      {diagnosis.map((a, i) => {
+        const { head, body } = splitHead(a);
+        return (
+          <div key={i}>
+            {head && (
+              <p className="text-[13px] font-bold text-[var(--color-text-primary)] leading-snug mb-1">{head}</p>
+            )}
+            <RichText text={body} className="text-[12px] text-[var(--color-text-secondary)] leading-relaxed" />
+          </div>
+        );
+      })}
 
-      {choiceItems.length > 0 && (
+      {choices.length > 0 && (
         <ul className="space-y-2">
-          {choiceItems.map((c, i) => (
+          {choices.map((c, i) => (
             <li key={i} className={cn(
-              'rounded-md px-3 py-2.5 flex items-start gap-2.5',
+              'rounded-md px-3.5 py-3',
               c.chosen
                 ? 'bg-[rgb(3_179_195_/_0.10)] border border-[var(--color-hairline)]'
                 : 'border border-[rgb(255_255_255_/_0.12)]'
             )}>
-              <span className={cn(
-                'mt-[5px] flex-shrink-0 flex items-center justify-center rounded-full text-[9px] font-bold w-4 h-4',
-                c.chosen ? 'bg-[var(--color-cyan-core)] text-[rgb(2_6_8)]' : 'ring-1 ring-[rgb(255_255_255_/_0.2)] text-[rgb(255_255_255_/_0.42)]'
-              )}>
-                {i + 1}
-              </span>
-              <RichText
-                text={c.text}
-                className={cn('text-[12px] leading-relaxed', c.chosen ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]')}
-              />
+              {/* 제목 줄 — 훑는 사람은 여기까지만 읽는다 */}
+              <div className="flex items-start gap-2.5 mb-1.5">
+                <span className={cn(
+                  'mt-[3px] flex-shrink-0 flex items-center justify-center rounded-full text-[9px] font-bold w-4 h-4',
+                  c.chosen
+                    ? 'bg-[var(--color-cyan-core)] text-[rgb(2_6_8)]'
+                    : 'ring-1 ring-[rgb(255_255_255_/_0.2)] text-[rgb(255_255_255_/_0.42)]'
+                )}>
+                  {i + 1}
+                </span>
+                <RichText
+                  text={c.head}
+                  className={cn('text-[12.5px] font-semibold leading-snug', c.chosen ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]')}
+                />
+                {c.chosen && (
+                  <span className="ml-auto mt-[2px] flex-shrink-0 rounded-full bg-[var(--color-cyan-core)] px-2 py-0.5 text-[9px] font-bold tracking-wider text-[rgb(2_6_8)]">
+                    선택
+                  </span>
+                )}
+              </div>
+              {/* 근거 줄 — 인라인에 padding을 주면 첫 줄만 밀리니 블록으로 감싼다 */}
+              <div className="pl-[26px]">
+                <RichText
+                  text={c.body}
+                  className={cn('text-[11.5px] leading-relaxed', c.chosen ? 'text-[var(--color-text-secondary)]' : 'text-[rgb(255_255_255_/_0.42)]')}
+                />
+              </div>
             </li>
           ))}
         </ul>
@@ -359,7 +376,7 @@ function ReviewNav({ reviews, activeIndex, onNavigate }: ReviewNavProps) {
 
 // 리뷰 한 편은 상자 다섯 개가 아니라 한 줄기다. 왼쪽 레일이 시간 축이고,
 // 무게는 색이 아니라 글자 크기로 준다. 라벨은 발판이라 죽이고 내용을 키운다.
-function Stage({ label, accent, children }: { label?: string; accent?: boolean; children: React.ReactNode }) {
+function Stage({ label, note, accent, children }: { label?: string; note?: string; accent?: boolean; children: React.ReactNode }) {
   return (
     <div className="relative pl-7">
       {/* 축을 뚫고 앉는 마디 */}
@@ -367,7 +384,10 @@ function Stage({ label, accent, children }: { label?: string; accent?: boolean; 
         <span className={cn('rounded-full', accent ? 'w-2 h-2 bg-[var(--color-cyan-core)]' : 'w-1.5 h-1.5 bg-[rgb(255_255_255_/_0.28)]')} />
       </span>
       {label && (
-        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[rgb(255_255_255_/_0.42)] mb-2">{label}</p>
+        <div className="flex items-baseline gap-2 mb-2">
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[rgb(255_255_255_/_0.42)]">{label}</p>
+          {note && <span className="text-[10px] text-[rgb(255_255_255_/_0.35)]">· {note}</span>}
+        </div>
       )}
       {children}
     </div>
@@ -382,6 +402,7 @@ interface ReviewContentProps {
 }
 
 function ReviewContent({ review, reviews, activeIndex, onNavigate }: ReviewContentProps) {
+  const choiceCount = review.analysis ? parseAnalysis(review.analysis).choices.length : 0;
   const hasStages = !!(
     review.problem ||
     review.analysis?.length ||
@@ -392,6 +413,8 @@ function ReviewContent({ review, reviews, activeIndex, onNavigate }: ReviewConte
 
   return (
     <div className="space-y-5">
+      <p className="text-[15px] font-bold text-[var(--color-text-primary)] leading-snug">{review.title}</p>
+
       {/* 리뷰 이미지 */}
       {review.image && (
         <div className="w-full flex justify-center gap-3">
@@ -420,30 +443,32 @@ function ReviewContent({ review, reviews, activeIndex, onNavigate }: ReviewConte
             </Stage>
           )}
           {review.analysis && review.analysis.length > 0 && (
-            <Stage label="분석">
+            <Stage label="분석" note={choiceCount > 0 ? `검토한 선택지 ${choiceCount}개` : undefined}>
               <AnalysisBlock items={review.analysis} />
             </Stage>
           )}
-          {review.action && review.action.length > 0 && (
+          {!!(review.action?.length || review.tradeOffs?.length) && (
             <Stage label="실행">
-              <ul className="space-y-1.5">
-                {review.action.map((a, i) => (
-                  <li key={i} className="flex items-start gap-2">
-                    <span className="mt-[6px] w-1 h-1 rounded-full bg-[rgb(255_255_255_/_0.25)] flex-shrink-0" />
-                    <RichText text={a} className="text-[12px] text-[var(--color-text-secondary)] leading-relaxed" />
-                  </li>
-                ))}
-              </ul>
+              {review.action && review.action.length > 0 && (
+                <ul className="space-y-1.5">
+                  {review.action.map((a, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <span className="mt-[6px] w-1 h-1 rounded-full bg-[rgb(255_255_255_/_0.25)] flex-shrink-0" />
+                      <RichText text={a} className="text-[12px] text-[var(--color-text-secondary)] leading-relaxed" />
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {review.tradeOffs && review.tradeOffs.length > 0 && (
+                <div className="mt-3">
+                  <TradeOffBlock items={review.tradeOffs} />
+                </div>
+              )}
             </Stage>
           )}
           {review.result && review.result.length > 0 && (
-            <Stage accent>
+            <Stage label="결과" accent>
               <ResultBlock metrics={review.result} />
-            </Stage>
-          )}
-          {review.tradeOffs && review.tradeOffs.length > 0 && (
-            <Stage>
-              <TradeOffBlock items={review.tradeOffs} />
             </Stage>
           )}
         </div>

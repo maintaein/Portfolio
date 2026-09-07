@@ -207,11 +207,9 @@ export default function ProjectsSection() {
           </div>
         </div>
 
-        {/* 클릭 안내 텍스트 */}
-        <p className="mt-3 text-center text-[11px] tracking-widest text-[rgb(255_255_255_/_0.35)] uppercase select-none">
-          {featuredIdx !== null
-            ? 'click again for detail · click elsewhere to close'
-            : 'drag · click card to expand'}
+        {/* 쉬는 상태에서만 안내한다. 펼친 카드는 자기 안에 힌트를 갖고 있다 */}
+        <p className="mt-3 min-h-[16px] text-center text-[11px] tracking-widest text-[rgb(255_255_255_/_0.35)] uppercase select-none">
+          {featuredIdx !== null ? '' : 'drag · click card to expand'}
         </p>
       </div>
 
