@@ -850,3 +850,33 @@ describe('HERO 재순서 — 광선 부팅 안무가 되살아나지 않았다',
     }
   });
 });
+
+// 부모(HyperspeedBackground)는 ref 콜백에서 곧바로 setIdleScale을 부른다.
+// ref 콜백은 커밋 단계라 App을 만드는 passive effect보다 앞서 돈다. 예전에는
+// 그 호출이 appRef?.에 삼켜져 사라졌고, overview에서 섹션으로 넘어가는
+// 경로에서만 값이 한 번 더 바뀌어 가려졌다. 섹션 주소로 바로 들어오면
+// 배경이 오버뷰 속도로 흘렀다.
+describe('체류 배율: App 생성보다 먼저 온 setIdleScale', () => {
+  it('섹션 주소로 바로 들어와도 느린 배율이 App에 끼워진다', () => {
+    // loadAssets를 부르는 주체가 곧 갓 만들어진 App이다. contexts로 그
+    // 수신자를 그대로 받아 온다.
+    const loadAssets = vi
+      .spyOn(App.prototype, 'loadAssets')
+      .mockResolvedValue(undefined);
+
+    render(
+      <Hyperspeed
+        ref={(handle) => {
+          handle?.setIdleScale(0.1);
+        }}
+      />
+    );
+
+    const app = loadAssets.mock.contexts[0] as InstanceType<typeof App>;
+    expect(app).toBeDefined();
+    // 목표만이 아니라 현재값도 같이 들어가야 한다. 목표만 넣으면 배경이
+    // 오버뷰 속도로 시작했다가 1초쯤 걸려 느려진다.
+    expect(app.idleScaleTarget).toBe(0.1);
+    expect(app.idleScale).toBe(0.1);
+  });
+});

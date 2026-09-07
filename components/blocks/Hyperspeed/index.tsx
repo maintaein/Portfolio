@@ -1202,6 +1202,13 @@ const Hyperspeed = forwardRef<HyperspeedHandle, HyperspeedProps>(function Hypers
   // 마운트 시점의 effectOptions만 쓴다 — ref가 안정적이라 exhaustive-deps 없이도
   // 마운트 한 번짜리 effect를 유지할 수 있다. 이후의 조정은 ref API로만 한다.
   const effectOptionsRef = useRef(effectOptions);
+  // App은 아래 effect에서 만들어지는데 부모의 ref 콜백은 그보다 앞선
+  // 커밋 단계에서 불린다. 그때 도착한 setIdleScale은 appRef가 아직 비어
+  // 있어 옵셔널 체이닝에 조용히 삼켜졌다. overview에서 섹션으로 넘어가면
+  // 값이 한 번 더 바뀌면서 가려졌지만, 섹션 주소로 바로 들어오면 값이
+  // 다시 바뀔 일이 없어 배경이 오버뷰 속도 그대로 흘렀다. 마지막 요청을
+  // 들고 있다가 App이 생기는 순간 끼운다.
+  const idleScaleRef = useRef<number | null>(null);
 
   useEffect(() => {
     const el = container.current;
@@ -1222,6 +1229,12 @@ const Hyperspeed = forwardRef<HyperspeedHandle, HyperspeedProps>(function Hypers
     try {
       const app = new App(el, options);
       appRef.current = app;
+      // 아직 한 프레임도 그리지 않았으므로 수렴시킬 이전 상태가 없다.
+      // 목표와 현재값을 같이 끼워야 배경이 빠르게 시작했다 느려지지 않는다.
+      if (idleScaleRef.current !== null) {
+        app.setIdleScale(idleScaleRef.current);
+        app.idleScale = idleScaleRef.current;
+      }
       app.loadAssets().then(() => app.init());
     } catch {
       appRef.current = null;
@@ -1241,7 +1254,10 @@ const Hyperspeed = forwardRef<HyperspeedHandle, HyperspeedProps>(function Hypers
       resume: () => appRef.current?.resume(),
       boost: () => appRef.current?.boost(),
       settle: () => appRef.current?.settle(),
-      setIdleScale: (scale: number) => appRef.current?.setIdleScale(scale),
+      setIdleScale: (scale: number) => {
+        idleScaleRef.current = scale;
+        appRef.current?.setIdleScale(scale);
+      },
       isLost: () => appRef.current?.isLost() ?? false
     }),
     []
