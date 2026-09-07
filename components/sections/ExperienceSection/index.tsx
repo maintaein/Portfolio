@@ -73,7 +73,7 @@ export default function ExperienceSection() {
     <section
       id={SECTION_IDS.EXPERIENCE}
       aria-labelledby="experience-heading"
-      className="experience-hud section-plate"
+      className="experience-hud"
     >
       {/* 화면에서는 뺀 제목. 섹션 이름을 쥐고 있는 유일한 요소라 접근성
           트리에는 남긴다. AboutSection도 같은 방식이다. */}

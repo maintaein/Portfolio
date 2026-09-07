@@ -1297,15 +1297,39 @@
     top: 50%;
     right: 0;
     left: 0;
-    height: 1px;
+    height: 2px;
+    color: var(--color-hairline);
     background: linear-gradient(
       90deg,
       transparent,
-      var(--color-hairline) 12%,
-      var(--color-hairline) 88%,
+      currentColor 12%,
+      currentColor 88%,
       transparent
     );
+    animation: experience-axis-charge 3.2s ease-in-out infinite;
     pointer-events: none;
+  }
+
+  /* 선도 마름모와 같은 3.2초 박자로 차오른다. 링은 선에 넣지 않는다.
+     화면 폭을 가로지르는 선에서 링이 퍼지면 무엇이 어디서 터진 것인지
+     읽히지 않는다. 그라디언트가 currentColor를 물고 있어 color 하나만
+     옮기면 양 끝의 페이드까지 함께 따라온다. */
+  @keyframes experience-axis-charge {
+    0% {
+      color: var(--color-hairline);
+    }
+
+    55% {
+      color: var(--color-cyan-hi);
+    }
+
+    72% {
+      color: var(--color-cyan-core);
+    }
+
+    100% {
+      color: var(--color-hairline);
+    }
   }
 
   /* width: max-content가 없으면 그리드 컨테이너 폭이 스크롤 상자 폭에
@@ -1330,18 +1354,18 @@
     display: none;
   }
 
-  /* 카드. 왼쪽 2px 시안 바가 카드의 시작을 쥐고, 배경은 검정에 가까운
-     반투명이라 배경 광선이 글자 뒤로 지나가도 본문이 이긴다. 모서리는
-     각지게 둔다. */
+  /* 카드. 왼쪽 2px 시안 바가 카드의 시작을 쥐고, 배경은 거의 불투명한
+     검정이라 Hyperspeed 광선이 카드 뒤를 지나가도 글자가 이긴다. 어둡게
+     까는 자리는 섹션이 아니라 여기다. 섹션에 깔면 상자 경계가 푸터와
+     맞닿는 자리에서 색 단차로 드러난다. 시안 물빛은 위층 그라디언트로만
+     얹어 왼쪽 위 모서리를 살린다. 모서리는 각지게 둔다. */
   .experience-node {
     position: relative;
     padding: 18px 22px 20px;
     border-left: 2px solid var(--color-cyan-core);
-    background: linear-gradient(
-      150deg,
-      rgb(3 179 195 / 0.1),
-      rgb(0 0 0 / 0.62) 62%
-    );
+    background:
+      linear-gradient(150deg, rgb(3 179 195 / 0.14), transparent 62%),
+      rgb(0 0 0 / 0.92);
   }
 
   /* 축 위의 마름모(::before)와 그 자리에서 퍼지는 에너지 링(::after).
@@ -1437,6 +1461,10 @@
 
     .experience-node::after {
       display: none;
+    }
+
+    .experience-axis {
+      animation: none;
     }
   }
 

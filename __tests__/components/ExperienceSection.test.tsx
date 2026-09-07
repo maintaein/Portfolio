@@ -242,17 +242,26 @@ describe('ExperienceSection', () => {
     expect(css).toMatch(/@keyframes experience-node-ring/);
     expect(css).toMatch(/animation: experience-node-charge/);
     expect(css).toMatch(/animation: experience-node-ring/);
+    expect(css).toMatch(/@keyframes experience-axis-charge/);
+    expect(css).toMatch(/animation: experience-axis-charge/);
 
     const block = css.slice(css.indexOf('.experience-node::before'));
     const reduced = block.slice(block.indexOf('@media (prefers-reduced-motion: reduce)'));
     expect(reduced).toContain('.experience-node::before');
     expect(reduced).toContain('animation: none');
     expect(reduced).toContain('.experience-node::after');
+    expect(reduced).toContain('.experience-axis');
   });
 
-  it('섹션이 어두운 판 위에 올라간다', () => {
+  // 어둡게 까는 자리는 카드다. 섹션에 깔면 상자 경계가 푸터와 맞닿는
+  // 자리에서 색 단차로 드러난다.
+  it('섹션이 아니라 카드 배경이 어둡다', () => {
     const { container } = render(<ExperienceSection />);
-    expect(container.querySelector('section')!.className).toContain('section-plate');
+    expect(container.querySelector('section')!.className).not.toContain('section-plate');
+
+    const css = readFileSync(resolve(process.cwd(), 'styles/design-tokens.css'), 'utf8');
+    const card = css.slice(css.indexOf('.experience-node {'));
+    expect(card.slice(0, card.indexOf('}'))).toContain('rgb(0 0 0 / 0.92)');
   });
 
   it('섹션 id를 유지한다', () => {
