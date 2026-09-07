@@ -192,14 +192,14 @@ function AnalysisBlock({ items }: { items: string[] }) {
         <ul className="space-y-2">
           {choiceItems.map((c, i) => (
             <li key={i} className={cn(
-              'rounded-lg px-3 py-2.5 flex items-start gap-2.5',
+              'rounded-md px-3 py-2.5 flex items-start gap-2.5',
               c.chosen
                 ? 'bg-[rgb(3_179_195_/_0.10)] border border-[var(--color-hairline)]'
-                : 'bg-[rgb(255_255_255_/_0.04)] border border-[rgb(255_255_255_/_0.08)]'
+                : 'border border-[rgb(255_255_255_/_0.12)]'
             )}>
               <span className={cn(
                 'mt-[5px] flex-shrink-0 flex items-center justify-center rounded-full text-[9px] font-bold w-4 h-4',
-                c.chosen ? 'bg-[var(--color-cyan-core)] text-[rgb(2_6_8)]' : 'bg-[rgb(255_255_255_/_0.12)] text-[var(--color-text-secondary)]'
+                c.chosen ? 'bg-[var(--color-cyan-core)] text-[rgb(2_6_8)]' : 'ring-1 ring-[rgb(255_255_255_/_0.2)] text-[rgb(255_255_255_/_0.42)]'
               )}>
                 {i + 1}
               </span>
@@ -357,6 +357,23 @@ function ReviewNav({ reviews, activeIndex, onNavigate }: ReviewNavProps) {
   );
 }
 
+// 리뷰 한 편은 상자 다섯 개가 아니라 한 줄기다. 왼쪽 레일이 시간 축이고,
+// 무게는 색이 아니라 글자 크기로 준다. 라벨은 발판이라 죽이고 내용을 키운다.
+function Stage({ label, accent, children }: { label?: string; accent?: boolean; children: React.ReactNode }) {
+  return (
+    <div className="relative pl-7">
+      {/* 축을 뚫고 앉는 마디 */}
+      <span className="absolute left-0 top-0.5 w-4 h-4 rounded-full bg-[rgb(6_8_10)] flex items-center justify-center" aria-hidden>
+        <span className={cn('rounded-full', accent ? 'w-2 h-2 bg-[var(--color-cyan-core)]' : 'w-1.5 h-1.5 bg-[rgb(255_255_255_/_0.28)]')} />
+      </span>
+      {label && (
+        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[rgb(255_255_255_/_0.42)] mb-2">{label}</p>
+      )}
+      {children}
+    </div>
+  );
+}
+
 interface ReviewContentProps {
   review: ProjectReview;
   reviews: ProjectReview[];
@@ -365,6 +382,14 @@ interface ReviewContentProps {
 }
 
 function ReviewContent({ review, reviews, activeIndex, onNavigate }: ReviewContentProps) {
+  const hasStages = !!(
+    review.problem ||
+    review.analysis?.length ||
+    review.action?.length ||
+    review.result?.length ||
+    review.tradeOffs?.length
+  );
+
   return (
     <div className="space-y-5">
       {/* 리뷰 이미지 */}
@@ -384,36 +409,44 @@ function ReviewContent({ review, reviews, activeIndex, onNavigate }: ReviewConte
         </div>
       )}
 
-      {review.problem && (
-        <div className="rounded-lg border-l border-[rgb(255_255_255_/_0.14)] bg-[rgb(255_255_255_/_0.04)] px-4 py-3">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--color-text-primary)] mb-1.5">문제</p>
-          <RichText text={review.problem} className="text-[12px] text-[var(--color-text-secondary)] leading-relaxed" />
+      {hasStages && (
+        <div className="relative space-y-6">
+          {/* 시간 축 */}
+          <div className="absolute left-2 top-2.5 bottom-2.5 w-px bg-[rgb(255_255_255_/_0.10)]" aria-hidden />
+
+          {review.problem && (
+            <Stage label="문제">
+              <RichText text={review.problem} className="text-[14px] text-[var(--color-text-primary)] leading-[1.6]" />
+            </Stage>
+          )}
+          {review.analysis && review.analysis.length > 0 && (
+            <Stage label="분석">
+              <AnalysisBlock items={review.analysis} />
+            </Stage>
+          )}
+          {review.action && review.action.length > 0 && (
+            <Stage label="실행">
+              <ul className="space-y-1.5">
+                {review.action.map((a, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <span className="mt-[6px] w-1 h-1 rounded-full bg-[rgb(255_255_255_/_0.25)] flex-shrink-0" />
+                    <RichText text={a} className="text-[12px] text-[var(--color-text-secondary)] leading-relaxed" />
+                  </li>
+                ))}
+              </ul>
+            </Stage>
+          )}
+          {review.result && review.result.length > 0 && (
+            <Stage accent>
+              <ResultBlock metrics={review.result} />
+            </Stage>
+          )}
+          {review.tradeOffs && review.tradeOffs.length > 0 && (
+            <Stage>
+              <TradeOffBlock items={review.tradeOffs} />
+            </Stage>
+          )}
         </div>
-      )}
-      {review.analysis && review.analysis.length > 0 && (
-        <div className="rounded-lg border-l border-[rgb(255_255_255_/_0.14)] bg-[rgb(255_255_255_/_0.04)] px-4 py-3">
-          <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-[var(--color-text-primary)] mb-3">분석</p>
-          <AnalysisBlock items={review.analysis} />
-        </div>
-      )}
-      {review.action && review.action.length > 0 && (
-        <div className="rounded-lg border-l border-[rgb(255_255_255_/_0.14)] bg-[rgb(255_255_255_/_0.04)] px-4 py-3">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--color-text-primary)] mb-2">실행</p>
-          <ul className="space-y-1.5">
-            {review.action.map((a, i) => (
-              <li key={i} className="flex items-start gap-2">
-                <span className="mt-[6px] w-1 h-1 rounded-full bg-[rgb(255_255_255_/_0.25)] flex-shrink-0" />
-                <RichText text={a} className="text-[12px] text-[var(--color-text-secondary)] leading-relaxed" />
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {review.result && review.result.length > 0 && (
-        <ResultBlock metrics={review.result} />
-      )}
-      {review.tradeOffs && review.tradeOffs.length > 0 && (
-        <TradeOffBlock items={review.tradeOffs} />
       )}
 
       {/* 리뷰 하단 네비게이션 */}

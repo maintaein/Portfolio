@@ -63,3 +63,29 @@ describe('프로젝트 섹션과 모달의 어두운 테마', () => {
     expect(MODAL.match(/rounded-2xl/g)).toHaveLength(1);
   });
 });
+
+// 다섯 단계가 똑같은 상자 다섯 개였다. 순서만 있고 흐름이 없었고,
+// 라벨이 내용보다 크고 밝아서 이미 아는 단어가 증거보다 크게 읽혔다.
+describe('리뷰는 상자가 아니라 한 줄기로 읽힌다', () => {
+  it('다섯 단계가 축 하나 위의 마디로 놓인다', () => {
+    // 단계마다 두르던 면이 사라졌다.
+    expect(MODAL).not.toContain('rounded-lg border-l border-[rgb(255_255_255_/_0.14)]');
+    expect(MODAL.match(/<Stage(?=[\s>])/g)).toHaveLength(5);
+  });
+
+  it('단계 라벨은 내용보다 작고 흐리다', () => {
+    // 라벨은 발판이라 3단 회색 10px, 문제 진술이 리뷰에서 제일 큰 글자다.
+    expect(MODAL).toContain(
+      'text-[10px] font-bold uppercase tracking-[0.16em] text-[rgb(255_255_255_/_0.42)]'
+    );
+    expect(MODAL).toContain(
+      'text={review.problem} className="text-[14px] text-[var(--color-text-primary)]'
+    );
+  });
+
+  it('분석에서 채워진 선택지는 고른 것 하나뿐이다', () => {
+    // 탈락한 대안은 테두리만 남는다. 시안은 고른 순간과 도착한 순간에만 붙는다.
+    expect(MODAL).toContain("      : 'border border-[rgb(255_255_255_/_0.12)]'");
+    expect(MODAL.match(/bg-\[var\(--color-cyan-core\)\]/g)?.length ?? 0).toBeGreaterThan(0);
+  });
+});
