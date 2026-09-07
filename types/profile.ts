@@ -31,6 +31,8 @@ export interface Certificate {
   name: string;
   organization: string;
   date: string;
+  // 취득 등급. 수상의 rank와 같은 자리에 놓이는 열이라 선택값이 아니다.
+  grade: string;
   logo: string;
   validUntil?: string;
   credentialId?: string;

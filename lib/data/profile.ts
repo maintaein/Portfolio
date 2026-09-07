@@ -61,9 +61,10 @@ export const awards: Award[] = [
 export const certificates: Certificate[] = [
     {
       id: '1',
-      name: 'OPIC IH',
+      name: 'OPIC',
       organization: 'ACTFL',
       date: '2025. 03',
+      grade: 'IH',
       logo: 'opic',
       validUntil: '2027. 03',
     },

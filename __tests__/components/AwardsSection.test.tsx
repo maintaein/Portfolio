@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import AwardsAndCertificatesSection from '@/components/sections/AwardAndCertificatesSection';
 import { findTailwindPaletteColorUtilities } from '@/__tests__/helpers/tailwindPalette';
 import { awards, certificates } from '@/lib/data';
@@ -11,6 +12,15 @@ const SOURCE = readFileSync(
   resolve(process.cwd(), 'components/sections/AwardAndCertificatesSection/index.tsx'),
   'utf8'
 );
+
+// 원장의 줄 순서. 수상이 먼저, 자격증이 뒤에 오고 번호는 이어진다.
+const TITLES = [
+  ...awards.map((award) => award.title),
+  ...certificates.map((certificate) => certificate.name),
+];
+
+// 펼친 판의 로고 폭 상한. 컴포넌트와 같은 값이어야 비율 검사가 성립한다.
+const PANEL_LOGO_MAX_WIDTH = 148;
 
 // PNG는 8바이트 시그니처 뒤에 바로 IHDR이 오고 폭과 높이가 16~23바이트에
 // 빅엔디언 4바이트씩 들어 있다. 라이브러리 없이 읽는다.
@@ -24,6 +34,23 @@ function logoFile(element: HTMLElement): string {
   const file = source.match(/\/logos-mono\/([\w-]+\.png)\)/)?.[1];
   expect(file, `--org-logo-src를 읽을 수 없다: ${source}`).toBeDefined();
   return file!;
+}
+
+function rows(): HTMLElement[] {
+  return [...document.querySelectorAll<HTMLElement>('[data-ledger-row]')];
+}
+
+function toggle(title: string): HTMLElement {
+  const row = rows().find((node) => node.dataset.ledgerRow === title);
+  expect(row, `${title} 줄이 없다`).toBeDefined();
+  return row!.querySelector('button')!;
+}
+
+function panelOf(title: string): HTMLElement {
+  const id = toggle(title).getAttribute('aria-controls')!;
+  const panel = document.getElementById(id);
+  expect(panel, `${title}의 판이 없다`).not.toBeNull();
+  return panel!;
 }
 
 describe('수상과 자격증 데이터', () => {
@@ -43,7 +70,7 @@ describe('수상과 자격증 데이터', () => {
     expect(certificates.length).toBeGreaterThan(0);
 
     for (const certificate of certificates) {
-      for (const field of ['name', 'organization', 'date', 'logo'] as const) {
+      for (const field of ['name', 'organization', 'date', 'grade', 'logo'] as const) {
         expect(certificate[field].trim(), `${certificate.name}의 ${field}`).not.toBe('');
       }
     }
@@ -55,113 +82,138 @@ describe('수상과 자격증 데이터', () => {
     for (const award of awards) {
       expect(award.rank, `${award.title}의 등급`).toMatch(/^[가-힣\s]+$/);
     }
+
+    for (const certificate of certificates) {
+      expect(certificate.grade, `${certificate.name}의 등급`).toMatch(/^[가-힣A-Z0-9\s]+$/);
+    }
   });
 });
 
 describe('AwardsAndCertificatesSection', () => {
-  it('수상을 데이터 순서 그대로 렌더한다', () => {
+  it('수상과 자격증을 한 원장에 번호를 이어 세운다', () => {
     render(<AwardsAndCertificatesSection />);
 
-    const rows = [...document.querySelectorAll('[data-award-row]')];
-    expect(rows.map((row) => row.getAttribute('data-award-row'))).toEqual(
-      awards.map((award) => award.title)
+    expect(rows().map((row) => row.dataset.ledgerRow)).toEqual(TITLES);
+
+    const indexes = [...document.querySelectorAll('[data-ledger-field="index"]')].map(
+      (node) => node.textContent
+    );
+    expect(indexes).toEqual(TITLES.map((_, index) => String(index + 1)));
+  });
+
+  it('계기 줄의 개수가 두 목록을 합친 수와 맞는다', () => {
+    render(<AwardsAndCertificatesSection />);
+
+    expect(document.querySelector('[data-ledger-count]')!.textContent).toBe(
+      String(awards.length + certificates.length)
     );
   });
 
-  // D4: 등급·대회·관련 프로젝트·주관사·날짜가 한 행에 모두 있어야 한다.
-  it('각 행이 등급·대회·주관사·프로젝트·날짜를 모두 담는다', () => {
+  // 처음에는 제목과 등급만 보이는 표다. 상세는 누른 뒤에 온다.
+  it('처음에는 모든 줄이 접혀 있다', () => {
     render(<AwardsAndCertificatesSection />);
 
-    const rows = [...document.querySelectorAll('[data-award-row]')];
-    rows.forEach((row, index) => {
-      const award = awards[index];
-      const read = (field: string) =>
-        row.querySelector(`[data-award-field="${field}"]`)?.textContent ?? '';
-
-      expect(read('rank')).toBe(award.rank);
-      expect(read('title')).toBe(award.title);
-      expect(read('date')).toBe(award.date);
-      expect(read('meta')).toContain(award.organization);
-      expect(read('meta')).toContain(award.project);
-    });
+    for (const title of TITLES) {
+      expect(toggle(title).getAttribute('aria-expanded')).toBe('false');
+    }
+    expect(rows().filter((row) => row.dataset.ledgerOpen === 'true')).toHaveLength(0);
   });
 
-  // 화면에서 읽는 순서와 DOM 순서가 어긋나면 스크린리더 사용자만 다른
-  // 이야기를 듣는다.
-  it('행 안 DOM 순서가 시각 순서와 같다', () => {
+  it('줄을 누르면 상세가 펼쳐진다', async () => {
+    const user = userEvent.setup();
     render(<AwardsAndCertificatesSection />);
 
-    const row = document.querySelector('[data-award-row]')!;
-    const order = [...row.querySelectorAll('[data-award-field]')].map((node) =>
-      node.getAttribute('data-award-field')
-    );
-    expect(order).toEqual(['rank', 'title', 'description', 'meta', 'date']);
+    const award = awards[0];
+    await user.click(toggle(award.title));
+
+    expect(toggle(award.title).getAttribute('aria-expanded')).toBe('true');
+
+    const panel = panelOf(award.title);
+    expect(panel.getAttribute('aria-hidden')).toBe('false');
+    expect(panel.textContent).toContain(award.organization);
+    expect(panel.textContent).toContain(award.project);
+    expect(panel.textContent).toContain(award.date);
+    expect(panel.textContent).toContain(award.description);
   });
 
-  // D4: 자격증 한 건 때문에 탭을 만들지 않는다. 같은 화면 안에 있어야
-  // 하고, 위계는 수상보다 낮아야 한다.
-  it('자격증이 탭 없이 같은 화면의 낮은 위계 행으로 있다', () => {
+  // 여러 줄이 한꺼번에 열리면 가운데 정렬이 화면 밖으로 밀려 방금 누른
+  // 줄이 눈에서 사라진다.
+  it('다른 줄을 누르면 앞서 열린 줄이 닫힌다', async () => {
+    const user = userEvent.setup();
     render(<AwardsAndCertificatesSection />);
 
-    expect(screen.queryByRole('tab')).toBeNull();
-    expect(screen.queryByRole('tablist')).toBeNull();
-    expect(screen.queryByRole('button')).toBeNull();
+    await user.click(toggle(awards[0].title));
+    await user.click(toggle(awards[1].title));
 
-    const rows = [...document.querySelectorAll('[data-credential-row]')];
-    expect(rows.map((row) => row.getAttribute('data-credential-row'))).toEqual(
-      certificates.map((certificate) => certificate.name)
-    );
-
-    // 수상 제목은 t4, 자격증 이름은 t5다. 같은 크기면 둘의 위계가 무너진다.
-    const title = document.querySelector('[data-award-field="title"]')!;
-    const name = document.querySelector('[data-credential-field="name"]')!;
-    expect(title.className).toContain('text-t4');
-    expect(name.className).toContain('text-t5');
+    expect(toggle(awards[0].title).getAttribute('aria-expanded')).toBe('false');
+    expect(toggle(awards[1].title).getAttribute('aria-expanded')).toBe('true');
+    expect(rows().filter((row) => row.dataset.ledgerOpen === 'true')).toHaveLength(1);
   });
 
-  it('계기 줄의 개수가 실제 데이터 개수와 맞는다', () => {
+  it('열린 줄을 다시 누르면 닫힌다', async () => {
+    const user = userEvent.setup();
     render(<AwardsAndCertificatesSection />);
 
-    expect(document.querySelector('[data-award-count]')!.textContent).toBe(
-      String(awards.length).padStart(2, '0')
-    );
-    expect(document.querySelector('[data-credential-count]')!.textContent).toBe(
-      String(certificates.length).padStart(2, '0')
-    );
+    await user.click(toggle(awards[0].title));
+    await user.click(toggle(awards[0].title));
+
+    expect(toggle(awards[0].title).getAttribute('aria-expanded')).toBe('false');
+    expect(rows().filter((row) => row.dataset.ledgerOpen === 'true')).toHaveLength(0);
   });
 
-  it('로고 마스크가 실제로 있는 파일을 가리키고 슬롯 폭이 원본 비율과 맞는다', () => {
+  // 높이를 재지 않고 여는 방식이라 판이 DOM에 남아 있어야 한다. 언마운트로
+  // 바꾸면 전환이 시작점을 잃고 툭 튀어나온다.
+  it('접힌 판도 DOM에 남되 접근성 트리에서는 빠진다', () => {
     render(<AwardsAndCertificatesSection />);
 
-    const logos = [
-      ...document.querySelectorAll('[data-award-logo], [data-credential-logo]'),
-    ] as HTMLElement[];
-    expect(logos).toHaveLength(awards.length + certificates.length);
-
-    for (const logo of logos) {
-      const file = logoFile(logo);
-      const { width, height } = pngSize(file);
-      const slotHeight = Number.parseInt(logo.style.height, 10);
-      expect(slotHeight, `${file}의 슬롯 높이`).toBeGreaterThan(0);
-      expect(Number.parseInt(logo.style.width, 10), `${file}의 슬롯 폭`).toBe(
-        Math.round((slotHeight * width) / height)
-      );
+    for (const title of TITLES) {
+      const panel = panelOf(title);
+      expect(panel.getAttribute('aria-hidden')).toBe('true');
+      expect(panel.className).toContain('grid-rows-[0fr]');
     }
   });
 
-  // 로고 폭이 30px에서 97px까지 벌어진다. 열을 auto로 두면 행마다 로고
-  // 폭이 그 행의 열 너비가 돼서 넓은 로고가 있는 행만 제목이 밀린다.
-  // jsdom은 레이아웃을 하지 않으므로 열 정의가 두 목록에서 같은지 본다.
-  it('수상과 자격증이 같은 고정 폭 로고 열을 쓴다', () => {
+  it('자격증도 같은 줄 모양으로 발급처와 유효 기간을 편다', async () => {
+    const user = userEvent.setup();
     render(<AwardsAndCertificatesSection />);
 
-    const columns = [
-      ...document.querySelectorAll('[data-award-row], [data-credential-row]'),
-    ].map((row) => [...row.classList].find((name) => name.includes('grid-cols-')));
+    const certificate = certificates[0];
+    await user.click(toggle(certificate.name));
 
-    expect(columns).toHaveLength(awards.length + certificates.length);
-    expect(new Set(columns).size, `행마다 다른 열 정의: ${columns.join(', ')}`).toBe(1);
-    expect(columns[0]).not.toContain('auto_1fr');
+    const panel = panelOf(certificate.name);
+    expect(panel.textContent).toContain(certificate.organization);
+    expect(panel.textContent).toContain(certificate.date);
+    expect(panel.textContent).toContain(certificate.validUntil!);
+    expect(toggle(certificate.name).textContent).toContain(certificate.grade);
+  });
+
+  // 줄이 열려 상자가 커져도 세로 가운데 정렬은 auto 마진이 쥔다.
+  // items-center로 바꾸면 내용이 길 때 위쪽이 잘려 스크롤로도 닿지 못한다.
+  it('상자가 커져도 세로 가운데 정렬을 auto 마진으로 유지한다', () => {
+    const { container } = render(<AwardsAndCertificatesSection />);
+
+    const section = container.querySelector('section')!;
+    expect(section.className).toContain('min-h-full');
+    expect(section.className).not.toContain('items-center');
+    expect(container.querySelector('.section-plate')!.className).toContain('m-auto');
+  });
+
+  it('로고 마스크가 실제로 있는 파일을 가리키고 원본 비율과 맞는다', () => {
+    render(<AwardsAndCertificatesSection />);
+
+    const logos = [...document.querySelectorAll<HTMLElement>('.org-logo')];
+    expect(logos).toHaveLength(TITLES.length);
+
+    for (const logo of logos) {
+      const file = logoFile(logo);
+      const source = pngSize(file);
+      const height = Number.parseFloat(logo.style.height);
+      const width = Number.parseFloat(logo.style.width);
+
+      expect(width, `${file}의 슬롯 폭`).toBe(
+        Math.min(PANEL_LOGO_MAX_WIDTH, Math.round((height * source.width) / source.height))
+      );
+    }
   });
 
   // A-0: 화면에 보이는 섹션 제목은 전부 뺐고 h2는 접근성 트리에만 남는다.
