@@ -118,3 +118,38 @@ describe('모달은 판단부터 보여주고 기능 목록으로 끝난다', ()
     expect(MODAL.match(/border-t border-\[rgb\(255_255_255_\/_0\.10\)\] mb-6/g)).toHaveLength(5);
   });
 });
+
+// 화면으로 재보니 같은 말이 두 번 나오고, 라벨 밝기가 제자리를 벗어나 있었다.
+describe('모달의 말과 밝기가 제자리에 앉는다', () => {
+  it('탭이 이름을 말하면 그 밑에서 다시 말하지 않는다', () => {
+    expect(MODAL).toContain('{reviews.length <= 1 && (');
+  });
+
+  it('라벨은 본문색을 빌려 쓰지 않는다', () => {
+    // 라벨은 3단 회색, 본문은 T2. 성과 그리드 머리가 본문색을 쓰고 있었다.
+    expect(MODAL).not.toMatch(/uppercase[^"]*text-\[var\(--color-text-secondary\)\]/);
+  });
+
+  it('곁가지 머리가 자기 단계 라벨보다 밝지 않다', () => {
+    expect(MODAL).toContain(
+      'text-[10px] font-bold uppercase tracking-widest text-[rgb(255_255_255_/_0.42)]">트레이드오프'
+    );
+  });
+
+  it('모달 안에 그림문자를 두지 않는다', () => {
+    // ⚖ 하나뿐이었고, 아이콘 체계가 따로 없는 판에서 혼자 튀었다.
+    expect(MODAL).not.toMatch(/[☀-➿️]|\ud83c[\udf00-\udfff]|\ud83d[\udc00-\ude4f]/);
+  });
+
+  it('헤더 버튼도 판의 다른 선과 같은 굵기다', () => {
+    // Button의 outline 기본값이 border-2였다. 모달의 다른 선은 전부 1px이다.
+    expect(MODAL).toContain('className={`border border-[rgb(255_255_255_/_0.18)]');
+  });
+
+  it('포커스 링이 검은 판 위에 흰 테를 만들지 않는다', () => {
+    // Button은 ring-offset-2를 깔고 offset 색 기본값이 흰색이다. 판 색으로 덮는다.
+    const ring = MODAL.match(/focus-visible:ring-\[var\(--color-cyan-core\)\]/g) ?? [];
+    const offset = MODAL.match(/focus-visible:ring-offset-\[rgb\(6_8_10\)\]/g) ?? [];
+    expect(offset).toHaveLength(ring.length);
+  });
+});

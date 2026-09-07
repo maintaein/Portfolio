@@ -74,8 +74,7 @@ function TradeOffBlock({ items }: { items: string[] }) {
     <div className="rounded-lg border border-[rgb(255_255_255_/_0.08)] overflow-hidden">
       {/* 헤더 */}
       <div className="flex items-center gap-2 px-3 py-2 bg-[rgb(255_255_255_/_0.04)] border-b border-[rgb(255_255_255_/_0.08)]">
-        <span className="text-[rgb(255_255_255_/_0.42)] text-[14px] leading-none select-none">⚖</span>
-        <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--color-text-primary)]">트레이드오프</span>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-[rgb(255_255_255_/_0.42)]">트레이드오프</span>
       </div>
 
       {/* 항목 목록 */}
@@ -119,7 +118,7 @@ function OverviewBlock({ project }: { project: NonNullable<Parameters<typeof Pro
       {/* 성과 카드 그리드 */}
       {learnedMetrics.length > 0 && (
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--color-text-secondary)] mb-3">이 프로젝트에서 배운 것</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[rgb(255_255_255_/_0.42)] mb-3">이 프로젝트에서 배운 것</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {learnedMetrics.map((m, i) => (
               <div key={i} className="rounded-lg bg-[rgb(255_255_255_/_0.04)] border border-[rgb(255_255_255_/_0.08)] p-4">
@@ -413,7 +412,10 @@ function ReviewContent({ review, reviews, activeIndex, onNavigate }: ReviewConte
 
   return (
     <div className="space-y-5">
-      <p className="text-[15px] font-bold text-[var(--color-text-primary)] leading-snug">{review.title}</p>
+      {/* 탭이 있으면 고른 칩이 이미 이름을 말한다. 탭이 없을 때만 제목을 세운다 */}
+      {reviews.length <= 1 && (
+        <p className="text-[15px] font-bold text-[var(--color-text-primary)] leading-snug">{review.title}</p>
+      )}
 
       {/* 리뷰 이미지 */}
       {review.image && (
@@ -561,14 +563,14 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
               <div className="flex items-center gap-2 ml-3 flex-shrink-0">
                 {project.githubUrl && (
                   <Button variant="outline" leftIcon={<Icon name="share" />}
-                    className={`border-[rgb(255_255_255_/_0.18)] text-[var(--color-text-primary)] hover:bg-[rgb(255_255_255_/_0.08)] focus-visible:ring-[var(--color-cyan-core)]`}
+                    className={`border border-[rgb(255_255_255_/_0.18)] text-[var(--color-text-primary)] hover:bg-[rgb(255_255_255_/_0.08)] focus-visible:ring-[var(--color-cyan-core)] focus-visible:ring-offset-[rgb(6_8_10)]`}
                     onClick={() => window.open(project.githubUrl, '_blank', 'noopener,noreferrer')}>
                     GitHub
                   </Button>
                 )}
                 {project.demoUrl && (
                   <Button leftIcon={<Icon name="arrow-right" />}
-                    className={`bg-[var(--color-cyan-core)] text-[rgb(2_6_8)] hover:bg-[var(--color-cyan-hi)] focus-visible:ring-[var(--color-cyan-core)]`}
+                    className={`bg-[var(--color-cyan-core)] text-[rgb(2_6_8)] hover:bg-[var(--color-cyan-hi)] focus-visible:ring-[var(--color-cyan-core)] focus-visible:ring-offset-[rgb(6_8_10)]`}
                     onClick={() => window.open(project.demoUrl, '_blank', 'noopener,noreferrer')}>
                     Live
                   </Button>
