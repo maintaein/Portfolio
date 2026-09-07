@@ -101,3 +101,20 @@ describe('리뷰는 P/A/A/R 네 단으로 읽힌다', () => {
     expect(SECTION).not.toContain('click again for detail');
   });
 });
+
+// 기능 목록이 두 번째에 앉아 있어서, 판단이 드러나는 리뷰와 기술 선정이
+// 그 뒤로 밀렸다. 아무것도 감추지 않고 읽는 순서만 바꾼다.
+describe('모달은 판단부터 보여주고 기능 목록으로 끝난다', () => {
+  it('구현 사항이 맨 마지막이다', () => {
+    const order = ['프로젝트 요약', 'Project Review', '기술 스택 & 선정 이유', '배운 점', '구현 사항'].map(
+      (label) => MODAL.indexOf(`<SectionLabel>${label}</SectionLabel>`)
+    );
+    expect(Math.min(...order)).toBeGreaterThan(0);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+  });
+
+  it('맨 뒤로 간 구현 사항도 앞 블록과 줄로 갈린다', () => {
+    // 요약 밑에 붙어 있을 땐 필요 없던 가름줄을, 자리를 옮겼으니 붙인다.
+    expect(MODAL.match(/border-t border-\[rgb\(255_255_255_\/_0\.10\)\] mb-6/g)).toHaveLength(5);
+  });
+});

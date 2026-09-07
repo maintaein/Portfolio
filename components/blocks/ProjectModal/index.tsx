@@ -666,58 +666,6 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                   </div>
                 )}
 
-                {/* 구현 사항 */}
-                {project.implementations && project.implementations.length > 0 && (
-                  <div>
-                    <SectionLabel>구현 사항</SectionLabel>
-                    {/* 테이블형 2열 레이아웃 — 카테고리 라벨(좌) + 아이템(우) */}
-                    <div className="rounded-lg border border-[rgb(255_255_255_/_0.08)] overflow-hidden">
-                      {project.implementations.map((impl, index) => {
-                        const isLast = index === project.implementations!.length - 1;
-                        return (
-                          <div
-                            key={index}
-                            className={cn(
-                              'grid grid-cols-[6rem_1fr] sm:grid-cols-[8rem_1fr]',
-                              !isLast && 'border-b border-[rgb(255_255_255_/_0.08)]'
-                            )}
-                          >
-                            {/* 카테고리 라벨 열 */}
-                            <div className="bg-[rgb(255_255_255_/_0.04)] px-3 py-4 flex items-start justify-end border-r border-[rgb(255_255_255_/_0.08)]">
-                              <span className="text-[10px] font-bold tracking-wider text-[rgb(255_255_255_/_0.42)] uppercase text-right leading-snug pt-0.5">
-                                {impl.category.replace(' 섹션', '')}
-                              </span>
-                            </div>
-                            {/* 아이템 열 */}
-                            <div className="px-4 py-3 space-y-2.5 bg-transparent">
-                              {impl.items.map((text, itemIdx) => {
-                                const isTechItem = text.startsWith('**');
-                                return (
-                                  <div key={itemIdx}>
-                                    {isTechItem ? (
-                                      <div className="rounded-md bg-[rgb(3_179_195_/_0.10)] border border-[var(--color-hairline)] px-3 py-2">
-                                        <RichText text={text} className="text-[12px] text-[var(--color-text-primary)] leading-relaxed" />
-                                      </div>
-                                    ) : (
-                                      <div className="flex items-start gap-2">
-                                        <span className="mt-[6px] w-1 h-1 rounded-full bg-[rgb(255_255_255_/_0.2)] flex-shrink-0" />
-                                        <RichText text={text} className="text-[12px] text-[var(--color-text-secondary)] leading-relaxed" />
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                              {impl.video && (
-                                <video src={impl.video} controls className="w-full rounded-lg mt-1" preload="metadata" />
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
                 {/* 프로젝트 리뷰: 카드 컨테이너로 시각적 격리 */}
                 {project.reviews && project.reviews.length > 0 && (
                   <div ref={reviewSectionRef}>
@@ -807,6 +755,59 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                         );
                       })}
                     </ul>
+                  </div>
+                )}
+
+                {/* 구현 사항 */}
+                {project.implementations && project.implementations.length > 0 && (
+                  <div>
+                    <div className="border-t border-[rgb(255_255_255_/_0.10)] mb-6" />
+                    <SectionLabel>구현 사항</SectionLabel>
+                    {/* 테이블형 2열 레이아웃 — 카테고리 라벨(좌) + 아이템(우) */}
+                    <div className="rounded-lg border border-[rgb(255_255_255_/_0.08)] overflow-hidden">
+                      {project.implementations.map((impl, index) => {
+                        const isLast = index === project.implementations!.length - 1;
+                        return (
+                          <div
+                            key={index}
+                            className={cn(
+                              'grid grid-cols-[6rem_1fr] sm:grid-cols-[8rem_1fr]',
+                              !isLast && 'border-b border-[rgb(255_255_255_/_0.08)]'
+                            )}
+                          >
+                            {/* 카테고리 라벨 열 */}
+                            <div className="bg-[rgb(255_255_255_/_0.04)] px-3 py-4 flex items-start justify-end border-r border-[rgb(255_255_255_/_0.08)]">
+                              <span className="text-[10px] font-bold tracking-wider text-[rgb(255_255_255_/_0.42)] uppercase text-right leading-snug pt-0.5">
+                                {impl.category.replace(' 섹션', '')}
+                              </span>
+                            </div>
+                            {/* 아이템 열 */}
+                            <div className="px-4 py-3 space-y-2.5 bg-transparent">
+                              {impl.items.map((text, itemIdx) => {
+                                const isTechItem = text.startsWith('**');
+                                return (
+                                  <div key={itemIdx}>
+                                    {isTechItem ? (
+                                      <div className="rounded-md bg-[rgb(3_179_195_/_0.10)] border border-[var(--color-hairline)] px-3 py-2">
+                                        <RichText text={text} className="text-[12px] text-[var(--color-text-primary)] leading-relaxed" />
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-start gap-2">
+                                        <span className="mt-[6px] w-1 h-1 rounded-full bg-[rgb(255_255_255_/_0.2)] flex-shrink-0" />
+                                        <RichText text={text} className="text-[12px] text-[var(--color-text-secondary)] leading-relaxed" />
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                              {impl.video && (
+                                <video src={impl.video} controls className="w-full rounded-lg mt-1" preload="metadata" />
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 
