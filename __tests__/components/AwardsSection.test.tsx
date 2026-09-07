@@ -267,7 +267,36 @@ describe('AwardsAndCertificatesSection', () => {
     const section = container.querySelector('section')!;
     expect(section.className).toContain('min-h-full');
     expect(section.className).not.toContain('items-center');
-    expect(container.querySelector('.section-plate')!.className).toContain('m-auto');
+    expect(container.querySelector('section > div')!.className).toContain('m-auto');
+  });
+
+  it('두 머리글이 본문보다 크고 밝다', () => {
+    const { container } = render(<AwardsAndCertificatesSection />);
+
+    const headings = [...container.querySelectorAll('.section-plate > p')];
+    expect(headings.map((node) => node.textContent)).toEqual([
+      `Awards${awards.length}`,
+      `Credentials${certificates.length}`,
+    ]);
+
+    for (const heading of headings) {
+      // 본문 줄은 t7이다. 머리글은 그보다 두 단 위에 밝은 잉크로 선다.
+      expect(heading.className).toContain('text-t5');
+      expect(heading.className).toContain('text-[var(--color-text-primary)]');
+      expect(heading.className).toContain('border-b-2');
+    }
+  });
+
+  // 줄을 가르는 것은 실선 하나가 아니라 눈금 두 겹이다. 폭 전체의
+  // 머리카락선 위에 번호 열 너비만큼의 밝은 눈금이 얹힌다.
+  it('줄 사이를 눈금 두 겹으로 가른다', () => {
+    render(<AwardsAndCertificatesSection />);
+
+    for (const row of rows()) {
+      expect(row.className).toContain('before:bg-[var(--color-hairline)]');
+      expect(row.className).toMatch(/after:w-7/);
+      expect(row.className).toMatch(/after:bg-\[rgb\(255_255_255/);
+    }
   });
 
   it('로고 마스크가 실제로 있는 파일을 가리키고 원본 비율과 맞는다', () => {
@@ -310,10 +339,16 @@ describe('AwardsAndCertificatesSection', () => {
 
   // A-0: 콘텐츠가 앉는 상자에만 검정 판을 깐다. 섹션 전체에 깔면 판의
   // 경계가 푸터와 맞닿는 자리에서 색 단차로 드러난다.
-  it('콘텐츠 상자에만 어두운 판을 깐다', () => {
+  it('콘텐츠 상자에만 어두운 판을 깔고 수상과 자격증을 따로 앉힌다', () => {
     const { container } = render(<AwardsAndCertificatesSection />);
 
     expect(container.querySelector('section')!.className).not.toContain('section-plate');
-    expect(container.querySelector('.section-plate')).not.toBeNull();
+
+    const plates = [...container.querySelectorAll('.section-plate')];
+    expect(plates, '수상과 자격증은 각자의 판에 앉는다').toHaveLength(2);
+    expect(plates[0].textContent).toContain(awards[0].title.slice(-4));
+    expect(plates[1].textContent).toContain(certificates[0].grade);
+    expect(plates[0].querySelector('[data-credential-row]')).toBeNull();
+    expect(plates[1].querySelector('[data-ledger-row]')).toBeNull();
   });
 });
