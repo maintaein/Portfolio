@@ -19,7 +19,11 @@ export interface Award {
     organization: string;
     date: string;
     description?: string;
-    rank?: string;
+    // 등급과 연결 프로젝트는 Recognition Ledger의 열이라 선택값이 아니다.
+    // 하나라도 비면 행의 열이 어긋나고 외부 검증이 반쪽으로 읽힌다.
+    rank: string;
+    project: string;
+    logo: string;
 }
   
 export interface Certificate {
@@ -27,6 +31,7 @@ export interface Certificate {
   name: string;
   organization: string;
   date: string;
+  logo: string;
   validUntil?: string;
   credentialId?: string;
 }

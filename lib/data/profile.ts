@@ -31,23 +31,29 @@ export const awards: Award[] = [
       title: '삼성청년SW아카데미 자율프로젝트',
       organization: '삼성전자',
       date: '2025. 05',
-      rank: '🏆 우수상',
-      description: 'AI 기반 업무 자동화 웹 서비스 AlphaMail의 프론트엔드 담당으로 수상'
+      rank: '우수상',
+      project: 'AlphaMail',
+      logo: 'ssafy',
+      description: 'AI 기반 업무 자동화 웹 서비스의 프론트엔드 담당으로 수상'
     },
     {
       id: '2',
       title: '삼성청년SW아카데미 특화프로젝트',
       organization: '삼성전자',
       date: '2025. 04',
-      rank: '🏆 우수상',
-      description: '카드 혜택 기반으로 효율적 소비를 도와주는 모바일 금융 서비스 Rebirth의 프론트엔드 담당으로 수상'
+      rank: '우수상',
+      project: 'ReBirth',
+      logo: 'ssafy',
+      description: '카드 혜택 기반으로 효율적 소비를 도와주는 모바일 금융 서비스의 프론트엔드 담당으로 수상'
     },
     {
       id: '3',
       title: '한국경제 SW개발 경진대회',
       organization: '한국경제',
       date: '2024. 06',
-      rank: '🏆 장려상',
+      rank: '장려상',
+      project: 'PoseTive',
+      logo: 'hankyung',
       description: '이미지의 포즈를 사용자가 그리는 대로 변환할 수 있는 AI 서비스'
     },
   ];
@@ -58,6 +64,7 @@ export const certificates: Certificate[] = [
       name: 'OPIC IH',
       organization: 'ACTFL',
       date: '2025. 03',
+      logo: 'opic',
       validUntil: '2027. 03',
     },
   ];

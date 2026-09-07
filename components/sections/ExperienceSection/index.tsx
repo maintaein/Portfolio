@@ -1,28 +1,14 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import { experiences } from '@/lib/data';
+import { orgLogoStyle } from '@/lib/logos';
 import { SECTION_IDS } from '@/lib/constants';
 
-// 마스크 원본 크기. 슬롯 높이를 32px로 고정하고 폭은 여기서 비율로
-// 계산한다. contain 마스크는 폭이 남으면 그만큼 죽은 여백을 만들 뿐이라,
-// 정사각 타일에 넣으면 4:1 워드마크가 8px까지 줄어 읽히지 않는다.
+// 슬롯 높이 32px, 폭 상한 96px. 원본 비율 역산은 Awards와 같은 표를 쓴다.
 const LOGO_HEIGHT = 32;
 const LOGO_MAX_WIDTH = 96;
-const LOGOS: Record<string, { file: string; width: number; height: number }> = {
-  FASOO: { file: 'fasoo', width: 428, height: 104 },
-  SSAFY: { file: 'ssafy', width: 184, height: 145 },
-  KUA: { file: 'kua', width: 216, height: 176 },
-};
-
-function logoStyle(logo: string): CSSProperties {
-  const { file, width, height } = LOGOS[logo];
-  return {
-    '--org-logo-src': `url(/logos-mono/${file}.png)`,
-    width: Math.min(LOGO_MAX_WIDTH, Math.round((LOGO_HEIGHT * width) / height)),
-  } as CSSProperties;
-}
 
 export default function ExperienceSection() {
   const railRef = useRef<HTMLDivElement>(null);
@@ -126,7 +112,11 @@ export default function ExperienceSection() {
                     aria-hidden
                     data-experience-logo
                     className="org-logo shrink-0"
-                    style={logoStyle(experience.logo ?? 'FASOO')}
+                    style={orgLogoStyle(
+                      experience.logo ?? 'FASOO',
+                      LOGO_HEIGHT,
+                      LOGO_MAX_WIDTH
+                    )}
                   />
                   <h3 className="text-t3 font-semibold text-[var(--color-text-primary)]">
                     {experience.company}
