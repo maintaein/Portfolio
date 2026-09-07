@@ -234,7 +234,7 @@ function TechReasonExpand({ tech }: { tech: TechReason }) {
             {tech.alternatives.map((alt, i) => (
               <li key={i} className="text-[11px] text-grey-700 leading-relaxed">
                 <span className="font-semibold text-grey-800">{alt.name}</span>
-                <span className="text-grey-400 mx-1.5">—</span>
+                <span className="text-grey-400 mr-1.5">:</span>
                 {alt.rejectedBecause}
               </li>
             ))}

@@ -120,12 +120,8 @@ export default function AwardsAndCertificatesSection() {
 
                     <span
                       data-ledger-field="grade"
-                      className="flex items-center gap-2 text-t7 uppercase tracking-widest text-[var(--color-text-secondary)]"
+                      className="text-t7 uppercase tracking-widest text-[var(--color-text-secondary)]"
                     >
-                      <span
-                        aria-hidden
-                        className="block size-1 rounded-full bg-[var(--color-cyan-core)]"
-                      />
                       {entry.grade}
                     </span>
                   </button>

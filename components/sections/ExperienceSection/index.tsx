@@ -102,6 +102,10 @@ export default function ExperienceSection() {
                 >
                   <span className="flex items-center gap-2">
                     {experience.period}
+                    {/* 카드 안에서 시안은 여기 하나뿐이다. 계획 5 A-1의 "시안
+                        강조는 사용자의 한 상태에만 쓴다"를 지키려면 직책·기술
+                        칩·하단 안내문이 같이 켜져 있으면 안 된다. 넷이 다
+                        시안이던 동안에는 강조가 아니라 그냥 카드 글자색이었다. */}
                     {current && <span className="text-[var(--color-cyan-hi)]">CURRENT</span>}
                   </span>
                   <span>NODE_{String(index + 1).padStart(2, '0')}</span>
@@ -125,7 +129,7 @@ export default function ExperienceSection() {
 
                 <p
                   data-experience-field="position"
-                  className="mt-1.5 text-t7 font-medium uppercase tracking-widest text-[var(--color-cyan-hi)]"
+                  className="mt-1.5 text-t7 font-medium uppercase tracking-widest text-[var(--color-text-primary)]"
                 >
                   {experience.position}
                 </p>
@@ -143,7 +147,7 @@ export default function ExperienceSection() {
                   {(experience.skills ?? []).map((skill) => (
                     <li
                       key={skill}
-                      className="border border-[var(--color-hairline)] px-2.5 py-1 text-t8 uppercase tracking-wider text-[var(--color-cyan-hi)]"
+                      className="border border-[var(--color-hairline)] px-2.5 py-1 text-t8 uppercase tracking-wider text-[var(--color-text-secondary)]"
                     >
                       {skill}
                     </li>
@@ -155,9 +159,9 @@ export default function ExperienceSection() {
         </ol>
       </div>
 
-      <p className="pointer-events-none absolute bottom-6 right-8 z-10 flex items-center gap-4 text-t8 uppercase tracking-widest text-[var(--color-cyan-hi)]">
+      <p className="pointer-events-none absolute bottom-6 right-8 z-10 flex items-center gap-4 text-t8 uppercase tracking-widest text-[var(--color-text-secondary)]">
         휠 또는 드래그로 이동
-        <span aria-hidden className="block h-px w-10 bg-[var(--color-cyan-core)]" />
+        <span aria-hidden className="block h-px w-10 bg-[var(--color-hairline)]" />
       </p>
     </section>
   );
