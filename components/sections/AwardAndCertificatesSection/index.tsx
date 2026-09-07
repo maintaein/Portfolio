@@ -51,22 +51,30 @@ function rowTitle(award: Award): string {
     : award.title;
 }
 
-// 로고 슬롯. 24px에서는 글씨가 뭉갠다. 40px면 읽힌다. 폭 상한은 가로로 긴
-// 마크를 눌러 시각 크기를 맞춘다. 마스크가 contain이라 폭을 조이면 높이도
-// 같이 줄어든다.
-const LOGO_HEIGHT = 40;
+// 로고 슬롯. 폭 상한에 걸린 마크는 마스크가 contain이라 슬롯 높이보다
+// 낮게 그려진다. 그래서 가장 납작한 한국경제(4.06:1)가 상한 120에 닿지
+// 않는 최대 높이를 슬롯 높이로 쓴다. 그러면 상한이 아무 마크도 누르지
+// 않아 나란히 선 마크끼리 키가 맞는다.
+const LOGO_HEIGHT = 29;
 const LOGO_MAX_WIDTH = 120;
 
 // 자격증 마크는 상보다 작게 앉는다. 줄 안에 글자와 나란히 서는 크기다.
 const CREDENTIAL_LOGO_HEIGHT = 26;
 const CREDENTIAL_LOGO_MAX_WIDTH = 96;
 
-// 두 판의 머리글은 같은 옷을 입는다. 어느 항목이 어느 주제에 속하는지는
-// 이 줄 하나가 쥐므로 본문보다 크고 밝다. 계기의 이름표다.
+// 판의 이름표. 밑줄을 그으면 항목을 가르는 선과 같은 종류로 보여 어느
+// 선이 무엇을 나누는지 흐려진다. 그래서 선이 아니라 판 위쪽을 가로지르는
+// 띠로 세운다. 선은 항목 사이에만 남기고, 주제는 면으로 가른다.
+// 음수 마진이 판의 안쪽 여백을 되물려 띠를 판 폭 끝까지 늘린다.
 const HEADING =
-  'flex items-baseline justify-between gap-4 border-b-2 border-[var(--color-hairline)] pb-3 text-t5 font-semibold uppercase tracking-[0.28em] text-[var(--color-text-primary)]';
+  '-mx-4 mb-2 flex items-baseline justify-between gap-4 bg-[rgb(255_255_255_/_0.06)] px-4 py-3 text-t5 font-semibold uppercase tracking-[0.28em] text-[var(--color-text-primary)] sm:-mx-6 sm:px-6';
 const HEADING_COUNT =
   'text-t7 font-normal tracking-normal tabular-nums text-[var(--color-text-secondary)]';
+
+// 결과값 표. 우수상도 IH도 같은 종류의 값이라 같은 옷을 입는다. 테두리를
+// 두르면 판 안에 선이 하나 더 늘어날 뿐이라 채움으로 세운다.
+const GRADE_TAG =
+  'whitespace-nowrap bg-[rgb(255_255_255_/_0.08)] px-2.5 py-1 text-t7 font-medium tracking-wide text-[var(--color-text-primary)]';
 
 export default function AwardsAndCertificatesSection() {
   // 한 번에 하나만 펼친다. 여러 개가 열리면 세로 가운데 정렬이 화면 밖으로
@@ -92,7 +100,7 @@ export default function AwardsAndCertificatesSection() {
 
         {/* 수상과 자격증은 각자의 판에 앉는다. 사이의 틈으로 배경이 그대로
             지나가서, 선 하나로 나누는 것보다 경계가 확실하다. */}
-        <div className="section-plate px-4 py-6 sm:px-6">
+        <div className="section-plate px-4 pb-6 sm:px-6">
           <p className={HEADING}>
             <span>Awards</span>
             <span data-ledger-count className={HEADING_COUNT}>
@@ -102,10 +110,11 @@ export default function AwardsAndCertificatesSection() {
 
           {AWARD_GROUPS.map((group) => (
             <div key={group.organization} data-ledger-group={group.organization}>
-              {/* 마크가 이 묶음의 제목 노릇을 한다. 오른쪽으로 흐르는 실선이
-                  마크를 받쳐 묶음의 시작을 긋는다. 화면에서는 로고가,
-                  접근성 트리에서는 기관 이름이 같은 자리를 채운다. */}
-              <p className="flex items-center gap-4 pt-8 pb-4">
+              {/* 마크가 이 묶음의 제목 노릇을 한다. 선을 덧대지 않고 위아래
+                  여백만으로 세운다. 항목 사이에 이미 선이 있어서, 여기에도
+                  선을 그으면 어느 선이 무엇을 가르는지 흐려진다. 화면에서는
+                  로고가, 접근성 트리에서는 기관 이름이 같은 자리를 채운다. */}
+              <p className="flex items-center pt-8 pb-4">
                 <span className="sr-only">{group.organization}</span>
                 <span
                   aria-hidden
@@ -113,13 +122,12 @@ export default function AwardsAndCertificatesSection() {
                   className="org-logo"
                   style={orgLogoStyle(group.logo, LOGO_HEIGHT, LOGO_MAX_WIDTH)}
                 />
-                <span
-                  aria-hidden
-                  className="h-px flex-1 bg-[var(--color-hairline)]"
-                />
               </p>
 
-              <ul>
+              {/* 선은 줄과 줄 사이에만 놓는다. divide-y가 첫 줄을 건너뛰므로
+                  묶음의 시작과 끝에는 선이 남지 않는다. 이 판에서 가로선은
+                  이것 하나뿐이고, 뜻도 하나다. 항목이 여기서 끝난다. */}
+              <ul className="divide-y divide-[var(--color-hairline)]">
                 {group.entries.map((award) => {
                   const id = `award-${award.id}`;
                   const open = openId === id;
@@ -132,17 +140,14 @@ export default function AwardsAndCertificatesSection() {
                       // 데이터의 전체 제목 그대로다.
                       data-ledger-row={award.title}
                       data-ledger-open={open ? 'true' : undefined}
-                      // 줄을 가르는 것은 실선 하나가 아니라 눈금 두 겹이다.
-                      // before가 폭 전체의 머리카락선을, after가 번호 열
-                      // 너비만큼의 밝은 눈금을 긋는다. 계기의 큰 눈금과 작은
-                      // 눈금이고, after가 뒤에 칠해져 위에 얹힌다.
-                      // 왼쪽 선은 접혀 있을 때도 자리를 차지한다. 열릴 때만
-                      // 그리면 줄 전체가 2px 밀려 목록이 흔들린다. 이 선이
-                      // 섹션에서 시안을 쓰는 유일한 자리다.
-                      className={`relative border-l-2 transition-colors duration-200 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-[var(--color-hairline)] after:pointer-events-none after:absolute after:bottom-0 after:left-0 after:h-px after:w-7 after:bg-[rgb(255_255_255_/_0.45)] ${
-                        open
-                          ? 'border-l-[var(--color-cyan-core)]'
-                          : 'border-l-[rgb(255_255_255_/_0.12)] hover:border-l-[rgb(255_255_255_/_0.3)]'
+                      // 왼쪽 선은 가르는 선이 아니라 상태 등이다. 열린
+                      // 줄에만 켜지므로 접혔을 때는 투명하다. 접힌 줄에도
+                      // 색을 주면 세로선까지 구분선으로 읽혀 판 안에 선이
+                      // 하나 더 늘어난다. 자리는 계속 차지해야 한다. 열릴
+                      // 때만 그리면 줄 전체가 2px 밀려 목록이 흔들린다.
+                      // 이 선이 섹션에서 시안을 쓰는 유일한 자리다.
+                      className={`border-l-2 transition-colors duration-200 ${
+                        open ? 'border-l-[var(--color-cyan-core)]' : 'border-l-transparent'
                       }`}
                     >
                       <h3>
@@ -178,10 +183,7 @@ export default function AwardsAndCertificatesSection() {
                             </span>
                           </span>
 
-                          <span
-                            data-ledger-field="grade"
-                            className="whitespace-nowrap border border-[var(--color-hairline)] px-2 py-0.5 text-t7 tracking-wide text-[var(--color-text-primary)]"
-                          >
+                          <span data-ledger-field="grade" className={GRADE_TAG}>
                             {award.rank}
                           </span>
                         </button>
@@ -218,10 +220,9 @@ export default function AwardsAndCertificatesSection() {
 
         {/* 자격증은 상과 같은 목록에 세우지 않는다. 한 건뿐이라 번호를 이어
             붙이면 네 번째 상처럼 읽히고, 펼칠 것도 없어 여닫는 단추가
-            아무것도 내주지 않는다. 상의 줄은 눈금 두 겹으로 갈리지만 자격증은
-            줄이 하나뿐이라 가를 것이 없다. 대신 등급 하나를 크게 세우고 밑에
-            선을 그어 계기의 측정값처럼 읽게 한다. */}
-        <div className="section-plate px-4 py-6 sm:px-6">
+            아무것도 내주지 않는다. 다만 읽는 자리는 상과 같게 둔다. 왼쪽에
+            준 쪽, 가운데 언제, 오른쪽 끝에 결과값이다. */}
+        <div className="section-plate px-4 pb-6 sm:px-6">
           <p className={HEADING}>
             <span>Credentials</span>
             <span data-credential-count className={HEADING_COUNT}>
@@ -229,15 +230,16 @@ export default function AwardsAndCertificatesSection() {
             </span>
           </p>
 
-          <ul className="flex flex-col gap-5 pt-6">
+          <ul className="divide-y divide-[var(--color-hairline)] pt-6">
             {certificates.map((certificate) => (
               <li
                 key={certificate.id}
                 data-credential-row={certificate.name}
-                className="flex flex-wrap items-center gap-x-6 gap-y-3"
+                className="grid grid-cols-[auto_1fr_auto] items-center gap-x-5 py-3"
               >
                 {/* 마크가 곧 이름이다(OPIC). 글자로 한 번 더 적으면 같은
-                    말이 두 번 나오므로 접근성 트리에만 남긴다. */}
+                    말이 두 번 나오므로 접근성 트리에만 남긴다. sr-only는
+                    자리를 절대 위치로 빼므로 격자 칸을 먹지 않는다. */}
                 <span className="sr-only">{certificate.name}</span>
                 <span
                   aria-hidden
@@ -250,15 +252,16 @@ export default function AwardsAndCertificatesSection() {
                   )}
                 />
 
-                <span className="border-b-2 border-[var(--color-hairline)] pb-1 text-t3 leading-none font-medium tracking-wide text-[var(--color-text-primary)]">
-                  {certificate.grade}
-                </span>
-
-                <span className="ml-auto text-t7 tabular-nums text-[var(--color-text-secondary)]">
+                <span className="text-t7 tabular-nums text-[var(--color-text-secondary)]">
                   {certificate.organization} · {certificate.date} 취득
                   {certificate.validUntil
                     ? ` · ${certificate.validUntil}까지`
                     : ''}
+                </span>
+
+                {/* 상의 우수상이 서는 자리와 같은 오른쪽 끝이다. */}
+                <span data-credential-field="grade" className={GRADE_TAG}>
+                  {certificate.grade}
                 </span>
               </li>
             ))}

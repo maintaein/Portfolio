@@ -9,7 +9,7 @@ const INTRINSIC: Record<string, { width: number; height: number }> = {
   hankyung: { width: 714, height: 176 },
   kua: { width: 216, height: 176 },
   opic: { width: 304, height: 176 },
-  ssafy: { width: 184, height: 145 },
+  ssafy: { width: 156, height: 68 },
 };
 
 // maxWidth는 아주 납작한 워드마크가 줄을 통째로 밀어낼 때만 쓴다. 상한에

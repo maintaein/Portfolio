@@ -12,12 +12,6 @@ import type { Skill } from '@/types';
 const SKILL_DESCRIPTION_SCRIM =
   'radial-gradient(ellipse at center, rgb(0 0 0 / 0.78) 0%, rgb(0 0 0 / 0.55) 45%, rgb(0 0 0 / 0) 85%)';
 
-// 레인 블록 뒤. 설명 슬롯보다 넓은 면적을 덮으므로 중심을 덜 태우고
-// 가장자리를 더 멀리까지 끌어 사각형 티가 나지 않게 한다. 아이콘은 글자와
-// 달리 획이 굵어 설명 슬롯만큼 태울 필요가 없다.
-const SKILL_LANE_SCRIM =
-  'radial-gradient(ellipse at center, rgb(0 0 0 / 0.72) 0%, rgb(0 0 0 / 0.5) 55%, rgb(0 0 0 / 0) 92%)';
-
 const ALL_SKILLS = skillCategories.flatMap((category) => category.skills);
 // 기본 설명 슬롯은 React다(브리프 "상호작용" 절).
 const DEFAULT_SKILL = ALL_SKILLS.find((skill) => skill.name === 'React')!;
@@ -78,20 +72,12 @@ export default function SkillsSection() {
           ))}
         </div>
 
-        {/* 레인 전체 뒤에 스크림 하나. Hyperspeed 광선이 아이콘 사이를
-            지나가면 둘 다 빛나는 시안이라 서로 섞여 시인성이 무너진다.
-            컨트롤러가 네 방향을 브라우저에서 비교해 확인했다. 글로우를
-            키우는 쪽은 오히려 나빠진다. 배경도 같이 밝아지는 게 아니라
-            기본과 호버의 차이가 사라지기 때문이다. 겹침 자체를 끊는 것이
-            답이다.
-            레인마다 따로 깔지 않고 블록 하나에 건다. 레인 길이가 4·7·2·4로
-            제각각이라 따로 깔면 가장자리가 들쭉날쭉해진다. */}
-        <div className="relative isolate flex flex-col gap-4 lg:gap-3">
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute -inset-x-6 -inset-y-4 -z-[1]"
-            style={{ background: SKILL_LANE_SCRIM }}
-          />
+        {/* Hyperspeed 광선이 아이콘 사이를 지나가면 둘 다 빛나는 시안이라
+            서로 섞여 시인성이 무너진다. 레인 뒤를 어둡게 끊는 것이 답이다.
+            타원 스크림 하나로 덮던 것을 레인마다의 판으로 바꿨다. 레인이
+            블록 폭을 꽉 채우므로 길이가 4·7·2·4로 제각각이어도 가장자리는
+            가지런하고, Awards의 판과 같은 검정이라 섹션끼리도 맞는다. */}
+        <div className="flex flex-col gap-4 lg:gap-3">
           {skillCategories.map((category) => {
             const dimmed = pinnedCategory !== null && pinnedCategory !== category.label;
 
@@ -100,7 +86,7 @@ export default function SkillsSection() {
                 key={category.label}
                 data-skill-category={category.label}
                 data-skill-category-dimmed={dimmed}
-                className={`flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-5 ${
+                className={`section-plate flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:gap-5 ${
                   dimmed ? 'opacity-25' : 'opacity-100'
                 }`}
               >

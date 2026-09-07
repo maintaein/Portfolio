@@ -609,6 +609,19 @@ describe('SkillsSection 카테고리 아이콘 그리드', () => {
   // 세로 가운데 정렬은 min-h-full과 자식의 m-auto가 함께 만든다. flex의
   // items-center로 바꾸면 내용이 상자보다 길 때 위쪽이 잘려 스크롤로도
   // 닿지 못한다.
+  // 레인마다 판을 깔면 어느 아이콘이 어느 갈래인지 배경이 먼저 말한다.
+  // Awards의 판과 같은 클래스라 섹션끼리 검정도 맞는다.
+  it('스킬 갈래마다 어두운 판이 깔린다', () => {
+    const { container } = render(<SkillsSection />);
+
+    const lanes = [...container.querySelectorAll('[data-skill-category]')];
+    expect(lanes.length).toBe(skillCategories.length);
+
+    for (const lane of lanes) {
+      expect(lane.className).toContain('section-plate');
+    }
+  });
+
   it('내용이 세로 가운데에 앉고 어두운 판 위에 올라간다', () => {
     const { container } = render(<SkillsSection />);
 

@@ -283,19 +283,65 @@ describe('AwardsAndCertificatesSection', () => {
       // 본문 줄은 t7이다. 머리글은 그보다 두 단 위에 밝은 잉크로 선다.
       expect(heading.className).toContain('text-t5');
       expect(heading.className).toContain('text-[var(--color-text-primary)]');
-      expect(heading.className).toContain('border-b-2');
+      // 주제는 면으로, 항목은 선으로 가른다. 머리글에 밑줄을 그으면 항목
+      // 구분선과 같은 종류가 되어 위계가 무너진다.
+      expect(heading.className).toMatch(/bg-\[rgb\(255_255_255/);
+      expect(heading.className).not.toMatch(/border-b/);
     }
   });
 
-  // 줄을 가르는 것은 실선 하나가 아니라 눈금 두 겹이다. 폭 전체의
-  // 머리카락선 위에 번호 열 너비만큼의 밝은 눈금이 얹힌다.
-  it('줄 사이를 눈금 두 겹으로 가른다', () => {
+  // 판 안에서 가로선은 한 종류뿐이고 뜻도 하나다. 항목이 여기서
+  // 끝난다는 것. divide-y가 첫 줄을 건너뛰므로 묶음의 시작과 끝에는
+  // 선이 남지 않는다.
+  it('가로선은 줄과 줄 사이에만 있다', () => {
+    const { container } = render(<AwardsAndCertificatesSection />);
+
+    for (const list of container.querySelectorAll('.section-plate ul')) {
+      expect(list.className).toContain('divide-y');
+      expect(list.className).toContain('divide-[var(--color-hairline)]');
+    }
+
+    for (const row of rows()) {
+      expect(row.className).not.toMatch(/before:|after:/);
+      expect(row.className).not.toMatch(/border-b/);
+    }
+  });
+
+  // 왼쪽 세로선은 가르는 선이 아니라 열림 표시다. 접힌 줄에도 색이 있으면
+  // 그것마저 구분선으로 읽혀 판 안에 선이 하나 더 늘어난다.
+  it('접힌 줄의 왼쪽 선은 투명하고 열린 줄만 켜진다', async () => {
     render(<AwardsAndCertificatesSection />);
 
     for (const row of rows()) {
-      expect(row.className).toContain('before:bg-[var(--color-hairline)]');
-      expect(row.className).toMatch(/after:w-7/);
-      expect(row.className).toMatch(/after:bg-\[rgb\(255_255_255/);
+      expect(row.className).toContain('border-l-transparent');
+    }
+
+    await userEvent.click(toggle(TITLES[0]));
+
+    const opened = rows().find((row) => row.dataset.ledgerRow === TITLES[0])!;
+    expect(opened.className).toContain('border-l-[var(--color-cyan-core)]');
+    expect(opened.className).not.toContain('border-l-transparent');
+  });
+
+  // 우수상과 IH는 같은 종류의 값이다. 둘레 선 대신 같은 채움으로 세우고,
+  // 두 판에서 오른쪽 끝 같은 자리에 앉는다.
+  it('결과값은 둘레 선 없이 채움으로 서고 오른쪽 끝에 앉는다', () => {
+    const { container } = render(<AwardsAndCertificatesSection />);
+
+    const tags = [
+      ...container.querySelectorAll('[data-ledger-field="grade"]'),
+      ...container.querySelectorAll('[data-credential-field="grade"]'),
+    ];
+    expect(tags).toHaveLength(awards.length + certificates.length);
+
+    for (const tag of tags) {
+      expect(tag.className).toMatch(/bg-\[rgb\(255_255_255/);
+      expect(tag.className).not.toMatch(/\bborder\b/);
+    }
+
+    // 자격증 줄의 마지막 칸이 등급이어야 상의 우수상과 같은 자리에 선다.
+    for (const row of container.querySelectorAll('[data-credential-row]')) {
+      expect(row.lastElementChild!.getAttribute('data-credential-field')).toBe('grade');
     }
   });
 
