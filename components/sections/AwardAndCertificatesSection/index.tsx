@@ -57,6 +57,10 @@ function rowTitle(award: Award): string {
 const LOGO_HEIGHT = 40;
 const LOGO_MAX_WIDTH = 120;
 
+// 자격증 마크는 상보다 작게 앉는다. 줄 안에 글자와 나란히 서는 크기다.
+const CREDENTIAL_LOGO_HEIGHT = 22;
+const CREDENTIAL_LOGO_MAX_WIDTH = 96;
+
 export default function AwardsAndCertificatesSection() {
   // 한 번에 하나만 펼친다. 여러 개가 열리면 세로 가운데 정렬이 화면 밖으로
   // 밀려 방금 누른 줄이 눈에서 사라진다.
@@ -90,7 +94,7 @@ export default function AwardsAndCertificatesSection() {
           <div key={group.organization} data-ledger-group={group.organization}>
             {/* 마크가 이 묶음의 제목 노릇을 한다. 화면에서는 로고가, 접근성
                 트리에서는 기관 이름이 같은 자리를 채운다. */}
-            <p className="flex items-center pt-6 pb-3">
+            <p className="flex items-center pt-8 pb-4">
               <span className="sr-only">{group.organization}</span>
               <span
                 aria-hidden
@@ -116,10 +120,10 @@ export default function AwardsAndCertificatesSection() {
                     // 왼쪽 선은 접혀 있을 때도 자리를 차지한다. 열릴 때만
                     // 그리면 줄 전체가 2px 밀려 목록이 흔들린다. 이 선이
                     // 섹션에서 시안을 쓰는 유일한 자리다.
-                    className={`border-b border-l-2 border-b-[var(--color-hairline)] ${
+                    className={`border-b border-l-2 border-b-[var(--color-hairline)] transition-colors duration-200 ${
                       open
                         ? 'border-l-[var(--color-cyan-core)]'
-                        : 'border-l-transparent'
+                        : 'border-l-[rgb(255_255_255_/_0.12)] hover:border-l-[rgb(255_255_255_/_0.3)]'
                     }`}
                   >
                     <h3>
@@ -128,13 +132,13 @@ export default function AwardsAndCertificatesSection() {
                         aria-expanded={open}
                         aria-controls={panelId}
                         onClick={() => setOpenId(open ? null : id)}
-                        className="grid w-full cursor-pointer grid-cols-[1.5rem_1fr_auto] items-baseline gap-x-4 py-4 pl-3 text-left transition-colors duration-200 hover:bg-[rgb(255_255_255_/_0.04)] focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)] active:bg-[rgb(255_255_255_/_0.08)] sm:pl-4"
+                        className="grid w-full cursor-pointer grid-cols-[1.75rem_1fr_auto] items-baseline gap-x-5 py-5 pl-3 text-left transition-colors duration-200 hover:bg-[rgb(255_255_255_/_0.04)] focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)] active:bg-[rgb(255_255_255_/_0.08)] sm:pl-4"
                       >
                         <span
                           data-ledger-field="index"
                           className="text-t7 tabular-nums text-[var(--color-text-secondary)]"
                         >
-                          {awards.indexOf(award) + 1}
+                          {String(awards.indexOf(award) + 1).padStart(2, '0')}
                         </span>
 
                         <span className="flex flex-col gap-1">
@@ -157,7 +161,7 @@ export default function AwardsAndCertificatesSection() {
 
                         <span
                           data-ledger-field="grade"
-                          className="text-t7 uppercase tracking-widest text-[var(--color-text-secondary)]"
+                          className="whitespace-nowrap border border-[var(--color-hairline)] px-2 py-0.5 text-t7 tracking-wide text-[var(--color-text-primary)]"
                         >
                           {award.rank}
                         </span>
@@ -194,49 +198,49 @@ export default function AwardsAndCertificatesSection() {
 
         {/* 자격증은 상과 같은 목록에 세우지 않는다. 한 건뿐이라 번호를 이어
             붙이면 네 번째 상처럼 읽히고, 펼칠 것도 없어 여닫는 단추가 아무것도
-            내주지 않는다. 구분선 아래 한 줄로 고정한다. */}
-        <div className="mt-10 border-t border-[var(--color-hairline)] pt-5">
+            내주지 않는다. 상의 줄은 아래에만 선이 있고 자격증은 사방이
+            테두리다. 라벨을 읽기 전에 모양으로 먼저 갈린다. */}
+        <div className="mt-12 border-t border-[var(--color-hairline)] pt-6">
           <p className="text-t7 font-medium uppercase tracking-widest text-[var(--color-text-secondary)]">
             Credentials
           </p>
 
-          {certificates.map((certificate) => (
-            <div key={certificate.id} data-credential-row={certificate.name}>
-              <p className="flex items-center pt-4 pb-3">
+          <ul className="mt-4 flex flex-col gap-3">
+            {certificates.map((certificate) => (
+              <li
+                key={certificate.id}
+                data-credential-row={certificate.name}
+                className="flex flex-wrap items-center gap-x-4 gap-y-2 border border-[var(--color-hairline)] px-4 py-3"
+              >
+                {/* 마크가 곧 이름이다(OPIC). 글자로 한 번 더 적으면 같은
+                    말이 두 번 나오므로 접근성 트리에만 남긴다. */}
+                <span className="sr-only">{certificate.name}</span>
                 <span
                   aria-hidden
                   data-ledger-logo={certificate.logo}
                   className="org-logo"
                   style={orgLogoStyle(
                     certificate.logo,
-                    LOGO_HEIGHT,
-                    LOGO_MAX_WIDTH
+                    CREDENTIAL_LOGO_HEIGHT,
+                    CREDENTIAL_LOGO_MAX_WIDTH
                   )}
                 />
-              </p>
 
-              <p className="grid grid-cols-[1.5rem_1fr_auto] items-baseline gap-x-4 border-b border-[var(--color-hairline)] pb-4 pl-3 sm:pl-4">
-                <span />
-
-                <span className="flex flex-col gap-1">
-                  <span className="text-t4 font-medium text-[var(--color-text-primary)]">
-                    {certificate.name}
-                  </span>
-
-                  <span className="text-t7 tabular-nums text-[var(--color-text-secondary)]">
-                    {certificate.organization} · {certificate.date} 취득
-                    {certificate.validUntil
-                      ? ` · ${certificate.validUntil}까지`
-                      : ''}
-                  </span>
-                </span>
-
-                <span className="text-t7 uppercase tracking-widest text-[var(--color-text-secondary)]">
+                {/* 상의 등급과 같은 표를 쓴다. 모양은 달라도 같은 종류의
+                    값이라는 것은 이 조각이 잇는다. */}
+                <span className="whitespace-nowrap border border-[var(--color-hairline)] px-2 py-0.5 text-t7 tracking-wide text-[var(--color-text-primary)]">
                   {certificate.grade}
                 </span>
-              </p>
-            </div>
-          ))}
+
+                <span className="ml-auto text-t7 tabular-nums text-[var(--color-text-secondary)]">
+                  {certificate.organization} · {certificate.date} 취득
+                  {certificate.validUntil
+                    ? ` · ${certificate.validUntil}까지`
+                    : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     </section>

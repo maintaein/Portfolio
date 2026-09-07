@@ -192,7 +192,7 @@ describe('section visibility utilities', () => {
     expect(scroll).toMatch(/overflow-x\s*:\s*hidden\s*;/);
     expect(scroll).toMatch(/overflow-y\s*:\s*auto\s*;/);
     expect(scroll).toMatch(/overscroll-behavior\s*:\s*contain\s*;/);
-    expect(scroll).toMatch(/scrollbar-gutter\s*:\s*stable\s*;/);
+    expect(scroll).toMatch(/scrollbar-width\s*:\s*none\s*;/);
   });
 
   // 이 파일에서 가장 중요한 계약이다. 브라우저는 가로·세로 팬의 touch-action

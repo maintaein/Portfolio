@@ -96,7 +96,9 @@ describe('AwardsAndCertificatesSection', () => {
     const indexes = [...document.querySelectorAll('[data-ledger-field="index"]')].map(
       (node) => node.textContent
     );
-    expect(indexes).toEqual(TITLES.map((_, index) => String(index + 1)));
+    expect(indexes).toEqual(
+      TITLES.map((_, index) => String(index + 1).padStart(2, '0'))
+    );
   });
 
   it('계기 줄의 개수가 수상 건수와 맞는다', () => {

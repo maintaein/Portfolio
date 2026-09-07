@@ -582,15 +582,29 @@
     background: rgb(0 0 0 / 0.55);
   }
 
+  /* 스크롤은 섹션 안에서만 일어난다. 막대는 지운다. 자리를 미리 비워 두는
+     scrollbar-gutter는 막대가 없어지면 할 일이 없어져 같이 뺐다.
+     아래 40px은 푸터 띠와 맞닿는 자리다. 여기서 글이 칼로 자른 듯 끊기던
+     것을 마스크로 풀어 아래에서 올라오는 것처럼 만든다. 같은 40px을
+     안쪽 여백으로도 두어야 끝까지 내렸을 때 마지막 줄이 흐려지지 않는다.
+     inset이 높이를 고정하고 box-sizing이 border-box라 이 여백은 스크롤
+     길이를 늘리지 않는다. */
   .section-scroll {
     position: absolute;
     inset: 0;
+    padding-bottom: 40px;
     overflow-x: hidden;
     overflow-y: auto;
     touch-action: pan-y pinch-zoom;
     overscroll-behavior: contain;
-    scrollbar-gutter: stable;
+    scrollbar-width: none;
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 40px), transparent);
     -webkit-overflow-scrolling: touch;
+  }
+
+  /* 파이어폭스는 위의 scrollbar-width, 웹킷은 이 의사요소만 듣는다. */
+  .section-scroll::-webkit-scrollbar {
+    display: none;
   }
 
   /* 섹션 은닉 — 전 섹션이 DOM에 상주한다. 진짜 이유는 SEO다(크롤러는
