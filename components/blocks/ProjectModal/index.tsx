@@ -548,11 +548,11 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
           >
             {/* 헤더 */}
             <motion.div
-              className="flex items-center justify-between px-6 py-4 border-b border-[rgb(255_255_255_/_0.08)] flex-shrink-0"
+              className="flex flex-wrap items-center justify-between gap-y-3 px-6 py-4 border-b border-[rgb(255_255_255_/_0.08)] flex-shrink-0"
               initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2, duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
             >
-              <div className="flex items-start gap-3 min-w-0">
+              <div className="flex items-start gap-3 min-w-0 basis-full sm:basis-auto">
                 <div className="w-1 h-5 rounded-full bg-[var(--color-cyan-core)] flex-shrink-0 mt-0.5" />
                 <div className="min-w-0">
                   <h2 id="modal-title" className="text-[17px] font-bold text-[var(--color-text-primary)] truncate">
@@ -560,7 +560,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                   </h2>
                 </div>
               </div>
-              <div className="flex items-center gap-2 ml-3 flex-shrink-0">
+              <div className="flex items-center gap-2 ml-auto pl-3 flex-shrink-0">
                 {project.githubUrl && (
                   <Button variant="outline" leftIcon={<Icon name="share" />}
                     className={`border border-[rgb(255_255_255_/_0.18)] text-[var(--color-text-primary)] hover:bg-[rgb(255_255_255_/_0.08)] focus-visible:ring-[var(--color-cyan-core)] focus-visible:ring-offset-[rgb(6_8_10)]`}

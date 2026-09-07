@@ -146,6 +146,13 @@ describe('모달의 말과 밝기가 제자리에 앉는다', () => {
     expect(MODAL).toContain('className={`border border-[rgb(255_255_255_/_0.18)]');
   });
 
+  it('좁은 화면에서 제목이 버튼에 눌려 사라지지 않는다', () => {
+    // 390px에서 GitHub·Live·닫기가 가로를 다 먹고 제목이 0폭으로 눌렸다.
+    // 헤더를 접히게 두고, 좁을 때 제목이 자기 줄을 갖게 한다.
+    expect(MODAL).toContain('flex flex-wrap items-center justify-between gap-y-3 px-6 py-4');
+    expect(MODAL).toContain('flex items-start gap-3 min-w-0 basis-full sm:basis-auto');
+  });
+
   it('포커스 링이 검은 판 위에 흰 테를 만들지 않는다', () => {
     // Button은 ring-offset-2를 깔고 offset 색 기본값이 흰색이다. 판 색으로 덮는다.
     const ring = MODAL.match(/focus-visible:ring-\[var\(--color-cyan-core\)\]/g) ?? [];
