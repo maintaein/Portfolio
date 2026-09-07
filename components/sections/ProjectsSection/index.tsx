@@ -118,7 +118,7 @@ export default function ProjectsSection() {
       onClick={handleSectionClick}
     >
       <div className="pointer-events-none absolute inset-0" aria-hidden style={{
-        backgroundImage: 'radial-gradient(circle, rgba(49,130,246,0.03) 1px, transparent 1px)',
+        backgroundImage: 'radial-gradient(circle, rgba(3,179,195,0.05) 1px, transparent 1px)',
         backgroundSize: '32px 32px',
       }} />
 
@@ -131,10 +131,10 @@ export default function ProjectsSection() {
         <div className="relative">
           {/* 좌우 페이드 그라디언트 — 가로 스크롤 힌트 */}
           <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-12 z-10" style={{
-            background: 'linear-gradient(90deg, rgba(255,255,255,0.95) 0%, transparent 100%)'
+            background: 'linear-gradient(90deg, rgba(0,0,0,0.9) 0%, transparent 100%)'
           }} />
           <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-12 z-10" style={{
-            background: 'linear-gradient(270deg, rgba(255,255,255,0.95) 0%, transparent 100%)'
+            background: 'linear-gradient(270deg, rgba(0,0,0,0.9) 0%, transparent 100%)'
           }} />
 
           {/* 가로 스크롤 힌트 화살표 — 첫 진입 시 */}
@@ -148,9 +148,9 @@ export default function ProjectsSection() {
                 transition={{ duration: 2.2, delay: 0.8, times: [0, 0.2, 0.8, 1] }}
                 onAnimationComplete={() => setShowHint(false)}
               >
-                <span className="text-[11px] text-grey-400 tracking-wider">scroll</span>
+                <span className="text-[11px] text-[rgb(255_255_255_/_0.42)] tracking-wider">scroll</span>
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                  <path d="M4 10h12M12 6l4 4-4 4" stroke="#b0b8c1" strokeWidth="1.5"
+                  <path d="M4 10h12M12 6l4 4-4 4" stroke="rgba(255,255,255,0.42)" strokeWidth="1.5"
                     strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </motion.div>
@@ -208,7 +208,7 @@ export default function ProjectsSection() {
         </div>
 
         {/* 클릭 안내 텍스트 */}
-        <p className="mt-3 text-center text-[11px] tracking-widest text-grey-300 uppercase select-none">
+        <p className="mt-3 text-center text-[11px] tracking-widest text-[rgb(255_255_255_/_0.35)] uppercase select-none">
           {featuredIdx !== null
             ? 'click again for detail · click elsewhere to close'
             : 'drag · click card to expand'}
@@ -249,8 +249,8 @@ function ProjectCard({ project, isFeatured }: ProjectCardProps) {
           className="absolute inset-0 transition-[background] duration-500"
           style={{
             background: isFeatured
-              ? 'linear-gradient(90deg, rgba(8,12,24,0.88) 0%, rgba(8,12,24,0.82) 36%, rgba(8,12,24,0.28) 62%, rgba(8,12,24,0.06) 100%)'
-              : 'linear-gradient(180deg, rgba(8,12,24,0.08) 0%, rgba(8,12,24,0.40) 62%, rgba(8,12,24,0.82) 100%)',
+              ? 'linear-gradient(90deg, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.82) 36%, rgba(0,0,0,0.28) 62%, rgba(0,0,0,0.06) 100%)'
+              : 'linear-gradient(180deg, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.40) 62%, rgba(0,0,0,0.82) 100%)',
           }}
         />
       </div>
@@ -265,8 +265,8 @@ function ProjectCard({ project, isFeatured }: ProjectCardProps) {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
           >
-            <div className="w-7 h-[2px] mb-2.5 rounded-full bg-gradient-to-r from-blue-500 to-blue-300" />
-            <p className="text-white font-bold text-[14px] leading-snug mb-1.5 drop-shadow">
+            <div className="w-7 h-[2px] mb-2.5 rounded-full bg-gradient-to-r from-[var(--color-cyan-core)] to-[var(--color-cyan-hi)]" />
+            <p className="text-[var(--color-text-primary)] font-bold text-[14px] leading-snug mb-1.5 drop-shadow">
               {project.title}
             </p>
             <div className="flex flex-wrap gap-1">
@@ -274,9 +274,9 @@ function ProjectCard({ project, isFeatured }: ProjectCardProps) {
                 <span key={tag}
                   className="text-[9px] px-1.5 py-0.5 rounded font-medium"
                   style={{
-                    background: 'rgba(49,130,246,0.2)',
-                    color: 'rgba(147,197,253,0.9)',
-                    border: '1px solid rgba(49,130,246,0.25)',
+                    background: 'rgba(3,179,195,0.18)',
+                    color: 'rgba(127,227,238,0.9)',
+                    border: '1px solid rgba(3,179,195,0.3)',
                   }}>
                   {tag}
                 </span>
@@ -300,19 +300,19 @@ function ProjectCard({ project, isFeatured }: ProjectCardProps) {
             {/* 상단 */}
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <div className="w-5 h-[2px] rounded-full bg-gradient-to-r from-blue-500 to-blue-300" />
-                <span className="text-[9px] font-bold tracking-[0.2em] uppercase text-blue-400">
+                <div className="w-5 h-[2px] rounded-full bg-gradient-to-r from-[var(--color-cyan-core)] to-[var(--color-cyan-hi)]" />
+                <span className="text-[9px] font-bold tracking-[0.2em] uppercase text-[var(--color-cyan-hi)]">
                   Featured
                 </span>
               </div>
 
-              <h3 className="text-[22px] font-bold text-white leading-tight mb-4 drop-shadow-md">
+              <h3 className="text-[22px] font-bold text-[var(--color-text-primary)] leading-tight mb-4 drop-shadow-md">
                 {project.title}
               </h3>
 
               {project.subtitle && (
                 <p className="text-[12px] leading-relaxed whitespace-pre-line"
-                  style={{ color: 'rgba(180,205,255,0.7)' }}>
+                  style={{ color: 'rgba(176,186,197,0.85)' }}>
                   {project.subtitle}
                 </p>
               )}
@@ -321,14 +321,14 @@ function ProjectCard({ project, isFeatured }: ProjectCardProps) {
               {project.implementations && project.implementations.length > 0 && (() => {
                 const items = project.implementations.slice(0, 3).map(impl => impl.category);
                 return (
-                  <div className="mt-4 pt-4 border-t space-y-2.5" style={{ borderColor: 'rgba(99,160,255,0.15)' }}>
+                  <div className="mt-4 pt-4 border-t space-y-2.5" style={{ borderColor: 'rgba(255,255,255,0.12)' }}>
                     {items.map((label, i) => (
                       <div key={i} className="flex items-center gap-3">
                         <span className="text-[10px] font-bold tabular-nums flex-shrink-0 w-4 text-right"
-                          style={{ color: 'rgba(99,160,255,0.7)' }}>
+                          style={{ color: 'rgba(3,179,195,0.9)' }}>
                           {String(i + 1).padStart(2, '0')}
                         </span>
-                        <span className="text-[12px] font-semibold leading-snug text-white">
+                        <span className="text-[12px] font-semibold leading-snug text-[var(--color-text-primary)]">
                           {label}
                         </span>
                       </div>
@@ -342,8 +342,8 @@ function ProjectCard({ project, isFeatured }: ProjectCardProps) {
             <div>
               {project.duration && (
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="h-px w-3.5 rounded-full bg-blue-500/40" />
-                  <span className="text-[10px] font-medium" style={{ color: 'rgba(190,215,255,0.85)' }}>
+                  <span className="h-px w-3.5 rounded-full bg-[var(--color-cyan-core)]/50" />
+                  <span className="text-[10px] font-medium" style={{ color: 'rgba(176,186,197,0.9)' }}>
                     {project.duration}
                   </span>
                 </div>
@@ -354,9 +354,9 @@ function ProjectCard({ project, isFeatured }: ProjectCardProps) {
                   <span key={tag}
                     className="text-[10px] px-2.5 py-0.5 rounded-full font-semibold"
                     style={{
-                      background: 'rgba(49,130,246,0.28)',
-                      color: 'rgba(190,220,255,1)',
-                      border: '1px solid rgba(49,130,246,0.45)',
+                      background: 'rgba(3,179,195,0.22)',
+                      color: 'rgba(127,227,238,1)',
+                      border: '1px solid rgba(3,179,195,0.45)',
                     }}>
                     {tag}
                   </span>
@@ -375,7 +375,7 @@ function ProjectCard({ project, isFeatured }: ProjectCardProps) {
 
               {/* 다시 클릭 힌트 */}
               <div className="flex items-center gap-1.5"
-                style={{ color: 'rgba(190,220,255,0.80)' }}>
+                style={{ color: 'rgba(127,227,238,0.8)' }}>
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                   <circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1.2"/>
                   <path d="M6 4v4M4 6h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>

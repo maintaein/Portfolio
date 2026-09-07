@@ -21,8 +21,8 @@ interface ProjectModalProps {
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3 mb-5">
-      <div className="w-1 h-4 rounded-full bg-blue-500 flex-shrink-0" />
-      <h3 className="text-[13px] font-bold tracking-[0.12em] uppercase text-grey-800">
+      <div className="w-1 h-4 rounded-full bg-[var(--color-cyan-core)] flex-shrink-0" />
+      <h3 className="text-[13px] font-bold tracking-[0.12em] uppercase text-[var(--color-text-primary)]">
         {children}
       </h3>
     </div>
@@ -32,47 +32,47 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 function ResultBlock({ metrics }: { metrics: KeyMetric[] }) {
   return (
-    <div className="rounded-md overflow-hidden border border-emerald-100 text-[11px]">
+    <div className="rounded-lg overflow-hidden border border-[var(--color-hairline)] text-[11px]">
       {/* 상단 바 */}
-      <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border-b border-emerald-100">
-        <span className="w-2 h-2 rounded-full bg-emerald-300" />
-        <span className="w-2 h-2 rounded-full bg-emerald-200" />
-        <span className="w-2 h-2 rounded-full bg-emerald-100" />
-        <span className="ml-2 text-[10px] font-semibold uppercase tracking-widest text-emerald-500">
+      <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[rgb(3_179_195_/_0.12)] border-b border-[var(--color-hairline)]">
+        <span className="w-2 h-2 rounded-full bg-[var(--color-cyan-hi)]" />
+        <span className="w-2 h-2 rounded-full bg-[var(--color-cyan-core)]" />
+        <span className="w-2 h-2 rounded-full bg-[rgb(3_179_195_/_0.4)]" />
+        <span className="ml-2 text-[10px] font-semibold uppercase tracking-widest text-[var(--color-cyan-hi)]">
           결과
         </span>
       </div>
 
       {/* 항목 목록 */}
-      <div className="bg-white divide-y divide-emerald-50">
+      <div className="divide-y divide-[rgb(255_255_255_/_0.07)]">
         {metrics.map((m, i) => (
           <div key={i} className="px-3 py-3 space-y-1.5">
             {/* 레이블 */}
-            <span className="text-[11px] font-bold text-grey-700">{m.label}</span>
+            <span className="text-[11px] font-bold text-[var(--color-text-primary)]">{m.label}</span>
 
             {/* before 줄 */}
             {m.before && (
               <div className="flex items-start gap-2 pl-1">
-                <span className="text-red-400 select-none mt-px font-bold shrink-0">−</span>
-                <RichText text={m.before} className="text-grey-400 line-through leading-snug text-[11px]" />
+                <span className="text-[rgb(255_255_255_/_0.3)] select-none mt-px font-bold shrink-0">−</span>
+                <RichText text={m.before} className="text-[rgb(255_255_255_/_0.42)] line-through leading-snug text-[11px]" />
               </div>
             )}
 
             {/* after 줄 — delta가 있으면 줄 끝에 인라인으로 표시 */}
             <div className="flex items-start gap-2 pl-1">
-              <span className="text-emerald-500 select-none font-bold mt-px shrink-0">+</span>
-              <span className="text-emerald-700 font-semibold leading-snug text-[11px]">
+              <span className="text-[var(--color-cyan-hi)] select-none font-bold mt-px shrink-0">+</span>
+              <span className="text-[var(--color-text-primary)] font-semibold leading-snug text-[11px]">
                 <RichText text={m.after} />
                 {m.delta && (
-                  <span className="ml-2 text-[10px] font-bold text-emerald-500">({m.delta})</span>
+                  <span className="ml-2 text-[10px] font-bold text-[var(--color-cyan-hi)]">({m.delta})</span>
                 )}
               </span>
             </div>
 
             {/* measuredBy */}
             <div className="flex items-center gap-1.5 pl-1 pt-0.5">
-              <span className="text-[9px] font-bold uppercase tracking-wider text-grey-300 shrink-0">측정</span>
-              <RichText text={m.measuredBy ?? ''} className="text-[10px] text-grey-400 leading-snug" />
+              <span className="text-[9px] font-bold uppercase tracking-wider text-[rgb(255_255_255_/_0.35)] shrink-0">측정</span>
+              <RichText text={m.measuredBy ?? ''} className="text-[10px] text-[rgb(255_255_255_/_0.42)] leading-snug" />
             </div>
           </div>
         ))}
@@ -83,21 +83,21 @@ function ResultBlock({ metrics }: { metrics: KeyMetric[] }) {
 
 function TradeOffBlock({ items }: { items: string[] }) {
   return (
-    <div className="rounded-lg border border-purple-100 overflow-hidden">
+    <div className="rounded-lg border border-[rgb(255_255_255_/_0.08)] overflow-hidden">
       {/* 헤더 */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 border-b border-purple-100">
-        <span className="text-purple-400 text-[14px] leading-none select-none">⚖</span>
-        <span className="text-[10px] font-bold uppercase tracking-widest text-purple-500">트레이드오프</span>
+      <div className="flex items-center gap-2 px-3 py-2 bg-[rgb(255_255_255_/_0.04)] border-b border-[rgb(255_255_255_/_0.08)]">
+        <span className="text-[rgb(255_255_255_/_0.42)] text-[14px] leading-none select-none">⚖</span>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--color-text-primary)]">트레이드오프</span>
       </div>
 
       {/* 항목 목록 */}
-      <div className="divide-y divide-purple-50 bg-white">
+      <div className="divide-y divide-[rgb(255_255_255_/_0.07)]">
         {items.map((t, i) => (
           <div key={i} className="grid grid-cols-[20px_1fr] gap-2 px-3 py-2.5 items-start">
-            <span className="text-[11px] font-bold text-purple-300 tabular-nums mt-px select-none">
+            <span className="text-[11px] font-bold text-[rgb(255_255_255_/_0.3)] tabular-nums mt-px select-none">
               {String(i + 1).padStart(2, '0')}
             </span>
-            <RichText text={t} className="text-[12px] text-grey-600 leading-relaxed" />
+            <RichText text={t} className="text-[12px] text-[var(--color-text-secondary)] leading-relaxed" />
           </div>
         ))}
       </div>
@@ -119,11 +119,11 @@ function OverviewBlock({ project }: { project: NonNullable<Parameters<typeof Pro
       {project.motivation && (
         <div className="relative">
           {/* 큰 따옴표 장식 */}
-          <span className="absolute -top-1 -left-0.5 text-[32px] leading-none text-blue-200 font-serif select-none" aria-hidden>
+          <span className="absolute -top-1 -left-0.5 text-[32px] leading-none text-[rgb(3_179_195_/_0.28)] font-serif select-none" aria-hidden>
             &ldquo;
           </span>
           <div className="pl-5 pr-2 pt-1">
-            <RichText text={project.motivation} className="text-[13px] text-grey-700 leading-[1.75]" />
+            <RichText text={project.motivation} className="text-[13px] text-[var(--color-text-secondary)] leading-[1.75]" />
           </div>
         </div>
       )}
@@ -131,23 +131,23 @@ function OverviewBlock({ project }: { project: NonNullable<Parameters<typeof Pro
       {/* 성과 카드 그리드 */}
       {learnedMetrics.length > 0 && (
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-grey-700 mb-3">이 프로젝트에서 배운 것</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--color-text-secondary)] mb-3">이 프로젝트에서 배운 것</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {learnedMetrics.map((m, i) => (
-              <div key={i} className="rounded-xl bg-grey-50 border border-grey-100 p-4">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-grey-800">{m.label}</span>
+              <div key={i} className="rounded-lg bg-[rgb(255_255_255_/_0.04)] border border-[rgb(255_255_255_/_0.08)] p-4">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-text-primary)]">{m.label}</span>
                 {/* 수치: before→after 또는 after만 인라인 표시 */}
                 {m.before ? (
                   <p className="mt-1 mb-2.5 text-[11px] leading-snug">
-                    <span className="text-grey-400 line-through">{m.before}</span>
-                    <span className="mx-1.5 text-grey-300">→</span>
-                    <span className="font-bold text-blue-600">{m.after}</span>
+                    <span className="text-[rgb(255_255_255_/_0.42)] line-through">{m.before}</span>
+                    <span className="mx-1.5 text-[rgb(255_255_255_/_0.35)]">→</span>
+                    <span className="font-bold text-[var(--color-cyan-hi)]">{m.after}</span>
                   </p>
                 ) : (
-                  <p className="mt-1 mb-2.5 text-[11px] font-bold text-blue-600 leading-snug">{m.after}</p>
+                  <p className="mt-1 mb-2.5 text-[11px] font-bold text-[var(--color-cyan-hi)] leading-snug">{m.after}</p>
                 )}
                 {/* 배운 점 — 주인공 */}
-                {m.learned && <RichText text={m.learned} className="text-[12px] text-grey-700 leading-[1.65]" />}
+                {m.learned && <RichText text={m.learned} className="text-[12px] text-[var(--color-text-secondary)] leading-[1.65]" />}
               </div>
             ))}
           </div>
@@ -181,8 +181,8 @@ function AnalysisBlock({ items }: { items: string[] }) {
         <ul className="space-y-2">
           {diagnosisItems.map((a, i) => (
             <li key={i} className="flex items-start gap-2.5">
-              <span className="mt-[6px] w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
-              <RichText text={a} className="text-[12px] text-grey-700 leading-relaxed" />
+              <span className="mt-[6px] w-1.5 h-1.5 rounded-full bg-[rgb(255_255_255_/_0.3)] flex-shrink-0" />
+              <RichText text={a} className="text-[12px] text-[var(--color-text-secondary)] leading-relaxed" />
             </li>
           ))}
         </ul>
@@ -194,18 +194,18 @@ function AnalysisBlock({ items }: { items: string[] }) {
             <li key={i} className={cn(
               'rounded-lg px-3 py-2.5 flex items-start gap-2.5',
               c.chosen
-                ? 'bg-blue-50 border border-blue-200'
-                : 'bg-white border border-grey-100'
+                ? 'bg-[rgb(3_179_195_/_0.10)] border border-[var(--color-hairline)]'
+                : 'bg-[rgb(255_255_255_/_0.04)] border border-[rgb(255_255_255_/_0.08)]'
             )}>
               <span className={cn(
                 'mt-[5px] flex-shrink-0 flex items-center justify-center rounded-full text-[9px] font-bold w-4 h-4',
-                c.chosen ? 'bg-blue-500 text-white' : 'bg-grey-200 text-grey-500'
+                c.chosen ? 'bg-[var(--color-cyan-core)] text-[rgb(2_6_8)]' : 'bg-[rgb(255_255_255_/_0.12)] text-[var(--color-text-secondary)]'
               )}>
                 {i + 1}
               </span>
               <RichText
                 text={c.text}
-                className={cn('text-[12px] leading-relaxed', c.chosen ? 'text-blue-900' : 'text-grey-600')}
+                className={cn('text-[12px] leading-relaxed', c.chosen ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]')}
               />
             </li>
           ))}
@@ -220,21 +220,21 @@ function TechReasonExpand({ tech }: { tech: TechReason }) {
   const hasExpand = !!(tech.selectionCriteria || tech.alternatives?.length || tech.tradeOffs?.length || tech.action?.length);
   if (!hasExpand) return null;
   return (
-    <div className="border-t border-grey-100 bg-grey-50/60 px-4 py-3 space-y-3">
+    <div className="border-t border-[rgb(255_255_255_/_0.08)] bg-[rgb(255_255_255_/_0.03)] px-4 py-3 space-y-3">
       {tech.selectionCriteria && (
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-grey-500 mb-1">선택 기준</p>
-          <RichText text={tech.selectionCriteria} className="text-[11px] text-grey-700 leading-relaxed" />
+          <p className="text-[10px] font-bold uppercase tracking-wider text-[rgb(255_255_255_/_0.42)] mb-1">선택 기준</p>
+          <RichText text={tech.selectionCriteria} className="text-[11px] text-[var(--color-text-secondary)] leading-relaxed" />
         </div>
       )}
       {tech.alternatives && tech.alternatives.length > 0 && (
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-amber-600 mb-1.5">검토한 대안</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-[rgb(255_255_255_/_0.42)] mb-1.5">검토한 대안</p>
           <ul className="space-y-1">
             {tech.alternatives.map((alt, i) => (
-              <li key={i} className="text-[11px] text-grey-700 leading-relaxed">
-                <span className="font-semibold text-grey-800">{alt.name}</span>
-                <span className="text-grey-400 mr-1.5">:</span>
+              <li key={i} className="text-[11px] text-[var(--color-text-secondary)] leading-relaxed">
+                <span className="font-semibold text-[var(--color-text-primary)]">{alt.name}</span>
+                <span className="text-[rgb(255_255_255_/_0.42)] mr-1.5">:</span>
                 {alt.rejectedBecause}
               </li>
             ))}
@@ -243,12 +243,12 @@ function TechReasonExpand({ tech }: { tech: TechReason }) {
       )}
       {tech.action && tech.action.length > 0 && (
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-blue-600 mb-1.5">실행</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-[rgb(255_255_255_/_0.42)] mb-1.5">실행</p>
           <ul className="space-y-1">
             {tech.action.map((a, i) => (
               <li key={i} className="flex items-start gap-2">
-                <span className="mt-[5px] w-1 h-1 rounded-full bg-blue-400 flex-shrink-0" />
-                <RichText text={a} className="text-[11px] text-grey-700 leading-relaxed" />
+                <span className="mt-[5px] w-1 h-1 rounded-full bg-[rgb(255_255_255_/_0.25)] flex-shrink-0" />
+                <RichText text={a} className="text-[11px] text-[var(--color-text-secondary)] leading-relaxed" />
               </li>
             ))}
           </ul>
@@ -256,12 +256,12 @@ function TechReasonExpand({ tech }: { tech: TechReason }) {
       )}
       {tech.tradeOffs && tech.tradeOffs.length > 0 && (
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-purple-600 mb-1.5">트레이드오프</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-[rgb(255_255_255_/_0.42)] mb-1.5">트레이드오프</p>
           <ul className="space-y-1">
             {tech.tradeOffs.map((t, i) => (
               <li key={i} className="flex items-start gap-2">
-                <span className="mt-[5px] w-1 h-1 rounded-full bg-purple-400 flex-shrink-0" />
-                <RichText text={t} className="text-[11px] text-grey-700 leading-relaxed" />
+                <span className="mt-[5px] w-1 h-1 rounded-full bg-[rgb(255_255_255_/_0.25)] flex-shrink-0" />
+                <RichText text={t} className="text-[11px] text-[var(--color-text-secondary)] leading-relaxed" />
               </li>
             ))}
           </ul>
@@ -283,22 +283,22 @@ function ReviewNav({ reviews, activeIndex, onNavigate }: ReviewNavProps) {
   const next = activeIndex < reviews.length - 1 ? reviews[activeIndex + 1] : null;
 
   return (
-    <div className="mt-8 pt-5 border-t border-grey-200">
+    <div className="mt-8 pt-5 border-t border-[rgb(255_255_255_/_0.08)]">
       <div className="flex items-stretch gap-3">
         {/* 이전 버튼 */}
         <div className="flex-1">
           {prev && (
             <button
               onClick={() => onNavigate(activeIndex - 1)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-grey-200 bg-white hover:border-blue-300 hover:bg-blue-50/40 transition-all duration-200 text-left group"
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg border border-[rgb(255_255_255_/_0.08)] bg-[rgb(255_255_255_/_0.04)] hover:border-[var(--color-hairline)] hover:bg-[rgb(3_179_195_/_0.08)] transition-all duration-200 text-left group"
             >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0 text-grey-400 group-hover:text-blue-500 transition-colors duration-200">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0 text-[rgb(255_255_255_/_0.42)] group-hover:text-[var(--color-cyan-hi)] transition-colors duration-200">
                 <path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
               <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-grey-400 mb-0.5">이전 리뷰</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-[rgb(255_255_255_/_0.42)] mb-0.5">이전 리뷰</p>
                 <div className="flex items-center gap-1.5">
-                  <p className="text-[12px] font-medium text-grey-700 truncate">{prev.title}</p>
+                  <p className="text-[12px] font-medium text-[var(--color-text-secondary)] truncate">{prev.title}</p>
                 </div>
               </div>
             </button>
@@ -314,8 +314,8 @@ function ReviewNav({ reviews, activeIndex, onNavigate }: ReviewNavProps) {
               className={cn(
                 'rounded-full transition-all duration-200',
                 i === activeIndex
-                  ? 'w-1.5 h-4 bg-blue-500'
-                  : 'w-1.5 h-1.5 bg-grey-300 hover:bg-grey-400'
+                  ? 'w-1.5 h-4 bg-[var(--color-cyan-core)]'
+                  : 'w-1.5 h-1.5 bg-[rgb(255_255_255_/_0.2)] hover:bg-[rgb(255_255_255_/_0.35)]'
               )}
               aria-label={reviews[i].title}
             />
@@ -327,26 +327,26 @@ function ReviewNav({ reviews, activeIndex, onNavigate }: ReviewNavProps) {
           {next ? (
             <button
               onClick={() => onNavigate(activeIndex + 1)}
-              className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-grey-200 bg-white hover:border-blue-300 hover:bg-blue-50/40 transition-all duration-200 text-right group"
+              className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg border border-[rgb(255_255_255_/_0.08)] bg-[rgb(255_255_255_/_0.04)] hover:border-[var(--color-hairline)] hover:bg-[rgb(3_179_195_/_0.08)] transition-all duration-200 text-right group"
             >
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-grey-400 mb-0.5">다음 리뷰</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-[rgb(255_255_255_/_0.42)] mb-0.5">다음 리뷰</p>
                 <div className="flex items-center justify-end gap-1.5">
-                  <p className="text-[12px] font-medium text-grey-700 truncate">{next.title}</p>
+                  <p className="text-[12px] font-medium text-[var(--color-text-secondary)] truncate">{next.title}</p>
                 </div>
               </div>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0 text-grey-400 group-hover:text-blue-500 transition-colors duration-200">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0 text-[rgb(255_255_255_/_0.42)] group-hover:text-[var(--color-cyan-hi)] transition-colors duration-200">
                 <path d="M6 12l4-4-4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
           ) : (
             /* 마지막 탭: 리뷰 완료 메시지 */
-            <div className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-grey-100 bg-grey-50 text-right">
+            <div className="w-full flex items-center gap-3 px-4 py-3 rounded-lg border border-[rgb(255_255_255_/_0.08)] bg-[rgb(255_255_255_/_0.04)] text-right">
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-grey-400 mb-0.5">완료</p>
-                <p className="text-[12px] font-medium text-grey-500">모든 리뷰를 확인했습니다</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-[rgb(255_255_255_/_0.42)] mb-0.5">완료</p>
+                <p className="text-[12px] font-medium text-[rgb(255_255_255_/_0.42)]">모든 리뷰를 확인했습니다</p>
               </div>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0 text-emerald-400">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0 text-[var(--color-cyan-hi)]">
                 <path d="M3 8l3.5 3.5L13 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
@@ -372,12 +372,12 @@ function ReviewContent({ review, reviews, activeIndex, onNavigate }: ReviewConte
         <div className="w-full flex justify-center gap-3">
           {Array.isArray(review.image) ? (
             review.image.map((img, idx) => (
-              <div key={idx} className="flex-1 max-w-sm rounded-lg overflow-hidden border border-grey-100">
+              <div key={idx} className="flex-1 max-w-sm rounded-lg overflow-hidden border border-[rgb(255_255_255_/_0.08)]">
                 <Image src={img} alt={`${review.title} - ${idx + 1}`} width={600} height={338} className="w-full" />
               </div>
             ))
           ) : (
-            <div className="w-full rounded-lg overflow-hidden border border-grey-100">
+            <div className="w-full rounded-lg overflow-hidden border border-[rgb(255_255_255_/_0.08)]">
               <Image src={review.image} alt={review.title} width={650} height={350} className="w-full" />
             </div>
           )}
@@ -385,25 +385,25 @@ function ReviewContent({ review, reviews, activeIndex, onNavigate }: ReviewConte
       )}
 
       {review.problem && (
-        <div className="rounded-lg border-l-4 border-red-400 bg-red-50/60 px-4 py-3">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-red-500 mb-1.5">문제</p>
-          <RichText text={review.problem} className="text-[12px] text-grey-700 leading-relaxed" />
+        <div className="rounded-lg border-l border-[rgb(255_255_255_/_0.14)] bg-[rgb(255_255_255_/_0.04)] px-4 py-3">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--color-text-primary)] mb-1.5">문제</p>
+          <RichText text={review.problem} className="text-[12px] text-[var(--color-text-secondary)] leading-relaxed" />
         </div>
       )}
       {review.analysis && review.analysis.length > 0 && (
-        <div className="rounded-lg border-l-4 border-amber-400 bg-amber-50/60 px-4 py-3">
-          <p className="text-[12px] font-bold uppercase tracking-wider text-amber-600 mb-3">분석</p>
+        <div className="rounded-lg border-l border-[rgb(255_255_255_/_0.14)] bg-[rgb(255_255_255_/_0.04)] px-4 py-3">
+          <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-[var(--color-text-primary)] mb-3">분석</p>
           <AnalysisBlock items={review.analysis} />
         </div>
       )}
       {review.action && review.action.length > 0 && (
-        <div className="rounded-lg border-l-4 border-blue-400 bg-blue-50/60 px-4 py-3">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-blue-600 mb-2">실행</p>
+        <div className="rounded-lg border-l border-[rgb(255_255_255_/_0.14)] bg-[rgb(255_255_255_/_0.04)] px-4 py-3">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--color-text-primary)] mb-2">실행</p>
           <ul className="space-y-1.5">
             {review.action.map((a, i) => (
               <li key={i} className="flex items-start gap-2">
-                <span className="mt-[6px] w-1 h-1 rounded-full bg-blue-400 flex-shrink-0" />
-                <RichText text={a} className="text-[12px] text-grey-700 leading-relaxed" />
+                <span className="mt-[6px] w-1 h-1 rounded-full bg-[rgb(255_255_255_/_0.25)] flex-shrink-0" />
+                <RichText text={a} className="text-[12px] text-[var(--color-text-secondary)] leading-relaxed" />
               </li>
             ))}
           </ul>
@@ -476,7 +476,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
           {/* 백드롭 */}
           {/* 모달 패널 */}
           <motion.div
-            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[92vh] overflow-hidden"
+            className="relative bg-[rgb(6_8_10_/_0.97)] ring-1 ring-[var(--color-hairline)] shadow-[0_30px_90px_rgb(0_0_0_/_0.75)] rounded-2xl w-full max-w-4xl mx-auto flex flex-col max-h-[92vh] overflow-hidden"
             initial={{
               opacity: 0, scaleX, scaleY, borderRadius: '16px',
               translateX: originRect ? originRect.left + originRect.width  / 2 - window.innerWidth  / 2 : 0,
@@ -488,14 +488,14 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
           >
             {/* 헤더 */}
             <motion.div
-              className="flex items-center justify-between px-6 py-4 border-b border-grey-100 flex-shrink-0"
+              className="flex items-center justify-between px-6 py-4 border-b border-[rgb(255_255_255_/_0.08)] flex-shrink-0"
               initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2, duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
             >
               <div className="flex items-start gap-3 min-w-0">
-                <div className="w-1 h-5 rounded-full bg-blue-500 flex-shrink-0 mt-0.5" />
+                <div className="w-1 h-5 rounded-full bg-[var(--color-cyan-core)] flex-shrink-0 mt-0.5" />
                 <div className="min-w-0">
-                  <h2 id="modal-title" className="text-[17px] font-bold text-grey-900 truncate">
+                  <h2 id="modal-title" className="text-[17px] font-bold text-[var(--color-text-primary)] truncate">
                     {project.title}
                   </h2>
                 </div>
@@ -503,19 +503,21 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
               <div className="flex items-center gap-2 ml-3 flex-shrink-0">
                 {project.githubUrl && (
                   <Button variant="outline" leftIcon={<Icon name="share" />}
+                    className={`border-[rgb(255_255_255_/_0.18)] text-[var(--color-text-primary)] hover:bg-[rgb(255_255_255_/_0.08)] focus-visible:ring-[var(--color-cyan-core)]`}
                     onClick={() => window.open(project.githubUrl, '_blank', 'noopener,noreferrer')}>
                     GitHub
                   </Button>
                 )}
                 {project.demoUrl && (
                   <Button leftIcon={<Icon name="arrow-right" />}
+                    className={`bg-[var(--color-cyan-core)] text-[rgb(2_6_8)] hover:bg-[var(--color-cyan-hi)] focus-visible:ring-[var(--color-cyan-core)]`}
                     onClick={() => window.open(project.demoUrl, '_blank', 'noopener,noreferrer')}>
                     Live
                   </Button>
                 )}
                 <button
                   onClick={onClose}
-                  className="p-2 text-grey-400 hover:text-grey-700 hover:bg-grey-100 rounded-lg transition-colors duration-150"
+                  className="p-2 text-[rgb(255_255_255_/_0.42)] hover:text-[var(--color-text-primary)] hover:bg-[rgb(255_255_255_/_0.08)] rounded-lg transition-colors duration-150"
                   aria-label="닫기"
                 >
                   <Icon name="close" size="medium" />
@@ -526,7 +528,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
             {/* 콘텐츠 */}
             <motion.div
               ref={contentRef}
-              className="overflow-y-auto flex-1 px-6 py-6"
+              className="overflow-y-auto flex-1 px-6 py-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }}
               transition={{ delay: 0.26, duration: 0.3, ease: 'easeOut' }}
             >
@@ -536,17 +538,17 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                 <div className="flex flex-col sm:flex-row gap-5 items-start">
                   {/* 썸네일 */}
                   <div className={cn(
-                    'relative bg-grey-100 rounded-xl overflow-hidden flex-shrink-0',
+                    'relative bg-[rgb(255_255_255_/_0.06)] rounded-lg overflow-hidden flex-shrink-0',
                     project.imageAspect === 'portrait'  ? 'w-32 aspect-[9/16]' :
                     project.imageAspect === 'square'    ? 'w-40 aspect-square'  :
                     'w-full sm:w-64 aspect-video'
                   )}>
                     {imgLoading && (
-                      <div className="absolute inset-0"><Skeleton variant="rectangular" className="w-full h-full" /></div>
+                      <div className="absolute inset-0"><Skeleton variant="rectangular" className="w-full h-full bg-[rgb(255_255_255_/_0.06)]" /></div>
                     )}
                     {imgError ? (
                       <div className="flex items-center justify-center h-full">
-                        <Icon name="image" size="large" className="text-grey-300" />
+                        <Icon name="image" size="large" className="text-[rgb(255_255_255_/_0.35)]" />
                       </div>
                     ) : (
                       <Image src={project.image} alt={project.title} fill
@@ -561,25 +563,25 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                   {/* 메타 정보 */}
                   <div className="flex-1 min-w-0">
                     {project.subtitle && (
-                      <p className="text-[13px] font-medium text-blue-600 mb-2 leading-snug">{project.subtitle}</p>
+                      <p className="text-[13px] font-medium text-[var(--color-cyan-hi)] mb-2 leading-snug">{project.subtitle}</p>
                     )}
                     <div className="flex flex-wrap gap-x-6 gap-y-2">
                       {project.duration && (
                         <div>
-                          <p className="text-[10px] font-semibold uppercase tracking-wider text-grey-400 mb-0.5">기간</p>
-                          <p className="text-[12px] font-semibold text-grey-800">{project.duration}</p>
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-[rgb(255_255_255_/_0.42)] mb-0.5">기간</p>
+                          <p className="text-[12px] font-semibold text-[var(--color-text-primary)]">{project.duration}</p>
                         </div>
                       )}
                       {project.role && (
                         <div>
-                          <p className="text-[10px] font-semibold uppercase tracking-wider text-grey-400 mb-0.5">역할</p>
-                          <p className="text-[12px] font-semibold text-grey-800">{project.role}</p>
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-[rgb(255_255_255_/_0.42)] mb-0.5">역할</p>
+                          <p className="text-[12px] font-semibold text-[var(--color-text-primary)]">{project.role}</p>
                         </div>
                       )}
                       {project.teamSize && (
                         <div>
-                          <p className="text-[10px] font-semibold uppercase tracking-wider text-grey-400 mb-0.5">팀</p>
-                          <p className="text-[12px] font-semibold text-grey-800">{project.teamSize}</p>
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-[rgb(255_255_255_/_0.42)] mb-0.5">팀</p>
+                          <p className="text-[12px] font-semibold text-[var(--color-text-primary)]">{project.teamSize}</p>
                         </div>
                       )}
                     </div>
@@ -588,7 +590,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                       <div className="flex flex-wrap gap-1.5 mt-3">
                         {project.tags.map(tag => (
                           <span key={tag}
-                            className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-grey-100 text-grey-600">
+                            className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-[rgb(255_255_255_/_0.06)] text-[var(--color-text-secondary)]">
                             {tag}
                           </span>
                         ))}
@@ -600,7 +602,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                 {/* 프로젝트 요약: 만든 이유(P) + 성과·배움(R) */}
                 {(project.motivation || project.keyMetrics?.length) && (
                   <div>
-                    <div className="border-t-2 border-grey-200 mb-6" />
+                    <div className="border-t border-[rgb(255_255_255_/_0.10)] mb-6" />
                     <SectionLabel>프로젝트 요약</SectionLabel>
                     <OverviewBlock project={project} />
                   </div>
@@ -611,7 +613,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                   <div>
                     <SectionLabel>구현 사항</SectionLabel>
                     {/* 테이블형 2열 레이아웃 — 카테고리 라벨(좌) + 아이템(우) */}
-                    <div className="rounded-xl border border-grey-100 overflow-hidden">
+                    <div className="rounded-lg border border-[rgb(255_255_255_/_0.08)] overflow-hidden">
                       {project.implementations.map((impl, index) => {
                         const isLast = index === project.implementations!.length - 1;
                         return (
@@ -619,29 +621,29 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                             key={index}
                             className={cn(
                               'grid grid-cols-[6rem_1fr] sm:grid-cols-[8rem_1fr]',
-                              !isLast && 'border-b border-grey-100'
+                              !isLast && 'border-b border-[rgb(255_255_255_/_0.08)]'
                             )}
                           >
                             {/* 카테고리 라벨 열 */}
-                            <div className="bg-grey-50 px-3 py-4 flex items-start justify-end border-r border-grey-100">
-                              <span className="text-[10px] font-bold tracking-wider text-grey-500 uppercase text-right leading-snug pt-0.5">
+                            <div className="bg-[rgb(255_255_255_/_0.04)] px-3 py-4 flex items-start justify-end border-r border-[rgb(255_255_255_/_0.08)]">
+                              <span className="text-[10px] font-bold tracking-wider text-[rgb(255_255_255_/_0.42)] uppercase text-right leading-snug pt-0.5">
                                 {impl.category.replace(' 섹션', '')}
                               </span>
                             </div>
                             {/* 아이템 열 */}
-                            <div className="px-4 py-3 space-y-2.5 bg-white">
+                            <div className="px-4 py-3 space-y-2.5 bg-transparent">
                               {impl.items.map((text, itemIdx) => {
                                 const isTechItem = text.startsWith('**');
                                 return (
                                   <div key={itemIdx}>
                                     {isTechItem ? (
-                                      <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2">
-                                        <RichText text={text} className="text-[12px] text-blue-900 leading-relaxed" />
+                                      <div className="rounded-md bg-[rgb(3_179_195_/_0.10)] border border-[var(--color-hairline)] px-3 py-2">
+                                        <RichText text={text} className="text-[12px] text-[var(--color-text-primary)] leading-relaxed" />
                                       </div>
                                     ) : (
                                       <div className="flex items-start gap-2">
-                                        <span className="mt-[6px] w-1 h-1 rounded-full bg-grey-300 flex-shrink-0" />
-                                        <RichText text={text} className="text-[12px] text-grey-600 leading-relaxed" />
+                                        <span className="mt-[6px] w-1 h-1 rounded-full bg-[rgb(255_255_255_/_0.2)] flex-shrink-0" />
+                                        <RichText text={text} className="text-[12px] text-[var(--color-text-secondary)] leading-relaxed" />
                                       </div>
                                     )}
                                   </div>
@@ -661,13 +663,13 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                 {/* 프로젝트 리뷰: 카드 컨테이너로 시각적 격리 */}
                 {project.reviews && project.reviews.length > 0 && (
                   <div ref={reviewSectionRef}>
-                    <div className="border-t-2 border-grey-200 mb-6" />
+                    <div className="border-t border-[rgb(255_255_255_/_0.10)] mb-6" />
                     <SectionLabel>Project Review</SectionLabel>
 
-                    <div className="rounded-xl border border-grey-200 bg-grey-50 overflow-hidden">
+                    <div className="rounded-lg border border-[rgb(255_255_255_/_0.08)] bg-[rgb(255_255_255_/_0.04)] overflow-hidden">
                       {/* 탭 바 */}
                       {project.reviews.length > 1 && (
-                        <div className="flex gap-1.5 px-5 pt-4 pb-3 overflow-x-auto border-b border-grey-200 bg-white">
+                        <div className="flex gap-1.5 px-5 pt-4 pb-3 overflow-x-auto border-b border-[rgb(255_255_255_/_0.08)] bg-transparent">
                           {project.reviews.map((review, index) => (
                             <button
                               key={review.id}
@@ -675,8 +677,8 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                               className={cn(
                                 'flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[12px] font-medium transition-all duration-200 whitespace-nowrap flex-shrink-0',
                                 activeReviewTab === index
-                                  ? 'bg-blue-500 text-white shadow-sm'
-                                  : 'bg-grey-100 text-grey-600 hover:bg-grey-200'
+                                  ? 'bg-[var(--color-cyan-core)] text-[rgb(2_6_8)]'
+                                  : 'bg-[rgb(255_255_255_/_0.06)] text-[var(--color-text-secondary)] hover:bg-[rgb(255_255_255_/_0.12)]'
                               )}
                             >
                               {review.title}
@@ -701,19 +703,19 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                 {/* 기술 스택 & 선정 이유 */}
                 {project.techReasons && project.techReasons.length > 0 && (
                   <div>
-                    <div className="border-t-2 border-grey-200 mb-6" />
+                    <div className="border-t border-[rgb(255_255_255_/_0.10)] mb-6" />
                     <SectionLabel>기술 스택 & 선정 이유</SectionLabel>
                     <div className="space-y-2">
                       {project.techReasons.map((tech, index) => (
-                        <div key={index} className="rounded-xl border border-grey-100 overflow-hidden">
-                          <div className="px-4 py-2.5 bg-grey-50 border-b border-grey-100">
-                            <span className="text-[12px] font-bold text-blue-600">{tech.name}</span>
+                        <div key={index} className="rounded-lg border border-[rgb(255_255_255_/_0.08)] overflow-hidden">
+                          <div className="px-4 py-2.5 bg-[rgb(255_255_255_/_0.04)] border-b border-[rgb(255_255_255_/_0.08)]">
+                            <span className="text-[12px] font-bold text-[var(--color-cyan-hi)]">{tech.name}</span>
                           </div>
                           <ul className="px-4 py-3 space-y-1.5">
                             {tech.reasons.map((reason, idx) => (
                               <li key={idx} className="flex items-start gap-2">
-                                <span className="mt-[5px] w-1 h-1 rounded-full bg-grey-300 flex-shrink-0" />
-                                <RichText text={reason} className="text-[12px] text-grey-600 leading-relaxed" />
+                                <span className="mt-[5px] w-1 h-1 rounded-full bg-[rgb(255_255_255_/_0.2)] flex-shrink-0" />
+                                <RichText text={reason} className="text-[12px] text-[var(--color-text-secondary)] leading-relaxed" />
                               </li>
                             ))}
                           </ul>
@@ -727,7 +729,7 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                 {/* 배운 점 */}
                 {project.keyLearnings && project.keyLearnings.length > 0 && (
                   <div>
-                    <div className="border-t-2 border-grey-200 mb-6" />
+                    <div className="border-t border-[rgb(255_255_255_/_0.10)] mb-6" />
                     <SectionLabel>배운 점</SectionLabel>
                     <ul className="space-y-3">
                       {project.keyLearnings.map((learning, index) => {
@@ -736,12 +738,12 @@ export default function ProjectModal({ isOpen, onClose, project, originRect }: P
                         const content = colonIdx !== -1 ? learning.substring(colonIdx + 1).trim() : learning;
                         return (
                           <li key={index} className="flex items-start gap-3">
-                            <span className="text-[10px] font-bold text-amber-400 mt-0.5 flex-shrink-0">
+                            <span className="text-[10px] font-bold text-[var(--color-cyan-core)] mt-0.5 flex-shrink-0">
                               {String(index + 1).padStart(2, '0')}
                             </span>
                             <div>
-                              {title && <p className="text-[12px] font-bold text-grey-800 mb-0.5">{title}</p>}
-                              <RichText text={content} className="text-[12px] text-grey-600 leading-relaxed" />
+                              {title && <p className="text-[12px] font-bold text-[var(--color-text-primary)] mb-0.5">{title}</p>}
+                              <RichText text={content} className="text-[12px] text-[var(--color-text-secondary)] leading-relaxed" />
                             </div>
                           </li>
                         );

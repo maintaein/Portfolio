@@ -14,21 +14,21 @@ export function parseRichText(text: string): React.ReactNode[] {
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
       return (
-        <strong key={i} className="font-semibold text-grey-900">
+        <strong key={i} className="font-semibold text-[var(--color-text-primary)]">
           {part.slice(2, -2)}
         </strong>
       );
     }
     if (part.startsWith('`') && part.endsWith('`')) {
       return (
-        <code key={i} className="px-1 py-0.5 rounded text-[11px] font-mono bg-grey-100 text-blue-700">
+        <code key={i} className="px-1 py-0.5 rounded text-[11px] font-mono bg-[rgb(255_255_255_/_0.08)] text-[var(--color-cyan-hi)]">
           {part.slice(1, -1)}
         </code>
       );
     }
     if (part.startsWith('__') && part.endsWith('__')) {
       return (
-        <mark key={i} className="bg-amber-200/70 text-grey-900 font-medium px-0.5 rounded-sm" style={{ boxDecorationBreak: 'clone' }}>
+        <mark key={i} className="bg-[rgb(3_179_195_/_0.22)] text-[var(--color-text-primary)] font-medium px-0.5 rounded-sm" style={{ boxDecorationBreak: 'clone' }}>
           {part.slice(2, -2)}
         </mark>
       );
@@ -74,8 +74,8 @@ export function RichText({ text, className }: { text: string; className?: string
       <ul className="mt-1.5 space-y-1 pl-1">
         {bulletLines.map((b, i) => (
           <li key={i} className="flex items-start gap-2">
-            <span className="mt-[5px] w-1 h-1 rounded-full bg-amber-300 flex-shrink-0" />
-            <span className="text-[11px] text-grey-600 leading-snug">{parseRichText(b)}</span>
+            <span className="mt-[5px] w-1 h-1 rounded-full bg-[rgb(255_255_255_/_0.25)] flex-shrink-0" />
+            <span className="text-[11px] text-[var(--color-text-secondary)] leading-snug">{parseRichText(b)}</span>
           </li>
         ))}
       </ul>
