@@ -13,14 +13,12 @@ const SOURCE = readFileSync(
   'utf8'
 );
 
-// 원장의 줄 순서. 수상이 먼저, 자격증이 뒤에 오고 번호는 이어진다.
-const TITLES = [
-  ...awards.map((award) => award.title),
-  ...certificates.map((certificate) => certificate.name),
-];
+// 원장에 여닫는 줄로 서는 것은 수상뿐이다. 자격증은 한 건이라 아래 구분선
+// 밑에 한 줄로 고정된다.
+const TITLES = awards.map((award) => award.title);
 
-// 펼친 판의 로고 폭 상한. 컴포넌트와 같은 값이어야 비율 검사가 성립한다.
-const PANEL_LOGO_MAX_WIDTH = 148;
+// 로고 슬롯. 컴포넌트와 같은 값이어야 비율 검사가 성립한다.
+const LOGO_MAX_WIDTH = 120;
 
 // PNG는 8바이트 시그니처 뒤에 바로 IHDR이 오고 폭과 높이가 16~23바이트에
 // 빅엔디언 4바이트씩 들어 있다. 라이브러리 없이 읽는다.
@@ -90,7 +88,7 @@ describe('수상과 자격증 데이터', () => {
 });
 
 describe('AwardsAndCertificatesSection', () => {
-  it('수상과 자격증을 한 원장에 번호를 이어 세운다', () => {
+  it('수상을 데이터 순서대로 번호를 이어 세운다', () => {
     render(<AwardsAndCertificatesSection />);
 
     expect(rows().map((row) => row.dataset.ledgerRow)).toEqual(TITLES);
@@ -101,15 +99,63 @@ describe('AwardsAndCertificatesSection', () => {
     expect(indexes).toEqual(TITLES.map((_, index) => String(index + 1)));
   });
 
-  it('계기 줄의 개수가 두 목록을 합친 수와 맞는다', () => {
+  it('계기 줄의 개수가 수상 건수와 맞는다', () => {
     render(<AwardsAndCertificatesSection />);
 
     expect(document.querySelector('[data-ledger-count]')!.textContent).toBe(
-      String(awards.length + certificates.length)
+      String(awards.length)
     );
   });
 
-  // 처음에는 제목과 등급만 보이는 표다. 상세는 누른 뒤에 온다.
+  // 같은 기관이 준 상은 한 마크 아래로 묶인다. 주관사 이름은 이 머리글이
+  // 쥐고 있어서 줄마다 다시 적지 않는다.
+  it('같은 주관사의 상을 한 묶음으로 세우고 머리글이 기관 이름을 쥔다', () => {
+    render(<AwardsAndCertificatesSection />);
+
+    const groups = [...document.querySelectorAll<HTMLElement>('[data-ledger-group]')];
+    expect(groups.map((group) => group.dataset.ledgerGroup)).toEqual([
+      ...new Set(awards.map((award) => award.organization)),
+    ]);
+
+    for (const group of groups) {
+      expect(group.textContent).toContain(group.dataset.ledgerGroup);
+    }
+  });
+
+  // 1번과 2번은 데이터상 제목의 앞부분이 같다. 그 앞부분은 묶음 머리글이
+  // 이미 말하므로 줄에서는 뺀다. 남는 것은 두 줄을 실제로 가르는 부분이다.
+  it('묶음 머리글이 말한 부분을 제목에서 뺀다', () => {
+    render(<AwardsAndCertificatesSection />);
+
+    for (const award of awards) {
+      const shown = toggle(award.title).querySelector(
+        '[data-ledger-field="title"]'
+      )!.textContent!;
+
+      expect(award.title.endsWith(shown), `${award.title}의 표시 제목`).toBe(true);
+      expect(shown.startsWith(award.organization)).toBe(false);
+    }
+
+    const shownTitles = [...document.querySelectorAll('[data-ledger-field="title"]')].map(
+      (node) => node.textContent
+    );
+    expect(new Set(shownTitles).size, '줄인 제목이 서로 겹친다').toBe(awards.length);
+  });
+
+  // 누르기 전에 무엇으로 언제 받았는지가 이미 읽힌다. 접힌 줄이 제목만
+  // 보여 주면 무엇을 펼칠지 고를 근거가 없다.
+  it('접힌 줄에서 이미 프로젝트와 날짜를 읽을 수 있다', () => {
+    render(<AwardsAndCertificatesSection />);
+
+    for (const award of awards) {
+      const text = toggle(award.title).textContent!;
+      expect(text, `${award.title}의 접힌 줄`).toContain(award.project);
+      expect(text).toContain(award.date);
+      expect(text).toContain(award.rank);
+    }
+  });
+
+  // 처음에는 제목과 등급만 보이는 표다. 설명은 누른 뒤에 온다.
   it('처음에는 모든 줄이 접혀 있다', () => {
     render(<AwardsAndCertificatesSection />);
 
@@ -119,7 +165,7 @@ describe('AwardsAndCertificatesSection', () => {
     expect(rows().filter((row) => row.dataset.ledgerOpen === 'true')).toHaveLength(0);
   });
 
-  it('줄을 누르면 상세가 펼쳐진다', async () => {
+  it('줄을 누르면 설명이 펼쳐진다', async () => {
     const user = userEvent.setup();
     render(<AwardsAndCertificatesSection />);
 
@@ -130,9 +176,6 @@ describe('AwardsAndCertificatesSection', () => {
 
     const panel = panelOf(award.title);
     expect(panel.getAttribute('aria-hidden')).toBe('false');
-    expect(panel.textContent).toContain(award.organization);
-    expect(panel.textContent).toContain(award.project);
-    expect(panel.textContent).toContain(award.date);
     expect(panel.textContent).toContain(award.description);
   });
 
@@ -173,18 +216,45 @@ describe('AwardsAndCertificatesSection', () => {
     }
   });
 
-  it('자격증도 같은 줄 모양으로 발급처와 유효 기간을 편다', async () => {
-    const user = userEvent.setup();
+  // 누를 수 있게 생긴 것은 무언가를 내줘야 한다. 자격증은 펼칠 내용이 없어
+  // 한 줄에 전부 적고 단추를 두지 않는다.
+  it('자격증은 여닫는 단추 없이 한 줄에 전부 적는다', () => {
     render(<AwardsAndCertificatesSection />);
 
-    const certificate = certificates[0];
-    await user.click(toggle(certificate.name));
+    const lines = [...document.querySelectorAll<HTMLElement>('[data-credential-row]')];
+    expect(lines.map((line) => line.dataset.credentialRow)).toEqual(
+      certificates.map((certificate) => certificate.name)
+    );
 
-    const panel = panelOf(certificate.name);
-    expect(panel.textContent).toContain(certificate.organization);
-    expect(panel.textContent).toContain(certificate.date);
-    expect(panel.textContent).toContain(certificate.validUntil!);
-    expect(toggle(certificate.name).textContent).toContain(certificate.grade);
+    for (const [index, line] of lines.entries()) {
+      const certificate = certificates[index];
+      expect(line.querySelector('button'), '자격증 줄에 단추가 있다').toBeNull();
+      expect(line.textContent).toContain(certificate.name);
+      expect(line.textContent).toContain(certificate.organization);
+      expect(line.textContent).toContain(certificate.date);
+      expect(line.textContent).toContain(certificate.grade);
+      expect(line.textContent).toContain(certificate.validUntil!);
+    }
+  });
+
+  // 결함 수정: 눌리는 줄인데 손을 올려도 눌러도 아무 반응이 없었다.
+  it('줄에 올림과 눌림과 초점 표시가 모두 있다', () => {
+    render(<AwardsAndCertificatesSection />);
+
+    const button = toggle(awards[0].title);
+    expect(button.className).toContain('transition-colors');
+    expect(button.className).toMatch(/hover:bg-/);
+    expect(button.className).toMatch(/active:bg-/);
+    expect(button.className).toContain('focus-visible:outline');
+  });
+
+  // 시안은 사용자의 한 상태에만 쓴다. 이 섹션에서 그 상태는 "열린 줄"이고,
+  // 표시는 왼쪽 세로선 하나다. 초점 테두리가 나머지 하나다. 다른 자리에
+  // 시안을 칠하면 강조가 아니라 그냥 글자색이 된다.
+  it('시안을 열린 줄의 선과 초점 테두리에만 쓴다', () => {
+    expect(SOURCE.match(/--color-cyan-/g) ?? []).toHaveLength(2);
+    expect(SOURCE).toContain('border-l-[var(--color-cyan-core)]');
+    expect(SOURCE).toContain('focus-visible:outline-[var(--color-cyan-hi)]');
   });
 
   // 줄이 열려 상자가 커져도 세로 가운데 정렬은 auto 마진이 쥔다.
@@ -202,7 +272,10 @@ describe('AwardsAndCertificatesSection', () => {
     render(<AwardsAndCertificatesSection />);
 
     const logos = [...document.querySelectorAll<HTMLElement>('.org-logo')];
-    expect(logos).toHaveLength(TITLES.length);
+    // 묶음마다 하나, 자격증마다 하나.
+    expect(logos).toHaveLength(
+      new Set(awards.map((award) => award.organization)).size + certificates.length
+    );
 
     for (const logo of logos) {
       const file = logoFile(logo);
@@ -211,7 +284,7 @@ describe('AwardsAndCertificatesSection', () => {
       const width = Number.parseFloat(logo.style.width);
 
       expect(width, `${file}의 슬롯 폭`).toBe(
-        Math.min(PANEL_LOGO_MAX_WIDTH, Math.round((height * source.width) / source.height))
+        Math.min(LOGO_MAX_WIDTH, Math.round((height * source.width) / source.height))
       );
     }
   });
