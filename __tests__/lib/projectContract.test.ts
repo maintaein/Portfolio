@@ -8,7 +8,7 @@ import {
 import { projects } from '@/lib/data';
 import type { Project } from '@/types/index';
 
-const EM_DASH = '—';
+const EM_DASH = '\u2014';
 
 function findProject(title: string): Project {
   const found = projects.find((p) => p.title.includes(title));

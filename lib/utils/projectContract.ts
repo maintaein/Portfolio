@@ -4,7 +4,9 @@
 // 정본은 .claude/designRefactoring/2026-09-09-t2-implementation-spec.md §6
 import type { Project, ProjectReview } from '@/types/index';
 
-const EM_DASH = '—';
+// 이스케이프로 쓴다. 이 저장소는 산문에서 줄표를 금지하기 때문에 리터럴로
+// 두면 언젠가 정리 대상으로 오인돼 파서가 조용히 깨진다.
+const EM_DASH = '\u2014';
 const PLACEHOLDER_METRICS = new Set(['', 'N', 'TODO']);
 
 export type AnalysisKind = 'diagnosis' | 'option' | 'other';
