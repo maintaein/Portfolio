@@ -44,6 +44,29 @@ const MUTED = 'rgb(255 255 255 / 0.62)';
 // 프로젝트 프리뷰 영상 순환 주기. 정본은 스펙 §4.6
 const CYCLE_MS = 3000;
 
+// 프리뷰 캡션 뒤 국소 그라데이션. 전면 카드로 덮지 않고 글자가 앉는
+// 아래쪽에만 깐다 - SkillsSection의 SKILL_DESCRIPTION_SCRIM, About의
+// ABOUT_SCRIMS_MOBILE와 같은 처방이고 방향(to top)도 같다. 알파 0.78도
+// SKILL_DESCRIPTION_SCRIM에서 가져온 값이다.
+//
+// 다만 저 둘과 달리 뒷배경이 Hyperspeed가 아니라 남의 앱 화면 녹화다.
+// 여섯 프로젝트 중 다섯이 밝은 테마라 캡션 뒤에 순백(255,255,255)이 그대로
+// 온다. 형제 섹션처럼 기울기를 계속 태우면 글자 윗줄이 알파 0.47 자리에
+// 앉아 대비가 3.25:1까지 내려간다(크롬 실측). 그래서 위 두 정지점의 알파를
+// 같게 두어 글자가 앉는 구간 전체를 평평한 0.78로 만들고, 기울기는 글자가
+// 없는 위쪽 여백(pt-12)에서만 진다. 어느 줄이 어디에 앉든 뒤가 같은 알파다
+const PREVIEW_CAPTION_SCRIM =
+  'linear-gradient(to top, rgb(0 0 0 / 0.78) 0%, rgb(0 0 0 / 0.78) 62%, rgb(0 0 0 / 0.3) 84%, rgb(0 0 0 / 0) 100%)';
+
+// 프로젝트가 갈릴 때 미디어 겹이 자리를 잡는 시간. --animate-duration-base와
+// 같은 값이다. 이름을 훑으면 매번 오는 전환이라 길면 걸리적거린다
+const PREVIEW_SWAP_MS = 300;
+
+// lib/gsap의 SITE_EASE와 같은 곡선을 CSS 표기로 적은 것. 값을 import하면
+// gsap 모듈이 정적 번들로 딸려 들어와 지연 로드가 깨진다 - design-tokens.css도
+// 같은 이유로 이 리터럴을 그대로 쓴다
+const SITE_EASE_CSS = 'cubic-bezier(0.22, 1, 0.36, 1)';
+
 // 접힘 프리뷰와 펼침 stage 사이 비행 시간. 워드마크 FLIP과 같은 값이고
 // 정본은 styles/design-tokens.css의 워드마크 flip 지속 변수다. HomeClient도
 // 같은 값을 복제해 둔다 - 숫자 하나 때문에 공유 모듈을 파지 않는다
@@ -99,8 +122,20 @@ export default function ProjectsSection() {
   const [revealed, setRevealed] = useState<boolean | null>(null);
 
   const nameRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  // 이름 단추 안쪽의 글자 상자. 비행 손잡이는 단추가 아니라 이쪽이 쥔다 -
+  // 단추는 호버 과녁이라 w-full이고, 상세 판 제목은 글자 너비라, 단추를
+  // 그대로 태우면 Flip이 그 너비 비율을 첫 프레임 scaleX로 박는다
+  const nameFlipRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const sectionRef = useRef<HTMLElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
+  // 프로젝트 전환 tween이 붙는 겹. previewRef 자신이 아니라 그 안쪽이다 -
+  // openModal이 Flip.getState(previewRef)로 뜨는 것은 previewRef의
+  // getBoundingClientRect이고, 자식에 걸린 transform은 거기 안 섞인다.
+  // 호버로 전환이 시작되자마자 클릭이 오는 흔한 경로에서 비행이 비뚤어지지
+  // 않는 이유가 이것이다. 프리뷰 자신에 걸었다면 openModal에서 tween을
+  // 먼저 죽여야 했을 것이다
+  const mediaLayerRef = useRef<HTMLDivElement | null>(null);
+  const swapTweenRef = useRef<{ kill: () => void } | null>(null);
   // 펼침 stage. 모달이 지연 로드라 부모의 layout effect로는 DOM에 박히는
   // 순간을 못 잡는다 - ProjectModal의 onStageMount 콜백 ref가 채운다
   const stageElRef = useRef<HTMLDivElement | null>(null);
@@ -111,6 +146,16 @@ export default function ProjectsSection() {
   const gsapModuleRef = useRef<typeof import('@/lib/gsap') | null>(null);
   const pendingFlipStateRef = useRef<Flip.FlipState | null>(null);
   const flightRef = useRef<{ kill: () => void } | null>(null);
+  // 닫기에서 제목을 되돌리는 두 번째 비행. 여는 쪽은 Flip.from 하나가
+  // stage와 제목을 같이 태우지만 닫기는 Flip.fit이라 대상마다 호출이 하나다
+  const titleFlightRef = useRef<{ kill: () => void } | null>(null);
+  // 닫기 비행 동안 감춰 둔 착지점 이름. 착지든 중도 정리든 되돌릴 자리를
+  // 잃지 않으려고 노드 자체를 들고 있는다
+  const hiddenNameRef = useRef<HTMLElement | null>(null);
+  // 모달을 연 시점의 인덱스. 착지점은 이 값으로 집는다. 펼친 상태에서는
+  // 프로젝트를 못 바꾸니 지금은 activeIndex와 같지만, 같다는 사실에 기대는
+  // 코드는 언젠가 깨진다
+  const openedIndexRef = useRef(0);
   // 붕괴가 끝나기를 기다렸다 닫기 비행을 띄우는 예약. setTimeout이 아니라
   // GSAP 시계를 쓴다 - 탭이 백그라운드에 갔다 와도 타임라인과 안 어긋난다
   const collapseCallRef = useRef<{ kill: () => void } | null>(null);
@@ -200,25 +245,72 @@ export default function ProjectsSection() {
     });
   }, []);
 
+  // 프로젝트 전환. 이 모션이 전하는 것 하나: "보고 있는 프로젝트가 바뀌었다".
+  // 새 화면이 조금 크게 아래에서 들어와 제자리에 앉는다. 순환 재생(3초)이
+  // 도는 중의 src 교체에는 안 걸린다 - 그건 같은 프로젝트 안의 다음 장면이라
+  // 상태 전환이 아니고, 걸면 3초마다 영원히 꿈틀대는 잔모션이 된다.
+  // transform과 opacity만 만진다. 이름을 빠르게 훑으면 전환이 겹치므로
+  // 이전 것을 죽이고 다음을 태운다
+  useEffect(() => {
+    const layer = mediaLayerRef.current;
+    swapTweenRef.current?.kill();
+    swapTweenRef.current = null;
+    if (!layer) return;
+    const mod = gsapModuleRef.current;
+    // reduce에서는 즉시 교체로 무너진다. 죽은 tween이 남긴 transform도 걷는다
+    if (!mod || !motionReady || reducedMotion) {
+      layer.style.removeProperty('transform');
+      layer.style.removeProperty('opacity');
+      return;
+    }
+    mod.registerGsap();
+    swapTweenRef.current = asKillable(
+      mod.gsap.fromTo(
+        layer,
+        { opacity: 0, scale: 1.06, yPercent: 3 },
+        {
+          opacity: 1,
+          scale: 1,
+          yPercent: 0,
+          duration: PREVIEW_SWAP_MS / 1000,
+          ease: mod.SITE_EASE,
+          clearProps: 'transform',
+        }
+      )
+    );
+  }, [activeIndex, motionReady, reducedMotion]);
+
   // 모달이 사라지면 남은 비행과 재진입 잠금을 푼다. 정상 닫기에서는 이미 끝난
   // tween을 한 번 더 kill할 뿐이지만, popstate가 비행 중에 모달을 걷어가는
   // 경우에는 이 정리가 없으면 closingRef가 참으로 굳어 다음 닫기가 막힌다
+  // 닫기 비행 동안 감췄던 착지점 이름을 되돌린다. 착지 onComplete 한 곳에만
+  // 두면 비행이 중간에 죽었을 때 이름이 영영 안 보인다
+  const restoreLandingName = useCallback(() => {
+    hiddenNameRef.current?.style.removeProperty('opacity');
+    hiddenNameRef.current = null;
+  }, []);
+
   useEffect(() => {
     if (modalOpen) return;
     closingRef.current = false;
     flightRef.current?.kill();
     flightRef.current = null;
+    titleFlightRef.current?.kill();
+    titleFlightRef.current = null;
+    restoreLandingName();
     // 붕괴를 기다리던 예약이 남아 있으면 사라진 stage로 비행을 띄운다
     collapseCallRef.current?.kill();
     collapseCallRef.current = null;
     setRevealed(null);
-  }, [modalOpen]);
+  }, [modalOpen, restoreLandingName]);
 
   // 비행 도중 컴포넌트가 통째로 사라지는 경우
   useEffect(
     () => () => {
       flightRef.current?.kill();
+      titleFlightRef.current?.kill();
       collapseCallRef.current?.kill();
+      swapTweenRef.current?.kill();
     },
     []
   );
@@ -261,7 +353,12 @@ export default function ProjectsSection() {
       const id = reconcileProjectModal(state);
       if (id) {
         const idx = projects.findIndex((p) => p.title === id);
-        if (idx !== -1) setActiveIndex(idx);
+        if (idx !== -1) {
+          setActiveIndex(idx);
+          // openModal을 안 거치는 복구 경로다. 여기서 안 맞추면 닫기 비행의
+          // 착지점이 엉뚱한 이름으로 간다
+          openedIndexRef.current = idx;
+        }
         setModalOpen(true);
       } else {
         setModalOpen(false);
@@ -293,10 +390,11 @@ export default function ProjectsSection() {
   const openModal = useCallback(
     (i: number) => {
       const mod = flipModule();
+      openedIndexRef.current = i;
       // 이름 노드는 눌린 인덱스로 집는다. handleNameClick이 goTo(i)를 먼저
       // 부르지만 그건 비동기 상태 갱신이라 이 시점 DOM의 활성 이름은 아직
       // 이전 것일 수 있다 - activeIndex로 집으면 엉뚱한 노드가 날아간다
-      const nameEl = nameRefs.current[i];
+      const nameEl = nameFlipRefs.current[i];
       if (mod && previewRef.current && nameEl) {
         // 호버 없이 클릭이 곧장 오는 경로(터치, 프로그램적 클릭)에서는 goTo(i)가
         // 아직 커밋 전이라 접힘 손잡이가 이전 프로젝트 것이거나 아예 없다.
@@ -395,9 +493,29 @@ export default function ProjectsSection() {
             },
           })
         );
+
+        // 제목도 같은 시점에 같은 길이로 되돌린다. 어긋나면 이미지와 제목이
+        // 따로 논다. 착지점 이름은 비행 동안 감춘다 - 셸 배경이 뒤 60%에
+        // 빠지므로 그냥 두면 날아오는 제목과 제자리 이름이 겹쳐 읽힌다.
+        // visibility가 아니라 opacity인 것은 이 노드가 착지 좌표의 기준이라
+        // 레이아웃이 살아 있어야 하기 때문이다
+        const titleEl = document.getElementById('pm-title');
+        const landingEl = nameFlipRefs.current[openedIndexRef.current];
+        if (titleEl && landingEl) {
+          landingEl.style.opacity = '0';
+          hiddenNameRef.current = landingEl;
+          titleFlightRef.current = asKillable(
+            mod.Flip.fit(titleEl, landingEl, {
+              duration: seconds,
+              ease: mod.SITE_EASE,
+              scale: true,
+              onComplete: restoreLandingName,
+            })
+          );
+        }
       })
     );
-  }, [finishClose, flipModule]);
+  }, [finishClose, flipModule, restoreLandingName]);
 
   // stage가 DOM에 박히는 커밋에서, 브라우저가 그리기 전에 불린다. 관문을 여기서
   // 다시 보지 않는 것은 구조적으로 강제되기 때문이다 - pendingFlipStateRef는
@@ -505,7 +623,7 @@ export default function ProjectsSection() {
 
       <div className="my-auto grid grid-cols-1 lg:grid-cols-[3fr_2fr]">
         {/* 좁은 화면에서는 프리뷰가 w-full이라 justify-center가 할 일이 없다.
-            lg에서만 3fr 열 안의 60% 프리뷰를 가로 가운데로 민다 */}
+            lg에서만 3fr 열 안의 80% 프리뷰를 가로 가운데로 민다 */}
         <div className="flex items-center justify-center">
           {/* 같은 data-flip-id를 가진 노드가 화면에 둘이면 Flip이 짝을 못
               짓는다. 펼침이 살아 있는 동안은 접힘 쪽 손잡이를 뗀다 */}
@@ -514,9 +632,18 @@ export default function ProjectsSection() {
             data-part="preview"
             aria-hidden="true"
             data-flip-id={modalOpen ? undefined : `pv-${activeProject.title}`}
-            className="w-full lg:w-[60%] aspect-video"
+            className="w-full lg:w-[80%] aspect-video"
           >
-            <div className="relative h-full w-full" style={{ background: 'rgb(255 255 255 / 0.06)' }}>
+            {/* 자르는 쪽이 여기다. 영상은 object-cover로 상자를 넘치므로
+                반경만 줘서는 모서리가 안 깎인다. rounded-media는 상세 판
+                무대와 같은 토큰이다(비행 양 끝의 모서리가 같아야 한다).
+                이 상자는 전환 tween이 안 붙는다 - 잘라내는 틀은 제자리에
+                있고 안쪽 겹만 움직여야 새 화면이 틀 안으로 들어온다 */}
+            <div
+              className="relative h-full w-full overflow-hidden rounded-media"
+              style={{ background: 'rgb(255 255 255 / 0.06)' }}
+            >
+            <div ref={mediaLayerRef} data-part="preview-media" className="absolute inset-0">
               {mediaError ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-center px-4">
                   <span className="text-[13px] tabular-nums" style={{ color: MUTED }}>
@@ -550,11 +677,38 @@ export default function ProjectsSection() {
                   src={activeProject.image}
                   alt={activeProject.title}
                   fill
-                  sizes="(max-width: 1024px) 100vw, 520px"
+                  sizes="(max-width: 1024px) 100vw, 660px"
                   className="object-cover pointer-events-none"
                   onError={handleMediaError}
                 />
               )}
+
+              {/* 영상 위 캡션. 프리뷰 컨테이너에 aria-hidden이 걸려 있으므로
+                  이 글자는 장식이고, 같은 내용을 오른쪽 이름 목록이 이미
+                  스크린리더에 준다. 그래서 이름 목록보다 작고 흐리다 -
+                  같은 제목이 화면에 둘이니 어느 쪽이 주인공인지 크기와
+                  색으로 갈라야 한다. absolute라 subtitle이 있든 없든
+                  프리뷰 높이가 안 흔들린다(FLIP 출발 좌표가 곧 이 높이다).
+                  subtitle은 선택 필드이고 TDS 것에는 리터럴 줄바꿈이 들어
+                  있는데, HTML 공백 접기가 그것을 한 칸으로 만들고 truncate가
+                  한 줄로 고정한다. 오류 화면에는 이미 제목이 있어 뺀다 */}
+              {mediaError ? null : (
+                <div
+                  data-part="preview-caption"
+                  className="pointer-events-none absolute inset-x-0 bottom-0 px-5 pb-4 pt-12"
+                  style={{ background: PREVIEW_CAPTION_SCRIM }}
+                >
+                  <p className="text-t5 font-semibold text-[var(--color-text-primary)]">
+                    {activeProject.title}
+                  </p>
+                  {activeProject.subtitle ? (
+                    <p className="mt-0.5 truncate text-t7 text-[var(--color-text-secondary)]">
+                      {activeProject.subtitle}
+                    </p>
+                  ) : null}
+                </div>
+              )}
+            </div>
             </div>
           </div>
         </div>
@@ -567,7 +721,27 @@ export default function ProjectsSection() {
             >
               MY PROJECTS
             </span>
-            <span className="flex-1 h-px" style={{ background: LINE_STRONG }} />
+            {/* 이미 있던 헤어라인이 일을 하나 하게 한다: 목록 여섯 중
+                몇 번째를 보고 있는지. 장식을 하나 더 얹는 대신 있던 선을
+                궤도로 쓴다. transform만 움직이고 reduce에서는 즉시 뛴다.
+                이름 목록이 aria로 이미 말하고 있으니 여기는 장식이다 */}
+            <span
+              aria-hidden="true"
+              className="relative flex-1 h-px overflow-hidden"
+              style={{ background: LINE_STRONG }}
+            >
+              <span
+                data-part="index-progress"
+                className="absolute inset-0 origin-left"
+                style={{
+                  background: 'var(--color-cyan-core)',
+                  transform: `scaleX(${(activeIndex + 1) / N})`,
+                  transition: reducedMotion
+                    ? 'none'
+                    : `transform var(--animate-duration-base) ${SITE_EASE_CSS}`,
+                }}
+              />
+            </span>
           </div>
 
           <div
@@ -589,20 +763,43 @@ export default function ProjectsSection() {
                   type="button"
                   role="tab"
                   data-name={i}
-                  data-flip-id={
-                    isActive && !modalOpen ? `title-${project.title}` : undefined
-                  }
                   aria-selected={isActive}
                   tabIndex={isActive ? 0 : -1}
                   onClick={() => handleNameClick(i)}
                   onMouseEnter={() => goTo(i)}
                   onFocus={() => goTo(i)}
-                  className={`block w-full text-left text-t3 font-bold tracking-[-0.02em] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)] ${
+                  // 이름이 광휘 겹의 글자를 data-glow-text로 복제한다. 그
+                  // 사본이 접근성 이름에 두 번 섞이지 않게 여기서 이름을
+                  // 못박는다
+                  aria-label={project.title}
+                  // 줄 사이를 벌리는 것은 목록의 gap이 아니라 단추 자신의
+                  // py다. gap으로 벌리면 줄과 줄 사이에 아무 반응 없는 죽은
+                  // 띠가 생겨, 목록을 세로로 훑을 때 광휘가 그 띠마다 깜빡인다
+                  className={`block w-full text-left text-t2 font-bold tracking-[-0.02em] py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)] ${
                     isActive ? 'text-[var(--color-text-primary)]' : ''
                   }`}
                   style={{ color: isActive ? undefined : MUTED }}
                 >
-                  {project.title}
+                  {/* 단추는 w-full로 남아 호버 과녁을 지키고, 비행 손잡이는
+                      글자 너비인 이 안쪽 상자가 쥔다. inline-block이 아니라
+                      block인 것은 기준선 밑에 딸려 오는 여백이 단추 높이를
+                      바꾸지 않게 하기 위해서다 */}
+                  <span
+                    ref={(el) => {
+                      nameFlipRefs.current[i] = el;
+                    }}
+                    data-flip-id={
+                      isActive && !modalOpen ? `title-${project.title}` : undefined
+                    }
+                    // 광휘 겹 둘이 이 글자를 복제해 번짐만 남긴다. 정본은
+                    // styles/design-tokens.css의 .pj-name-glow이고, 그 겹은
+                    // absolute라 이 상자의 너비를 바꾸지 않는다 - 바꾸면
+                    // 비행 첫 프레임이 배율로 부푼다
+                    data-glow-text={project.title}
+                    className="pj-name-glow block w-fit"
+                  >
+                    {project.title}
+                  </span>
                 </button>
               );
             })}

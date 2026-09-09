@@ -451,7 +451,7 @@ export default function ProjectModal({
           <h2
             id="pm-title"
             data-flip-id={`title-${project.title}`}
-            className={cn('truncate text-t3 font-bold tracking-[-0.02em]', T1)}
+            className={cn('truncate text-t2 font-bold tracking-[-0.02em]', T1)}
           >
             {project.title}
           </h2>
@@ -502,7 +502,11 @@ export default function ProjectModal({
             data-modal-part="stage"
             data-flip-id={`pv-${project.title}`}
             ref={onStageMount}
-            className="relative grid justify-items-center gap-0"
+            // 모서리는 접힘 프리뷰와 같은 토큰이다. 이 노드가 비행하는
+            // 노드라 여기 반경이 없으면 날아가는 동안만 각져 보인다.
+            // 자르기를 여기 두는 것은 안전하다 - collectClippedAncestors는
+            // 이 노드의 부모부터 걷어내므로 자기 overflow는 안 건드린다
+            className="relative grid justify-items-center gap-0 overflow-hidden rounded-media"
             onTouchStart={handleStageTouchStart}
             onTouchEnd={handleStageTouchEnd}
           >
@@ -518,10 +522,10 @@ export default function ProjectModal({
                       muted
                       loop
                       playsInline
-                      className="block aspect-video w-full rounded-lg border border-[rgb(255_255_255_/_0.08)] bg-[rgb(0_0_0)] object-cover"
+                      className="block aspect-video w-full rounded-media border border-[rgb(255_255_255_/_0.08)] bg-[rgb(0_0_0)] object-cover"
                     />
                   ) : (
-                    <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-[rgb(255_255_255_/_0.08)] bg-[rgb(0_0_0)]">
+                    <div className="relative aspect-video w-full overflow-hidden rounded-media border border-[rgb(255_255_255_/_0.08)] bg-[rgb(0_0_0)]">
                       <Image
                         src={project.image}
                         alt={project.title}
@@ -535,7 +539,7 @@ export default function ProjectModal({
               ))
             ) : (
               <figure data-feat={0} className="w-full">
-                <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-[rgb(255_255_255_/_0.08)] bg-[rgb(0_0_0)]">
+                <div className="relative aspect-video w-full overflow-hidden rounded-media border border-[rgb(255_255_255_/_0.08)] bg-[rgb(0_0_0)]">
                   <Image
                     src={project.image}
                     alt={project.title}

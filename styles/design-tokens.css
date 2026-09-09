@@ -133,6 +133,15 @@
   --line-height-t7: 1.21875rem;
   --line-height-t8: 1.03125rem;
 
+  /* 미디어 상자 모서리. 이 저장소의 모서리 규칙은 "알약(9999px) 아니면
+     각짐"이었는데, 여기 한 칸을 더 연다: 영상·이미지가 앉는 상자만 이
+     반경을 쓴다. 값을 토큰 하나로 두는 이유는 Projects 접힘 프리뷰와
+     상세 판 무대가 FLIP 짝이기 때문이다 - 둘의 반경이 다르면 비행이
+     출발하는 프레임과 착지하는 프레임에서 모서리가 튄다. 한 곳만
+     고쳐도 두 끝이 같이 움직여야 한다. 14px은 12~16px 후보를 크롬에서
+     나란히 보고 고른 값이다. */
+  --radius-media: 14px;
+
   /* Animation */
   --animate-duration-fast: 150ms;
   --animate-duration-base: 300ms;
@@ -1109,6 +1118,77 @@
   @media (prefers-reduced-motion: reduce) {
     .skill-icon-button:has(.skill-icon-active)::before,
     .skill-icon-button:has(.skill-icon-active)::after {
+      animation: none;
+    }
+  }
+
+  /* Projects 이름 광휘. 바로 위 Skills 아이콘 광휘를 글자로 옮긴 것이고
+     판단들을 그대로 물려받는다. 아이콘은 실루엣을 drop-shadow로 번지게
+     했지만 글자는 text-shadow가 같은 일을 한다. 겹 둘은 글자를 그대로 베낀
+     투명 사본이라 번짐만 남는다 - 진짜 글자에 text-shadow를 직접 걸면
+     전환할 수 있는 것이 반경밖에 없다.
+
+     상자를 건드리지 않는 것이 여기서 제일 중요하다. 이 요소는 상세 판
+     제목과 짝지어 날아가는 FLIP 손잡이라, 너비가 글자 너비에서 벗어나면
+     비행 첫 프레임이 그 비율만큼 배율로 부푼다. 그래서 겹은 absolute이고
+     부모는 position만 갖는다. isolation은 겹의 음수 z-index가 이 span
+     안쪽에서만 해석되게 못박는다 - 없으면 조상 어디의 배경 뒤로 숨는다.
+     white-space: pre는 사본이 진짜 글자와 다른 자리에서 줄바꿈하지 않게
+     한다. 단추에 aria-label이 있어 이 사본은 접근성 이름에 안 섞인다. */
+  .pj-name-glow {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .pj-name-glow::before,
+  .pj-name-glow::after {
+    content: attr(data-glow-text);
+    position: absolute;
+    inset: 0;
+    white-space: pre;
+    color: transparent;
+    opacity: 0;
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  /* 넓고 옅은 바깥 번짐. 26px 글자에 18px이면 Skills가 40px 아이콘에
+     96px 원반을 깔던 비율과 얼추 같은 자리에 빛이 닿는다. */
+  .pj-name-glow::before {
+    text-shadow: 0 0 18px var(--color-cyan-hi);
+  }
+
+  /* 좁고 밝은 안쪽 번짐. 패스를 두 번 겹치는 이유는 Skills ::after와 같다 -
+     알파가 1에서 멈추므로 첫 패스가 획 사이를 메우는 동안 이미 꽉 찬
+     글자는 더 밝아지지 못한다. */
+  .pj-name-glow::after {
+    text-shadow:
+      0 0 3px var(--color-cyan-hi),
+      0 0 8px var(--color-cyan-hi);
+  }
+
+  /* :hover가 아니라 활성 상태를 따라간다. 이름은 onMouseEnter로 프로젝트를
+     바꾸는데 마우스를 떼도 프리뷰는 그 프로젝트를 계속 보여준다 - 광휘만
+     꺼지면 어느 이름 이야기인지 끊긴다. 키보드 onFocus 경로도 같은
+     aria-selected를 옮기므로 같은 광휘가 온다. 좁은 겹이 먼저, 넓은 겹이
+     늦게 켜져서 번짐이 글자에서 바깥으로 자라는 것처럼 읽힌다. 움직이는
+     것은 opacity 하나다. */
+  [data-name][aria-selected="true"] .pj-name-glow::after {
+    opacity: 1;
+    animation: skill-bloom var(--animate-duration-fast) ease-out backwards;
+  }
+
+  [data-name][aria-selected="true"] .pj-name-glow::before {
+    opacity: 1;
+    animation: skill-bloom var(--animate-duration-base) ease-out
+      var(--animate-duration-fast) backwards;
+  }
+
+  /* 번짐이 켜지는 전환만 죽이고 최종 상태는 남긴다. 활성 표시가 통째로
+     사라지면 어느 이름 이야기인지 알 수 없다. */
+  @media (prefers-reduced-motion: reduce) {
+    [data-name][aria-selected="true"] .pj-name-glow::before,
+    [data-name][aria-selected="true"] .pj-name-glow::after {
       animation: none;
     }
   }

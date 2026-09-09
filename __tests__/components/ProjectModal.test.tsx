@@ -469,19 +469,24 @@ describe('ProjectModal 아이콘과 글자 크기 한 칸 내리기', () => {
     expect(SOURCE).not.toMatch(/\|\s\|/); // 정지 표시로 쓰던 파이프 두 개
   });
 
-  // 램프를 한 칸씩 내렸다. 제목은 실제로 그려진 class로 잠근다.
-  // 이 잠금은 cn이 크기 클래스를 색과 헷갈려 지워 버리는 회귀도 같이 잡는다
-  it('제목이 램프 한 칸 내려간 t3으로 그려진다', () => {
+  // 제목은 실제로 그려진 class로 잠근다. 이 잠금은 cn이 크기 클래스를
+  // 색과 헷갈려 지워 버리는 회귀도 같이 잡는다.
+  // t2는 접힘 이름 목록과 짝을 맞춘 값이다 - 두 노드는 Flip으로 날아가는
+  // 짝이라 글자 크기가 갈리면 비행 내내 배율로 늘어난다. 짝이 맞는지는
+  // ProjectsSection.test.tsx의 교차 잠금이 보고, 여기서는 이 파일이
+  // 혼자 옛 t3으로 되돌아가는 것을 막는다
+  it('제목이 접힘 이름과 같은 t2로 그려진다', () => {
     renderModal();
     const heading = screen.getByRole('heading', { name: project.title });
     const classes = heading.className.split(/ +/);
-    expect(classes).toContain('text-t3');
-    expect(classes).not.toContain('text-t2');
+    expect(classes).toContain('text-t2');
+    expect(classes).not.toContain('text-t3');
   });
 
-  // 데스크톱 제목이 t3(22px)이 되면서 좁은 화면 전용 22px 축소 규칙은
-  // 아무 일도 하지 않는다. NARROW_PANEL_CSS의 다른 규칙(pm-cap-name 등)은
-  // 여전히 22px을 쓰므로 head h2로 좁혀서 확인한다
+  // 좁은 화면 전용 축소 규칙을 여기에 되살리면 안 된다. FLIP은 lg(1024)
+  // 위에서 도는데 NARROW_PANEL_CSS는 1100px 아래에 걸려 있어, 1024~1100
+  // 구간에서 제목만 줄어들고 접힘 이름은 t2로 남는다 - 비행 첫 프레임이
+  // 그 비율만큼 배율로 어긋난다. 제목이 버튼을 미는 문제는 truncate가 맡는다
   it('NARROW_PANEL_CSS에 head h2 font-size 규칙이 남지 않는다', () => {
     expect(SOURCE).not.toMatch(/\[data-modal-part="head"\]\s*h2\s*\{[^}]*font-size/);
   });

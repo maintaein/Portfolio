@@ -147,6 +147,13 @@ function nameEl(i: number) {
   return document.querySelector<HTMLButtonElement>(`[data-name="${i}"]`)!;
 }
 
+// 비행 손잡이를 쥔 노드는 단추가 아니라 그 안쪽 글자 상자다. 단추는 호버
+// 과녁이라 w-full이고 상세 판 제목은 글자 너비라, 단추를 그대로 태우면
+// Flip이 그 너비 비율을 첫 프레임 scaleX로 박는다(크롬 실측 5.07배)
+function nameFlipEl(i: number) {
+  return nameEl(i).firstElementChild as HTMLElement;
+}
+
 function previewEl() {
   return document.querySelector<HTMLElement>('[data-part="preview"]')!;
 }
@@ -187,16 +194,46 @@ describe('ProjectsFlip - 펼치기 비행', { timeout: 30_000 }, () => {
     await flushGsapImport();
 
     const preview = previewEl();
-    const pressed = nameEl(READY_INDEX);
+    const pressed = nameFlipEl(READY_INDEX);
     // 이 테스트의 전제. 누르기 직전의 활성 이름이 눌릴 이름과 달라야
     // "눌린 인덱스로 집는다"가 "활성 인덱스로 집는다"와 구분된다. 데이터가
     // 바뀌어 둘이 같아지면 테스트가 이빨을 잃으므로 여기서 소리내어 깨진다
-    expect(document.querySelector('[aria-selected="true"]')).not.toBe(pressed);
+    expect(document.querySelector('[aria-selected="true"]')).not.toBe(nameEl(READY_INDEX));
 
     openStale();
 
     expect(getState).toHaveBeenCalledTimes(1);
     expect(getState).toHaveBeenCalledWith([preview, pressed]);
+  });
+
+  // 이 과제가 존재하는 이유. 두 노드의 상자 너비가 다르면 Flip.from은 그
+  // 비율을 비행 첫 프레임의 scaleX로 박는다. 크롬 실측으로 단추 504px 대
+  // 제목 99.33px, 배율 5.07이었다. jsdom에는 레이아웃이 없어 픽셀은 못 재니
+  // 원인을 잠근다: 상태를 뜨는 노드가 w-full 단추가 아니라 글자 너비 상자다
+  it('상태를 뜨는 노드는 w-full 단추가 아니라 그 안쪽 글자 너비 상자다', async () => {
+    const getState = vi.spyOn(Flip, 'getState');
+    renderSection();
+    await flushGsapImport();
+
+    const button = nameEl(READY_INDEX);
+    const handle = nameFlipEl(READY_INDEX);
+
+    // 단추는 호버 과녁이라 오른쪽 열 전체 너비로 남아야 한다. 여기서 w-full을
+    // 떼고 상자를 글자에 맞추면 비행은 맞지만 호버 과녁이 글자 폭으로 줄어든다
+    expect(button.className).toContain('w-full');
+    // 손잡이는 글자 너비다. w-fit이 fit-content 상자를 만든다. block인 것은
+    // inline-block의 기준선 여백이 단추 높이를 바꾸지 않게 하기 위해서다
+    const handleClasses = handle.className.split(/\s+/);
+    expect(handleClasses).toContain('w-fit');
+    expect(handleClasses).not.toContain('w-full');
+    expect(handleClasses).toContain('block');
+    // 과녁과 손잡이가 같은 노드로 되돌아가면 이 과제가 원위치다
+    expect(handle).not.toBe(button);
+    expect(button.contains(handle)).toBe(true);
+
+    open();
+
+    expect(getState.mock.calls[0][0]).toEqual([previewEl(), handle]);
   });
 
   it('호버 없이 곧장 눌러도 접힘 손잡이가 눌린 프로젝트 것으로 맞춰진 뒤 상태가 뜬다', async () => {
@@ -220,7 +257,7 @@ describe('ProjectsFlip - 펼치기 비행', { timeout: 30_000 }, () => {
     expect(getState).toHaveBeenCalledTimes(1);
     expect(captured).toEqual([`pv-${title}`, `title-${title}`]);
     // 뜬 뒤에는 되돌린다. 같은 손잡이를 가진 노드가 화면에 둘이면 안 된다
-    expect(nameEl(READY_INDEX).dataset.flipId).toBeUndefined();
+    expect(nameFlipEl(READY_INDEX).dataset.flipId).toBeUndefined();
   });
 
   it('stage가 박히면 Flip.from이 뜬 상태로, 펼침 노드를 targets로 지정해 불린다', async () => {
@@ -324,16 +361,23 @@ describe('ProjectsFlip - 등장은 비행이 끝난 뒤다', { timeout: 30_000 }
     renderSection();
     await flushGsapImport();
 
-    open();
+    // open()을 풀어 쓴다. 앞쪽 호버는 프로젝트 전환 tween을 하나 태우는데
+    // 그건 비행이 아니라 프리뷰 안쪽 겹의 일이다. 이 테스트가 묻는 것은
+    // "비행이 무엇을 만지느냐"라 그 앞의 것은 잘라 낸다
+    fireEvent.mouseEnter(nameEl(READY_INDEX));
+    const beforeFlight = fromTo.mock.calls.length;
+    fireEvent.click(nameEl(READY_INDEX));
     await findDialog();
 
     // 내용 불투명도는 ProjectModal로 넘어갔다. 여기가 크롬에 트윈을 걸면
     // 착지 순간 컨테이너와 자식이 서로 다른 프레임에 되살아나 번쩍인다
     const shell = document.getElementById('pm-shell');
-    expect(fromTo.mock.calls.map((call) => call[0])).toEqual([shell]);
+    expect(fromTo.mock.calls.slice(beforeFlight).map((call) => call[0])).toEqual([
+      shell,
+    ]);
     // 앞 60%를 넘겨 잡으면 비행 중반에 접힘 섹션 글자가 날아가는 이미지
     // 너머로 비친다
-    const to = fromTo.mock.calls[0][2] as Record<string, unknown>;
+    const to = fromTo.mock.calls[beforeFlight][2] as Record<string, unknown>;
     expect(to.duration).toBeCloseTo(0.3);
   });
 });
@@ -465,7 +509,7 @@ describe('ProjectsFlip - 닫기 비행', { timeout: 30_000 }, () => {
     // t=220 - 배경이 먼저 돌아오고 비행이 같이 뜬다. finishClose를 통해
     // 간접적으로 두면 착지한 뒤에야 배경이 돌아와 열기와 대칭이 아니다
     expect(obscured()).toBe('false');
-    expect(fit).toHaveBeenCalledTimes(1);
+    expect(fit).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('dialog')).not.toBeNull();
   });
 
@@ -515,7 +559,7 @@ describe('ProjectsFlip - 닫기 비행', { timeout: 30_000 }, () => {
       reservations[0].run();
     });
 
-    expect(fit).toHaveBeenCalledTimes(1);
+    expect(fit).toHaveBeenCalledTimes(2);
     const [flying, landing, vars] = fit.mock.calls[0] as [
       Element,
       Element,
@@ -538,6 +582,109 @@ describe('ProjectsFlip - 닫기 비행', { timeout: 30_000 }, () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  // 이 과제의 두 번째 이유. 닫기는 Flip.fit 하나만 돌려서 이미지만 접히고
+  // 제목은 셸이 사라질 때 같이 사라졌다. 여는 쪽 Flip.from은 stage와 제목을
+  // 한 타임라인에 태우므로 닫는 쪽도 둘 다 되돌려야 대칭이다
+  it('제목도 같은 시점 같은 길이로 접힘 이름 자리로 되돌아간다', async () => {
+    const reservations = stubDelayedCall();
+    const fit = vi.spyOn(Flip, 'fit');
+    const closeButton = await openAndGetCloseButton();
+    vi.spyOn(window.history, 'back').mockImplementation(() => {});
+
+    fireEvent.click(closeButton);
+    act(() => {
+      reservations[0].run();
+    });
+
+    expect(fit).toHaveBeenCalledTimes(2);
+    const [titleFlying, titleLanding, titleVars] = fit.mock.calls[1] as [
+      Element,
+      Element,
+      Record<string, unknown>,
+    ];
+    expect(titleFlying).toBe(document.getElementById('pm-title'));
+    expect(titleLanding).toBe(nameFlipEl(READY_INDEX));
+    // 두 비행이 어긋나면 이미지와 제목이 따로 논다. 같은 예약 안에서 같은
+    // 길이와 같은 가속으로 떠야 한다
+    const stageVars = fit.mock.calls[0][2] as Record<string, unknown>;
+    expect(titleVars.duration).toBe(stageVars.duration);
+    expect(titleVars.ease).toBe(stageVars.ease);
+    expect(titleVars).toMatchObject({ duration: 0.5, ease: SITE_EASE, scale: true });
+  });
+
+  // 펼친 상태에서는 프로젝트를 못 바꾸니 지금은 activeIndex와 열 때 눌린
+  // 인덱스가 같다. 같다는 사실에 기대면 언젠가 깨지므로 둘을 갈라 놓고 잰다
+  it('착지점은 activeIndex가 아니라 열 때 눌린 인덱스의 이름이다', async () => {
+    const reservations = stubDelayedCall();
+    const fit = vi.spyOn(Flip, 'fit');
+    const closeButton = await openAndGetCloseButton();
+    vi.spyOn(window.history, 'back').mockImplementation(() => {});
+
+    // 펼친 채로 활성 인덱스만 흔든다
+    fireEvent.mouseEnter(nameEl(OTHER_INDEX));
+    expect(document.querySelector('[aria-selected="true"]')).toBe(nameEl(OTHER_INDEX));
+
+    fireEvent.click(closeButton);
+    act(() => {
+      reservations[0].run();
+    });
+
+    expect(fit.mock.calls[1][1]).toBe(nameFlipEl(READY_INDEX));
+    expect(fit.mock.calls[1][1]).not.toBe(nameFlipEl(OTHER_INDEX));
+  });
+
+  // 착지점 이름은 비행 내내 제자리에 그려져 있다. 셸 배경이 비행의 뒤 60%에
+  // 빠지므로 마지막 200ms에 날아오는 제목과 제자리 이름이 두 겹으로 읽힌다.
+  // visibility가 아니라 opacity인 것은 이 노드가 착지 좌표의 기준이라
+  // 레이아웃이 살아 있어야 하기 때문이다
+  it('착지점 이름은 비행 동안 opacity로 감췄다가 착지에 되돌린다', async () => {
+    const reservations = stubDelayedCall();
+    const fit = vi.spyOn(Flip, 'fit');
+    const closeButton = await openAndGetCloseButton();
+    vi.spyOn(window.history, 'back').mockImplementation(() => {});
+
+    const landing = nameFlipEl(READY_INDEX);
+    expect(landing.style.opacity).toBe('');
+
+    fireEvent.click(closeButton);
+    act(() => {
+      reservations[0].run();
+    });
+
+    expect(landing.style.opacity).toBe('0');
+    // 레이아웃이 사라지면 착지 좌표가 어긋난다
+    expect(landing.style.visibility).toBe('');
+    expect(landing.style.display).toBe('');
+
+    act(() => {
+      (fit.mock.calls[1][2] as { onComplete: () => void }).onComplete();
+    });
+    expect(landing.style.opacity).toBe('');
+  });
+
+  it('비행이 중간에 죽어도 착지점 이름은 되돌아온다', async () => {
+    const reservations = stubDelayedCall();
+    const closeButton = await openAndGetCloseButton();
+    vi.spyOn(window.history, 'back').mockImplementation(() => {});
+
+    const landing = nameFlipEl(READY_INDEX);
+    fireEvent.click(closeButton);
+    act(() => {
+      reservations[0].run();
+    });
+    expect(landing.style.opacity).toBe('0');
+
+    // 착지 onComplete가 오지 않는다. popstate가 비행 중에 모달을 걷어간다 -
+    // 되돌리는 일이 onComplete 한 곳에만 있으면 이름이 영영 안 보인다
+    act(() => {
+      window.history.replaceState(null, '', '/');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(nameFlipEl(READY_INDEX).style.opacity).toBe('');
+  });
+
   it('붕괴 중 Escape를 두 번 눌러도 비행 예약은 하나뿐이다', async () => {
     const reservations = stubDelayedCall();
     const fit = vi.spyOn(Flip, 'fit');
@@ -552,7 +699,7 @@ describe('ProjectsFlip - 닫기 비행', { timeout: 30_000 }, () => {
     act(() => {
       reservations[0].run();
     });
-    expect(fit).toHaveBeenCalledTimes(1);
+    expect(fit).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('dialog')).not.toBeNull();
   });
 
@@ -585,7 +732,7 @@ describe('ProjectsFlip - 접힘 손잡이는 펼침 중에 뗀다', { timeout: 3
 
     // 같은 id를 가진 노드가 둘이면 Flip이 짝을 못 짓는다
     expect(previewEl().getAttribute('data-flip-id')).toBeNull();
-    expect(nameEl(READY_INDEX).getAttribute('data-flip-id')).toBeNull();
+    expect(nameFlipEl(READY_INDEX).getAttribute('data-flip-id')).toBeNull();
     // 펼침 쪽에는 그대로 살아 있다
     expect(
       document.querySelector('[data-modal-part="stage"]')!.getAttribute('data-flip-id')
@@ -608,6 +755,67 @@ describe('ProjectsFlip - 접힘 손잡이는 펼침 중에 뗀다', { timeout: 3
 
     // 닫히면 접힘 쪽 손잡이가 돌아온다 - 다음 펼치기가 짝을 지으려면 필요하다
     expect(previewEl().getAttribute('data-flip-id')).toBe(`pv-${title}`);
-    expect(nameEl(READY_INDEX).getAttribute('data-flip-id')).toBe(`title-${title}`);
+    expect(nameFlipEl(READY_INDEX).getAttribute('data-flip-id')).toBe(`title-${title}`);
+  });
+});
+
+// 호버가 프로젝트 전환 tween을 띄운 직후 클릭이 오는 것은 마우스 경로의
+// 기본값이다(openStale/open 둘 다 호버로 시작한다). 그 tween이 비행의
+// 출발 좌표를 건드리면 펼치기가 통째로 비뚤어진다. 여기서는 모의 없이
+// 진짜 gsap을 태우고, 인라인 transform이 어느 노드에 박히는지로 본다.
+// jsdom에는 레이아웃 엔진이 없어 좌표는 못 재므로, 좌표를 바꾸는 유일한
+// 경로(손잡이 상자 자신의 transform)가 비어 있는지를 대신 본다
+describe('ProjectsFlip - 전환 tween이 비행 기하를 안 건드린다', { timeout: 30_000 }, () => {
+  it('전환은 프리뷰 안쪽 겹만 움직이고 손잡이 상자는 제자리다', async () => {
+    renderSection();
+    await flushGsapImport();
+
+    const preview = previewEl();
+    const layer = document.querySelector<HTMLElement>('[data-part="preview-media"]')!;
+    expect(preview.contains(layer)).toBe(true);
+    expect(layer).not.toBe(preview);
+
+    // 활성 인덱스가 실제로 움직여야 전환이 뜬다. 0에 호버하면 이미
+    // 0이라 아무 일도 안 일어나고, 그러면 이 테스트는 빈 값을 빈 값과
+    // 비교하며 조용히 통과한다
+    expect(READY_INDEX).not.toBe(0);
+    // 300ms짜리 tween이라 끝나면 clearProps가 transform을 걷어 간다.
+    // 첫 프레임을 확실히 붙잡으려고 전역 시계를 세운다
+    gsap.globalTimeline.pause();
+    try {
+      fireEvent.mouseEnter(nameEl(READY_INDEX));
+
+      // fromTo는 시작 프레임을 즉시 그린다. 겹에는 값이 박혀 있어야 하고
+      // (안 박히면 이 테스트가 아무 것도 안 보는 것이다)
+      expect(layer.style.transform).not.toBe('');
+      expect(layer.style.opacity).not.toBe('');
+      // 손잡이 상자에는 하나도 안 묻어야 한다. 여기에 transform이 묻으면
+      // Flip.getState가 뜨는 getBoundingClientRect가 그만큼 어긋난다
+      expect(preview.style.transform).toBe('');
+      expect(preview.style.opacity).toBe('');
+    } finally {
+      gsap.globalTimeline.play();
+    }
+  });
+
+  it('전환이 도는 중에 클릭이 와도 getState는 프리뷰 상자를 그대로 뜬다', async () => {
+    const getState = vi.spyOn(Flip, 'getState');
+    renderSection();
+    await flushGsapImport();
+
+    // 전환이 아직 진행 중인 상태에서 곧바로 누른다
+    fireEvent.mouseEnter(nameEl(READY_INDEX));
+    const layer = document.querySelector<HTMLElement>('[data-part="preview-media"]')!;
+    expect(layer.style.transform).not.toBe('');
+
+    const preview = previewEl();
+    fireEvent.click(nameEl(READY_INDEX));
+
+    expect(getState).toHaveBeenCalledTimes(1);
+    const targets = getState.mock.calls[0][0] as HTMLElement[];
+    expect(targets[0]).toBe(preview);
+    // 뜨는 순간에도 손잡이 상자는 여전히 깨끗하다. 전환을 프리뷰 자신에
+    // 걸면 여기서 FAIL한다 - openModal이 tween을 먼저 죽이지 않는 한
+    expect(preview.style.transform).toBe('');
   });
 });
