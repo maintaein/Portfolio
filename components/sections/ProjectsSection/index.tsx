@@ -61,8 +61,10 @@ const CYCLE_MS = 3000;
 
 export default function ProjectsSection() {
   const { active, pageVisible, motionReady, reducedMotion } = useSectionActivity();
-  // SSR에는 window가 없어 기본값 1440x900으로 첫 렌더를 잡고 마운트 뒤 실측으로 덮는다
-  const [geo, setGeo] = useState<DeckGeometry>(() => calcGeometry(N, 1440, 900));
+  // SSR에는 window가 없어 기본값 1440x900으로 첫 렌더를 잡고 마운트 뒤 실측으로 덮는다.
+  // 743은 그 화면에서 셸이 섹션에 내주는 상자 높이다(헤더와 푸터, 스크롤 컨테이너
+  // 아래 여백을 뺀 값). 뷰포트 높이를 그냥 넣으면 첫 페인트가 실제보다 크게 잡힌다
+  const [geo, setGeo] = useState<DeckGeometry>(() => calcGeometry(N, 1440, 900, 743));
   const [activeIndex, setActiveIndex] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -143,7 +145,19 @@ export default function ProjectsSection() {
   }, []);
 
   useEffect(() => {
-    const measure = () => setGeo(calcGeometry(N, window.innerWidth, window.innerHeight));
+    // 섹션이 사는 상자는 뷰포트가 아니라 셸의 스크롤 컨테이너다. 뷰포트 높이로
+    // 재면 카드가 상자보다 커져 인덱스 행이 고정 푸터 밑으로 깔린다. 상자 높이의
+    // 정본은 CSS이므로 숫자를 여기에 복제하지 않고 매번 실측한다.
+    // 상자를 못 재면(마운트 전, 레이아웃 없는 환경) 직전 기하를 그대로 둔다
+    const measure = () => {
+      const box = sectionRef.current?.closest<HTMLElement>('.section-scroll');
+      if (!box) return;
+      const cs = getComputedStyle(box);
+      const layoutH =
+        box.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+      if (!(layoutH > 0)) return;
+      setGeo(calcGeometry(N, window.innerWidth, window.innerHeight, layoutH));
+    };
     measure();
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
@@ -308,7 +322,7 @@ export default function ProjectsSection() {
     <section
       ref={sectionRef}
       id={SECTION_IDS.PROJECTS}
-      className="py-20 px-10 flex flex-col items-center"
+      className="py-6 px-10 flex flex-col items-center"
     >
       <h2 className="sr-only">Projects</h2>
 
@@ -529,7 +543,10 @@ function DeckCard({ slot, globalIndex, project, geo, cardRef, onOpen, onSelect, 
             className="shrink-0 flex flex-col justify-center gap-2 px-4"
             style={{ height: DECK_META_H }}
           >
-            <div className="text-[13px]" style={{ color: MUTED }}>
+            {/* 좁은 화면에서 카드 폭이 310까지 줄면 이 줄이 두 줄로 접힌다.
+                띠 높이는 기하가 정한 값으로 고정이라 접히는 만큼 태그 칩이
+                카드 밖으로 밀려 잘린다. 띠를 늘리는 대신 글을 띠에 맞춘다 */}
+            <div className="text-[13px] truncate" style={{ color: MUTED }}>
               {[project.duration, project.role, project.teamSize].filter(Boolean).join(' · ')}
             </div>
             <div className="flex flex-wrap gap-2">

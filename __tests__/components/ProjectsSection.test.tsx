@@ -40,6 +40,40 @@ function renderSection(active: NavId = SECTION_IDS.PROJECTS) {
   );
 }
 
+// 셸의 .section-scroll을 흉내 낸 상자에 담아 그린다. jsdom은 레이아웃을 하지
+// 않아 clientHeight가 늘 0이고 선언하지 않은 padding은 빈 문자열로 나오므로,
+// 섹션이 상자를 못 재고 초기 기하에 머문다. 그래서 실제 셸이 주는 높이와 아래
+// 여백을 직접 심고 resize로 다시 재게 한다.
+// boxClientH는 스크롤 컨테이너의 clientHeight다. 섹션이 쓰는 상자는 여기서
+// 아래 여백 40을 뺀 값이 된다
+const SHELL_PAD_BOTTOM = 40;
+
+function renderInShell(boxClientH: number, active: NavId = SECTION_IDS.PROJECTS) {
+  const view = render(
+    <div
+      className="section-scroll"
+      style={{ paddingTop: 0, paddingBottom: SHELL_PAD_BOTTOM }}
+    >
+      <SectionActivityProvider
+        active={active}
+        entryAnimationTarget={null}
+        pageVisible
+        routeResolved
+        motionReady
+        reducedMotion={false}
+      >
+        <ProjectsSection />
+      </SectionActivityProvider>
+    </div>
+  );
+  const box = document.querySelector<HTMLElement>('.section-scroll')!;
+  Object.defineProperty(box, 'clientHeight', { configurable: true, value: boxClientH });
+  act(() => {
+    window.dispatchEvent(new Event('resize'));
+  });
+  return view;
+}
+
 const N = projects.length;
 
 describe('ProjectsSection 슬롯 계약', () => {
@@ -110,6 +144,17 @@ describe('ProjectsSection 모양 잠금', () => {
     expect(heading.className).toContain('sr-only');
   });
 
+  it('메타 첫 줄은 접히지 않고 말줄임으로 끊는다', () => {
+    // 390x844에서 카드 폭이 310이 되면 이 줄이 두 줄로 접힌다. 메타 띠 높이는
+    // 기하가 정한 값으로 고정이고 카드는 넘침을 감추므로, 접히는 만큼 아래
+    // 태그 칩이 카드 밖으로 밀려 잘린다. 실측으로 3px 넘쳤다.
+    // jsdom에는 레이아웃 엔진이 없어 줄바꿈도 넘침도 잴 수 없다. 그래서 결과
+    // 대신 한 줄로 묶는 유틸리티 클래스가 붙어 있는지를 잠근다
+    renderSection();
+    const meta = document.querySelector('[data-part="meta"]')!;
+    expect(meta.firstElementChild!.className).toContain('truncate');
+  });
+
   it('카드가 세로 flex를 유지한다', () => {
     renderSection();
     // jsdom에는 레이아웃 엔진이 없어 프리뷰가 실제로 무너지는 것을 못 본다.
@@ -123,10 +168,13 @@ describe('ProjectsSection 모양 잠금', () => {
 });
 
 describe('ProjectsSection Compact', () => {
+  // Compact 판정은 마운트 뒤 measure가 window를 읽어야 나온다. 상자를 못 재면
+  // 섹션은 초기 기하(1440x900)에 머물러 덱으로 그려지므로 셸에 담아 그린다.
+  // 768과 844에서 셸이 세로로 117을 먹고 남는 값이 651, 727이다
   it('덱을 접고 카드 1장만 세운다', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1366 });
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 768 });
-    renderSection();
+    renderInShell(651);
     expect(document.querySelectorAll('[data-slot]')).toHaveLength(1);
     expect(document.querySelectorAll('[data-band]')).toHaveLength(0);
   });
@@ -134,7 +182,7 @@ describe('ProjectsSection Compact', () => {
   it('Compact에서도 인덱스 행은 같은 컴포넌트를 그대로 쓴다', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 844 });
-    renderSection();
+    renderInShell(727);
     const row = document.querySelector('[data-part="index"]')!;
     expect(row.getAttribute('role')).toBe('tablist');
     expect(row.querySelectorAll('[role="tab"]')).toHaveLength(N);
@@ -143,9 +191,49 @@ describe('ProjectsSection Compact', () => {
   it('Compact에서 원근을 걸지 않는다', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1366 });
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 768 });
-    renderSection();
+    renderInShell(651);
     const deck = document.querySelector<HTMLElement>('[data-part="deck"]')!;
     expect(deck.style.perspective).toBe('');
+  });
+});
+
+describe('ProjectsSection 셸이 준 상자', () => {
+  function deckBox() {
+    const deck = document.querySelector<HTMLElement>('[data-part="deck"]')!;
+    return { w: deck.style.width, h: deck.style.height };
+  }
+
+  it('뷰포트가 아니라 스크롤 컨테이너 상자로 카드를 잡는다', () => {
+    // 1440x900에서 셸이 내주는 clientHeight가 783, 아래 여백 40을 빼면 743이다.
+    // 그 상자로 재면 640x468이고, 뷰포트 900을 그대로 넣으면 800x558이 된다.
+    // 후자는 인덱스 행이 고정 푸터 밑으로 깔리던 그 값이다
+    renderInShell(783);
+    expect(deckBox()).toEqual({ w: '640px', h: '468px' });
+  });
+
+  it('상자가 줄면 카드도 같이 준다', () => {
+    // 한 지점만 잠그면 상수를 박아 넣어도 통과한다. 상자를 바꿔 따라오는지 본다.
+    // 1280x800 상자 643 -> cardH 368, cardW 4160/9 = 462.2 -> 반올림 462
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+    renderInShell(683);
+    expect(deckBox()).toEqual({ w: '462px', h: '368px' });
+  });
+
+  it('상자를 못 재면 초기 기하를 그대로 둔다', () => {
+    // 셸 없이 그리면(다른 테스트 대부분이 이 경로다) measure가 빠져나가고
+    // SSR용 초기값 1440x900 상자 743이 남는다. 0이나 NaN으로 계산하지 않는다
+    renderSection();
+    expect(deckBox()).toEqual({ w: '640px', h: '468px' });
+  });
+
+  it('섹션의 세로 여백이 기하가 예산에 잡은 값과 같다', () => {
+    // 기하는 위아래 24씩을 예산에서 뺀다. 실제 CSS가 그보다 크면 그 차이만큼
+    // 아래로 밀려 푸터에 먹힌다. 두 숫자는 반드시 붙어 다녀야 한다
+    renderInShell(783);
+    const section = document.getElementById(SECTION_IDS.PROJECTS)!;
+    expect(section.className).toContain('py-6');
+    expect(section.className).toContain('px-10');
   });
 });
 

@@ -21,7 +21,7 @@ export const DECK_META_H = 64;
 export const DECK_CARD_MAX_W = 800;
 
 const SECTION_PAD_X = 40;   // 섹션 좌우 패딩
-const SECTION_PAD_Y = 80;   // py-20
+const SECTION_PAD_Y = 24;   // py-6. 위아래 여백은 셸의 헤더와 푸터가 이미 비워 준다
 const CHIP = 44;
 const CHIP_GAP = 12;
 const BACK_HEADER_ROOM = 132;  // 뒤 카드 헤더 3칸이 위로 넘칠 자리
@@ -74,9 +74,18 @@ function calcBand(n: number, isDeck: boolean): { lines: number; height: number }
   return { lines, height };
 }
 
-export function calcGeometry(n: number, vw: number, vh: number): DeckGeometry {
+// layoutH는 섹션이 실제로 배정받은 상자의 높이다. isDeck 게이트만 뷰포트
+// 높이(vh)로 판정하고 크기 산정은 전부 layoutH를 쓴다. 앱 셸은 헤더와 푸터,
+// 스크롤 컨테이너 아래 여백을 떼고 남은 상자를 주므로 vh보다 한참 작다.
+// 기본값이 vh인 이유는 시안처럼 셸이 없는 페이지가 그 조건이기 때문이다
+export function calcGeometry(
+  n: number,
+  vw: number,
+  vh: number,
+  layoutH: number = vh
+): DeckGeometry {
   const isDeck = vw >= 1024 && vh >= 800;
-  const availH = vh - SECTION_PAD_Y * 2;
+  const availH = layoutH - SECTION_PAD_Y * 2;
   const indexRowHeight = calcIndexRowHeight(n, vw);
   const band = calcBand(n, isDeck);
 
@@ -92,6 +101,14 @@ export function calcGeometry(n: number, vw: number, vh: number): DeckGeometry {
     // 폭 상한이 물리면 폭에서 16:9 프리뷰 높이를 되돌린다.
     // 안 그러면 카드 아래에 빈 띠가 생긴다
     cardW = DECK_CARD_MAX_W;
+    preview = (cardW * 9) / 16;
+    cardH = preview + DECK_HEADER_H + DECK_META_H;
+  }
+  const availW = vw - SECTION_PAD_X * 2;
+  if (cardW > availW) {
+    // 좁은 화면에서는 높이가 아니라 폭이 먼저 막힌다. 높이에서 16:9로 폭을
+    // 되돌리기만 하면 390짜리 화면에 780짜리 카드가 나와 밖으로 잘려 나간다
+    cardW = availW;
     preview = (cardW * 9) / 16;
     cardH = preview + DECK_HEADER_H + DECK_META_H;
   }
