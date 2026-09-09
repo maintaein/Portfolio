@@ -14,7 +14,6 @@ beforeEach(() => {
       matches: false, media: '', addEventListener: () => {}, removeEventListener: () => {},
     })
   );
-  // jsdom 기본은 1024x768이라 Compact로 떨어진다. 덱 경로를 보려면 올려야 한다
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
   Object.defineProperty(window, 'innerHeight', { configurable: true, value: 900 });
   // History 테스트가 남긴 state가 다음 테스트로 새지 않게 매번 깨끗하게 시작한다
@@ -40,77 +39,62 @@ function renderSection(active: NavId = SECTION_IDS.PROJECTS) {
   );
 }
 
-// 셸의 .section-scroll을 흉내 낸 상자에 담아 그린다. jsdom은 레이아웃을 하지
-// 않아 clientHeight가 늘 0이고 선언하지 않은 padding은 빈 문자열로 나오므로,
-// 섹션이 상자를 못 재고 초기 기하에 머문다. 그래서 실제 셸이 주는 높이와 아래
-// 여백을 직접 심고 resize로 다시 재게 한다.
-// boxClientH는 스크롤 컨테이너의 clientHeight다. 섹션이 쓰는 상자는 여기서
-// 아래 여백 40을 뺀 값이 된다
-const SHELL_PAD_BOTTOM = 40;
-
-function renderInShell(boxClientH: number, active: NavId = SECTION_IDS.PROJECTS) {
-  const view = render(
-    <div
-      className="section-scroll"
-      style={{ paddingTop: 0, paddingBottom: SHELL_PAD_BOTTOM }}
-    >
-      <SectionActivityProvider
-        active={active}
-        entryAnimationTarget={null}
-        pageVisible
-        routeResolved
-        motionReady
-        reducedMotion={false}
-      >
-        <ProjectsSection />
-      </SectionActivityProvider>
-    </div>
-  );
-  const box = document.querySelector<HTMLElement>('.section-scroll')!;
-  Object.defineProperty(box, 'clientHeight', { configurable: true, value: boxClientH });
-  act(() => {
-    window.dispatchEvent(new Event('resize'));
-  });
-  return view;
-}
-
 const N = projects.length;
 
-describe('ProjectsSection 슬롯 계약', () => {
-  it('프로젝트가 몇 개든 카드는 4장이다', () => {
+describe('ProjectsSection 접힘 레이아웃', () => {
+  it('섹션 패딩이 py-6 px-10이다', () => {
     renderSection();
-    expect(document.querySelectorAll('[data-slot]')).toHaveLength(Math.min(4, N));
+    const section = document.getElementById(SECTION_IDS.PROJECTS)!;
+    expect(section.className).toContain('py-6');
+    expect(section.className).toContain('px-10');
   });
 
-  it('슬롯 k가 projects[(active + k) % N]을 가리킨다', () => {
-    renderSection();
-    for (let k = 0; k < Math.min(4, N); k += 1) {
-      const card = document.querySelector(`[data-slot="${k}"]`)!;
-      expect(card.getAttribute('data-global-index')).toBe(String(k % N));
-    }
-  });
-
-  it('k=0만 본문을 갖는다. 뒤 카드는 헤더 바뿐이다', () => {
-    renderSection();
-    expect(
-      document.querySelector('[data-slot="0"] [data-part="preview"]')
-    ).not.toBeNull();
-    for (const k of [1, 2, 3]) {
-      expect(
-        document.querySelector(`[data-slot="${k}"] [data-part="preview"]`)
-      ).toBeNull();
-      expect(
-        document.querySelector(`[data-slot="${k}"] [data-part="header"]`)
-      ).not.toBeNull();
-    }
-  });
-
-  it('두께 밴드가 N-4장을 헤어라인으로 압축한다', () => {
-    renderSection();
-    // N=6이면 2줄이다. 밴드는 "많다"를 말하고 정확한 수는 인덱스 행이 맡는다
-    expect(document.querySelectorAll('[data-band]')).toHaveLength(
-      N > 4 ? Math.min(N - 4, 6) : 0
+  it('격자가 lg에서 3fr:2fr이다', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const source = readFileSync(
+      resolve(process.cwd(), 'components/sections/ProjectsSection/index.tsx'),
+      'utf8'
     );
+    expect(source).toContain('lg:grid-cols-[3fr_2fr]');
+  });
+
+  it('프리뷰가 열 폭의 0.6배 16:9다', () => {
+    renderSection();
+    const preview = document.querySelector('[data-part="preview"]')!;
+    expect(preview.className).toContain('w-[60%]');
+    expect(preview.className).toContain('aspect-video');
+  });
+
+  it('이름이 프로젝트 수만큼 있고 전부 role=tab이다', () => {
+    renderSection();
+    expect(document.querySelectorAll('[role="tab"]')).toHaveLength(N);
+  });
+
+  it('활성 이름은 text-t1이고 비활성 이름은 MUTED 밝기다', () => {
+    renderSection();
+    const active = document.querySelector<HTMLElement>('[aria-selected="true"]')!;
+    expect(active.className).toContain('text-t1');
+    const inactive = document.querySelector<HTMLElement>('[aria-selected="false"]')!;
+    // jsdom이 CSS 색을 rgba(...) 콤마 표기로 정규화한다. 소스의 리터럴과 다르다
+    expect(inactive.style.color).toBe('rgba(255, 255, 255, 0.62)');
+  });
+
+  it('호버가 프리뷰를 그 프로젝트로 갈아 끼운다', () => {
+    renderSection();
+    fireEvent.mouseEnter(document.querySelector('[data-name="1"]')!);
+    const preview = document.querySelector('[data-part="preview"]')!;
+    expect(preview.getAttribute('data-flip-id')).toBe(`pv-${projects[1].title}`);
+  });
+
+  it('FLIP 손잡이가 프리뷰 하나와 활성 이름 하나에만 붙는다', () => {
+    renderSection();
+    const preview = document.querySelector('[data-part="preview"]')!;
+    expect(preview.getAttribute('data-flip-id')).toBe(`pv-${projects[0].title}`);
+    expect(document.querySelectorAll('[data-flip-id^="title-"]')).toHaveLength(1);
+    expect(
+      document.querySelector('[data-flip-id^="title-"]')!.getAttribute('data-flip-id')
+    ).toBe(`title-${projects[0].title}`);
   });
 });
 
@@ -143,185 +127,66 @@ describe('ProjectsSection 모양 잠금', () => {
     const heading = screen.getByRole('heading', { level: 2 });
     expect(heading.className).toContain('sr-only');
   });
-
-  it('메타 첫 줄은 접히지 않고 말줄임으로 끊는다', () => {
-    // 390x844에서 카드 폭이 310이 되면 이 줄이 두 줄로 접힌다. 메타 띠 높이는
-    // 기하가 정한 값으로 고정이고 카드는 넘침을 감추므로, 접히는 만큼 아래
-    // 태그 칩이 카드 밖으로 밀려 잘린다. 실측으로 3px 넘쳤다.
-    // jsdom에는 레이아웃 엔진이 없어 줄바꿈도 넘침도 잴 수 없다. 그래서 결과
-    // 대신 한 줄로 묶는 유틸리티 클래스가 붙어 있는지를 잠근다
-    renderSection();
-    const meta = document.querySelector('[data-part="meta"]')!;
-    expect(meta.firstElementChild!.className).toContain('truncate');
-  });
-
-  it('카드가 세로 flex를 유지한다', () => {
-    renderSection();
-    // jsdom에는 레이아웃 엔진이 없어 프리뷰가 실제로 무너지는 것을 못 본다.
-    // 카드가 <button>이라 items-stretch가 빠지면 프리뷰가 405px 자리에서
-    // 17px이 되는데, 시안에서 실제로 밟았고 스크린샷을 봐야 드러났다.
-    // 그래서 결과 대신 클래스 자체를 잠근다
-    const card = document.querySelector('[data-slot="0"]')!;
-    expect(card.className).toContain('flex-col');
-    expect(card.className).toContain('items-stretch');
-  });
 });
 
-describe('ProjectsSection Compact', () => {
-  // Compact 판정은 마운트 뒤 measure가 window를 읽어야 나온다. 상자를 못 재면
-  // 섹션은 초기 기하(1440x900)에 머물러 덱으로 그려지므로 셸에 담아 그린다.
-  // 768과 844에서 셸이 세로로 117을 먹고 남는 값이 651, 727이다
-  it('덱을 접고 카드 1장만 세운다', () => {
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1366 });
-    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 768 });
-    renderInShell(651);
-    expect(document.querySelectorAll('[data-slot]')).toHaveLength(1);
-    expect(document.querySelectorAll('[data-band]')).toHaveLength(0);
-  });
-
-  it('Compact에서도 인덱스 행은 같은 컴포넌트를 그대로 쓴다', () => {
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
-    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 844 });
-    renderInShell(727);
-    const row = document.querySelector('[data-part="index"]')!;
-    expect(row.getAttribute('role')).toBe('tablist');
-    expect(row.querySelectorAll('[role="tab"]')).toHaveLength(N);
-  });
-
-  it('Compact에서 원근을 걸지 않는다', () => {
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1366 });
-    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 768 });
-    renderInShell(651);
-    const deck = document.querySelector<HTMLElement>('[data-part="deck"]')!;
-    expect(deck.style.perspective).toBe('');
-  });
-});
-
-describe('ProjectsSection 셸이 준 상자', () => {
-  function deckBox() {
-    const deck = document.querySelector<HTMLElement>('[data-part="deck"]')!;
-    return { w: deck.style.width, h: deck.style.height };
-  }
-
-  it('뷰포트가 아니라 스크롤 컨테이너 상자로 카드를 잡는다', () => {
-    // 1440x900에서 셸이 내주는 clientHeight가 783, 아래 여백 40을 빼면 743이다.
-    // 그 상자로 재면 640x468이고, 뷰포트 900을 그대로 넣으면 800x558이 된다.
-    // 후자는 인덱스 행이 고정 푸터 밑으로 깔리던 그 값이다
-    renderInShell(783);
-    expect(deckBox()).toEqual({ w: '640px', h: '468px' });
-  });
-
-  it('상자가 줄면 카드도 같이 준다', () => {
-    // 한 지점만 잠그면 상수를 박아 넣어도 통과한다. 상자를 바꿔 따라오는지 본다.
-    // 1280x800 상자 643 -> cardH 368, cardW 4160/9 = 462.2 -> 반올림 462
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
-    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
-    renderInShell(683);
-    expect(deckBox()).toEqual({ w: '462px', h: '368px' });
-  });
-
-  it('상자를 못 재면 초기 기하를 그대로 둔다', () => {
-    // 셸 없이 그리면(다른 테스트 대부분이 이 경로다) measure가 빠져나가고
-    // SSR용 초기값 1440x900 상자 743이 남는다. 0이나 NaN으로 계산하지 않는다
+describe('ProjectsSection 이름 목록', () => {
+  it('탭 정지점이 N과 무관하게 1개다', () => {
     renderSection();
-    expect(deckBox()).toEqual({ w: '640px', h: '468px' });
-  });
-
-  it('섹션의 세로 여백이 기하가 예산에 잡은 값과 같다', () => {
-    // 기하는 위아래 24씩을 예산에서 뺀다. 실제 CSS가 그보다 크면 그 차이만큼
-    // 아래로 밀려 푸터에 먹힌다. 두 숫자는 반드시 붙어 다녀야 한다
-    renderInShell(783);
-    const section = document.getElementById(SECTION_IDS.PROJECTS)!;
-    expect(section.className).toContain('py-6');
-    expect(section.className).toContain('px-10');
-  });
-});
-
-describe('ProjectsSection 인덱스 행', () => {
-  it('칩이 프로젝트 수만큼 있고 tablist다', () => {
-    renderSection();
-    const row = document.querySelector('[data-part="index"]')!;
-    expect(row.getAttribute('role')).toBe('tablist');
-    expect(row.querySelectorAll('[role="tab"]')).toHaveLength(N);
-  });
-
-  it('탭 정지점이 N과 무관하게 2개다', () => {
-    renderSection();
-    // 앞 카드 버튼 1개 + 활성 칩 1개. 나머지 칩은 -1이다
+    // 활성 이름 1개만 tabIndex 0이다. 나머지는 -1이다
     const stops = Array.from(
       document.querySelectorAll<HTMLElement>('button, [tabindex]')
     ).filter((el) => el.tabIndex === 0 && !el.hasAttribute('disabled'));
-    expect(stops).toHaveLength(2);
+    expect(stops).toHaveLength(1);
 
-    const chips = document.querySelectorAll<HTMLElement>('[data-chip]');
-    expect(Array.from(chips).filter((c) => c.tabIndex === 0)).toHaveLength(1);
+    const names = document.querySelectorAll<HTMLElement>('[data-name]');
+    expect(Array.from(names).filter((c) => c.tabIndex === 0)).toHaveLength(1);
   });
 
-  it('ArrowRight가 끝에서 처음으로 감긴다', () => {
+  it('ArrowDown이 끝에서 처음으로 감긴다', () => {
     renderSection();
-    const row = document.querySelector('[data-part="index"]')!;
-    for (let i = 0; i < N; i += 1) fireEvent.keyDown(row, { key: 'ArrowRight' });
+    const row = document.querySelector('[role="tablist"]')!;
+    for (let i = 0; i < N; i += 1) fireEvent.keyDown(row, { key: 'ArrowDown' });
     // N번 누르면 제자리다. 순환이 안 되면 마지막에 멈춘다
     expect(
-      document.querySelector('[data-slot="0"]')!.getAttribute('data-global-index')
+      document.querySelector('[aria-selected="true"]')!.getAttribute('data-name')
     ).toBe('0');
   });
 
-  it('ArrowLeft가 처음에서 끝으로 감긴다', () => {
+  it('ArrowUp이 처음에서 끝으로 감긴다', () => {
     renderSection();
-    const row = document.querySelector('[data-part="index"]')!;
-    fireEvent.keyDown(row, { key: 'ArrowLeft' });
+    const row = document.querySelector('[role="tablist"]')!;
+    fireEvent.keyDown(row, { key: 'ArrowUp' });
     expect(
-      document.querySelector('[data-slot="0"]')!.getAttribute('data-global-index')
+      document.querySelector('[aria-selected="true"]')!.getAttribute('data-name')
     ).toBe(String(N - 1));
   });
 
   it('Home은 0으로, End는 N-1로 간다', () => {
     renderSection();
-    const row = document.querySelector('[data-part="index"]')!;
+    const row = document.querySelector('[role="tablist"]')!;
     fireEvent.keyDown(row, { key: 'End' });
     expect(
-      document.querySelector('[data-slot="0"]')!.getAttribute('data-global-index')
+      document.querySelector('[aria-selected="true"]')!.getAttribute('data-name')
     ).toBe(String(N - 1));
     fireEvent.keyDown(row, { key: 'Home' });
     expect(
-      document.querySelector('[data-slot="0"]')!.getAttribute('data-global-index')
+      document.querySelector('[aria-selected="true"]')!.getAttribute('data-name')
     ).toBe('0');
   });
 
-  it('active가 N-1일 때 슬롯이 순환한다', () => {
-    // 덱의 핵심 로직이고 경계에서만 틀린다
+  it('active가 N-1일 때 프리뷰가 그 프로젝트를 가리킨다', () => {
     renderSection();
-    fireEvent.keyDown(document.querySelector('[data-part="index"]')!, { key: 'End' });
-    for (let k = 0; k < Math.min(4, N); k += 1) {
-      const card = document.querySelector(`[data-slot="${k}"]`)!;
-      expect(card.getAttribute('data-global-index')).toBe(String((N - 1 + k) % N));
-    }
-  });
-
-  it('활성 칩만 aria-selected가 true다', () => {
-    renderSection();
-    const selected = document.querySelectorAll('[data-chip][aria-selected="true"]');
-    expect(selected).toHaveLength(1);
-    expect(selected[0].getAttribute('data-chip')).toBe('0');
-  });
-
-  it('뒤 카드를 누르면 그 카드로 이동하고 모달은 안 열린다', () => {
-    // 포인터 편의일 뿐이다. 키보드는 인덱스 행이 전부 커버한다
-    renderSection();
-    fireEvent.click(document.querySelector('[data-slot="2"]')!);
+    fireEvent.keyDown(document.querySelector('[role="tablist"]')!, { key: 'End' });
     expect(
-      document.querySelector('[data-slot="0"]')!.getAttribute('data-global-index')
-    ).toBe('2');
-    expect(screen.queryByRole('dialog')).toBeNull();
+      document.querySelector('[data-part="preview"]')!.getAttribute('data-flip-id')
+    ).toBe(`pv-${projects[N - 1].title}`);
   });
 
-  it('뒤 카드는 탭 정지점이 아니다', () => {
+  it('활성 이름만 aria-selected가 true다', () => {
     renderSection();
-    for (const k of [1, 2, 3]) {
-      const card = document.querySelector<HTMLElement>(`[data-slot="${k}"]`)!;
-      expect(card.tabIndex).toBe(-1);
-    }
+    const selected = document.querySelectorAll('[data-name][aria-selected="true"]');
+    expect(selected).toHaveLength(1);
+    expect(selected[0].getAttribute('data-name')).toBe('0');
   });
 });
 
@@ -342,14 +207,14 @@ describe('ProjectsSection 영상', () => {
     vi.useRealTimers();
   });
 
-  it('영상이 있는 카드가 활성이면 첫 구현 기능 영상을 건다', () => {
+  it('영상이 있는 프로젝트가 활성이면 첫 구현 기능 영상을 건다', () => {
     renderSection();
     goToIndex(withVideo);
     const video = document.querySelector<HTMLVideoElement>('[data-part="preview-video"]')!;
     expect(video.getAttribute('src')).toBe(
       projects[withVideo].implementations!.filter((i) => i.video)[0].video
     );
-    // 카드 전체가 모달을 여는 단일 버튼이다. 영상이 클릭을 가로채면 안 된다
+    // 프리뷰는 손잡이일 뿐 클릭은 이름 버튼이 받는다
     expect(video.getAttribute('aria-hidden')).toBe('true');
     expect(video.hasAttribute('controls')).toBe(false);
     expect(video.muted).toBe(true);
@@ -385,13 +250,13 @@ describe('ProjectsSection 영상', () => {
     ).toBe(videos[1]);
   });
 
-  it('카드가 바뀌면 src를 놓고 순환 인덱스가 0으로 되돌아온다', () => {
+  it('프로젝트가 바뀌면 src를 놓고 순환 인덱스가 0으로 되돌아온다', () => {
     renderSection();
     goToIndex(withVideo);
     act(() => {
       vi.advanceTimersByTime(CYCLE_MS);
     });
-    goToIndex(withVideo);   // 한 바퀴 돌아 같은 카드로 되돌아온다
+    goToIndex(withVideo);   // 한 바퀴 돌아 같은 프로젝트로 되돌아온다
     const video = document.querySelector<HTMLVideoElement>('[data-part="preview-video"]')!;
     expect(video.getAttribute('src')).toBe(
       projects[withVideo].implementations!.filter((i) => i.video)[0].video
@@ -464,9 +329,11 @@ describe('ProjectsSection 영상', () => {
   });
 });
 
-// 인덱스 칩을 눌러 그 프로젝트로 간다
+// 이름에 호버해 그 프로젝트로 간다. click을 쓰면 계약을 채운 프로젝트에서
+// 모달이 열려 !modalOpen 게이트가 재생을 끊는다 — 이 describe는 프리뷰
+// 재생만 보는 것이라 호버로 선택만 옮긴다
 function goToIndex(i: number) {
-  fireEvent.click(document.querySelector(`[data-chip="${i}"]`)!);
+  fireEvent.mouseEnter(document.querySelector(`[data-name="${i}"]`)!);
 }
 
 // ProjectModal은 next/dynamic({ssr:false})로 실제 import()를 거쳐 로드된다
@@ -475,10 +342,10 @@ function goToIndex(i: number) {
 // 하므로 findByRole/waitFor로 기다린다 — getByRole 동기 단정은 청크 로드 전에
 // 거짓 실패한다
 describe('ProjectsSection modal-only History', { timeout: 30_000 }, () => {
-  it('모달을 열면 projectModalId를 pushState한다', () => {
+  it('이름을 눌러 펼치면 projectModalId를 pushState한다', () => {
     const push = vi.spyOn(window.history, 'pushState');
     renderSection();
-    fireEvent.click(document.querySelector('[data-slot="0"]')!);
+    fireEvent.click(document.querySelector('[data-name="0"]')!);
     expect(push).toHaveBeenCalled();
     const state = push.mock.calls.at(-1)![0] as Record<string, unknown>;
     expect(typeof state.projectModalId).toBe('string');
@@ -515,13 +382,21 @@ describe('ProjectsSection modal-only History', { timeout: 30_000 }, () => {
     expect(state.__NA).toBe('next가 쓰는 필드');
   });
 
-  it('계약 미달 프로젝트의 카드는 탭 정지점을 만들지 않는다', () => {
+  it('계약 미달 이름은 눌러도 안 펼쳐진다', () => {
     const unready = projects.findIndex((p) => !isProjectModalReady(p));
     if (unready === -1) return;
+    const push = vi.spyOn(window.history, 'pushState');
     renderSection();
-    goToIndex(unready);
-    const front = document.querySelector('[data-slot="0"]')!;
-    expect(front.tagName).toBe('DIV');
+    // 클릭으로 직접 열기를 시도한다. goToIndex(hover)로는 애초에 openModal
+    // 경로를 안 타므로 이 시나리오를 못 잡는다
+    fireEvent.click(document.querySelector(`[data-name="${unready}"]`)!);
+    expect(
+      document.querySelector('[aria-selected="true"]')!.getAttribute('data-name')
+    ).toBe(String(unready));
+    // 뮤테이션: handleNameClick이 계약을 안 보고 항상 openModal을 부르면
+    // pushState가 불려 여기서 FAIL한다
+    expect(push).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   // 계획서 테스트 네 개는 위까지다. 아래는 함정 하나(복구된 모달을 History.back()으로
@@ -530,11 +405,11 @@ describe('ProjectsSection modal-only History', { timeout: 30_000 }, () => {
   // 추가로 고정한다. 계획서에는 없지만 이 계약을 지키는 테스트가 없으면
   // 위 네 개만으로는 회귀를 못 잡는다.
 
-  it('모달을 열 때 기존 history.state 필드를 펼쳐 담는다', () => {
+  it('펼칠 때 기존 history.state 필드를 펼쳐 담는다', () => {
     window.history.replaceState({ __NA: 'next가 쓰는 필드' }, '', '#projects');
     const push = vi.spyOn(window.history, 'pushState');
     renderSection();
-    fireEvent.click(document.querySelector('[data-slot="0"]')!);
+    fireEvent.click(document.querySelector('[data-name="0"]')!);
     const state = push.mock.calls.at(-1)![0] as Record<string, unknown>;
     // 뮤테이션: pushState({ projectModalId })로 스프레드를 빼면 __NA가
     // 사라져 여기서 FAIL한다
@@ -560,15 +435,15 @@ describe('ProjectsSection modal-only History', { timeout: 30_000 }, () => {
     expect(
       await screen.findByRole('dialog', { name: ready.title }, { timeout: 20_000 })
     ).toBeTruthy();
-    // activeIndex도 복구된 모달과 맞아야 한다 — 슬롯0이 그 프로젝트를 가리킨다
+    // 활성 이름도 복구된 모달과 맞아야 한다
     expect(
-      document.querySelector('[data-slot="0"]')!.getAttribute('data-global-index')
+      document.querySelector('[aria-selected="true"]')!.getAttribute('data-name')
     ).toBe(String(readyIndex));
   });
 
   it('popstate로 무효한 projectModalId가 오면 열려 있던 모달을 닫는다', async () => {
     renderSection();
-    fireEvent.click(document.querySelector('[data-slot="0"]')!);
+    fireEvent.click(document.querySelector('[data-name="0"]')!);
     expect(await screen.findByRole('dialog', {}, { timeout: 20_000 })).toBeTruthy();
 
     act(() => {
@@ -581,7 +456,7 @@ describe('ProjectsSection modal-only History', { timeout: 30_000 }, () => {
 
   it('클릭으로 연 모달을 닫으면 history.back을 부르고 replaceState는 부르지 않는다', async () => {
     renderSection();
-    fireEvent.click(document.querySelector('[data-slot="0"]')!);
+    fireEvent.click(document.querySelector('[data-name="0"]')!);
     const closeButton = await screen.findByRole(
       'button',
       { name: '닫기' },

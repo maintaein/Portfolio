@@ -754,7 +754,7 @@ describe('HomeClient → HyperspeedBackground 배선', { timeout: 30_000 }, () =
     expect(probe).toHaveAttribute('data-obscured', 'false');
 
     const projectsSection = getSection(container, 'projects');
-    const card = projectsSection.querySelector<HTMLElement>('[data-slot="0"]');
+    const card = projectsSection.querySelector<HTMLElement>('[data-name="0"]');
     expect(card).not.toBeNull();
 
     fireEvent.click(card!);
@@ -816,7 +816,7 @@ describe('HomeClient 모달-only History와 셸 격리', { timeout: 30_000 }, ()
     expect(footerLink.closest('[inert]')).toBeNull();
 
     const projectsSection = getSection(container, 'projects');
-    const card = projectsSection.querySelector<HTMLElement>('[data-slot="0"]');
+    const card = projectsSection.querySelector<HTMLElement>('[data-name="0"]');
     fireEvent.click(card!);
     const closeButton = await screen.findByRole(
       'button',
@@ -845,7 +845,7 @@ describe('HomeClient 모달-only History와 셸 격리', { timeout: 30_000 }, ()
     const stage = container.querySelector<HTMLElement>('.section-stage')!;
 
     const projectsSection = getSection(container, 'projects');
-    const card = projectsSection.querySelector<HTMLElement>('[data-slot="0"]');
+    const card = projectsSection.querySelector<HTMLElement>('[data-name="0"]');
     fireEvent.click(card!);
     await screen.findByRole('button', { name: '닫기' }, { timeout: 20_000 });
 
@@ -875,7 +875,7 @@ describe('HomeClient 모달-only History와 셸 격리', { timeout: 30_000 }, ()
     const stage = container.querySelector<HTMLElement>('.section-stage')!;
 
     const projectsSection = getSection(container, 'projects');
-    const card = projectsSection.querySelector<HTMLElement>('[data-slot="0"]');
+    const card = projectsSection.querySelector<HTMLElement>('[data-name="0"]');
     fireEvent.click(card!);
     const dialog = await screen.findByRole('dialog', {}, { timeout: 20_000 });
 
@@ -896,7 +896,7 @@ describe('HomeClient 모달-only History와 셸 격리', { timeout: 30_000 }, ()
     window.history.replaceState(null, '', '/#projects');
     const { container } = render(<HomeClient />);
     const projectsSection = getSection(container, 'projects');
-    const card = projectsSection.querySelector<HTMLElement>('[data-slot="0"]')!;
+    const card = projectsSection.querySelector<HTMLElement>('[data-name="0"]')!;
 
     fireEvent.click(card);
     const closeButton = await screen.findByRole(
@@ -920,7 +920,7 @@ describe('HomeClient 모달-only History와 셸 격리', { timeout: 30_000 }, ()
     window.history.replaceState(null, '', '/#projects');
     const { container } = render(<HomeClient />);
     const projectsSection = getSection(container, 'projects');
-    const card = projectsSection.querySelector<HTMLElement>('[data-slot="0"]')!;
+    const card = projectsSection.querySelector<HTMLElement>('[data-name="0"]')!;
 
     fireEvent.click(card);
     const closeButton = await screen.findByRole(
@@ -946,7 +946,7 @@ describe('HomeClient 모달-only History와 셸 격리', { timeout: 30_000 }, ()
     window.history.replaceState(null, '', '/#projects');
     const { container } = render(<HomeClient />);
     const card = getSection(container, 'projects').querySelector<HTMLElement>(
-      '[data-slot="0"]'
+      '[data-name="0"]'
     )!;
 
     const focusedBeforeFrame = document.activeElement;
