@@ -1,390 +1,481 @@
 'use client';
 
-import {
-  useState, useRef, useCallback, useEffect,
-} from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
-import { motion, AnimatePresence } from 'framer-motion';
-import { SectionHeader } from '@/components/blocks';
-import { Project } from '@/types/index';
-import { SECTION_IDS } from '@/lib/constants';
+import {
+  calcGeometry,
+  slotTransform,
+  bandLineRects,
+  DECK_SLOT_BORDER,
+  DECK_SLOT_DIM,
+  DECK_TRANSITION_MS,
+  DECK_EASE,
+  DECK_HEADER_H,
+  DECK_META_H,
+  type DeckGeometry,
+} from '@/lib/utils/deckGeometry';
+import { isProjectModalReady } from '@/lib/utils/projectContract';
 import { projects } from '@/lib/data';
+import { SECTION_IDS } from '@/lib/constants';
+import type { Project } from '@/types/index';
 import { setProjectModalObscured } from '@/hooks/useProjectModalObscured';
+import { useSectionActivity } from '@/components/common/SectionActivityContext';
 
 const ProjectModal = dynamic(
   () => import('@/components/blocks/ProjectModal'),
   { ssr: false }
 );
 
-const CARD_H          = 420;
-const CARD_W_DEFAULT  = 200;
-const CARD_W_FEATURED = 540;
-const CARD_GAP        = 14;
+const N = projects.length;
+
+// 카드 4개(또는 그 미만)만 재사용하고 슬롯 k -> projects[(active + k) % N]로
+// 내용만 갈아 끼운다. 정본은 .claude/designRefactoring/2026-09-09-t2-implementation-spec.md §4
+const LINE = 'rgb(255 255 255 / 0.08)';
+const LINE_STRONG = 'rgb(255 255 255 / 0.14)';
+const MUTED = 'rgb(255 255 255 / 0.62)';
+
+// 카드 썸네일 영상 순환 주기. 정본은 스펙 §4.6
+const CYCLE_MS = 3000;
 
 export default function ProjectsSection() {
-  const [featuredIdx,  setFeaturedIdx]  = useState<number | null>(null);
-  const [modalOpen,    setModalOpen]    = useState(false);
-  const [modalOrigin,  setModalOrigin]  = useState<DOMRect | null>(null);
+  const { active, pageVisible, motionReady, reducedMotion } = useSectionActivity();
+  // SSR에는 window가 없어 기본값 1440x900으로 첫 렌더를 잡고 마운트 뒤 실측으로 덮는다
+  const [geo, setGeo] = useState<DeckGeometry>(() => calcGeometry(N, 1440, 900));
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [modalOpen, setModalOpen] = useState(false);
 
-  const scrollRef   = useRef<HTMLDivElement>(null);
-  const cardRefs    = useRef<(HTMLDivElement | null)[]>([]);
-  const dragStartX  = useRef(0);
-  const dragScrollL = useRef(0);
-  const didDrag     = useRef(false);   // mouseup 시점에 드래그 여부 기록
-  const [showHint, setShowHint] = useState(true);
+  const slotRefs = useRef<(HTMLElement | null)[]>([]);
+  const chipRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const prevActiveRef = useRef(activeIndex);
 
-  // Hyperspeed 배경(HomeClient)에 모달 열림을 알린다 — obscured=true면 배경
-  // 밝기만 추가로 낮춘다(components/blocks/HyperspeedBackground.tsx 참고).
+  const activeProject = projects[activeIndex];
+  const videoList = useMemo(
+    () =>
+      (activeProject.implementations ?? [])
+        .map((impl) => impl.video)
+        .filter((v): v is string => Boolean(v)),
+    [activeProject]
+  );
+  const hasVideo = videoList.length > 0;
+
+  // 정지 조건은 하나로 모은다. 정본은 스펙 §4.6
+  const playable =
+    active === SECTION_IDS.PROJECTS &&
+    !modalOpen &&
+    pageVisible &&
+    motionReady &&
+    !reducedMotion;
+
+  const [cycleIndex, setCycleIndex] = useState(0);
+  const [mediaError, setMediaError] = useState(false);
+  const videoElRef = useRef<HTMLVideoElement | null>(null);
+  const currentSrc = hasVideo ? (videoList[cycleIndex] ?? null) : null;
+
+  // 실제로 그릴 src. playable일 때만 currentSrc를 따라가고, 아니면 멈춘 자리를
+  // 그대로 둔다. src를 놓는 것은 활성 카드가 바뀔 때(goTo가 cycleIndex를
+  // 0으로 되돌릴 때)뿐이다
+  const [committedSrc, setCommittedSrc] = useState<string | null>(null);
+  useEffect(() => {
+    if (playable) setCommittedSrc(currentSrc);
+  }, [playable, currentSrc]);
+
+  useEffect(() => {
+    setMediaError(false);
+  }, [activeIndex]);
+
+  useEffect(() => {
+    const video = videoElRef.current;
+    if (!video) return;
+    if (!playable) {
+      video.pause();
+      return;
+    }
+    // jsdom의 play()는 Promise를 돌려주지 않는다. 실제 브라우저의 거절만 조용히 삼킨다
+    const playResult = video.play();
+    if (playResult && typeof playResult.catch === 'function') {
+      playResult.catch(() => {});
+    }
+  }, [playable, committedSrc]);
+
+  // 영상이 하나뿐이면 순환하지 않는다. onEnded가 3초를 기다리지 않고 다음으로 넘긴다
+  useEffect(() => {
+    if (!playable || videoList.length < 2) return;
+    const timeout = setTimeout(() => {
+      setCycleIndex((i) => (i + 1) % videoList.length);
+    }, CYCLE_MS);
+    return () => clearTimeout(timeout);
+  }, [playable, videoList.length, cycleIndex]);
+
+  const handleVideoEnded = useCallback(() => {
+    setCycleIndex((i) => (videoList.length > 0 ? (i + 1) % videoList.length : 0));
+  }, [videoList.length]);
+
+  const handleMediaError = useCallback(() => {
+    setMediaError(true);
+  }, []);
+
+  useEffect(() => {
+    const measure = () => setGeo(calcGeometry(N, window.innerWidth, window.innerHeight));
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+
   useEffect(() => {
     setProjectModalObscured(modalOpen);
   }, [modalOpen]);
 
-  const scrollToCenter = useCallback((idx: number) => {
-    const card = cardRefs.current[idx];
-    const container = scrollRef.current;
-    if (!card || !container) return;
-    setTimeout(() => {
-      const containerW  = container.clientWidth;
-      const scrollW     = container.scrollWidth;
-      const cardLeft    = card.offsetLeft;
-      const cardCenter  = cardLeft + CARD_W_FEATURED / 2;
-      // 중앙 정렬 기준 scrollLeft
-      const targetCenter = cardCenter - containerW / 2;
-      // 카드 오른쪽 끝이 잘리지 않도록: 카드 right가 container 안에 들어올 최솟값
-      const minToShowRight = cardLeft + CARD_W_FEATURED - containerW;
-      // 최종값: 두 조건 중 큰 값(더 오른쪽), 단 scrollWidth 초과 방지
-      const scrollLeft = Math.min(
-        Math.max(0, targetCenter, minToShowRight),
-        scrollW - containerW
-      );
-      container.scrollTo({ left: scrollLeft, behavior: 'smooth' });
-    }, 30);
+  // 슬롯 k의 목표 위치는 활성 카드가 바뀌어도 그대로다(위치는 slot에만 매인다).
+  // 그래서 CSS transition만으로는 안 움직인다. 팬텀(한 칸 뒤) 위치로 순간 이동시킨
+  // 뒤 목표로 되돌려 보내야 "한 칸 밀려온" 것처럼 보인다. geo만 바뀐 리렌더(리사이즈)는
+  // prevActiveRef로 걸러 건드리지 않는다. 즉시 재배치는 렌더의 transition:none이 맡는다
+  useLayoutEffect(() => {
+    const prevActive = prevActiveRef.current;
+    prevActiveRef.current = activeIndex;
+    if (prevActive === activeIndex) return;
+    if (!geo.isDeck || reducedMotion) return;
+
+    const renderCount = Math.min(4, N);
+    const els = slotRefs.current.slice(0, renderCount);
+
+    els.forEach((el, k) => {
+      if (!el) return;
+      el.style.transition = 'none';
+      el.style.transform = slotTransform(Math.min(k + 1, 4), geo.cardW, geo.cardH);
+      el.style.opacity = k === 3 ? '0' : '1';
+    });
+
+    // 강제 리플로우. 위 팬텀 위치를 트랜지션 없이 먼저 그리게 한다
+    void els[0]?.offsetHeight;
+
+    const raf = requestAnimationFrame(() => {
+      els.forEach((el, k) => {
+        if (!el) return;
+        el.style.transition = `transform ${DECK_TRANSITION_MS}ms ${DECK_EASE}, opacity ${DECK_TRANSITION_MS}ms ${DECK_EASE}`;
+        el.style.transform = slotTransform(k, geo.cardW, geo.cardH);
+        el.style.opacity = '1';
+      });
+    });
+
+    const timeout = setTimeout(() => {
+      els.forEach((el) => {
+        if (!el) return;
+        el.style.transition = 'none';
+      });
+    }, DECK_TRANSITION_MS);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timeout);
+    };
+  }, [activeIndex, geo, reducedMotion]);
+
+  const openModal = useCallback(() => setModalOpen(true), []);
+  const closeModal = useCallback(() => setModalOpen(false), []);
+
+  const goTo = useCallback((next: number) => {
+    setActiveIndex(next);
+    setCycleIndex(0);
+    chipRefs.current[next]?.focus();
   }, []);
 
-  /* 카드 클릭 — didDrag가 true면(드래그였으면) 무시 */
-  const handleCardClick = useCallback((idx: number) => {
-    if (didDrag.current) return;
-    setFeaturedIdx(prev => {
-      if (prev === idx) {
-        // 이미 featured → 두 번 클릭 = 모달 (카드 위치 캡처)
-        const cardEl = cardRefs.current[idx];
-        if (cardEl) setModalOrigin(cardEl.getBoundingClientRect());
-        setModalOpen(true);
-        return prev;
-      }
-      scrollToCenter(idx);
-      return idx;
-    });
-    setShowHint(false);
-  }, [scrollToCenter]);
+  const handleIndexKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLElement>) => {
+      let next: number | null = null;
+      if (event.key === 'ArrowLeft') next = (activeIndex - 1 + N) % N;
+      else if (event.key === 'ArrowRight') next = (activeIndex + 1) % N;
+      else if (event.key === 'Home') next = 0;
+      else if (event.key === 'End') next = N - 1;
 
-  /* 드래그 스크롤 — window 리스너 방식, 자식 onClick 간섭 없음 */
-  const onMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return;
-    didDrag.current   = false;
-    dragStartX.current  = e.clientX;
-    dragScrollL.current = scrollRef.current?.scrollLeft ?? 0;
+      if (next === null) return;
+      event.preventDefault();
+      goTo(next);
+    },
+    [activeIndex, goTo]
+  );
 
-    const onMove = (me: MouseEvent) => {
-      const dx = me.clientX - dragStartX.current;
-      if (Math.abs(dx) > 8) didDrag.current = true;
-      if (scrollRef.current) scrollRef.current.scrollLeft = dragScrollL.current - dx;
-    };
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      // click 이벤트는 mouseup 직후 동기 실행 → didDrag를 그 다음 tick에 리셋
-      setTimeout(() => { didDrag.current = false; }, 10);
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  };
-
-  /* 섹션 내 카드 트랙 외부 클릭 → featured 닫기 */
-  const handleSectionClick = (e: React.MouseEvent<HTMLElement>) => {
-    if (featuredIdx === null) return;
-    if (modalOpen) return;
-    if (scrollRef.current && scrollRef.current.contains(e.target as Node)) return;
-    setFeaturedIdx(null);
-  };
-
-  const featuredProject = featuredIdx !== null ? projects[featuredIdx] : null;
+  const renderCount = geo.isDeck ? Math.min(4, N) : Math.min(1, N);
+  const bandRects = geo.isDeck ? bandLineRects(geo) : [];
 
   return (
     <section
       id={SECTION_IDS.PROJECTS}
-      className="py-12 sm:py-16 lg:py-20 overflow-hidden relative"
-      onClick={handleSectionClick}
+      className="py-20 px-10 flex flex-col items-center"
     >
-      <div className="pointer-events-none absolute inset-0" aria-hidden style={{
-        backgroundImage: 'radial-gradient(circle, rgba(3,179,195,0.05) 1px, transparent 1px)',
-        backgroundSize: '32px 32px',
-      }} />
+      <h2 className="sr-only">Projects</h2>
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6">
-        <SectionHeader
-          title="PROJECTS"
-          subtitle="직접 기획하고 개발한 프로젝트들입니다"
-        />
-
-        <div className="relative">
-          {/* 좌우 페이드 그라디언트 — 가로 스크롤 힌트 */}
-          <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-12 z-10" style={{
-            background: 'linear-gradient(90deg, rgba(0,0,0,0.9) 0%, transparent 100%)'
-          }} />
-          <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-12 z-10" style={{
-            background: 'linear-gradient(270deg, rgba(0,0,0,0.9) 0%, transparent 100%)'
-          }} />
-
-          {/* 가로 스크롤 힌트 화살표 — 첫 진입 시 */}
-          <AnimatePresence>
-            {showHint && (
-              <motion.div
-                className="pointer-events-none absolute right-14 top-1/2 -translate-y-1/2 z-20
-                           flex items-center gap-1"
-                initial={{ opacity: 0, x: 8 }}
-                animate={{ opacity: [0, 1, 1, 0], x: [8, 0, 0, 8] }}
-                transition={{ duration: 2.2, delay: 0.8, times: [0, 0.2, 0.8, 1] }}
-                onAnimationComplete={() => setShowHint(false)}
-              >
-                <span className="text-[11px] text-[rgb(255_255_255_/_0.42)] tracking-wider">scroll</span>
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                  <path d="M4 10h12M12 6l4 4-4 4" stroke="rgba(255,255,255,0.42)" strokeWidth="1.5"
-                    strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* 스크롤 컨테이너 */}
+      <div
+        className="relative mx-auto"
+        style={{ width: Math.round(geo.cardW), marginBottom: 24 }}
+      >
+        {geo.bandLines > 0 && (
           <div
-            ref={scrollRef}
-            onMouseDown={onMouseDown}
-            data-section-swipe-ignore
-            className="section-horizontal-scroll flex overflow-x-auto pb-4 cursor-grab active:cursor-grabbing select-none"
-            style={{
-              gap: CARD_GAP,
-              scrollbarWidth: 'none',
-              msOverflowStyle: 'none',
-            }}
+            data-part="band"
+            className="relative mx-auto"
+            style={{ width: Math.round(geo.cardW), height: geo.bandHeight }}
           >
-            {/* 좌측 여백 */}
-            <div className="shrink-0 w-8" />
-
-            {projects.map((project, idx) => {
-              const isFeatured = featuredIdx === idx;
-              const isOther    = featuredIdx !== null && !isFeatured;
-
-              return (
-                <motion.div
-                  key={project.title}
-                  ref={el => { cardRefs.current[idx] = el; }}
-                  animate={{
-                    width:  isFeatured ? CARD_W_FEATURED : isOther ? CARD_W_DEFAULT - 16 : CARD_W_DEFAULT,
-                    opacity: isOther ? 0.45 : 1,
-                    scale:   isOther ? 0.96 : 1,
-                  }}
-                  transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
-                  onClick={() => handleCardClick(idx)}
-                  className="relative shrink-0 rounded-2xl overflow-hidden cursor-pointer"
-                  style={{ height: CARD_H, minWidth: CARD_W_DEFAULT - 16 }}
-                  whileHover={!isFeatured ? {
-                    scale: 1.03,
-                    transition: { duration: 0.2 },
-                  } : {}}
-                >
-                  <ProjectCard
-                    project={project}
-                    isFeatured={isFeatured}
-                  />
-                </motion.div>
-              );
-            })}
-
-            {/* 우측 여백 */}
-            <div className="shrink-0 w-8" />
+            {bandRects.map((rect, j) => (
+              <div
+                key={j}
+                data-band={j}
+                className="absolute h-px"
+                style={{
+                  left: rect.left,
+                  width: rect.width,
+                  bottom: rect.bottom,
+                  background: LINE_STRONG,
+                }}
+              />
+            ))}
           </div>
-        </div>
+        )}
 
-        {/* 쉬는 상태에서만 안내한다. 펼친 카드는 자기 안에 힌트를 갖고 있다 */}
-        <p className="mt-3 min-h-[16px] text-center text-[11px] tracking-widest text-[rgb(255_255_255_/_0.35)] uppercase select-none">
-          {featuredIdx !== null ? '' : 'drag · click card to expand'}
-        </p>
+        <div
+          data-part="deck"
+          className="relative"
+          style={{
+            width: Math.round(geo.cardW),
+            height: Math.round(geo.cardH),
+            marginTop: geo.isDeck ? 132 : 0,
+            perspective: geo.isDeck ? 900 : undefined,
+          }}
+        >
+          {Array.from({ length: renderCount }, (_, k) => {
+            const globalIndex = (activeIndex + k) % N;
+            const project = projects[globalIndex];
+            return (
+              <DeckCard
+                key={k}
+                slot={k}
+                globalIndex={globalIndex}
+                project={project}
+                geo={geo}
+                cardRef={(el) => {
+                  slotRefs.current[k] = el;
+                }}
+                onOpen={k === 0 ? openModal : undefined}
+                onSelect={k > 0 ? goTo : undefined}
+                media={
+                  k === 0
+                    ? {
+                        hasVideo,
+                        videoSrc: committedSrc,
+                        mediaError,
+                        onVideoEnded: handleVideoEnded,
+                        onMediaError: handleMediaError,
+                        setVideoEl: (el) => {
+                          videoElRef.current = el;
+                        },
+                      }
+                    : undefined
+                }
+              />
+            );
+          })}
+        </div>
       </div>
 
-      {/* 모달 */}
-      <ProjectModal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        project={featuredProject}
-        originRect={modalOrigin}
-      />
+      <nav
+        data-part="index"
+        role="tablist"
+        aria-label="프로젝트 목록"
+        className="self-stretch flex flex-wrap gap-3 pt-3"
+        style={{ borderTop: `1px solid ${LINE_STRONG}` }}
+        onKeyDown={handleIndexKeyDown}
+      >
+        {projects.map((project, i) => {
+          const isActive = i === activeIndex;
+          return (
+            <button
+              key={project.title}
+              ref={(el) => {
+                chipRefs.current[i] = el;
+              }}
+              type="button"
+              role="tab"
+              data-chip={i}
+              aria-selected={isActive}
+              aria-label={project.title}
+              tabIndex={isActive ? 0 : -1}
+              onClick={() => goTo(i)}
+              className={`relative w-11 h-11 shrink-0 bg-transparent border-0 text-[13px] tabular-nums flex items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)] ${
+                isActive
+                  ? "text-[var(--color-text-primary)] after:content-[''] after:absolute after:left-2 after:right-2 after:bottom-1 after:h-0.5 after:bg-[var(--color-cyan-core)]"
+                  : ''
+              }`}
+              style={{ color: isActive ? undefined : MUTED }}
+            >
+              {String(i + 1).padStart(2, '0')}
+            </button>
+          );
+        })}
+      </nav>
+
+      <ProjectModal isOpen={modalOpen} onClose={closeModal} project={modalOpen ? activeProject : null} />
     </section>
   );
 }
 
-interface ProjectCardProps {
-  project: Project;
-  isFeatured: boolean;
+interface DeckCardMedia {
+  hasVideo: boolean;
+  videoSrc: string | null;
+  mediaError: boolean;
+  onVideoEnded: () => void;
+  onMediaError: () => void;
+  setVideoEl: (el: HTMLVideoElement | null) => void;
 }
 
-function ProjectCard({ project, isFeatured }: ProjectCardProps) {
-  return (
-    <div className="w-full h-full relative flex overflow-hidden">
-      {/* 배경 이미지 */}
-      <div className="absolute inset-0">
-        <Image
-          src={project.image}
-          alt={project.title}
-          fill
-          className="object-cover transition-transform duration-700"
-          style={{ transform: isFeatured ? 'scale(1.04)' : 'scale(1)' }}
-          sizes="(max-width: 768px) 100vw, 560px"
-          draggable={false}
-        />
-        <div
-          className="absolute inset-0 transition-[background] duration-500"
-          style={{
-            background: isFeatured
-              ? 'linear-gradient(90deg, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.82) 36%, rgba(0,0,0,0.28) 62%, rgba(0,0,0,0.06) 100%)'
-              : 'linear-gradient(180deg, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.40) 62%, rgba(0,0,0,0.82) 100%)',
-          }}
-        />
+interface DeckCardProps {
+  slot: number;
+  globalIndex: number;
+  project: Project;
+  geo: DeckGeometry;
+  cardRef: (el: HTMLElement | null) => void;
+  onOpen?: () => void;
+  onSelect?: (globalIndex: number) => void;
+  media?: DeckCardMedia;
+}
+
+function DeckCard({ slot, globalIndex, project, geo, cardRef, onOpen, onSelect, media }: DeckCardProps) {
+  const isFeatured = slot === 0;
+  const ready = isFeatured && isProjectModalReady(project);
+  // 카드는 <button>이라 내용이 기본 세로 중앙 정렬된다. flex-col + items-stretch가
+  // 없으면 프리뷰가 405px이어야 할 자리에서 17px로 무너진다
+  const className = 'absolute inset-0 bg-[#0a0a0a] border overflow-hidden text-left flex flex-col items-stretch';
+  // 렌더가 세팅하는 transform은 항상 목표 위치다. transition은 기본 none이라
+  // geo만 바뀌는 리사이즈는 트랜지션 없이 그 자리로 즉시 스냅한다. 인덱스 전환
+  // 애니메이션은 부모의 useLayoutEffect가 이 스타일을 일시적으로 덮어써서 만든다
+  const style: React.CSSProperties = {
+    borderColor: DECK_SLOT_BORDER[slot],
+    filter: `brightness(${DECK_SLOT_DIM[slot]})`,
+    transition: 'none',
+    transform: geo.isDeck ? slotTransform(slot, geo.cardW, geo.cardH) : undefined,
+    opacity: 1,
+    zIndex: 4 - slot,
+  };
+
+  const content = (
+    <>
+      <div
+        data-part="header"
+        className="shrink-0 flex items-center gap-2.5 px-4"
+        style={{ height: DECK_HEADER_H, borderBottom: `1px solid ${LINE}` }}
+      >
+        <span className="text-[13px] tabular-nums" style={{ color: MUTED }}>
+          {String(globalIndex + 1).padStart(2, '0')}
+        </span>
+        <span
+          className={`font-semibold whitespace-nowrap overflow-hidden text-ellipsis text-[var(--color-text-primary)] ${isFeatured ? 'text-[17px]' : 'text-[15px]'}`}
+        >
+          {project.title}
+        </span>
       </div>
 
-      {/* 기본 상태 — 하단 타이틀 */}
-      <AnimatePresence>
-        {!isFeatured && (
-          <motion.div
-            className="absolute bottom-0 inset-x-0 p-4 z-10"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
+      {isFeatured && media && (
+        <>
+          <div
+            data-part="preview"
+            aria-hidden="true"
+            className="relative"
+            style={{ flex: '1 1 auto', minHeight: 0, background: 'rgb(255 255 255 / 0.06)' }}
           >
-            <div className="w-7 h-[2px] mb-2.5 rounded-full bg-gradient-to-r from-[var(--color-cyan-core)] to-[var(--color-cyan-hi)]" />
-            <p className="text-[var(--color-text-primary)] font-bold text-[14px] leading-snug mb-1.5 drop-shadow">
-              {project.title}
-            </p>
-            <div className="flex flex-wrap gap-1">
-              {project.tags.slice(0, 2).map(tag => (
-                <span key={tag}
-                  className="text-[9px] px-1.5 py-0.5 rounded font-medium"
+            {media.mediaError ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-center px-4">
+                <span className="text-[13px] tabular-nums" style={{ color: MUTED }}>
+                  {String(globalIndex + 1).padStart(2, '0')}
+                </span>
+                <span className="text-[15px] font-semibold text-[var(--color-text-primary)]">
+                  {project.title}
+                </span>
+                <span className="text-[11px]" style={{ color: MUTED }}>
+                  MEDIA UNAVAILABLE
+                </span>
+              </div>
+            ) : media.hasVideo ? (
+              <video
+                ref={media.setVideoEl}
+                data-part="preview-video"
+                aria-hidden="true"
+                muted
+                playsInline
+                poster={project.image}
+                src={media.videoSrc ?? undefined}
+                onEnded={media.onVideoEnded}
+                onError={media.onMediaError}
+                className="absolute inset-0 h-full w-full object-cover pointer-events-none"
+              />
+            ) : (
+              <Image
+                data-part="preview-image"
+                src={project.image}
+                alt={project.title}
+                fill
+                sizes="(max-width: 1024px) 100vw, 520px"
+                className="object-cover pointer-events-none"
+                onError={media.onMediaError}
+              />
+            )}
+          </div>
+          <div
+            data-part="meta"
+            className="shrink-0 flex flex-col justify-center gap-2 px-4"
+            style={{ height: DECK_META_H }}
+          >
+            <div className="text-[13px]" style={{ color: MUTED }}>
+              {[project.duration, project.role, project.teamSize].filter(Boolean).join(' · ')}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {project.tags.slice(0, 3).map((tag) => (
+                <span
+                  key={tag}
+                  className="text-[11px]"
                   style={{
-                    background: 'rgba(3,179,195,0.18)',
-                    color: 'rgba(127,227,238,0.9)',
-                    border: '1px solid rgba(3,179,195,0.3)',
-                  }}>
+                    padding: '3px 8px',
+                    border: `1px solid ${LINE_STRONG}`,
+                    borderRadius: 3,
+                    color: 'rgb(255 255 255 / 0.7)',
+                  }}
+                >
                   {tag}
                 </span>
               ))}
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </>
+      )}
+    </>
+  );
 
-      {/* Featured 상태 — 좌측 상세 패널 */}
-      <AnimatePresence>
-        {isFeatured && (
-          <motion.div
-            className="absolute inset-y-0 left-0 z-10 flex flex-col justify-between"
-            style={{ width: 360, padding: '28px 28px' }}
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -12 }}
-            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
-          >
-            {/* 상단 */}
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-5 h-[2px] rounded-full bg-gradient-to-r from-[var(--color-cyan-core)] to-[var(--color-cyan-hi)]" />
-                <span className="text-[9px] font-bold tracking-[0.2em] uppercase text-[var(--color-cyan-hi)]">
-                  Featured
-                </span>
-              </div>
+  if (isFeatured && ready) {
+    return (
+      <button
+        ref={(el) => cardRef(el)}
+        type="button"
+        data-slot={slot}
+        data-global-index={globalIndex}
+        aria-label={project.title}
+        className={className}
+        style={style}
+        onClick={onOpen}
+      >
+        {content}
+      </button>
+    );
+  }
 
-              <h3 className="text-[22px] font-bold text-[var(--color-text-primary)] leading-tight mb-4 drop-shadow-md">
-                {project.title}
-              </h3>
-
-              {project.subtitle && (
-                <p className="text-[12px] leading-relaxed whitespace-pre-line"
-                  style={{ color: 'rgba(176,186,197,0.85)' }}>
-                  {project.subtitle}
-                </p>
-              )}
-
-              {/* 구현 사항 — 번호 인덱스 */}
-              {project.implementations && project.implementations.length > 0 && (() => {
-                const items = project.implementations.slice(0, 3).map(impl => impl.category);
-                return (
-                  <div className="mt-4 pt-4 border-t space-y-2.5" style={{ borderColor: 'rgba(255,255,255,0.12)' }}>
-                    {items.map((label, i) => (
-                      <div key={i} className="flex items-center gap-3">
-                        <span className="text-[10px] font-bold tabular-nums flex-shrink-0 w-4 text-right"
-                          style={{ color: 'rgba(3,179,195,0.9)' }}>
-                          {String(i + 1).padStart(2, '0')}
-                        </span>
-                        <span className="text-[12px] font-semibold leading-snug text-[var(--color-text-primary)]">
-                          {label}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* 하단 — 메타 + 태그 + 클릭 힌트 */}
-            <div>
-              {project.duration && (
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="h-px w-3.5 rounded-full bg-[var(--color-cyan-core)]/50" />
-                  <span className="text-[10px] font-medium" style={{ color: 'rgba(176,186,197,0.9)' }}>
-                    {project.duration}
-                  </span>
-                </div>
-              )}
-
-              <div className="flex flex-wrap gap-1.5 mb-4">
-                {project.tags.slice(0, 4).map(tag => (
-                  <span key={tag}
-                    className="text-[10px] px-2.5 py-0.5 rounded-full font-semibold"
-                    style={{
-                      background: 'rgba(3,179,195,0.22)',
-                      color: 'rgba(127,227,238,1)',
-                      border: '1px solid rgba(3,179,195,0.45)',
-                    }}>
-                    {tag}
-                  </span>
-                ))}
-                {project.tags.length > 4 && (
-                  <span className="text-[10px] px-2.5 py-0.5 rounded-full font-medium"
-                    style={{
-                      background: 'rgba(255,255,255,0.10)',
-                      color: 'rgba(255,255,255,0.55)',
-                      border: '1px solid rgba(255,255,255,0.15)',
-                    }}>
-                    +{project.tags.length - 4}
-                  </span>
-                )}
-              </div>
-
-              {/* 다시 클릭 힌트 */}
-              <div className="flex items-center gap-1.5"
-                style={{ color: 'rgba(127,227,238,0.8)' }}>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                  <circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1.2"/>
-                  <path d="M6 4v4M4 6h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                </svg>
-                <span className="text-[10px] tracking-wide font-medium">클릭하여 상세 보기</span>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
+  return (
+    <div
+      ref={(el) => cardRef(el)}
+      data-slot={slot}
+      data-global-index={globalIndex}
+      aria-hidden={!isFeatured || undefined}
+      tabIndex={-1}
+      onClick={onSelect ? () => onSelect(globalIndex) : undefined}
+      className={className}
+      style={style}
+    >
+      {content}
     </div>
   );
 }

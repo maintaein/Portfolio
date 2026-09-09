@@ -52,11 +52,6 @@ describe('프로젝트 섹션과 모달의 어두운 테마', () => {
     expect(MODAL).not.toContain('bg-white');
   });
 
-  it('섹션의 좌우 페이드가 페이지 바탕과 같은 검정에서 시작한다', () => {
-    expect(SECTION).not.toContain('rgba(255,255,255,0.95)');
-    expect(SECTION.match(/linear-gradient\((?:90|270)deg, rgba\(0,0,0,0\.9\)/g)).toHaveLength(2);
-  });
-
   // 모서리는 판(2xl)과 그 안의 면(lg), 그리고 칩(full) 세 단만 쓴다.
   it('모서리 반경을 세 단으로 묶는다', () => {
     expect(MODAL).not.toMatch(/rounded-(?:xl|sm|none)\b/);

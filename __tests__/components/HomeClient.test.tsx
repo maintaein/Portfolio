@@ -516,48 +516,6 @@ describe('HomeClient section 상태', { timeout: 30_000 }, () => {
     expect(getSection(container, 'about')).toHaveClass('section-visible');
   });
 
-  it('Projects 가로 트랙에서 시작한 양방향 스와이프는 섹션을 이동하지 않는다', () => {
-    window.history.replaceState(null, '', '/#projects');
-    const { container } = render(<HomeClient />);
-    const stage = container.querySelector<HTMLElement>('.section-stage');
-    const projectsSection = getSection(container, 'projects');
-    const track = projectsSection.querySelector<HTMLElement>('.overflow-x-auto');
-    const card = track?.querySelector<HTMLElement>('.cursor-pointer');
-
-    expect(stage).not.toBeNull();
-    expect(projectsSection).toHaveClass('section-visible');
-    expect(track).not.toBeNull();
-    expect(card).not.toBeNull();
-
-    firePointer(card!, 'pointerdown', {
-      pointerId: 1,
-      pointerType: 'touch',
-      clientX: 240,
-      clientY: 200,
-    });
-    firePointer(stage!, 'pointerup', {
-      pointerId: 1,
-      pointerType: 'touch',
-      clientX: 160,
-      clientY: 205,
-    });
-    expect(projectsSection).toHaveClass('section-visible');
-
-    firePointer(card!, 'pointerdown', {
-      pointerId: 2,
-      pointerType: 'touch',
-      clientX: 160,
-      clientY: 200,
-    });
-    firePointer(stage!, 'pointerup', {
-      pointerId: 2,
-      pointerType: 'touch',
-      clientX: 240,
-      clientY: 205,
-    });
-    expect(projectsSection).toHaveClass('section-visible');
-  });
-
   it('섹션 DOM과 내부 scrollTop을 떠남·재방문 뒤에도 보존한다', () => {
     const { container } = render(<HomeClient />);
     const about = getSection(container, 'about');
@@ -796,17 +754,9 @@ describe('HomeClient → HyperspeedBackground 배선', { timeout: 30_000 }, () =
     expect(probe).toHaveAttribute('data-obscured', 'false');
 
     const projectsSection = getSection(container, 'projects');
-    const track = projectsSection.querySelector<HTMLElement>('.overflow-x-auto');
-    const card = track?.querySelector<HTMLElement>('.cursor-pointer');
+    const card = projectsSection.querySelector<HTMLElement>('[data-slot="0"]');
     expect(card).not.toBeNull();
-    // jsdom엔 Element.scrollTo가 없다. 첫 클릭이 featured로 만들며 예약하는
-    // scrollToCenter의 setTimeout(30ms) 콜백이 이걸 부르므로 스텁해 둔다 —
-    // 이 테스트의 관심사는 모달 열림→obscured 전파고 스크롤 자체가 아니다.
-    track!.scrollTo = vi.fn();
 
-    // 첫 클릭은 featured로만 만들고, 같은 카드를 다시 클릭해야 모달이 열린다
-    // (components/sections/ProjectsSection/index.tsx의 handleCardClick).
-    fireEvent.click(card!);
     fireEvent.click(card!);
     expect(probe).toHaveAttribute('data-obscured', 'true');
 
