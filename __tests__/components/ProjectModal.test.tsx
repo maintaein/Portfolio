@@ -143,7 +143,9 @@ describe('ProjectModal 모양 잠금', () => {
     expect(SOURCE).not.toMatch(/\brounded-xl\b/);
     expect(SOURCE).not.toMatch(/\brounded-sm\b/);
     expect(SOURCE).not.toMatch(/\brounded-none\b/);
-    expect((SOURCE.match(/\brounded-2xl\b/g) ?? []).length).toBe(1);
+    // 셸이 fixed inset-0 전체 화면 판이 됐다. 화면 가장자리에 붙은 판에
+    // 모서리는 없으므로 셸의 rounded-2xl은 사라졌다(다른 곳에도 없다).
+    expect((SOURCE.match(/\brounded-2xl\b/g) ?? []).length).toBe(0);
   });
 
   it('글자 크기가 램프 안에만 있다', () => {
@@ -190,6 +192,59 @@ describe('ProjectModal 모양 잠금', () => {
       'utf8'
     );
     expect(findTailwindPaletteColorUtilities(richText)).toEqual([]);
+  });
+});
+
+describe('ProjectModal 전체 화면 셸과 FLIP 손잡이', () => {
+  it('셸이 fixed inset-0로 화면을 덮고 mx-auto로 가운데 정렬되지 않는다', () => {
+    renderModal();
+    const shell = document.querySelector('#pm-shell')!;
+    const classes = shell.className.split(/ +/);
+    expect(classes).toContain('fixed');
+    expect(classes).toContain('inset-0');
+    expect(classes).not.toContain('mx-auto');
+  });
+
+  it('셸에 크기 제약이 없다', () => {
+    expect(SOURCE).not.toContain('min(880px,88vh)');
+    expect(SOURCE).not.toContain('min(1400px,92vw)');
+  });
+
+  it('셸에 outline 테두리가 없다', () => {
+    expect(SOURCE).not.toMatch(/outline-\[var\(--color-hairline\)\]/);
+  });
+
+  it('FLIP 손잡이 둘이 stage와 제목에 project.title로 그려진다', () => {
+    renderModal();
+    const stage = document.querySelector('[data-modal-part="stage"]')!;
+    const heading = screen.getByRole('heading', { name: project.title });
+    expect(stage.getAttribute('data-flip-id')).toBe(`pv-${project.title}`);
+    expect(heading.getAttribute('data-flip-id')).toBe(`title-${project.title}`);
+  });
+
+  it('FLIP 대상 노드에 transform 유틸이 없다', () => {
+    renderModal();
+    const stage = document.querySelector('[data-modal-part="stage"]')!;
+    const heading = screen.getByRole('heading', { name: project.title });
+    for (const el of [stage, heading]) {
+      expect(el.className).not.toMatch(/\btranslate-|\bscale-|\brotate-/);
+    }
+  });
+
+  it('onStageMount가 stage 노드를 부모에게 준다', () => {
+    let received: HTMLDivElement | null = null;
+    render(
+      <ProjectModal
+        project={project}
+        isOpen
+        onClose={() => {}}
+        onStageMount={(el) => {
+          received = el;
+        }}
+      />
+    );
+    expect(received).not.toBeNull();
+    expect((received as unknown as HTMLDivElement).getAttribute('data-modal-part')).toBe('stage');
   });
 });
 

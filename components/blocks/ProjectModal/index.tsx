@@ -15,6 +15,9 @@ interface ProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
   project: Project | null;
+  // 펼침 stage가 DOM에 박히거나 빠지는 순간을 부모에게 알린다. 부모가 이 시점에
+  // GSAP Flip을 태운다. 모달이 지연 로드라 부모의 layout effect로는 못 잡는다
+  onStageMount?: (el: HTMLDivElement | null) => void;
 }
 
 // 색은 세 단만 쓴다. T1이 가장 밝고, T3가 검정 판 위에서 7.76:1을 지키는
@@ -179,7 +182,7 @@ const NARROW_PANEL_CSS = `
 }
 `;
 
-export default function ProjectModal({ isOpen, onClose, project }: ProjectModalProps) {
+export default function ProjectModal({ isOpen, onClose, project, onStageMount }: ProjectModalProps) {
   const [feat, setFeat] = useState(0);
   // 자동재생 muted loop 영상의 정지 상태. WCAG 2.2.2가 5초 넘는 자동재생에
   // 정지 수단을 요구한다. 무대를 넘겨도(setFeat) 이 상태는 그대로 간다.
@@ -254,10 +257,9 @@ export default function ProjectModal({ isOpen, onClose, project }: ProjectModalP
       <div
         id="pm-shell"
         className={cn(
-          'relative mx-auto grid h-[min(880px,88vh)] w-[min(1400px,92vw)]',
+          'fixed inset-0 grid',
           'grid-cols-[3fr_2fr] grid-rows-[64px_minmax(0,1fr)]',
-          'overflow-hidden rounded-2xl bg-[rgb(6_8_10_/_0.97)]',
-          'outline outline-1 outline-[var(--color-hairline)]',
+          'overflow-hidden bg-[rgb(6_8_10_/_0.97)]',
           // 한국어는 어절 중간에서 끊기면 안 읽힌다. balance만으로는 부족하다.
           '[word-break:keep-all] [overflow-wrap:anywhere] [text-wrap:pretty] [-webkit-font-smoothing:antialiased]'
         )}
@@ -274,7 +276,11 @@ export default function ProjectModal({ isOpen, onClose, project }: ProjectModalP
             LINE
           )}
         >
-          <h2 id="pm-title" className={cn('truncate text-t3 font-bold tracking-[-0.02em]', T1)}>
+          <h2
+            id="pm-title"
+            data-flip-id={`title-${project.title}`}
+            className={cn('truncate text-t3 font-bold tracking-[-0.02em]', T1)}
+          >
             {project.title}
           </h2>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -322,6 +328,8 @@ export default function ProjectModal({ isOpen, onClose, project }: ProjectModalP
         >
           <div
             data-modal-part="stage"
+            data-flip-id={`pv-${project.title}`}
+            ref={onStageMount}
             className="relative grid justify-items-center gap-0"
             onTouchStart={handleStageTouchStart}
             onTouchEnd={handleStageTouchEnd}
