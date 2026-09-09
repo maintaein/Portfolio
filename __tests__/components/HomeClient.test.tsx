@@ -786,6 +786,187 @@ describe('HomeClient → HyperspeedBackground 배선', { timeout: 30_000 }, () =
   });
 });
 
+// 계획 5 T2 Task 9의 셸 격리는 HomeClient가 소유한 inert 배선이라 계획서의
+// ProjectsSection.test.tsx 파일 목록에는 없지만 여기서 고정하지 않으면
+// 검증되지 않는다(구현 담당 서브에이전트 브리프가 명시적으로 요구·승인한
+// 계획 일탈). "ProjectModal이 열리면 obscured가..." 테스트의 열기/닫기
+// 흐름을 그대로 재사용한다.
+// 이 파일의 beforeEach는 requestAnimationFrame을 콜백을 절대 안 부르는
+// 껍데기로 바꿔 둔다(다른 테스트가 호출 횟수만 세기 때문이다). 포커스
+// 복원은 한 프레임 뒤에 도는 것이 계약이라 그 껍데기 아래서는 관측 자체가
+// 안 된다. 그래서 이 두 테스트만 콜백을 실제로 돌려주는 것으로 되돌린다.
+// afterEach의 unstubAllGlobals가 원래대로 돌려놓는다
+function installRunnableAnimationFrame() {
+  vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) =>
+    setTimeout(() => cb(0), 0) as unknown as number
+  );
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
+}
+
+describe('HomeClient 모달-only History와 셸 격리', { timeout: 30_000 }, () => {
+  it('모달이 열리면 Navigation·main·Footer가 inert가 되고, 닫히면 다시 풀린다', async () => {
+    window.history.replaceState(null, '', '/#projects');
+    const { container } = render(<HomeClient />);
+    const stage = container.querySelector<HTMLElement>('.section-stage')!;
+    const navButton = screen.getByRole('button', { name: /^about$/i });
+    const footerLink = screen.getByText('Contact footer');
+
+    expect(stage.closest('[inert]')).toBeNull();
+    expect(navButton.closest('[inert]')).toBeNull();
+    expect(footerLink.closest('[inert]')).toBeNull();
+
+    const projectsSection = getSection(container, 'projects');
+    const card = projectsSection.querySelector<HTMLElement>('[data-slot="0"]');
+    fireEvent.click(card!);
+    const closeButton = await screen.findByRole(
+      'button',
+      { name: '닫기' },
+      { timeout: 20_000 }
+    );
+
+    // 뮤테이션: main에 inert를 안 걸면 여기서 stage.closest가 null을 돌려줘
+    // FAIL한다
+    expect(stage).toHaveAttribute('inert');
+    expect(navButton.closest('[inert]')).not.toBeNull();
+    expect(footerLink.closest('[inert]')).not.toBeNull();
+
+    fireEvent.click(closeButton);
+
+    // 되돌아오는 방향도 확인한다 — 한 번 inert를 걸고 영원히 두면 모달을
+    // 닫아도 셸이 죽어 있는 결함이다
+    expect(stage).not.toHaveAttribute('inert');
+    expect(navButton.closest('[inert]')).toBeNull();
+    expect(footerLink.closest('[inert]')).toBeNull();
+  });
+
+  it('모달이 열려 있으면 스와이프로 섹션이 바뀌지 않는다', async () => {
+    window.history.replaceState(null, '', '/#projects');
+    const { container } = render(<HomeClient />);
+    const stage = container.querySelector<HTMLElement>('.section-stage')!;
+
+    const projectsSection = getSection(container, 'projects');
+    const card = projectsSection.querySelector<HTMLElement>('[data-slot="0"]');
+    fireEvent.click(card!);
+    await screen.findByRole('button', { name: '닫기' }, { timeout: 20_000 });
+
+    // 뮤테이션: 모달이 열려 있어도 swipeHandlers를 계속 뿌리면(inert만 믿으면)
+    // jsdom은 inert의 포인터 차단을 구현하지 않으므로 이 pointerdown/up이
+    // 그대로 섹션을 넘겨 FAIL한다
+    firePointer(stage, 'pointerdown', {
+      pointerId: 1,
+      pointerType: 'touch',
+      clientX: 240,
+      clientY: 200,
+    });
+    firePointer(stage, 'pointerup', {
+      pointerId: 1,
+      pointerType: 'touch',
+      clientX: 160,
+      clientY: 205,
+    });
+
+    expect(getSection(container, 'projects')).toHaveClass('section-visible');
+    expect(getSection(container, 'experience')).not.toHaveClass('section-visible');
+  });
+
+  it('모달은 portal로 body에 붙어 main의 inert에 갇히지 않는다', async () => {
+    window.history.replaceState(null, '', '/#projects');
+    const { container } = render(<HomeClient />);
+    const stage = container.querySelector<HTMLElement>('.section-stage')!;
+
+    const projectsSection = getSection(container, 'projects');
+    const card = projectsSection.querySelector<HTMLElement>('[data-slot="0"]');
+    fireEvent.click(card!);
+    const dialog = await screen.findByRole('dialog', {}, { timeout: 20_000 });
+
+    // main이 inert라도 모달은 main의 자손이 아니라 document.body의 직속
+    // 자손(portal)이라 갇히지 않는다 — 뮤테이션으로 Modal의 portal 대상을
+    // main 내부로 옮기면 이 어서션이 FAIL한다
+    expect(stage).toHaveAttribute('inert');
+    expect(stage.contains(dialog)).toBe(false);
+    expect(dialog.closest('[inert]')).toBeNull();
+  });
+
+  // 표제 계약: 모달을 닫으면 포커스가 opener 카드로 돌아온다. 이 어서션이
+  // 없으면 포커스가 body로 새도 아무 테스트가 울지 않는다. Modal atom의
+  // 복원은 셸의 격리가 아직 안 풀린 시점에 돌아 opener가 갇혔다고 보고
+  // 포기하므로, ProjectsSection이 한 프레임 뒤에 직접 되돌려준다.
+  it('모달을 닫으면 포커스가 opener 카드로 돌아온다', async () => {
+    installRunnableAnimationFrame();
+    window.history.replaceState(null, '', '/#projects');
+    const { container } = render(<HomeClient />);
+    const projectsSection = getSection(container, 'projects');
+    const card = projectsSection.querySelector<HTMLElement>('[data-slot="0"]')!;
+
+    fireEvent.click(card);
+    const closeButton = await screen.findByRole(
+      'button',
+      { name: '닫기' },
+      { timeout: 20_000 }
+    );
+
+    fireEvent.click(closeButton);
+
+    // 복원이 한 프레임 뒤라 동기 단언은 못 쓴다
+    await waitFor(() => {
+      expect(document.activeElement).toBe(card);
+    });
+  });
+
+  // 반대쪽 갈래. opener가 없어졌을 때 아무 데도 안 보내면 포커스는 body로
+  // 떨어진다. 복원이 opener만 보고 fallback을 빼먹으면 여기서 FAIL한다
+  it('opener가 사라지면 포커스가 활성 section region으로 떨어진다', async () => {
+    installRunnableAnimationFrame();
+    window.history.replaceState(null, '', '/#projects');
+    const { container } = render(<HomeClient />);
+    const projectsSection = getSection(container, 'projects');
+    const card = projectsSection.querySelector<HTMLElement>('[data-slot="0"]')!;
+
+    fireEvent.click(card);
+    const closeButton = await screen.findByRole(
+      'button',
+      { name: '닫기' },
+      { timeout: 20_000 }
+    );
+
+    // 모달이 열려 있는 동안 opener를 DOM에서 뜯어낸다
+    card.remove();
+    fireEvent.click(closeButton);
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(getSection(container, 'projects'));
+    });
+  });
+
+  // 복원 effect의 첫 mount 가드. 이게 없으면 페이지를 열자마자 Projects
+  // 카드가 포커스를 훔쳐 간다. rAF 호출 횟수를 세는 다른 테스트가 우연히
+  // 그걸 잡기는 하지만 지연 수단만 바꿔도 사라지는 catch라 여기서 직접 본다
+  it('모달을 연 적이 없으면 첫 렌더에서 포커스를 가져가지 않는다', async () => {
+    installRunnableAnimationFrame();
+    window.history.replaceState(null, '', '/#projects');
+    const { container } = render(<HomeClient />);
+    const card = getSection(container, 'projects').querySelector<HTMLElement>(
+      '[data-slot="0"]'
+    )!;
+
+    const focusedBeforeFrame = document.activeElement;
+
+    // 프레임이 실제로 돌았다는 것을 같이 확인한다. 이게 없으면 프레임이 한 번도
+    // 안 돌아 통과하는 죽은 프로브와 구분이 안 된다
+    let framesRan = 0;
+    await act(async () => {
+      requestAnimationFrame(() => {
+        framesRan += 1;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(framesRan).toBe(1);
+    expect(focusedBeforeFrame).not.toBe(card);
+    expect(document.activeElement).not.toBe(card);
+  });
+});
+
 describe('HomeClient Footer — 표제 계약', () => {
   // "Footer가 더 이상 문서 흐름에서 섹션 뒤로 비치지 않는다"의 구조적 절반이다.
   // 나머지 절반(Footer 자체가 position:fixed인지)은 Footer.test.tsx가 격리된

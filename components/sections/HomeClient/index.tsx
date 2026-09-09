@@ -410,14 +410,20 @@ export default function HomeClient() {
         heroRevealed={heroRevealed}
       />
 
-      <Navigation
-        items={NAV_ITEMS}
-        active={active}
-        onNavigate={setActive}
-        reducedMotion={reducedMotion}
-        wordmarkRef={wordmarkRef}
-        wordmarkScaleRef={wordmarkScaleRef}
-      />
+      {/* 모달이 열리면 셸(Navigation)을 inert로 격리한다 — NEXT/스와이프로
+          섹션이 바뀌면 모달 뒤에서 배경이 갈리는 모순이 생긴다. Navigation은
+          inert를 직접 받지 않으므로 이 wrapper가 대신 짊어진다(계획 5 T2
+          Task 9 §7.4) */}
+      <div inert={isProjectModalOpen}>
+        <Navigation
+          items={NAV_ITEMS}
+          active={active}
+          onNavigate={setActive}
+          reducedMotion={reducedMotion}
+          wordmarkRef={wordmarkRef}
+          wordmarkScaleRef={wordmarkScaleRef}
+        />
+      </div>
 
       {/* 워드마크와 같은 셸 레벨 — overview 섹션(.section-hidden의
           content-visibility) 밖에 둔다. 섹션 안에 있으면 paint containment가
@@ -447,7 +453,12 @@ export default function HomeClient() {
         data-route-resolved={routeResolved}
         data-motion-ready={motionReady}
         data-reduced-motion={reducedMotion}
-        {...swipeHandlers}
+        // jsdom은 inert의 포인터 차단을 구현하지 않으므로(실제 브라우저와
+        // 달리 pointerdown이 그대로 발화한다), 모달이 열려 있으면 스와이프
+        // 핸들러 자체를 붙이지 않는다 — inert 하나로는 스와이프를 막지
+        // 못한다(계획 5 T2 Task 9 §7.4)
+        inert={isProjectModalOpen}
+        {...(isProjectModalOpen ? {} : swipeHandlers)}
       >
         <div
           ref={(node) => {
@@ -532,7 +543,11 @@ export default function HomeClient() {
         {isTransitioning ? '' : `${activeLabel} section`}
       </div>
 
-      <Footer />
+      {/* Footer도 셸의 일부다 — 모달이 열려 있는 동안 포커스 순서에서
+          빠지도록 inert로 격리한다 */}
+      <div inert={isProjectModalOpen}>
+        <Footer />
+      </div>
     </SectionActivityProvider>
   );
 }

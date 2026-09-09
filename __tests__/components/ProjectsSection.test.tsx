@@ -5,6 +5,7 @@ import { SectionActivityProvider } from '@/components/common/SectionActivityCont
 import { projects } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
 import type { NavId } from '@/hooks/useSectionNav';
+import { isProjectModalReady } from '@/lib/utils/projectContract';
 
 beforeEach(() => {
   vi.stubGlobal(
@@ -16,6 +17,12 @@ beforeEach(() => {
   // jsdom 기본은 1024x768이라 Compact로 떨어진다. 덱 경로를 보려면 올려야 한다
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
   Object.defineProperty(window, 'innerHeight', { configurable: true, value: 900 });
+  // History 테스트가 남긴 state가 다음 테스트로 새지 않게 매번 깨끗하게 시작한다
+  window.history.replaceState(null, '', '/');
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 function renderSection(active: NavId = SECTION_IDS.PROJECTS) {
@@ -373,3 +380,163 @@ describe('ProjectsSection 영상', () => {
 function goToIndex(i: number) {
   fireEvent.click(document.querySelector(`[data-chip="${i}"]`)!);
 }
+
+// ProjectModal은 next/dynamic({ssr:false})로 실제 import()를 거쳐 로드된다
+// (HomeClient.test.tsx의 findByRole(..., {timeout: 20_000}) 관례와 같은 이유).
+// 이 describe 안의 클릭·popstate 시나리오는 dialog가 실제로 그려지길 기다려야
+// 하므로 findByRole/waitFor로 기다린다 — getByRole 동기 단정은 청크 로드 전에
+// 거짓 실패한다
+describe('ProjectsSection modal-only History', { timeout: 30_000 }, () => {
+  it('모달을 열면 projectModalId를 pushState한다', () => {
+    const push = vi.spyOn(window.history, 'pushState');
+    renderSection();
+    fireEvent.click(document.querySelector('[data-slot="0"]')!);
+    expect(push).toHaveBeenCalled();
+    const state = push.mock.calls.at(-1)![0] as Record<string, unknown>;
+    expect(typeof state.projectModalId).toBe('string');
+  });
+
+  it('유효한 projectModalId로 mount하면 History를 늘리지 않고 모달을 복구한다', async () => {
+    const ready = projects.find((p) => isProjectModalReady(p))!;
+    window.history.replaceState({ projectModalId: ready.title }, '', '#projects');
+    const push = vi.spyOn(window.history, 'pushState');
+    const replace = vi.spyOn(window.history, 'replaceState');
+    renderSection();
+    expect(
+      await screen.findByRole('dialog', { name: ready.title }, { timeout: 20_000 })
+    ).toBeTruthy();
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it('무효한 projectModalId는 그 키만 replaceState로 지운다', () => {
+    window.history.replaceState(
+      { projectModalId: '없는프로젝트', __NA: 'next가 쓰는 필드' },
+      '',
+      '#projects'
+    );
+    const push = vi.spyOn(window.history, 'pushState');
+    const replace = vi.spyOn(window.history, 'replaceState');
+    renderSection();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).toHaveBeenCalled();
+    const state = replace.mock.calls.at(-1)![0] as Record<string, unknown>;
+    expect(state.projectModalId).toBeUndefined();
+    // 다른 Next.js History 필드는 그대로 둔다
+    expect(state.__NA).toBe('next가 쓰는 필드');
+  });
+
+  it('계약 미달 프로젝트의 카드는 탭 정지점을 만들지 않는다', () => {
+    const unready = projects.findIndex((p) => !isProjectModalReady(p));
+    if (unready === -1) return;
+    renderSection();
+    goToIndex(unready);
+    const front = document.querySelector('[data-slot="0"]')!;
+    expect(front.tagName).toBe('DIV');
+  });
+
+  // 계획서 테스트 네 개는 위까지다. 아래는 함정 하나(복구된 모달을 History.back()으로
+  // 닫으면 우리 사이트 밖으로 나갈 수 있다)와 mount·popstate가 정말 하나의
+  // 함수를 공유하는지, 그리고 pushState가 기존 state를 날리지 않는지를
+  // 추가로 고정한다. 계획서에는 없지만 이 계약을 지키는 테스트가 없으면
+  // 위 네 개만으로는 회귀를 못 잡는다.
+
+  it('모달을 열 때 기존 history.state 필드를 펼쳐 담는다', () => {
+    window.history.replaceState({ __NA: 'next가 쓰는 필드' }, '', '#projects');
+    const push = vi.spyOn(window.history, 'pushState');
+    renderSection();
+    fireEvent.click(document.querySelector('[data-slot="0"]')!);
+    const state = push.mock.calls.at(-1)![0] as Record<string, unknown>;
+    // 뮤테이션: pushState({ projectModalId })로 스프레드를 빼면 __NA가
+    // 사라져 여기서 FAIL한다
+    expect(state.__NA).toBe('next가 쓰는 필드');
+    expect(typeof state.projectModalId).toBe('string');
+  });
+
+  it('popstate로 유효한 projectModalId가 오면 mount와 같은 판정으로 모달을 연다', async () => {
+    const ready = projects.find((p) => isProjectModalReady(p))!;
+    const readyIndex = projects.findIndex((p) => p.title === ready.title);
+    renderSection();
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    // 뮤테이션: reconcileProjectModal이 mount에서만 불리고 popstate 경로가
+    // 따로 있으면(또는 아예 없으면) 여기서 다이얼로그가 안 뜬다
+    act(() => {
+      window.history.replaceState({ projectModalId: ready.title }, '', '#projects');
+      window.dispatchEvent(
+        new PopStateEvent('popstate', { state: { projectModalId: ready.title } })
+      );
+    });
+
+    expect(
+      await screen.findByRole('dialog', { name: ready.title }, { timeout: 20_000 })
+    ).toBeTruthy();
+    // activeIndex도 복구된 모달과 맞아야 한다 — 슬롯0이 그 프로젝트를 가리킨다
+    expect(
+      document.querySelector('[data-slot="0"]')!.getAttribute('data-global-index')
+    ).toBe(String(readyIndex));
+  });
+
+  it('popstate로 무효한 projectModalId가 오면 열려 있던 모달을 닫는다', async () => {
+    renderSection();
+    fireEvent.click(document.querySelector('[data-slot="0"]')!);
+    expect(await screen.findByRole('dialog', {}, { timeout: 20_000 })).toBeTruthy();
+
+    act(() => {
+      window.history.replaceState({}, '', '#projects');
+      window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+    });
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('클릭으로 연 모달을 닫으면 history.back을 부르고 replaceState는 부르지 않는다', async () => {
+    renderSection();
+    fireEvent.click(document.querySelector('[data-slot="0"]')!);
+    const closeButton = await screen.findByRole(
+      'button',
+      { name: '닫기' },
+      { timeout: 20_000 }
+    );
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+    const replace = vi.spyOn(window.history, 'replaceState');
+
+    fireEvent.click(closeButton);
+
+    expect(back).toHaveBeenCalledTimes(1);
+    expect(replace).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('새로고침으로 복구된 모달을 닫으면 history.back이 아니라 replaceState로 키만 지운다 — 페이지 이탈 방지', async () => {
+    const ready = projects.find((p) => isProjectModalReady(p))!;
+    window.history.replaceState(
+      { projectModalId: ready.title, __NA: 'next가 쓰는 필드' },
+      '',
+      '#projects'
+    );
+    renderSection();
+    const closeButton = await screen.findByRole(
+      'button',
+      { name: '닫기' },
+      { timeout: 20_000 }
+    );
+    expect(screen.getByRole('dialog', { name: ready.title })).toBeTruthy();
+
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+    const replace = vi.spyOn(window.history, 'replaceState');
+
+    fireEvent.click(closeButton);
+
+    // 뮤테이션: closeModal이 push 여부와 무관하게 항상 history.back을 부르면
+    // 여기서 back이 불려 FAIL한다 — 새로고침으로 들어온 항목 앞에는 우리
+    // 사이트가 아닌 페이지가 있을 수 있다
+    expect(back).not.toHaveBeenCalled();
+    expect(replace).toHaveBeenCalled();
+    const state = replace.mock.calls.at(-1)![0] as Record<string, unknown>;
+    expect(state.projectModalId).toBeUndefined();
+    expect(state.__NA).toBe('next가 쓰는 필드');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+});

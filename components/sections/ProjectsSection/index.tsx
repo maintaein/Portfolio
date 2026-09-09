@@ -29,6 +29,27 @@ const ProjectModal = dynamic(
 
 const N = projects.length;
 
+// history.state에서 projectModalId 키만 걷어내고 나머지 필드(Next.js가
+// 쓰는 것 포함)는 그대로 둔다. state가 객체가 아니면 빈 객체로 시작한다
+function stripProjectModalId(state: unknown): Record<string, unknown> {
+  const base: Record<string, unknown> =
+    state && typeof state === 'object' ? { ...(state as Record<string, unknown>) } : {};
+  delete base.projectModalId;
+  return base;
+}
+
+// mount와 popstate가 공용하는 순수 판정. history를 읽지도 쓰지도 않고
+// 인자만 본다 — 두 경로가 갈리면 새로고침 복구와 뒤로가기 복구가
+// 다르게 동작한다(계획 5 T2 Task 9)
+export function reconcileProjectModal(historyState: unknown): string | null {
+  if (!historyState || typeof historyState !== 'object') return null;
+  const id = (historyState as Record<string, unknown>).projectModalId;
+  if (typeof id !== 'string') return null;
+  const project = projects.find((p) => p.title === id);
+  if (!project || !isProjectModalReady(project)) return null;
+  return id;
+}
+
 // 카드 4개(또는 그 미만)만 재사용하고 슬롯 k -> projects[(active + k) % N]로
 // 내용만 갈아 끼운다. 정본은 .claude/designRefactoring/2026-09-09-t2-implementation-spec.md §4
 const LINE = 'rgb(255 255 255 / 0.08)';
@@ -47,7 +68,13 @@ export default function ProjectsSection() {
 
   const slotRefs = useRef<(HTMLElement | null)[]>([]);
   const chipRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const sectionRef = useRef<HTMLElement | null>(null);
   const prevActiveRef = useRef(activeIndex);
+  // 지금 열린 모달이 우리가 pushState한 항목인지 기억한다. 새로고침으로
+  // 복구된 모달(우리가 push한 적 없는 항목)을 history.back()으로 닫으면
+  // 직전 항목이 우리 사이트가 아닐 수 있어 페이지를 떠난다 — 그래서
+  // pushedRef가 false일 때는 back() 대신 replaceState로 키만 지운다
+  const pushedRef = useRef(false);
 
   const activeProject = projects[activeIndex];
   const videoList = useMemo(
@@ -126,6 +153,60 @@ export default function ProjectsSection() {
     setProjectModalObscured(modalOpen);
   }, [modalOpen]);
 
+  // 모달을 닫으면 Modal atom이 포커스를 opener로 돌려주려 하지만, 그 정리가
+  // 도는 시점에는 셸의 격리 속성이 아직 안 벗겨졌다. 바로 위 effect가 그보다
+  // 뒤에 돌기 때문이다. 그래서 atom은 opener가 갇혀 있다고 보고 포기하고,
+  // 포커스는 사라진 닫기 버튼과 함께 문서 바닥으로 떨어진다. 한 프레임 뒤
+  // 격리가 걷힌 다음 여기서 직접 돌려준다.
+  // wasOpenRef가 없으면 첫 mount에서도 돌아 페이지를 열자마자 Projects
+  // 카드로 포커스를 훔쳐 간다
+  const wasOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (modalOpen) {
+      wasOpenRef.current = true;
+      return;
+    }
+    if (!wasOpenRef.current) return;
+    wasOpenRef.current = false;
+
+    const raf = requestAnimationFrame(() => {
+      const opener = slotRefs.current[0];
+      const usable =
+        !!opener?.isConnected && !opener.closest('[inert], [aria-hidden="true"]');
+      const fallback = sectionRef.current?.closest<HTMLElement>('[data-section]') ?? null;
+      (usable ? opener : fallback)?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [modalOpen]);
+
+  // modal-only History. mount와 단일 popstate 구독이 같은 함수
+  // (applyReconciliation)를 쓴다 — 새로고침 복구와 뒤로가기 복구가 갈리지
+  // 않게 하는 것이 이 배선의 요점이다. 유효한 id면 그 프로젝트로
+  // activeIndex를 맞추고 모달을 열 뿐 push도 replace도 하지 않는다.
+  // 무효한 id는 그 키만 replaceState로 지운다
+  useEffect(() => {
+    const applyReconciliation = () => {
+      const state = window.history.state;
+      const id = reconcileProjectModal(state);
+      if (id) {
+        const idx = projects.findIndex((p) => p.title === id);
+        if (idx !== -1) setActiveIndex(idx);
+        setModalOpen(true);
+      } else {
+        setModalOpen(false);
+        if (state && typeof state === 'object' && 'projectModalId' in (state as object)) {
+          window.history.replaceState(stripProjectModalId(state), '', window.location.hash);
+        }
+      }
+      pushedRef.current = false;
+    };
+
+    applyReconciliation();
+    window.addEventListener('popstate', applyReconciliation);
+    return () => window.removeEventListener('popstate', applyReconciliation);
+  }, []);
+
   // 슬롯 k의 목표 위치는 활성 카드가 바뀌어도 그대로다(위치는 slot에만 매인다).
   // 그래서 CSS transition만으로는 안 움직인다. 팬텀(한 칸 뒤) 위치로 순간 이동시킨
   // 뒤 목표로 되돌려 보내야 "한 칸 밀려온" 것처럼 보인다. geo만 바뀐 리렌더(리사이즈)는
@@ -171,8 +252,33 @@ export default function ProjectsSection() {
     };
   }, [activeIndex, geo, reducedMotion]);
 
-  const openModal = useCallback(() => setModalOpen(true), []);
-  const closeModal = useCallback(() => setModalOpen(false), []);
+  const openModal = useCallback(() => {
+    // 기존 state를 펼쳐 담는다 — Next.js가 쓰는 필드를 날리면 안 된다
+    window.history.pushState(
+      { ...window.history.state, projectModalId: activeProject.title },
+      '',
+      window.location.hash
+    );
+    pushedRef.current = true;
+    setModalOpen(true);
+  }, [activeProject]);
+
+  const closeModal = useCallback(() => {
+    if (pushedRef.current) {
+      // 우리가 push한 항목이다 — 그 앞 항목은 항상 우리 사이트다
+      window.history.back();
+    } else {
+      // 새로고침으로 복구된 모달이다. 앞 항목이 우리 사이트가 아닐 수
+      // 있으므로 back() 대신 키만 지운다
+      window.history.replaceState(
+        stripProjectModalId(window.history.state),
+        '',
+        window.location.hash
+      );
+    }
+    pushedRef.current = false;
+    setModalOpen(false);
+  }, []);
 
   const goTo = useCallback((next: number) => {
     setActiveIndex(next);
@@ -200,6 +306,7 @@ export default function ProjectsSection() {
 
   return (
     <section
+      ref={sectionRef}
       id={SECTION_IDS.PROJECTS}
       className="py-20 px-10 flex flex-col items-center"
     >
