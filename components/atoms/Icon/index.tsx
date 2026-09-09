@@ -10,6 +10,10 @@ type IconName =
   | 'arrow-left'
   | 'chevron-down'
   | 'chevron-up'
+  | 'play'
+  | 'pause'
+  | 'chevron-left'
+  | 'chevron-right'
   | 'menu'
   | 'search'
   | 'user'
@@ -102,6 +106,38 @@ const icons: Record<IconName, React.ReactNode> = {
       strokeLinejoin="round"
       strokeWidth={2}
       d="M5 15l7-7 7 7"
+    />
+  ),
+  play: (
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z"
+    />
+  ),
+  pause: (
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M15.75 5.25v13.5m-7.5-13.5v13.5"
+    />
+  ),
+  'chevron-left': (
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M15.75 19.5 8.25 12l7.5-7.5"
+    />
+  ),
+  'chevron-right': (
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="m8.25 4.5 7.5 7.5-7.5 7.5"
     />
   ),
   menu: (

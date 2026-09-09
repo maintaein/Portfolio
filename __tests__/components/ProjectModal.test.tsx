@@ -12,6 +12,11 @@ const SOURCE = readFileSync(
   'utf8'
 );
 
+const ICON_SOURCE = readFileSync(
+  resolve(process.cwd(), 'components/atoms/Icon/index.tsx'),
+  'utf8'
+);
+
 const project = projects.find((p) => p.title === 'AlphaMail')!;
 
 beforeEach(() => {
@@ -386,5 +391,42 @@ describe('ProjectModal 좁은 판 여백과 높이', () => {
     // role=dialog까지 :has()로 짚어 height:100%를 준다. #pm-shell 자체의
     // height:100%(기존 규칙)만으로는 조상이 auto라 풀린다
     expect(media).toMatch(/\[role="dialog"\][^{]*\{[^}]*height:\s*100%/);
+  });
+});
+
+describe('ProjectModal 아이콘과 글자 크기 한 칸 내리기', () => {
+  // Icon 아톰에 재생 계열 이름 넷이 실제로 등록됐는지를 잠근다. 아톰이
+  // outline만 그리므로 solid path가 잘못 섞여도 이 검사로는 못 잡지만,
+  // 최소한 이름 자체가 유니온에서 빠지는 회귀는 여기서 걸린다
+  it('Icon 아톰에 play·pause·chevron-left·chevron-right가 있다', () => {
+    for (const name of ['play', 'pause', 'chevron-left', 'chevron-right']) {
+      expect(ICON_SOURCE).toContain(`'${name}'`);
+    }
+  });
+
+  // 재생/정지/화살표를 글자로 때우던 자리를 아이콘으로 갈아 끼웠다.
+  // 글립 문자가 소스에 남아 있으면 아이콘 대신 문자를 다시 쓴 것이다
+  it('재생·정지·화살표 글립 문자가 더는 소스에 없다', () => {
+    expect(SOURCE).not.toContain('‹'); // ‹
+    expect(SOURCE).not.toContain('›'); // ›
+    expect(SOURCE).not.toContain('▶'); // ▶
+    expect(SOURCE).not.toMatch(/\|\s\|/); // 정지 표시로 쓰던 파이프 두 개
+  });
+
+  // 램프를 한 칸씩 내렸다. 제목은 실제로 그려진 class로 잠근다.
+  // 이 잠금은 cn이 크기 클래스를 색과 헷갈려 지워 버리는 회귀도 같이 잡는다
+  it('제목이 램프 한 칸 내려간 t3으로 그려진다', () => {
+    renderModal();
+    const heading = screen.getByRole('heading', { name: project.title });
+    const classes = heading.className.split(/ +/);
+    expect(classes).toContain('text-t3');
+    expect(classes).not.toContain('text-t2');
+  });
+
+  // 데스크톱 제목이 t3(22px)이 되면서 좁은 화면 전용 22px 축소 규칙은
+  // 아무 일도 하지 않는다. NARROW_PANEL_CSS의 다른 규칙(pm-cap-name 등)은
+  // 여전히 22px을 쓰므로 head h2로 좁혀서 확인한다
+  it('NARROW_PANEL_CSS에 head h2 font-size 규칙이 남지 않는다', () => {
+    expect(SOURCE).not.toMatch(/\[data-modal-part="head"\]\s*h2\s*\{[^}]*font-size/);
   });
 });

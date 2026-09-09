@@ -40,7 +40,7 @@ function SubStep({ children, axis = false }: { children: React.ReactNode; axis?:
   return (
     <h4
       className={cn(
-        'relative mt-[34px] text-t6 font-bold tracking-[0.02em]',
+        'relative mt-[34px] text-t7 font-bold tracking-[0.02em]',
         axis &&
           cn(
             'pm-substep-dot',
@@ -107,7 +107,6 @@ const NARROW_PANEL_CSS = `
     padding-left: calc(max(0px, (100% - 700px) / 2) + 20px);
     padding-right: calc(max(0px, (100% - 700px) / 2) + 12px);
   }
-  #pm-shell [data-modal-part="head"] h2 { font-size: 22px; }
 
   #pm-shell [data-modal-panel="1"] { display: contents; }
   #pm-shell [data-modal-panel="1"] > * { display: none; }
@@ -275,7 +274,7 @@ export default function ProjectModal({ isOpen, onClose, project }: ProjectModalP
             LINE
           )}
         >
-          <h2 id="pm-title" className={cn('truncate text-t2 font-bold tracking-[-0.02em]', T1)}>
+          <h2 id="pm-title" className={cn('truncate text-t3 font-bold tracking-[-0.02em]', T1)}>
             {project.title}
           </h2>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -285,7 +284,7 @@ export default function ProjectModal({ isOpen, onClose, project }: ProjectModalP
                 target="_blank"
                 rel="noopener noreferrer"
                 className={cn(
-                  'grid h-11 place-items-center rounded-lg border px-3.5 text-t6 font-semibold',
+                  'grid h-11 place-items-center rounded-lg border px-3.5 text-t7 font-semibold',
                   'transition-colors hover:bg-[rgb(255_255_255_/_0.06)] hover:text-[var(--color-text-primary)]',
                   'hover:border-[var(--color-cyan-core)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-cyan-hi)]',
                   LINE_STRONG,
@@ -378,12 +377,12 @@ export default function ProjectModal({ isOpen, onClose, project }: ProjectModalP
                   aria-label="이전 기능 영상"
                   className={cn(
                     'pm-vidnav absolute left-2 top-1/2 hidden h-8 w-8 -translate-y-1/2 place-items-center',
-                    'rounded-full bg-[rgb(0_0_0_/_0.55)] pb-[3px] text-t3 font-bold',
+                    'rounded-full bg-[rgb(0_0_0_/_0.55)]',
                     'hover:bg-[rgb(0_0_0_/_0.75)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-cyan-hi)]',
                     T1
                   )}
                 >
-                  <span aria-hidden>{'‹'}</span>
+                  <Icon name="chevron-left" size="small" />
                 </button>
                 <button
                   type="button"
@@ -391,12 +390,12 @@ export default function ProjectModal({ isOpen, onClose, project }: ProjectModalP
                   aria-label="다음 기능 영상"
                   className={cn(
                     'pm-vidnav absolute right-2 top-1/2 hidden h-8 w-8 -translate-y-1/2 place-items-center',
-                    'rounded-full bg-[rgb(0_0_0_/_0.55)] pb-[3px] text-t3 font-bold',
+                    'rounded-full bg-[rgb(0_0_0_/_0.55)]',
                     'hover:bg-[rgb(0_0_0_/_0.75)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-cyan-hi)]',
                     T1
                   )}
                 >
-                  <span aria-hidden>{'›'}</span>
+                  <Icon name="chevron-right" size="small" />
                 </button>
               </>
             )}
@@ -410,13 +409,13 @@ export default function ProjectModal({ isOpen, onClose, project }: ProjectModalP
                   'absolute bottom-[10px] right-[10px] grid h-9 w-9 place-items-center rounded-full',
                   'after:absolute after:left-1/2 after:top-1/2 after:h-11 after:w-11 after:-translate-x-1/2',
                   'after:-translate-y-1/2 after:content-[""]',
-                  'bg-[rgb(0_0_0_/_0.72)] border text-t8',
+                  'bg-[rgb(0_0_0_/_0.72)] border',
                   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)]',
                   LINE_STRONG,
                   T1
                 )}
               >
-                <span aria-hidden>{playing ? '| |' : '▶'}</span>
+                <Icon name={playing ? 'pause' : 'play'} size="small" />
               </button>
             )}
           </div>
@@ -428,18 +427,18 @@ export default function ProjectModal({ isOpen, onClose, project }: ProjectModalP
               className={cn('mt-3 flex items-start justify-between gap-6 border-t pt-3', LINE)}
             >
               <div className="min-w-0">
-                <p className={cn('pm-cap-label text-t6 font-bold tracking-[0.02em]', T2)}>구현 기능</p>
+                <p className={cn('pm-cap-label text-t7 font-bold tracking-[0.02em]', T2)}>구현 기능</p>
                 <p
                   className={cn(
-                    'pm-cap-name mt-0.5 text-t2 font-bold leading-[1.25] tracking-[-0.02em]',
+                    'pm-cap-name mt-0.5 text-t3 font-bold leading-[1.25] tracking-[-0.02em]',
                     T1
                   )}
                 >
                   {active.category}
                 </p>
-                <p className={cn('mt-1 text-t5 leading-[1.55]', T2)}>{active.items[0]}</p>
+                <p className={cn('mt-1 text-t6 leading-[1.55]', T2)}>{active.items[0]}</p>
               </div>
-              <p className={cn('pm-vidx flex-none text-t6 font-bold tabular-nums tracking-[0.08em]', T3)}>
+              <p className={cn('pm-vidx flex-none text-t7 font-bold tabular-nums tracking-[0.08em]', T3)}>
                 <b className={T2}>{String(feat + 1).padStart(2, '0')}</b> /{' '}
                 {String(impls.length).padStart(2, '0')}
               </p>
@@ -457,13 +456,13 @@ export default function ProjectModal({ isOpen, onClose, project }: ProjectModalP
             {project.subtitle && (
               <p
                 data-modal-field="sub"
-                className={cn('text-t3 font-semibold leading-[1.45] tracking-[-0.01em]', T1)}
+                className={cn('text-t5 font-semibold leading-[1.45] tracking-[-0.01em]', T1)}
               >
                 {project.subtitle}
               </p>
             )}
             {metaLine.length > 0 && (
-              <p data-modal-field="meta" className={cn('mt-2.5 text-t6 tracking-[0.02em]', T2)}>
+              <p data-modal-field="meta" className={cn('mt-2.5 text-t7 tracking-[0.02em]', T2)}>
                 {project.duration}
                 {project.role && (
                   <>
@@ -479,19 +478,19 @@ export default function ProjectModal({ isOpen, onClose, project }: ProjectModalP
 
             <p
               data-modal-field="step"
-              className={cn('mb-3.5 mt-5 flex items-center gap-2 text-t5 font-bold tracking-[-0.01em]', T1)}
+              className={cn('mb-3.5 mt-5 flex items-center gap-2 text-t6 font-bold tracking-[-0.01em]', T1)}
             >
               <span aria-hidden className="h-1.5 w-1.5 flex-none rounded-full bg-[var(--color-cyan-core)]" />
               프로젝트
             </p>
             <h3
               data-modal-field="claim"
-              className={cn('text-t2 font-bold leading-[1.25] tracking-[-0.02em]', T1)}
+              className={cn('text-t3 font-bold leading-[1.25] tracking-[-0.02em]', T1)}
             >
               {motivation.claim}
             </h3>
             {motivation.body && (
-              <div data-modal-field="body" className={cn('mt-3.5 text-t5 leading-[1.75]', T2)}>
+              <div data-modal-field="body" className={cn('mt-3.5 text-t6 leading-[1.75]', T2)}>
                 <RichText text={motivation.body} />
               </div>
             )}
@@ -517,7 +516,7 @@ export default function ProjectModal({ isOpen, onClose, project }: ProjectModalP
                       >
                         <span
                           className={cn(
-                            'text-t6 font-bold tabular-nums tracking-[0.04em]',
+                            'text-t7 font-bold tabular-nums tracking-[0.04em]',
                             isActive ? T1 : T3
                           )}
                         >
@@ -525,11 +524,11 @@ export default function ProjectModal({ isOpen, onClose, project }: ProjectModalP
                         </span>
                         <span>
                           <span
-                            className={cn('block text-t5 font-semibold leading-[1.45]', isActive ? T1 : T2)}
+                            className={cn('block text-t6 font-semibold leading-[1.45]', isActive ? T1 : T2)}
                           >
                             {impl.category}
                           </span>
-                          <span className={cn('mt-1 block text-t5 leading-[1.6]', isActive ? T2 : T3)}>
+                          <span className={cn('mt-1 block text-t6 leading-[1.6]', isActive ? T2 : T3)}>
                             {impl.items[0]}
                           </span>
                         </span>
@@ -545,7 +544,7 @@ export default function ProjectModal({ isOpen, onClose, project }: ProjectModalP
                 {project.tags.map((tag) => (
                   <span
                     key={tag}
-                    className={cn('rounded-full bg-[rgb(255_255_255_/_0.06)] px-2.5 py-1 text-t7 leading-[1.4]', T2)}
+                    className={cn('rounded-full bg-[rgb(255_255_255_/_0.06)] px-2.5 py-1 text-t8 leading-[1.4]', T2)}
                   >
                     {tag}
                   </span>
@@ -564,7 +563,7 @@ export default function ProjectModal({ isOpen, onClose, project }: ProjectModalP
             />
             <p
               data-modal-field="step"
-              className={cn('mb-3.5 flex items-center gap-2 text-t5 font-bold tracking-[-0.01em]', T1)}
+              className={cn('mb-3.5 flex items-center gap-2 text-t6 font-bold tracking-[-0.01em]', T1)}
             >
               <span aria-hidden className="h-1.5 w-1.5 flex-none rounded-full bg-[var(--color-cyan-core)]" />
               트러블 슈팅
@@ -573,12 +572,12 @@ export default function ProjectModal({ isOpen, onClose, project }: ProjectModalP
               <>
                 <h3
                   data-modal-field="claim"
-                  className={cn('text-t2 font-bold leading-[1.25] tracking-[-0.02em]', T1)}
+                  className={cn('text-t3 font-bold leading-[1.25] tracking-[-0.02em]', T1)}
                 >
                   {review.title}
                 </h3>
                 {review.problem && (
-                  <div data-modal-field="body" className={cn('mt-3.5 text-t5 leading-[1.75]', T2)}>
+                  <div data-modal-field="body" className={cn('mt-3.5 text-t6 leading-[1.75]', T2)}>
                     <RichText text={review.problem} />
                   </div>
                 )}
@@ -587,10 +586,10 @@ export default function ProjectModal({ isOpen, onClose, project }: ProjectModalP
                   <>
                     <SubStep axis>진단</SubStep>
                     <div data-modal-field="diagnosis">
-                      <p className={cn('mt-4 text-t5 font-semibold leading-[1.5]', T1)}>
+                      <p className={cn('mt-4 text-t6 font-semibold leading-[1.5]', T1)}>
                         {diagnosis.name}
                       </p>
-                      <div className={cn('mt-1.5 text-t5 leading-[1.7]', T2)}>
+                      <div className={cn('mt-1.5 text-t6 leading-[1.7]', T2)}>
                         <RichText text={diagnosis.body} />
                       </div>
                     </div>
@@ -627,13 +626,13 @@ export default function ProjectModal({ isOpen, onClose, project }: ProjectModalP
                           <div>
                             <p
                               className={cn(
-                                'text-t5 font-semibold leading-[1.4]',
+                                'text-t6 font-semibold leading-[1.4]',
                                 option.chosen ? T1 : T2
                               )}
                             >
                               {option.name}
                               {option.chosen && (
-                                <span className={cn('ml-2 text-t7 font-bold tracking-[0.08em]', T1)}>
+                                <span className={cn('ml-2 text-t8 font-bold tracking-[0.08em]', T1)}>
                                   선택
                                 </span>
                               )}
@@ -642,7 +641,7 @@ export default function ProjectModal({ isOpen, onClose, project }: ProjectModalP
                                 p로 감싸면 브라우저가 p를 먼저 닫아 줄이 흐트러진다 */}
                             <div
                               className={cn(
-                                'mt-1 text-t5 leading-[1.65]',
+                                'mt-1 text-t6 leading-[1.65]',
                                 option.chosen ? T2 : T3
                               )}
                             >
@@ -658,7 +657,7 @@ export default function ProjectModal({ isOpen, onClose, project }: ProjectModalP
                 {review.action && review.action.length > 0 && (
                   <>
                     <SubStep axis>작업 사항</SubStep>
-                    <ul data-modal-field="did" className={cn('mt-4 space-y-2 text-t5 leading-[1.75]', T2)}>
+                    <ul data-modal-field="did" className={cn('mt-4 space-y-2 text-t6 leading-[1.75]', T2)}>
                       {review.action.map((item, i) => (
                         <li
                           key={i}
@@ -675,11 +674,11 @@ export default function ProjectModal({ isOpen, onClose, project }: ProjectModalP
                   <>
                     <SubStep axis>결과</SubStep>
                     <div data-modal-field="metric" className="mt-4">
-                      <p className={cn('text-t1 font-bold leading-[1.15] tabular-nums tracking-[-0.02em]', T1)}>
+                      <p className={cn('text-t2 font-bold leading-[1.15] tabular-nums tracking-[-0.02em]', T1)}>
                         {metric.after}
                       </p>
                       {metric.measuredBy && (
-                        <p className={cn('mt-1.5 text-t5 leading-[1.7]', T2)}>{metric.measuredBy}</p>
+                        <p className={cn('mt-1.5 text-t6 leading-[1.7]', T2)}>{metric.measuredBy}</p>
                       )}
                     </div>
                   </>
@@ -688,7 +687,7 @@ export default function ProjectModal({ isOpen, onClose, project }: ProjectModalP
                 {review.tradeOffs && review.tradeOffs.length > 0 && (
                   <>
                     <SubStep axis>트레이드 오프</SubStep>
-                    <ul data-modal-field="cost" className={cn('mt-4 space-y-2.5 text-t5 leading-[1.7]', T3)}>
+                    <ul data-modal-field="cost" className={cn('mt-4 space-y-2.5 text-t6 leading-[1.7]', T3)}>
                       {review.tradeOffs.map((item, i) => (
                         <li
                           key={i}
