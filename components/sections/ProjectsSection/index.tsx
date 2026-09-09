@@ -53,6 +53,12 @@ const FLIP_DURATION_MS = 500;
 const SHELL_BG = 'rgba(6, 8, 10, 0.97)';
 const SHELL_BG_CLEAR = 'rgba(6, 8, 10, 0)';
 
+// 셸 배경이 차오르는 구간은 비행의 앞 60%다. 비행 중반에 셸이 아직
+// 반투명하면 뒤에 있는 접힘 섹션 글자가 날아가는 이미지 너머로 비친다.
+// 닫기는 이것을 정확히 뒤집어 비행의 뒤 60%에 뺀다
+const SHELL_FADE_MS = FLIP_DURATION_MS * 0.6;
+const SHELL_FADE_OUT_DELAY_MS = FLIP_DURATION_MS - SHELL_FADE_MS;
+
 // FLIP은 섹션이 두 열로 서는 lg(1024) 위에서만 태운다. 비행의 출발 기하가
 // 섹션의 접힘 프리뷰이므로 모달이 아니라 섹션 쪽 경계를 쓴다
 const WIDE_QUERY = '(min-width: 1024px)';
@@ -68,23 +74,18 @@ function asKillable(value: unknown): { kill: () => void } | null {
 // 비행 동안 stage와 셸 사이 조상들의 자르기를 걷어야 한다. 증거 열에 걸린
 // overflow-hidden이, 접힘 프리뷰 자리에 있는 비행 초반(펼치기)·후반(닫기)의
 // stage를 잘라내기 때문이다. 셸 자신은 뷰포트 전체라 자를 게 없고 건드리면
-// 스크롤바가 생길 수 있어 뺀다. 올라가는 김에 같은 층의 형제(크롬 페이드
-// 대상)도 함께 모은다 - data-modal-part 이름에 기대지 않으므로 모달 구조가
-// 바뀌어도 따라간다
-function collectFlightNodes(stageEl: Element, shellEl: Element) {
-  const chrome: Element[] = [];
+// 스크롤바가 생길 수 있어 뺀다. data-modal-part 이름에 기대지 않으므로 모달
+// 구조가 바뀌어도 따라간다
+function collectClippedAncestors(stageEl: Element, shellEl: Element): Element[] {
   const clipped: Element[] = [];
   for (
-    let node: Element | null = stageEl;
+    let node: Element | null = stageEl.parentElement;
     node && node !== shellEl;
     node = node.parentElement
   ) {
-    if (node !== stageEl) clipped.push(node);
-    for (const sib of Array.from(node.parentElement?.children ?? [])) {
-      if (sib !== node) chrome.push(sib);
-    }
+    clipped.push(node);
   }
-  return { chrome, clipped };
+  return clipped;
 }
 
 export default function ProjectsSection() {
@@ -92,6 +93,10 @@ export default function ProjectsSection() {
     useSectionActivity();
   const [activeIndex, setActiveIndex] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
+  // 상세 판 내용의 등장 소유권은 ProjectModal에 있다. 여기는 비행과 셸 배경과
+  // 배경 알림만 갖고, 안무가 언제 시작하는지만 이 값으로 알린다.
+  // null = 안무 없음(관문이 닫힌 경로), false = 비행 중, true = 등장
+  const [revealed, setRevealed] = useState<boolean | null>(null);
 
   const nameRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const sectionRef = useRef<HTMLElement | null>(null);
@@ -106,6 +111,9 @@ export default function ProjectsSection() {
   const gsapModuleRef = useRef<typeof import('@/lib/gsap') | null>(null);
   const pendingFlipStateRef = useRef<Flip.FlipState | null>(null);
   const flightRef = useRef<{ kill: () => void } | null>(null);
+  // 붕괴가 끝나기를 기다렸다 닫기 비행을 띄우는 예약. setTimeout이 아니라
+  // GSAP 시계를 쓴다 - 탭이 백그라운드에 갔다 와도 타임라인과 안 어긋난다
+  const collapseCallRef = useRef<{ kill: () => void } | null>(null);
   // 비행 500ms 동안 모달은 아직 열려 있고 포커스 트랩도 살아 있다. Escape를
   // 또 누르거나 배경을 또 클릭하면 closeModal이 다시 불린다
   const closingRef = useRef(false);
@@ -200,12 +208,17 @@ export default function ProjectsSection() {
     closingRef.current = false;
     flightRef.current?.kill();
     flightRef.current = null;
+    // 붕괴를 기다리던 예약이 남아 있으면 사라진 stage로 비행을 띄운다
+    collapseCallRef.current?.kill();
+    collapseCallRef.current = null;
+    setRevealed(null);
   }, [modalOpen]);
 
   // 비행 도중 컴포넌트가 통째로 사라지는 경우
   useEffect(
     () => () => {
       flightRef.current?.kill();
+      collapseCallRef.current?.kill();
     },
     []
   );
@@ -298,6 +311,9 @@ export default function ProjectsSection() {
         if (nameHandle === undefined) delete nameEl.dataset.flipId;
         else nameEl.dataset.flipId = nameHandle;
       }
+      // 비행을 실제로 태울 수 있을 때만 내용을 감춘다. 관문이 닫혔으면
+      // null로 둬서 상세 판이 처음부터 그냥 보이게 한다
+      setRevealed(pendingFlipStateRef.current ? false : null);
       // 기존 state를 펼쳐 담는다 — Next.js가 쓰는 필드를 날리면 안 된다
       window.history.pushState(
         { ...window.history.state, projectModalId: projects[i].title },
@@ -344,31 +360,41 @@ export default function ProjectsSection() {
     }
 
     closingRef.current = true;
-    const seconds = FLIP_DURATION_MS / 1000;
-    const shellEl = document.getElementById('pm-shell');
-    const { chrome, clipped } = shellEl
-      ? collectFlightNodes(stageEl, shellEl)
-      : { chrome: [] as Element[], clipped: [] as Element[] };
+    // 0ms: 붕괴 시작. 내용 접기는 ProjectModal이 갖는다
+    setRevealed(false);
 
-    mod.gsap.set(clipped, { overflow: 'visible' });
-    mod.gsap.to(chrome, { opacity: 0, duration: seconds, ease: mod.SITE_EASE });
-    if (shellEl) {
-      mod.gsap.to(shellEl, {
-        backgroundColor: SHELL_BG_CLEAR,
-        duration: seconds,
-        ease: mod.SITE_EASE,
-      });
-    }
+    collapseCallRef.current = asKillable(
+      mod.gsap.delayedCall(mod.REVEAL_OUT_MS / 1000, () => {
+        collapseCallRef.current = null;
+        // 배경 복원은 비행과 같은 시점에 시작한다. finishClose를 통해
+        // 간접적으로 두면 착지한 뒤에야 돌아와 열기와 대칭이 아니다
+        setProjectModalObscured(false);
 
-    flightRef.current = asKillable(
-      mod.Flip.fit(stageEl, previewEl, {
-        duration: seconds,
-        ease: mod.SITE_EASE,
-        scale: true,
-        onComplete: () => {
-          mod.gsap.set(clipped, { clearProps: 'overflow' });
-          finishClose();
-        },
+        const seconds = FLIP_DURATION_MS / 1000;
+        const shellEl = document.getElementById('pm-shell');
+        const clipped = shellEl ? collectClippedAncestors(stageEl, shellEl) : [];
+
+        mod.gsap.set(clipped, { overflow: 'visible' });
+        if (shellEl) {
+          mod.gsap.to(shellEl, {
+            backgroundColor: SHELL_BG_CLEAR,
+            duration: SHELL_FADE_MS / 1000,
+            delay: SHELL_FADE_OUT_DELAY_MS / 1000,
+            ease: mod.SITE_EASE,
+          });
+        }
+
+        flightRef.current = asKillable(
+          mod.Flip.fit(stageEl, previewEl, {
+            duration: seconds,
+            ease: mod.SITE_EASE,
+            scale: true,
+            onComplete: () => {
+              mod.gsap.set(clipped, { clearProps: 'overflow' });
+              finishClose();
+            },
+          })
+        );
       })
     );
   }, [finishClose, flipModule]);
@@ -381,12 +407,19 @@ export default function ProjectsSection() {
     const state = pendingFlipStateRef.current;
     pendingFlipStateRef.current = null;
     const mod = gsapModuleRef.current;
-    if (!el || !state || !mod) return;
+    if (!el) return;
     const shellEl = document.getElementById('pm-shell');
-    if (!shellEl) return;
+    // 비행을 못 태우는 자리에서 감춘 채로 남겨두면 상세 판이 영영 안 보인다.
+    // 다만 이미 비행이 돌고 있으면 등장은 그 비행의 onComplete 몫이다 -
+    // 이 콜백 ref가 한 번 더 불리면 state는 이미 소진돼 null이라, 여기서
+    // 등장을 열면 날아가는 이미지 너머로 논증 열이 다 그려진 채 착지한다
+    if (!state || !mod || !shellEl) {
+      if (!flightRef.current) setRevealed(true);
+      return;
+    }
 
     const seconds = FLIP_DURATION_MS / 1000;
-    const { chrome, clipped } = collectFlightNodes(el, shellEl);
+    const clipped = collectClippedAncestors(el, shellEl);
     mod.gsap.set(clipped, { overflow: 'visible' });
 
     // targets를 명시해야 한다. 넘기지 않으면 GSAP은 상태를 뜬 접힘 노드를
@@ -401,23 +434,21 @@ export default function ProjectsSection() {
         absolute: true,
         onComplete: () => {
           mod.gsap.set(clipped, { clearProps: 'overflow' });
+          // 비행이 끝난 뒤에 내용이 등장한다. 동시에 하면 날아가는 이미지
+          // 너머로 논증 열이 이미 다 그려진 채 착지한다
+          setRevealed(true);
         },
       })
     );
 
-    // 크롬 안무. stage 자신은 끝까지 불투명하게 둔다 - 착지 순간 접힘 프리뷰와
-    // 같은 사각형에 있어야 교대가 눈에 안 띈다. 같이 페이드하면 유령이 겹친다
-    mod.gsap.fromTo(
-      chrome,
-      { opacity: 0 },
-      { opacity: 1, duration: seconds, ease: mod.SITE_EASE, clearProps: 'opacity' }
-    );
+    // stage 자신은 끝까지 불투명하게 둔다 - 착지 순간 접힘 프리뷰와 같은
+    // 사각형에 있어야 교대가 눈에 안 띈다. 같이 페이드하면 유령이 겹친다
     mod.gsap.fromTo(
       shellEl,
       { backgroundColor: SHELL_BG_CLEAR },
       {
         backgroundColor: SHELL_BG,
-        duration: seconds,
+        duration: SHELL_FADE_MS / 1000,
         ease: mod.SITE_EASE,
         clearProps: 'backgroundColor',
       }
@@ -584,6 +615,7 @@ export default function ProjectsSection() {
         onClose={closeModal}
         project={modalOpen ? activeProject : null}
         onStageMount={handleStageMount}
+        reveal={revealed}
       />
     </section>
   );

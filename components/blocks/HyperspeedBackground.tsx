@@ -117,6 +117,11 @@ const IDLE_SCALE_SECTION = 0.1;
 // 걸리고 그때는 배경 애니메이션을 볼 이유가 없으므로 감수한다. 실기기에서
 // 모달 여닫기가 무거우면 이 값을 낮추거나 감광으로 되돌린다.
 const OBSCURED_BLUR_PX = 8;
+// obscured 동안 배경 자신이 물러나는 감광 계수. 블러만 걸면 배경이 사라지는
+// 속도가 곧 모달 셸 배경이 차오르는 속도라, 배경이 제 걸음 없이 툭 꺼진
+// 것처럼 보인다. 밝기를 같이 빼면 배경이 스스로 뒤로 물러난다. 0으로
+// 떨어뜨리지 않는 것은 흐름이 완전히 죽으면 화면이 정지 이미지가 되기 때문이다
+const OBSCURED_OPACITY_SCALE = 0.35;
 
 // 컨텍스트 손실 뒤 씬을 다시 세워보는 횟수와 간격.
 //
@@ -270,20 +275,24 @@ export default function HyperspeedBackground({
   // heroRevealed와 무관하게 곧바로 최종 밝기로 보인다 — 재생할 부팅 자체가
   // 없는 경로에서 배경이 영원히 숨어 있으면 안 된다.
   const heroPending = active === OVERVIEW && !reducedMotion && !heroRevealed;
-  const opacity = heroPending
+  const baseOpacity = heroPending
     ? 0
     : active === OVERVIEW
       ? BASE_OPACITY_OVERVIEW
       : BASE_OPACITY_SECTION;
-  // obscured는 밝기가 아니라 초점만 건드린다. boost()·settle()도 그대로다.
+  // obscured는 초점과 밝기를 같이 건드린다. boost()·settle()은 그대로다 -
+  // 씬은 계속 돈다. rAF를 멈추면 재개 비용이 눈에 띄게 튄다.
+  const opacity = obscured ? baseOpacity * OBSCURED_OPACITY_SCALE : baseOpacity;
   const filter = obscured ? `blur(${OBSCURED_BLUR_PX}px)` : 'none';
   // 2차 감사 지적 — 이 래퍼에 전환이 없어 씬 청크가 풀리는 순간이나
   // heroRevealed가 뒤집히는 순간 캔버스가 튀어 들어왔다. opacity·filter
   // 둘 다 트랜지션을 걸어 모든 밝기·초점 변화가 페이드로 보이게 한다.
+  // 두 지속이 어긋나면 초점이 먼저 풀리고 밝기가 뒤따라 배경이 두 몸으로
+  // 움직인다. 같은 값으로 맞춰 한 몸으로 물러나게 한다.
   // reducedMotion에서는 전환 자체를 걸지 않는다(즉시 최종 상태).
   const transition = reducedMotion
     ? 'none'
-    : 'opacity var(--animate-duration-slow) ease-out, filter var(--animate-duration-base) ease-out';
+    : 'opacity var(--animate-duration-slow) ease-out, filter var(--animate-duration-slow) ease-out';
 
   return (
     <div

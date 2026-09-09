@@ -1,9 +1,18 @@
 import { describe, it, expect, vi } from 'vitest';
-import { SITE_EASE, SITE_EASE_CUBIC, registerGsap, Flip as LibFlip } from '@/lib/gsap';
+import {
+  SITE_EASE,
+  SITE_EASE_CUBIC,
+  REVEAL_IN_MS,
+  REVEAL_OUT_MS,
+  registerGsap,
+  Flip as LibFlip,
+  SplitText as LibSplitText,
+} from '@/lib/gsap';
 import gsap from 'gsap';
 import { CustomEase } from 'gsap/CustomEase';
 import { Flip } from 'gsap/Flip';
 import { MotionPathPlugin } from 'gsap/MotionPathPlugin';
+import { SplitText } from 'gsap/SplitText';
 
 // registerGsap이 이 파일 안에서 몇 번째 it()으로 처음 불리든 그 실제 등록 호출을
 // 놓치지 않기 위해, 어떤 it()보다도 먼저(모듈 평가 시점에) 스파이를 건다.
@@ -104,11 +113,26 @@ describe('lib/gsap', () => {
     expect(customEaseCreateSpy).toHaveBeenCalledTimes(1);
 
     const registeredPlugins = registerPluginSpy.mock.calls[0];
-    expect(registeredPlugins).toHaveLength(3);
-    expect(new Set(registeredPlugins)).toEqual(new Set([CustomEase, MotionPathPlugin, Flip]));
+    expect(registeredPlugins).toHaveLength(4);
+    expect(new Set(registeredPlugins)).toEqual(
+      new Set([CustomEase, MotionPathPlugin, Flip, SplitText])
+    );
   });
 
   it('lib/gsap가 재노출하는 Flip은 gsap/Flip과 동일한 참조다', () => {
     expect(LibFlip).toBe(Flip);
+  });
+
+  // 상세 판 등장 안무가 쓴다. 등록을 빠뜨리면 SplitText.create가 런타임에서만
+  // 터지므로 여기서 함께 못박는다
+  it('lib/gsap가 재노출하는 SplitText는 gsap/SplitText와 동일한 참조다', () => {
+    expect(LibSplitText).toBe(SplitText);
+  });
+
+  // 등장·퇴장 길이는 ProjectsSection과 ProjectModal이 같이 봐야 하는 숫자다.
+  // 퇴장이 등장보다 길면 닫기 안무가 비행보다 늦게 끝나 꼬리가 남는다
+  it('등장·퇴장 길이는 양수이고 퇴장이 등장보다 짧다', () => {
+    expect(REVEAL_OUT_MS).toBeGreaterThan(0);
+    expect(REVEAL_OUT_MS).toBeLessThan(REVEAL_IN_MS);
   });
 });

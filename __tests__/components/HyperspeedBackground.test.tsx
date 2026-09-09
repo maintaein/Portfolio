@@ -203,28 +203,61 @@ describe('HyperspeedBackground 밝기(overview 100%, 섹션 35%)와 obscured', (
     expect(root.style.opacity).toBe('0.35');
   });
 
-  // obscured는 감광이 아니라 블러다. 어둡게 하면 배경이 남색 덩어리로 죽는데
-  // 블러는 밝기를 유지한 채 시선만 모달로 보낸다. 그래서 opacity가 "변하지
-  // 않는 것"까지 함께 못박는다 — 감광으로 되돌아가면 이 어서션이 잡는다.
-  it('obscured=false→true→false는 초점만 바꾸고 밝기·boost·settle은 그대로다', async () => {
+  // obscured는 초점과 밝기를 같이 뺀다. 블러만 걸면 배경이 사라지는 속도가
+  // 곧 모달 셸 배경이 차오르는 속도라, 배경이 제 걸음 없이 툭 꺼진 것처럼
+  // 보인다. 다만 0으로 떨어뜨리지는 않는다 - 흐름이 죽으면 정지 이미지가 된다.
+  // 돌아올 때 정확히 baseline으로 복귀하는 것까지 양방향으로 못박는다.
+  it('obscured=false→true→false는 초점과 밝기를 같이 빼고 정확히 되돌린다', async () => {
     const { rerender } = await renderReady({ active: OVERVIEW, obscured: false });
     const root = screen.getByTestId('hyperspeed-background');
-    const baselineOpacity = root.style.opacity;
+    const baselineOpacity = Number(root.style.opacity);
+    expect(baselineOpacity).toBeGreaterThan(0);
     expect(root.style.filter).toBe('none');
     hyperspeedSpies.boost.mockClear();
     hyperspeedSpies.settle.mockClear();
 
     rerender(<HyperspeedBackground {...readyProps} active={OVERVIEW} obscured />);
     expect(root.style.filter).toMatch(/^blur\((\d|\.)+px\)$/);
-    expect(root.style.opacity).toBe(baselineOpacity);
+    // 물러나되 꺼지지는 않는다. 양옆을 다 막아야 계수가 1이나 0으로 새는 것을 잡는다
+    const obscuredOpacity = Number(root.style.opacity);
+    expect(obscuredOpacity).toBeGreaterThan(0);
+    expect(obscuredOpacity).toBeLessThan(baselineOpacity);
     expect(hyperspeedSpies.boost).not.toHaveBeenCalled();
     expect(hyperspeedSpies.settle).not.toHaveBeenCalled();
 
     rerender(<HyperspeedBackground {...readyProps} active={OVERVIEW} obscured={false} />);
     expect(root.style.filter).toBe('none');
-    expect(root.style.opacity).toBe(baselineOpacity);
+    expect(Number(root.style.opacity)).toBe(baselineOpacity);
     expect(hyperspeedSpies.boost).not.toHaveBeenCalled();
     expect(hyperspeedSpies.settle).not.toHaveBeenCalled();
+  });
+
+  // 밝기와 초점이 서로 다른 길이로 움직이면 초점이 먼저 풀리고 밝기가
+  // 뒤따라, 배경이 한 몸이 아니라 두 몸으로 움직인다.
+  it('밝기와 초점의 전환 길이가 같다 - 들어갈 때도 나올 때도', async () => {
+    const { rerender } = await renderReady({ active: OVERVIEW, obscured: false });
+    const root = screen.getByTestId('hyperspeed-background');
+
+    const durations = () =>
+      root.style.transition
+        .split(',')
+        .map((part) => part.trim())
+        .map((part) => {
+          const [property, ...rest] = part.split(/\s+/);
+          return { property, timing: rest.join(' ') };
+        });
+
+    for (const obscured of [true, false]) {
+      rerender(
+        <HyperspeedBackground {...readyProps} active={OVERVIEW} obscured={obscured} />
+      );
+      const parts = durations();
+      const opacityPart = parts.find((part) => part.property === 'opacity');
+      const filterPart = parts.find((part) => part.property === 'filter');
+      expect(opacityPart).toBeDefined();
+      expect(filterPart).toBeDefined();
+      expect(filterPart!.timing).toBe(opacityPart!.timing);
+    }
   });
 });
 

@@ -1,10 +1,25 @@
 // components/blocks/ProjectModal/index.tsx
 'use client';
 
-import { useEffect, useRef, useState, type TouchEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type TouchEvent,
+} from 'react';
 import Image from 'next/image';
 import Modal from '@/components/atoms/Modal';
 import Icon from '@/components/atoms/Icon';
+import {
+  gsap,
+  registerGsap,
+  REVEAL_IN_MS,
+  REVEAL_OUT_MS,
+  SITE_EASE,
+  SplitText,
+} from '@/lib/gsap';
 import { cn } from '@/lib/utils/cn';
 import { RichText } from '@/lib/utils/richText';
 import { parseAnalysisEntry, selectFeaturedReview } from '@/lib/utils/projectContract';
@@ -18,6 +33,10 @@ interface ProjectModalProps {
   // 펼침 stage가 DOM에 박히거나 빠지는 순간을 부모에게 알린다. 부모가 이 시점에
   // GSAP Flip을 태운다. 모달이 지연 로드라 부모의 layout effect로는 못 잡는다
   onStageMount?: (el: HTMLDivElement | null) => void;
+  // 내용의 등장·퇴장 소유권. null(또는 미전달)이면 안무가 없고 내용이 처음부터
+  // 그냥 보인다 - 좁은 화면, reducedMotion, gsap 미준비가 이 경로다.
+  // false는 비행 중(감춤), true는 등장 타임라인 한 번이다
+  reveal?: boolean | null;
 }
 
 // 색은 세 단만 쓴다. T1이 가장 밝고, T3가 검정 판 위에서 7.76:1을 지키는
@@ -182,7 +201,66 @@ const NARROW_PANEL_CSS = `
 }
 `;
 
-export default function ProjectModal({ isOpen, onClose, project, onStageMount }: ProjectModalProps) {
+// 감추는 단위 셋. 머리띠의 버튼 묶음, 논증 열, 증거 열 설명이다.
+// h2#pm-title과 [data-modal-part="stage"]는 비행 대상이라 여기 들어오지
+// 않는다 - 비행이 방금 앉혀 놓은 것을 다시 건드리면 튄다.
+//
+// 감추는 수단은 visibility다. display를 쓰면 레이아웃이 사라져 비행 착지
+// 좌표가 어긋나고, opacity 0은 안 보이는 채로 클릭·포커스가 되는 단추를
+// 남긴다. visibility는 접근성 트리에서도 같이 빠지므로 비행 500ms 동안
+// 아직 오지 않은 내용이 화면에도 스크린 리더에도 없다. Escape는 Modal
+// 아톰이 document에 걸어 두므로 이 구간에도 그대로 닫힌다
+function revealRoots(shell: HTMLElement): HTMLElement[] {
+  const head = shell.querySelector('[data-modal-part="head"]');
+  return [
+    ...(head
+      ? (Array.from(head.children).filter((el) => el.id !== 'pm-title') as HTMLElement[])
+      : []),
+    shell.querySelector<HTMLElement>('[data-modal-part="scroll"]'),
+    shell.querySelector<HTMLElement>('[data-modal-part="caption"]'),
+  ].filter((el): el is HTMLElement => el !== null);
+}
+
+// 등장 순서. 머리 -> 논증 열 DOM 순서 -> 증거 열 설명.
+function revealOrder(shell: HTMLElement): HTMLElement[] {
+  const head = shell.querySelector('[data-modal-part="head"]');
+  const scroll = shell.querySelector('[data-modal-part="scroll"]');
+  const caption = shell.querySelector<HTMLElement>('[data-modal-part="caption"]');
+  return [
+    ...(head
+      ? (Array.from(head.children).filter((el) => el.id !== 'pm-title') as HTMLElement[])
+      : []),
+    ...(scroll ? Array.from(scroll.querySelectorAll<HTMLElement>('[data-modal-field], h4')) : []),
+    ...(caption ? [caption] : []),
+  ];
+}
+
+// 단어로 쪼개 날아 들어오는 것은 주장과 부제뿐이다. 나머지는 통짜로 뜬다 -
+// RichText가 들어가는 블록은 안에 인라인 요소가 섞여 있어 쪼개면 깨진다.
+// 음절 단위 분해는 한국어를 낱자로 부수므로 어떤 대상에도 쓰지 않는다
+const WORDS_SELECTOR = '[data-modal-field="claim"], [data-modal-field="sub"]';
+
+// 등장 예산은 REVEAL_IN_MS 하나다. 가장 긴 트윈(단어)이 예산을 다 쓰도록
+// 남는 시간을 요소 간격과 단어 간격이 6:4로 나눠 갖는다 - 예산이 바뀌면
+// 두 상한이 같이 따라간다. 통짜 블록은 더 짧아서 언제나 예산 안이다
+const IN_S = REVEAL_IN_MS / 1000;
+const WORD_S = 0.5;
+const RISE_S = 0.45;
+const ELEM_STEP = 0.03;
+const WORD_STEP = 0.035;
+const ELEM_SPAN = (IN_S - WORD_S) * 0.6;
+const WORD_SPAN = (IN_S - WORD_S) * 0.4;
+// 논증 열에는 data-modal-field가 안 붙은 구조 블록(구현 기능 목록, 구분선,
+// 축선)이 섞여 있다. 열 자체를 짧게 페이드해 그것들이 t=0에 툭 서지 않게 한다
+const SCROLL_FADE_S = 0.3;
+
+export default function ProjectModal({
+  isOpen,
+  onClose,
+  project,
+  onStageMount,
+  reveal,
+}: ProjectModalProps) {
   const [feat, setFeat] = useState(0);
   // 자동재생 muted loop 영상의 정지 상태. WCAG 2.2.2가 5초 넘는 자동재생에
   // 정지 수단을 요구한다. 무대를 넘겨도(setFeat) 이 상태는 그대로 간다.
@@ -190,6 +268,11 @@ export default function ProjectModal({ isOpen, onClose, project, onStageMount }:
   const videoRefs = useRef<Array<HTMLVideoElement | null>>([]);
   // 좁은 판의 스와이프 시작 x좌표. 40px 임계를 넘으면 무대를 넘긴다.
   const touchStartXRef = useRef<number | null>(null);
+  const shellElRef = useRef<HTMLDivElement | null>(null);
+  // 콜백 ref는 커밋마다 최신 reveal을 봐야 한다. 렌더마다 갱신한다
+  const revealRef = useRef<boolean | null | undefined>(reveal);
+  revealRef.current = reveal;
+  const prevRevealRef = useRef<boolean | null | undefined>(undefined);
 
   // 프로젝트가 바뀔 때마다 무대를 첫 기능으로 되돌리고 재생을 재개한다.
   useEffect(() => {
@@ -212,6 +295,94 @@ export default function ProjectModal({ isOpen, onClose, project, onStageMount }:
       playResult.catch(() => {});
     }
   }, [feat, project, playing]);
+
+  // 셸은 Modal 아톰이 portal을 세운 다음 커밋에서야 DOM에 박힌다. reveal이
+  // false로 바뀌는 커밋과 그 커밋이 다를 수 있어서 layout effect만으로는
+  // 감추는 시점을 놓친다 - stage와 같은 방식으로 콜백 ref가 박히는 순간을 잡는다
+  const handleShellMount = useCallback((el: HTMLDivElement | null) => {
+    shellElRef.current = el;
+    if (el && revealRef.current === false) {
+      registerGsap();
+      gsap.set(revealRoots(el), { visibility: 'hidden' });
+    }
+  }, []);
+
+  // 내용의 등장·퇴장은 부모가 아니라 여기가 갖는다. 부모가 컨테이너를
+  // 되살리는 React 커밋과 자식을 등장 시작 상태로 누르는 순간이 갈리면 그
+  // 사이에 한 프레임이 번쩍인다. 같은 layout effect 안에 붙여야 안 샌다
+  useLayoutEffect(() => {
+    const prev = prevRevealRef.current;
+    prevRevealRef.current = reveal;
+    const shell = shellElRef.current;
+    if (!shell || reveal == null) return;
+    registerGsap();
+    const roots = revealRoots(shell);
+
+    if (reveal === false) {
+      // 비행 시작. 등장한 적이 없으면 그냥 감춘다
+      if (prev !== true) {
+        gsap.set(roots, { visibility: 'hidden' });
+        return;
+      }
+      // 퇴장. 나갈 때까지 글자를 쪼개면 산만하다 - 통짜로 접는다
+      const out = gsap.to(roots, {
+        opacity: 0,
+        y: 10,
+        duration: REVEAL_OUT_MS / 1000,
+        ease: SITE_EASE,
+      });
+      return () => {
+        out.kill();
+      };
+    }
+
+    // 감춰 둔 적이 없으면 등장도 없다. 안무 없이 그냥 보이던 판을 뒤늦게
+    // 0에서 끌어올리면 그게 곧 번쩍임이다
+    if (prev !== false) return;
+
+    gsap.set(roots, { visibility: 'visible' });
+    const tl = gsap.timeline();
+    const splits: SplitText[] = [];
+    const scroll = shell.querySelector<HTMLElement>('[data-modal-part="scroll"]');
+    if (scroll) {
+      tl.fromTo(scroll, { opacity: 0 }, { opacity: 1, duration: SCROLL_FADE_S, ease: SITE_EASE }, 0);
+    }
+
+    revealOrder(shell).forEach((el, i) => {
+      const at = Math.min(i * ELEM_STEP, ELEM_SPAN);
+      if (!el.matches(WORDS_SELECTOR)) {
+        tl.fromTo(
+          el,
+          { y: 12, opacity: 0 },
+          { y: 0, opacity: 1, duration: RISE_S, ease: SITE_EASE },
+          at
+        );
+        return;
+      }
+      const split = SplitText.create(el, { type: 'words', aria: 'auto' });
+      splits.push(split);
+      if (split.words.length === 0) return;
+      tl.fromTo(
+        split.words,
+        { y: 14, opacity: 0, filter: 'blur(6px)' },
+        {
+          y: 0,
+          opacity: 1,
+          filter: 'blur(0px)',
+          duration: WORD_S,
+          ease: SITE_EASE,
+          stagger: { amount: Math.min(WORD_STEP * (split.words.length - 1), WORD_SPAN) },
+        },
+        at
+      );
+    });
+
+    return () => {
+      tl.kill();
+      // 되돌리지 않으면 SplitText가 남긴 래퍼가 다음 열기에 겹쳐 쌓인다
+      splits.forEach((split) => split.revert());
+    };
+  }, [reveal]);
 
   if (!project) return null;
 
@@ -256,6 +427,7 @@ export default function ProjectModal({ isOpen, onClose, project, onStageMount }:
     >
       <div
         id="pm-shell"
+        ref={handleShellMount}
         className={cn(
           'fixed inset-0 grid',
           'grid-cols-[3fr_2fr] grid-rows-[64px_minmax(0,1fr)]',

@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import ProjectModal from '@/components/blocks/ProjectModal';
+import { gsap, REVEAL_IN_MS, REVEAL_OUT_MS, SplitText } from '@/lib/gsap';
 import { projects } from '@/lib/data';
 import { findTailwindPaletteColorUtilities } from '@/__tests__/helpers/tailwindPalette';
 import { isProjectModalReady, selectFeaturedReview } from '@/lib/utils/projectContract';
@@ -483,5 +484,159 @@ describe('ProjectModal 아이콘과 글자 크기 한 칸 내리기', () => {
   // 여전히 22px을 쓰므로 head h2로 좁혀서 확인한다
   it('NARROW_PANEL_CSS에 head h2 font-size 규칙이 남지 않는다', () => {
     expect(SOURCE).not.toMatch(/\[data-modal-part="head"\]\s*h2\s*\{[^}]*font-size/);
+  });
+});
+
+// 상세 판 내용의 등장·퇴장 소유권은 ProjectsSection이 아니라 ProjectModal에
+// 있다. 부모가 컨테이너를 되살리는 커밋과 자식을 시작 상태로 누르는 순간이
+// 갈리면 그 사이가 한 프레임 번쩍인다. 아래는 그 소유권 계약을 잠근다 -
+// jsdom에는 레이아웃 엔진이 없으므로 픽셀이 아니라 원인만 본다
+describe('ProjectModal 등장·퇴장 안무', () => {
+  const HEAD_ACTIONS = '[data-modal-part="head"] > div';
+  const SCROLL = '[data-modal-part="scroll"]';
+  const CAPTION = '[data-modal-part="caption"]';
+
+  function roots() {
+    return [HEAD_ACTIONS, SCROLL, CAPTION].map(
+      (sel) => document.querySelector<HTMLElement>(sel)!
+    );
+  }
+  function el(sel: string) {
+    return document.querySelector<HTMLElement>(sel)!;
+  }
+  // gsap.timeline을 감싸 실제로 만들어진 타임라인을 붙잡는다. 결과(픽셀)가
+  // 아니라 안무 자체를 재는 유일한 채널이다
+  function captureTimelines() {
+    const made: gsap.core.Timeline[] = [];
+    const original = gsap.timeline.bind(gsap);
+    vi.spyOn(gsap, 'timeline').mockImplementation(((vars: never) => {
+      const tl = original(vars);
+      made.push(tl);
+      return tl;
+    }) as typeof gsap.timeline);
+    return made;
+  }
+  function captureTweens() {
+    const made: gsap.core.Tween[] = [];
+    const original = gsap.to.bind(gsap);
+    vi.spyOn(gsap, 'to').mockImplementation(((target: never, vars: never) => {
+      const tween = original(target, vars);
+      made.push(tween);
+      return tween;
+    }) as typeof gsap.to);
+    return made;
+  }
+  function renderReveal(value: boolean | null | undefined) {
+    return render(<ProjectModal project={project} isOpen onClose={() => {}} reveal={value} />);
+  }
+  function rerenderReveal(
+    rerender: (ui: React.ReactElement) => void,
+    value: boolean | null | undefined
+  ) {
+    rerender(<ProjectModal project={project} isOpen onClose={() => {}} reveal={value} />);
+  }
+
+  // 표제 계약. 미전달이 기본값이고 그 경로에서는 안무가 아예 없다 -
+  // 좁은 화면·reducedMotion·gsap 미준비와 기존 테스트 전부가 여기를 탄다
+  it('reveal을 안 주면 내용이 감춰지지도 눌리지도 않는다', () => {
+    renderReveal(undefined);
+    for (const root of roots()) expect(root.style.visibility).toBe('');
+    expect(el('[data-modal-field="claim"]').children).toHaveLength(0);
+    expect(el('[data-modal-field="meta"]').style.opacity).toBe('');
+  });
+
+  it('reveal={false}면 세 영역이 감춰지고 비행 대상 둘은 건드리지 않는다', () => {
+    renderReveal(false);
+    for (const root of roots()) expect(root.style.visibility).toBe('hidden');
+    // 제목과 stage는 Flip이 나르는 중이다. 여기서 손대면 착지가 튄다.
+    // 감추는 수단이 display가 아닌 것도 같은 이유다 - 레이아웃이 사라지면
+    // 착지 좌표가 어긋난다
+    expect(document.getElementById('pm-title')!.style.visibility).toBe('');
+    expect(el('[data-modal-part="stage"]').style.visibility).toBe('');
+    for (const root of roots()) expect(root.style.display).toBe('');
+  });
+
+  it('reveal이 false에서 true가 되면 감춤이 걷히고 등장 시작 상태로 눌린다', () => {
+    const { rerender } = renderReveal(false);
+    rerenderReveal(rerender, true);
+
+    for (const root of roots()) expect(root.style.visibility).toBe('visible');
+    // fromTo는 immediateRender라 시작 상태가 이 자리에서 이미 눌려 있다.
+    // 그래서 컨테이너가 보이는 프레임과 자식이 눌리는 프레임이 같다
+    expect(el('[data-modal-field="meta"]').style.opacity).toBe('0');
+    expect(el(CAPTION).style.opacity).toBe('0');
+    expect(el(SCROLL).style.opacity).toBe('0');
+    // 비행 대상 둘은 여전히 무사하다
+    expect(document.getElementById('pm-title')!.style.cssText).toBe('');
+    expect(el('[data-modal-part="stage"]').style.cssText).toBe('');
+  });
+
+  it('주장과 부제만 단어 단위로 쪼갠다 - 음절로 부수지 않는다', () => {
+    const { rerender } = renderReveal(false);
+    const claim = el('[data-modal-field="claim"]');
+    const words = claim.textContent!.trim().split(/\s+/).length;
+    rerenderReveal(rerender, true);
+
+    // 눌린 조각의 수가 어절 수와 같다. 음절로 쪼갰다면 훨씬 많고, 아예
+    // 안 쪼갰다면 0이다
+    const pressed = Array.from(claim.querySelectorAll<HTMLElement>('*')).filter(
+      (node) => node.style.opacity === '0'
+    );
+    expect(pressed).toHaveLength(words);
+    expect(words).toBeGreaterThan(1);
+    // 통짜로 가는 블록은 쪼개지 않는다. RichText가 섞인 본문을 단어로
+    // 부수면 인라인 요소가 깨진다
+    expect(el('[data-modal-field="body"]').style.opacity).toBe('0');
+  });
+
+  it('등장 타임라인은 하나뿐이고 전체가 REVEAL_IN_MS 안에 끝난다', () => {
+    const timelines = captureTimelines();
+    const { rerender } = renderReveal(false);
+    expect(timelines).toHaveLength(0);
+
+    rerenderReveal(rerender, true);
+    expect(timelines).toHaveLength(1);
+    // 예산 밖으로 새면 비행 500 + 등장이 1초를 훌쩍 넘어 판이 늘어진다
+    expect(timelines[0].duration()).toBeLessThanOrEqual(REVEAL_IN_MS / 1000);
+    // 그렇다고 아무것도 안 하는 타임라인이면 안 된다
+    expect(timelines[0].duration()).toBeGreaterThan(REVEAL_IN_MS / 2000);
+  });
+
+  it('reveal이 true에서 false가 되면 통짜로 접힌다 - 단어를 다시 쪼개지 않는다', () => {
+    const { rerender } = renderReveal(false);
+    rerenderReveal(rerender, true);
+
+    const split = vi.spyOn(SplitText, 'create');
+    const tweens = captureTweens();
+    rerenderReveal(rerender, false);
+
+    expect(split).not.toHaveBeenCalled();
+    expect(tweens).toHaveLength(1);
+    expect(tweens[0].duration()).toBeCloseTo(REVEAL_OUT_MS / 1000);
+    act(() => {
+      tweens[0].progress(1);
+    });
+    for (const root of roots()) expect(root.style.opacity).toBe('0');
+  });
+
+  it('감춘 적이 없는 판에는 등장을 걸지 않는다 - 그게 곧 번쩍임이다', () => {
+    const timelines = captureTimelines();
+    const { rerender } = renderReveal(null);
+    rerenderReveal(rerender, true);
+    expect(timelines).toHaveLength(0);
+    expect(el('[data-modal-field="meta"]').style.opacity).toBe('');
+  });
+
+  it('안무가 끝나면 SplitText 래퍼가 걷혀 원래 글이 그대로 남는다', () => {
+    const { rerender } = renderReveal(false);
+    const claim = el('[data-modal-field="claim"]');
+    const text = claim.textContent;
+    rerenderReveal(rerender, true);
+    expect(claim.children.length).toBeGreaterThan(0);
+
+    rerenderReveal(rerender, null);
+    // 안 걷으면 다음 열기에 래퍼가 겹쳐 쌓인다
+    expect(claim.children).toHaveLength(0);
+    expect(claim.textContent).toBe(text);
   });
 });
