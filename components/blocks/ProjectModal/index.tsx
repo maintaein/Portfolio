@@ -278,7 +278,7 @@ export default function ProjectModal({ isOpen, onClose, project }: ProjectModalP
           <h2 id="pm-title" className={cn('truncate text-t2 font-bold tracking-[-0.02em]', T1)}>
             {project.title}
           </h2>
-          <div className="flex items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1.5">
             {project.githubUrl && (
               <a
                 href={project.githubUrl}

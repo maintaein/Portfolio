@@ -232,6 +232,17 @@ describe('ProjectModal 좁은 판', () => {
   });
 });
 
+describe('ProjectModal 헤더 버튼 묶음', () => {
+  // jsdom은 레이아웃 엔진이 없어 390px 폭에서 실제로 33px로 찌그러지는
+  // 결과 자체는 잴 수 없다. 대신 그 원인, 즉 버튼 묶음이 형제인 제목과
+  // 함께 줄어들지 않도록 막는 유틸리티가 붙어 있는지를 잠근다
+  it('닫기 버튼을 담은 묶음이 줄어들지 않는다', () => {
+    renderModal();
+    const closeButton = screen.getByRole('button', { name: '닫기' });
+    expect(closeButton.parentElement!.className).toMatch(/\bshrink-0\b/);
+  });
+});
+
 describe('ProjectModal 판 2', () => {
   const review = selectFeaturedReview(project)!;
 
