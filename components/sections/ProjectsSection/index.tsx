@@ -775,7 +775,7 @@ export default function ProjectsSection() {
                   // 줄 사이를 벌리는 것은 목록의 gap이 아니라 단추 자신의
                   // py다. gap으로 벌리면 줄과 줄 사이에 아무 반응 없는 죽은
                   // 띠가 생겨, 목록을 세로로 훑을 때 광휘가 그 띠마다 깜빡인다
-                  className={`block w-full text-left text-t2 font-bold tracking-[-0.02em] py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)] ${
+                  className={`block w-full text-left text-t3 lg:text-t2 font-bold tracking-[-0.02em] py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)] ${
                     isActive ? 'text-[var(--color-text-primary)]' : ''
                   }`}
                   style={{ color: isActive ? undefined : MUTED }}

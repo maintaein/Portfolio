@@ -451,7 +451,7 @@ export default function ProjectModal({
           <h2
             id="pm-title"
             data-flip-id={`title-${project.title}`}
-            className={cn('truncate text-t2 font-bold tracking-[-0.02em]', T1)}
+            className={cn('truncate text-t3 lg:text-t2 font-bold tracking-[-0.02em]', T1)}
           >
             {project.title}
           </h2>

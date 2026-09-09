@@ -471,16 +471,18 @@ describe('ProjectModal 아이콘과 글자 크기 한 칸 내리기', () => {
 
   // 제목은 실제로 그려진 class로 잠근다. 이 잠금은 cn이 크기 클래스를
   // 색과 헷갈려 지워 버리는 회귀도 같이 잡는다.
-  // t2는 접힘 이름 목록과 짝을 맞춘 값이다 - 두 노드는 Flip으로 날아가는
-  // 짝이라 글자 크기가 갈리면 비행 내내 배율로 늘어난다. 짝이 맞는지는
-  // ProjectsSection.test.tsx의 교차 잠금이 보고, 여기서는 이 파일이
-  // 혼자 옛 t3으로 되돌아가는 것을 막는다
-  it('제목이 접힘 이름과 같은 t2로 그려진다', () => {
+  // text-t3 lg:text-t2는 접힘 이름 목록과 짝을 맞춘 반응형 짝이다 - 두 노드는
+  // Flip으로 날아가는 짝이라 어느 폭에서든 글자 크기가 갈리면 비행 첫
+  // 프레임이 배율로 늘어난다. 짝이 맞는지는 ProjectsSection.test.tsx의
+  // 교차 잠금이 보고, 여기서는 이 파일이 혼자 반쪽만 올리거나 금지 칸인
+  // t4로 새는 것을 막는다
+  it('제목이 접힘 이름과 같은 text-t3 lg:text-t2 반응형 짝으로 그려진다', () => {
     renderModal();
     const heading = screen.getByRole('heading', { name: project.title });
     const classes = heading.className.split(/ +/);
-    expect(classes).toContain('text-t2');
-    expect(classes).not.toContain('text-t3');
+    expect(classes).toContain('text-t3');
+    expect(classes).toContain('lg:text-t2');
+    expect(classes).not.toContain('text-t4');
   });
 
   // 좁은 화면 전용 축소 규칙을 여기에 되살리면 안 된다. FLIP은 lg(1024)

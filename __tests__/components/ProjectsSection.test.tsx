@@ -79,10 +79,11 @@ describe('ProjectsSection 접힘 레이아웃', () => {
     expect(document.querySelectorAll('[role="tab"]')).toHaveLength(N);
   });
 
-  it('활성 이름은 text-t2이고 비활성 이름은 MUTED 밝기다', () => {
+  it('활성 이름은 text-t3 lg:text-t2이고 비활성 이름은 MUTED 밝기다', () => {
     renderSection();
     const active = document.querySelector<HTMLElement>('[aria-selected="true"]')!;
-    expect(active.className).toContain('text-t2');
+    expect(active.className).toContain('text-t3');
+    expect(active.className).toContain('lg:text-t2');
     const inactive = document.querySelector<HTMLElement>('[aria-selected="false"]')!;
     // jsdom이 CSS 색을 rgba(...) 콤마 표기로 정규화한다. 소스의 리터럴과 다르다
     expect(inactive.style.color).toBe('rgba(255, 255, 255, 0.62)');
@@ -104,7 +105,7 @@ describe('ProjectsSection 접힘 레이아웃', () => {
 
     renderSection();
     const name = document.querySelector<HTMLElement>('[data-name="0"]')!;
-    for (const token of ['text-t2', 'font-bold', 'tracking-[-0.02em]']) {
+    for (const token of ['text-t3', 'lg:text-t2', 'font-bold', 'tracking-[-0.02em]']) {
       expect(titleAttrs).toContain(token);
       expect(name.className).toContain(token);
     }
@@ -112,14 +113,26 @@ describe('ProjectsSection 접힘 레이아웃', () => {
     // leading-[1.35]는 text-t2 유틸리티가 넣는 줄높이를 덮는다
     expect(titleAttrs).not.toContain('text-t1');
     expect(name.className).not.toContain('text-t1');
-    // 한 칸이라도 어긋나면 안 된다. 둘 다 t2로 올라갔으므로 옛 t3이
-    // 어느 한쪽에 남아 있으면 그건 반쪽만 올린 것이다
-    expect(titleAttrs).not.toContain('text-t3');
-    expect(name.className).not.toContain('text-t3');
+    // text-t4는 이 저장소에서 금지된 칸이다
+    expect(titleAttrs).not.toContain('text-t4');
+    expect(name.className).not.toContain('text-t4');
     expect(name.className).not.toContain('leading-[1.35]');
     // truncate는 좁은 머리띠에서 제목이 버튼을 밀지 않게 하는 배치 장치다.
     // 밀어낼 버튼이 없는 이름 목록에는 오지 않는다
     expect(name.className).not.toContain('truncate');
+
+    // 좁은 화면(lg 미만)에서도 두 노드의 글자 크기가 같아야, FLIP 비행이
+    // 데스크톱 폭에서만 도는데도 첫 프레임 scaleX가 배율로 부풀지 않는다.
+    // 손으로 두 토큰만 대조하면 한쪽이 세 번째 크기 토큰을 몰래 더 가져도
+    // 못 잡으므로, 두 클래스 문자열에서 뽑은 text-* 토큰 집합 자체를 비교한다
+    const extractTextSizeTokens = (classAttr: string) =>
+      new Set(
+        (classAttr.match(/(?:^|\s)(lg:)?text-t\d\b/g) ?? []).map((t) => t.trim())
+      );
+    const titleTokens = extractTextSizeTokens(titleAttrs);
+    const nameTokens = extractTextSizeTokens(name.className);
+    expect(titleTokens).toEqual(nameTokens);
+    expect(titleTokens).toEqual(new Set(['text-t3', 'lg:text-t2']));
   });
 
   it('호버가 프리뷰를 그 프로젝트로 갈아 끼운다', () => {
