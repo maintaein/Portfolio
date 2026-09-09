@@ -71,13 +71,43 @@ describe('ProjectsSection 접힘 레이아웃', () => {
     expect(document.querySelectorAll('[role="tab"]')).toHaveLength(N);
   });
 
-  it('활성 이름은 text-t1이고 비활성 이름은 MUTED 밝기다', () => {
+  it('활성 이름은 text-t3이고 비활성 이름은 MUTED 밝기다', () => {
     renderSection();
     const active = document.querySelector<HTMLElement>('[aria-selected="true"]')!;
-    expect(active.className).toContain('text-t1');
+    expect(active.className).toContain('text-t3');
     const inactive = document.querySelector<HTMLElement>('[aria-selected="false"]')!;
     // jsdom이 CSS 색을 rgba(...) 콤마 표기로 정규화한다. 소스의 리터럴과 다르다
     expect(inactive.style.color).toBe('rgba(255, 255, 255, 0.62)');
+  });
+
+  // 이름과 상세 판 제목은 GSAP Flip으로 짝지어 날아간다. 두 노드의 글자
+  // 크기가 다르면 비행 내내 배율로 늘어나 흐려지므로, 글자 표현은 같은
+  // 토큰을 써야 한다. 어느 한쪽만 바뀌어도 이 테스트가 FAIL한다 -
+  // 이름 쪽만 손으로 적어 두면 제목이 움직였을 때 아무도 모른다
+  it('이름 글자 표현이 상세 판 제목과 같은 토큰을 쓴다', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const modalSource = readFileSync(
+      resolve(process.cwd(), 'components/blocks/ProjectModal/index.tsx'),
+      'utf8'
+    );
+    const fromTitle = modalSource.slice(modalSource.indexOf('id="pm-title"'));
+    const titleAttrs = fromTitle.slice(0, fromTitle.indexOf('>'));
+
+    renderSection();
+    const name = document.querySelector<HTMLElement>('[data-name="0"]')!;
+    for (const token of ['text-t3', 'font-bold', 'tracking-[-0.02em]']) {
+      expect(titleAttrs).toContain(token);
+      expect(name.className).toContain(token);
+    }
+    // 제목이 안 쓰는 것은 이름도 안 쓴다. text-t1은 크기가 어긋나고
+    // leading-[1.35]는 text-t3 유틸리티가 넣는 줄높이를 덮는다
+    expect(titleAttrs).not.toContain('text-t1');
+    expect(name.className).not.toContain('text-t1');
+    expect(name.className).not.toContain('leading-[1.35]');
+    // truncate는 좁은 머리띠에서 제목이 버튼을 밀지 않게 하는 배치 장치다.
+    // 밀어낼 버튼이 없는 이름 목록에는 오지 않는다
+    expect(name.className).not.toContain('truncate');
   });
 
   it('호버가 프리뷰를 그 프로젝트로 갈아 끼운다', () => {

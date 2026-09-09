@@ -463,12 +463,19 @@ export default function ProjectsSection() {
     <section
       ref={sectionRef}
       id={SECTION_IDS.PROJECTS}
-      className="py-6 px-10"
+      // min-h-full은 .section-scroll(absolute inset-0)의 확정 높이를 받는다.
+      // h-screen을 쓰면 푸터 띠와 헤더를 두 번 빼야 해서 무대와 어긋난다.
+      // 세로 가운데는 justify-center가 아니라 자식의 my-auto로 잡는다 -
+      // 내용이 무대보다 길어지면 auto 여백이 0으로 접혀 위에서부터 흐르고,
+      // justify-center였다면 위쪽이 스크롤로 닿지 않는 자리에 잘린다
+      className="py-6 px-10 min-h-full flex flex-col"
     >
       <h2 className="sr-only">Projects</h2>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr]">
-        <div className="flex items-center">
+      <div className="my-auto grid grid-cols-1 lg:grid-cols-[3fr_2fr]">
+        {/* 좁은 화면에서는 프리뷰가 w-full이라 justify-center가 할 일이 없다.
+            lg에서만 3fr 열 안의 60% 프리뷰를 가로 가운데로 민다 */}
+        <div className="flex items-center justify-center">
           {/* 같은 data-flip-id를 가진 노드가 화면에 둘이면 Flip이 짝을 못
               짓는다. 펼침이 살아 있는 동안은 접힘 쪽 손잡이를 뗀다 */}
           <div
@@ -559,7 +566,7 @@ export default function ProjectsSection() {
                   onClick={() => handleNameClick(i)}
                   onMouseEnter={() => goTo(i)}
                   onFocus={() => goTo(i)}
-                  className={`block w-full text-left text-t1 leading-[1.35] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)] ${
+                  className={`block w-full text-left text-t3 font-bold tracking-[-0.02em] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)] ${
                     isActive ? 'text-[var(--color-text-primary)]' : ''
                   }`}
                   style={{ color: isActive ? undefined : MUTED }}
