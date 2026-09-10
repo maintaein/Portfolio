@@ -158,18 +158,30 @@ function previewEl() {
   return document.querySelector<HTMLElement>('[data-part="preview"]')!;
 }
 
-// 다른 이름에 먼저 호버해 활성 인덱스를 옮긴 뒤 READY_INDEX를 누른다.
-// 클릭 시점의 activeIndex는 아직 OTHER_INDEX라, 소스가 눌린 인덱스가 아니라
+// READY_INDEX가 아닌 곳에 선택이 있는 상태에서, 같은 렌더 안에서
+// READY_INDEX를 두 번 누른다. 포커스는 이제 선택을 안 옮기므로 그 자리를
+// 만들 필요가 없다. 마운트 직후 활성 인덱스는 이미 OTHER_INDEX(0)이고
+// READY_INDEX는 정의상 0이 아니므로, 초기 상태 자체가 이미 이 조건을
+// 채운다. 여기서 OTHER_INDEX를 클릭하는 것은 안 된다. 0은 계약을 통과하는
+// 프로젝트라 클릭 한 번에 모달이 열려 아래 시나리오가 아예 성립하지 않는다.
+// goTo가 activeIndexRef.current를 동기로 갱신하므로 두 번째 클릭이 볼 때
+// ref는 이미 READY_INDEX인데 DOM의 aria-selected와 data-flip-id는 아직
+// OTHER_INDEX 것인 창이 열린다. 이 창에서 소스가 눌린 인덱스가 아니라
 // activeIndex로 이름 노드를 집으면 getState 인자가 달라진다
 function openStale() {
-  fireEvent.mouseEnter(nameEl(OTHER_INDEX));
-  fireEvent.click(nameEl(READY_INDEX));
+  // 두 클릭 사이에 렌더가 끼면 안 된다. fireEvent는 하나씩 act로 감싸
+  // 매번 커밋시키므로, 여기서는 act 한 덩어리 안에서 직접 이벤트를 쏜다
+  act(() => {
+    const el = nameEl(READY_INDEX);
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
 }
 
-// 실제 마우스·키보드 경로. 호버(또는 포커스)가 항상 클릭보다 먼저 와서
-// 활성 인덱스가 이미 눌린 것과 같다
+// 실제 마우스·키보드 경로. 첫 클릭이 선택을 옮기고, 이미 선택된 이름을
+// 다시 누르는 두 번째 클릭이 연다
 function open() {
-  fireEvent.mouseEnter(nameEl(READY_INDEX));
+  fireEvent.click(nameEl(READY_INDEX));
   fireEvent.click(nameEl(READY_INDEX));
 }
 
@@ -237,7 +249,7 @@ describe('ProjectsFlip - 펼치기 비행', { timeout: 30_000 }, () => {
     expect(getState.mock.calls[0][0]).toEqual([previewEl(), handle]);
   });
 
-  it('호버 없이 곧장 눌러도 접힘 손잡이가 눌린 프로젝트 것으로 맞춰진 뒤 상태가 뜬다', async () => {
+  it('같은 렌더 안에서 두 번 눌러도 접힘 손잡이가 눌린 프로젝트 것으로 맞춰진 뒤 상태가 뜬다', async () => {
     const title = projects[READY_INDEX].title;
     const original = Flip.getState;
     let captured: (string | undefined)[] = [];
@@ -251,13 +263,15 @@ describe('ProjectsFlip - 펼치기 비행', { timeout: 30_000 }, () => {
     renderSection();
     await flushGsapImport();
 
-    // 호버도 포커스도 없이 클릭만. 터치와 프로그램적 클릭이 이 모양이다.
-    // 이 시점 눌린 이름에는 손잡이가 없고 프리뷰 손잡이는 다른 프로젝트 것이다
-    fireEvent.click(nameEl(READY_INDEX));
+    // openStale이 여는 창. 두 번째 클릭이 열 시점에 이 이름에는 아직 손잡이가
+    // 없고 프리뷰 손잡이는 다른 프로젝트 것이다
+    openStale();
 
     expect(getState).toHaveBeenCalledTimes(1);
     expect(captured).toEqual([`pv-${title}`, `title-${title}`]);
-    // 뜬 뒤에는 되돌린다. 같은 손잡이를 가진 노드가 화면에 둘이면 안 된다
+    // 뜬 뒤에는 되돌린다. 다만 이 시점엔 렌더도 이미 커밋돼 모달이 열린 뒤
+    // 손잡이를 지우는 렌더 규칙과 겹친다. 되돌리기 자체가 실제로 동작했다는
+    // 증거는 이미 위 captured 값이 쥐고 있다
     expect(nameFlipEl(READY_INDEX).dataset.flipId).toBeUndefined();
   });
 
@@ -362,10 +376,10 @@ describe('ProjectsFlip - 등장은 비행이 끝난 뒤다', { timeout: 30_000 }
     renderSection();
     await flushGsapImport();
 
-    // open()을 풀어 쓴다. 앞쪽 호버는 프로젝트 전환 tween을 하나 태우는데
+    // open()을 풀어 쓴다. 앞쪽 첫 클릭은 프로젝트 전환 tween을 하나 태우는데
     // 그건 비행이 아니라 프리뷰 안쪽 겹의 일이다. 이 테스트가 묻는 것은
     // "비행이 무엇을 만지느냐"라 그 앞의 것은 잘라 낸다
-    fireEvent.mouseEnter(nameEl(READY_INDEX));
+    fireEvent.click(nameEl(READY_INDEX));
     const beforeFlight = fromTo.mock.calls.length;
     fireEvent.click(nameEl(READY_INDEX));
     await findDialog();
@@ -621,8 +635,10 @@ describe('ProjectsFlip - 닫기 비행', { timeout: 30_000 }, () => {
     const closeButton = await openAndGetCloseButton();
     vi.spyOn(window.history, 'back').mockImplementation(() => {});
 
-    // 펼친 채로 활성 인덱스만 흔든다
-    fireEvent.mouseEnter(nameEl(OTHER_INDEX));
+    // 펼친 채로 활성 인덱스만 흔든다. 이 시점에 활성은 READY_INDEX이고
+    // OTHER_INDEX는 활성이 아니므로, 클릭 한 번은 선택만 옮기고 다시 열지
+    // 않는다
+    fireEvent.click(nameEl(OTHER_INDEX));
     expect(document.querySelector('[aria-selected="true"]')).toBe(nameEl(OTHER_INDEX));
 
     fireEvent.click(closeButton);
@@ -760,9 +776,9 @@ describe('ProjectsFlip - 접힘 손잡이는 펼침 중에 뗀다', { timeout: 3
   });
 });
 
-// 호버가 프로젝트 전환 tween을 띄운 직후 클릭이 오는 것은 마우스 경로의
-// 기본값이다(openStale/open 둘 다 호버로 시작한다). 그 tween이 비행의
-// 출발 좌표를 건드리면 펼치기가 통째로 비뚤어진다. 여기서는 모의 없이
+// 첫 클릭이 프로젝트 전환 tween을 띄운 직후 두 번째 클릭이 오는 것은 마우스
+// 경로의 기본값이다(openStale/open 둘 다 첫 클릭으로 시작한다). 그 tween이
+// 비행의 출발 좌표를 건드리면 펼치기가 통째로 비뚤어진다. 여기서는 모의 없이
 // 진짜 gsap을 태우고, 인라인 transform이 어느 노드에 박히는지로 본다.
 // jsdom에는 레이아웃 엔진이 없어 좌표는 못 재므로, 좌표를 바꾸는 유일한
 // 경로(손잡이 상자 자신의 transform)가 비어 있는지를 대신 본다
@@ -776,7 +792,7 @@ describe('ProjectsFlip - 전환 tween이 비행 기하를 안 건드린다', { t
     expect(preview.contains(layer)).toBe(true);
     expect(layer).not.toBe(preview);
 
-    // 활성 인덱스가 실제로 움직여야 전환이 뜬다. 0에 호버하면 이미
+    // 활성 인덱스가 실제로 움직여야 전환이 뜬다. 0을 눌러도 이미
     // 0이라 아무 일도 안 일어나고, 그러면 이 테스트는 빈 값을 빈 값과
     // 비교하며 조용히 통과한다
     expect(READY_INDEX).not.toBe(0);
@@ -784,7 +800,7 @@ describe('ProjectsFlip - 전환 tween이 비행 기하를 안 건드린다', { t
     // 첫 프레임을 확실히 붙잡으려고 전역 시계를 세운다
     gsap.globalTimeline.pause();
     try {
-      fireEvent.mouseEnter(nameEl(READY_INDEX));
+      fireEvent.click(nameEl(READY_INDEX));
 
       // fromTo는 시작 프레임을 즉시 그린다. 겹에는 값이 박혀 있어야 하고
       // (안 박히면 이 테스트가 아무 것도 안 보는 것이다)
@@ -805,7 +821,7 @@ describe('ProjectsFlip - 전환 tween이 비행 기하를 안 건드린다', { t
     await flushGsapImport();
 
     // 전환이 아직 진행 중인 상태에서 곧바로 누른다
-    fireEvent.mouseEnter(nameEl(READY_INDEX));
+    fireEvent.click(nameEl(READY_INDEX));
     const layer = document.querySelector<HTMLElement>('[data-part="preview-media"]')!;
     expect(layer.style.transform).not.toBe('');
 

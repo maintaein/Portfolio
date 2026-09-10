@@ -121,11 +121,11 @@ describe('ProjectsSection 접힘 레이아웃', () => {
     expect(document.querySelectorAll('[role="tab"]')).toHaveLength(N);
   });
 
-  it('활성 이름은 text-t3 lg:text-t2이고 비활성 이름은 MUTED 밝기다', () => {
+  it('활성 이름은 text-t1 lg:text-d3이고 비활성 이름은 MUTED 밝기다', () => {
     renderSection();
     const active = document.querySelector<HTMLElement>('[aria-selected="true"]')!;
-    expect(active.className).toContain('text-t3');
-    expect(active.className).toContain('lg:text-t2');
+    expect(active.className).toContain('text-t1');
+    expect(active.className).toContain('lg:text-d3');
     const inactive = document.querySelector<HTMLElement>('[aria-selected="false"]')!;
     // 휠이 --pj-wheel-p로 활성색을 섞어 넣지만 비활성은 그 비율이 0이라 색은
     // 여전히 MUTED다. 기본값 0이 식 안에 박혀 있어야 휠이 아직 한 프레임도
@@ -134,11 +134,13 @@ describe('ProjectsSection 접힘 레이아웃', () => {
     expect(inactive.style.color).toContain('var(--pj-wheel-p, 0)');
   });
 
-  // 이름과 상세 판 제목은 GSAP Flip으로 짝지어 날아간다. 두 노드의 글자
-  // 크기가 다르면 비행 내내 배율로 늘어나 흐려지므로, 글자 표현은 같은
-  // 토큰을 써야 한다. 어느 한쪽만 바뀌어도 이 테스트가 FAIL한다 -
-  // 이름 쪽만 손으로 적어 두면 제목이 움직였을 때 아무도 모른다
-  it('이름 글자 표현이 상세 판 제목과 같은 토큰을 쓴다', async () => {
+  // 이름은 상세 판 제목과 더 이상 같은 크기 토큰을 쓰지 않는다. 이름은
+  // 이번 작업으로 text-t1/lg:text-d3로 두 배 가까이 커졌고, 제목(pm-title)은
+  // ProjectModal 소스라 이 작업의 범위 밖이라 손대지 않는다. 그래서 FLIP
+  // 비행 첫 프레임이 이제 배율로 살짝 부푼다. 알려진 대가이고, task-M 범위
+  // 밖의 후속 작업 몫이다. 여기서는 두 파일이 여전히 공유하는 서체 표현
+  // (굵기·자간·금지 칸)만 잠그고, 크기 토큰은 이름 쪽 자기 계약만 본다
+  it('이름 글자 표현이 상세 판 제목과 굵기·자간을 공유하고 금지 칸을 안 쓴다', async () => {
     const { readFileSync } = await import('node:fs');
     const { resolve } = await import('node:path');
     const modalSource = readFileSync(
@@ -150,14 +152,10 @@ describe('ProjectsSection 접힘 레이아웃', () => {
 
     renderSection();
     const name = document.querySelector<HTMLElement>('[data-name="0"]')!;
-    for (const token of ['text-t3', 'lg:text-t2', 'font-bold', 'tracking-[-0.02em]']) {
+    for (const token of ['font-bold', 'tracking-[-0.02em]']) {
       expect(titleAttrs).toContain(token);
       expect(name.className).toContain(token);
     }
-    // 제목이 안 쓰는 것은 이름도 안 쓴다. text-t1은 크기가 어긋나고
-    // leading-[1.35]는 text-t2 유틸리티가 넣는 줄높이를 덮는다
-    expect(titleAttrs).not.toContain('text-t1');
-    expect(name.className).not.toContain('text-t1');
     // text-t4는 이 저장소에서 금지된 칸이다
     expect(titleAttrs).not.toContain('text-t4');
     expect(name.className).not.toContain('text-t4');
@@ -166,23 +164,18 @@ describe('ProjectsSection 접힘 레이아웃', () => {
     // 밀어낼 버튼이 없는 이름 목록에는 오지 않는다
     expect(name.className).not.toContain('truncate');
 
-    // 좁은 화면(lg 미만)에서도 두 노드의 글자 크기가 같아야, FLIP 비행이
-    // 데스크톱 폭에서만 도는데도 첫 프레임 scaleX가 배율로 부풀지 않는다.
-    // 손으로 두 토큰만 대조하면 한쪽이 세 번째 크기 토큰을 몰래 더 가져도
-    // 못 잡으므로, 두 클래스 문자열에서 뽑은 text-* 토큰 집합 자체를 비교한다
+    // 이름 자신의 크기 계약: text-t1/lg:text-d3 정확히 그 둘뿐이다
     const extractTextSizeTokens = (classAttr: string) =>
       new Set(
-        (classAttr.match(/(?:^|\s)(lg:)?text-t\d\b/g) ?? []).map((t) => t.trim())
+        (classAttr.match(/(?:^|\s)(lg:)?text-[td]\d\b/g) ?? []).map((t) => t.trim())
       );
-    const titleTokens = extractTextSizeTokens(titleAttrs);
     const nameTokens = extractTextSizeTokens(name.className);
-    expect(titleTokens).toEqual(nameTokens);
-    expect(titleTokens).toEqual(new Set(['text-t3', 'lg:text-t2']));
+    expect(nameTokens).toEqual(new Set(['text-t1', 'lg:text-d3']));
   });
 
-  it('호버가 프리뷰를 그 프로젝트로 갈아 끼운다', () => {
+  it('첫 클릭이 프리뷰를 그 프로젝트로 갈아 끼운다', () => {
     renderSection();
-    fireEvent.mouseEnter(document.querySelector('[data-name="1"]')!);
+    fireEvent.click(document.querySelector('[data-name="1"]')!);
     const preview = document.querySelector('[data-part="preview"]')!;
     expect(preview.getAttribute('data-flip-id')).toBe(`pv-${projects[1].title}`);
   });
@@ -230,13 +223,18 @@ describe('ProjectsSection 모양 잠금', () => {
 });
 
 describe('ProjectsSection 이름 목록', () => {
-  it('탭 정지점이 N과 무관하게 1개다', () => {
+  // 이름 쪽 구르는 tabindex는 N과 무관하게 언제나 1개다. 프리뷰 과녁 단추가
+  // 새로 정지점 하나를 더하지만, 그것은 활성 프로젝트가 계약을 통과했을
+  // 때만이다. disabled 단추는 이 필터(hasAttribute('disabled'))에서 빠진다
+  it('탭 정지점이 N과 무관하게 이름 1개다, 프리뷰는 계약 통과일 때만 하나 더한다', () => {
     renderSection();
-    // 활성 이름 1개만 tabIndex 0이다. 나머지는 -1이다
     const stops = Array.from(
       document.querySelectorAll<HTMLElement>('button, [tabindex]')
     ).filter((el) => el.tabIndex === 0 && !el.hasAttribute('disabled'));
-    expect(stops).toHaveLength(1);
+    const nameStops = stops.filter((el) => el.hasAttribute('data-name'));
+    expect(nameStops).toHaveLength(1);
+    const otherStops = stops.filter((el) => !el.hasAttribute('data-name'));
+    expect(otherStops).toHaveLength(isProjectModalReady(projects[0]) ? 1 : 0);
 
     const names = document.querySelectorAll<HTMLElement>('[data-name]');
     expect(Array.from(names).filter((c) => c.tabIndex === 0)).toHaveLength(1);
@@ -356,7 +354,12 @@ describe('ProjectsSection 영상', () => {
     act(() => {
       vi.advanceTimersByTime(CYCLE_MS);
     });
-    goToIndex(withVideo);   // 한 바퀴 돌아 같은 프로젝트로 되돌아온다
+    // withVideo는 계약을 통과하는 프로젝트라 같은 단추를 다시 누르면 이제
+    // 정당하게 상세가 열린다. 그래서 곧장 재클릭하지 않고, 다른 프로젝트를
+    // 거쳐 한 바퀴 돌아 되돌아온다. goToIndex는 이미 활성인 인덱스에서는
+    // 아무 일도 안 하므로, 다른 곳을 먼저 거쳐야 진짜 선택 전환이 된다
+    goToIndex((withVideo + 1) % N);
+    goToIndex(withVideo);
     const video = document.querySelector<HTMLVideoElement>('[data-part="preview-video"]')!;
     expect(video.getAttribute('src')).toBe(
       projects[withVideo].implementations!.filter((i) => i.video)[0].video
@@ -429,11 +432,15 @@ describe('ProjectsSection 영상', () => {
   });
 });
 
-// 이름에 호버해 그 프로젝트로 간다. click을 쓰면 계약을 채운 프로젝트에서
-// 모달이 열려 !modalOpen 게이트가 재생을 끊는다 — 이 describe는 프리뷰
-// 재생만 보는 것이라 호버로 선택만 옮긴다
+// 이름을 클릭해 그 프로젝트로 간다. 포커스는 이제 선택을 안 옮기므로
+// click을 써야 한다. 다만 이미 활성인 인덱스를 그대로 다시 클릭하면
+// 두 번째 클릭이 되어 계약을 채운 프로젝트에서 모달이 열려 버린다.
+// 이 헬퍼는 "선택만 옮긴다"는 계약을 대신하는 자리이니, 이미 활성이면
+// 아무것도 안 하고 돌아간다
 function goToIndex(i: number) {
-  fireEvent.mouseEnter(document.querySelector(`[data-name="${i}"]`)!);
+  const el = document.querySelector(`[data-name="${i}"]`)!;
+  if (el.getAttribute('aria-selected') === 'true') return;
+  fireEvent.click(el);
 }
 
 // ProjectModal은 next/dynamic({ssr:false})로 실제 import()를 거쳐 로드된다
@@ -482,14 +489,17 @@ describe('ProjectsSection modal-only History', { timeout: 30_000 }, () => {
     expect(state.__NA).toBe('next가 쓰는 필드');
   });
 
-  it('계약 미달 이름은 눌러도 안 펼쳐진다', () => {
+  it('계약 미달 이름은 두 번 눌러도 안 펼쳐진다', () => {
     const unready = projects.findIndex((p) => !isProjectModalReady(p));
     if (unready === -1) return;
     const push = vi.spyOn(window.history, 'pushState');
     renderSection();
-    // 클릭으로 직접 열기를 시도한다. goToIndex(hover)로는 애초에 openModal
-    // 경로를 안 타므로 이 시나리오를 못 잡는다
-    fireEvent.click(document.querySelector(`[data-name="${unready}"]`)!);
+    const target = document.querySelector(`[data-name="${unready}"]`)!;
+    // 첫 클릭은 선택만 옮긴다(두 클릭 계약). 계약 게이트만 따로 보려면 이미
+    // 활성인 상태에서 다시 눌러야 한다. 한 번만 누르면 "아직 선택 전이라
+    // 안 열렸다"와 "계약이 막아서 안 열렸다"가 구분이 안 된다
+    fireEvent.click(target);
+    fireEvent.click(target);
     expect(
       document.querySelector('[aria-selected="true"]')!.getAttribute('data-name')
     ).toBe(String(unready));
@@ -497,6 +507,97 @@ describe('ProjectsSection modal-only History', { timeout: 30_000 }, () => {
     // pushState가 불려 여기서 FAIL한다
     expect(push).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  // 이 작업(task-M)이 새로 요구하는 두 클릭 계약과 프리뷰 과녁을 잠근다.
+  // 계획서 네 개 다음, 아래 추가 함정들 앞에 둔다. 순서 자체는 의미가 없다
+
+  it('활성이 아닌 이름은 한 번은 선택만, 다시 눌러야 펼친다', () => {
+    const target = projects.findIndex((p, i) => i !== 0 && isProjectModalReady(p));
+    expect(target).toBeGreaterThan(-1);
+    const push = vi.spyOn(window.history, 'pushState');
+    renderSection();
+    const el = document.querySelector(`[data-name="${target}"]`)!;
+
+    // 첫 클릭: 선택만 옮긴다. 아직 안 펼친다
+    fireEvent.click(el);
+    expect(
+      document.querySelector('[aria-selected="true"]')!.getAttribute('data-name')
+    ).toBe(String(target));
+    // 뮤테이션: handleNameClick이 alreadyActive를 안 보고 매 클릭마다 열면
+    // 여기서 push가 이미 불려 FAIL한다
+    expect(push).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    // 둘째 클릭: 이미 활성인 이름을 다시 누른 것이라 이제 펼친다
+    fireEvent.click(el);
+    // 뮤테이션: alreadyActive 검사가 반대로 뒤집히면(이미 활성일 때만 막으면)
+    // 여기서 push가 안 불려 FAIL한다
+    expect(push).toHaveBeenCalled();
+  });
+
+  // 진짜 마우스는 mousedown이 단추에 포커스를 준 다음에야 click을 쏜다.
+  // fireEvent.click만 쓰는 테스트는 포커스 이벤트를 아예 안 겪으므로 이
+  // 순서 버그를 영원히 못 잡는다. 그래서 여기서만 focus와 click을 손으로
+  // 따로 쏴 실제 mousedown -> click 순서를 재현한다
+  it('클릭 전에 focus가 먼저 와도 첫 클릭은 선택만 옮긴다', () => {
+    const target = projects.findIndex((p, i) => i !== 0 && isProjectModalReady(p));
+    expect(target).toBeGreaterThan(-1);
+    const push = vi.spyOn(window.history, 'pushState');
+    renderSection();
+    const el = document.querySelector(`[data-name="${target}"]`)!;
+
+    fireEvent.focus(el); // mousedown이 하는 일
+    fireEvent.click(el); // 그 다음에 오는 click
+    expect(
+      document.querySelector('[aria-selected="true"]')!.getAttribute('data-name')
+    ).toBe(String(target));
+    // 뮤테이션: onFocus가 goTo를 다시 부르면 위 focus에서 이미
+    // activeIndexRef가 target으로 바뀌어, click이 볼 때 alreadyActive가
+    // 참이 되고 여기서 push가 불려 FAIL한다
+    expect(push).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    // 같은 단추를 한 번 더 클릭하면 이제 진짜 두 번째 클릭이라 열린다
+    fireEvent.click(el);
+    expect(push).toHaveBeenCalled();
+  });
+
+  it('프리뷰를 누르면 현재 선택의 상세를 열고, 계약 미달이면 아무 일도 안 한다', () => {
+    const ready = projects.findIndex((p) => isProjectModalReady(p));
+    const unready = projects.findIndex((p) => !isProjectModalReady(p));
+    expect(ready).toBeGreaterThan(-1);
+
+    const push = vi.spyOn(window.history, 'pushState');
+    renderSection();
+
+    if (unready !== -1) {
+      // 계약 미달 프로젝트로 선택을 옮기면 프리뷰 과녁은 disabled다 -
+      // 눌러도 아무 일도 없다
+      fireEvent.click(document.querySelector(`[data-name="${unready}"]`)!);
+      const previewBtn = document.querySelector<HTMLButtonElement>(
+        '[data-part="preview-open"]'
+      )!;
+      expect(previewBtn.disabled).toBe(true);
+      fireEvent.click(previewBtn);
+      expect(push).not.toHaveBeenCalled();
+      expect(screen.queryByRole('dialog')).toBeNull();
+    }
+
+    // 계약을 통과한 프로젝트로 선택을 옮기면 프리뷰 과녁은 활성화되고,
+    // 눌렀을 때 그 프로젝트의 상세를 연다. 선택은 다시 안 옮긴다
+    fireEvent.click(document.querySelector(`[data-name="${ready}"]`)!);
+    const previewBtn = document.querySelector<HTMLButtonElement>(
+      '[data-part="preview-open"]'
+    )!;
+    expect(previewBtn.disabled).toBe(false);
+    fireEvent.click(previewBtn);
+    expect(push).toHaveBeenCalled();
+    const state = push.mock.calls.at(-1)![0] as Record<string, unknown>;
+    expect(state.projectModalId).toBe(projects[ready].title);
+    expect(
+      document.querySelector('[aria-selected="true"]')!.getAttribute('data-name')
+    ).toBe(String(ready));
   });
 
   // 계획서 테스트 네 개는 위까지다. 아래는 함정 하나(복구된 모달을 History.back()으로
@@ -625,10 +726,21 @@ const RADIUS_TOKEN_CLASSES = Array.from(
   TOKENS_CSS.matchAll(/--radius-([a-z0-9-]+)\s*:/g)
 ).map((m) => `rounded-${m[1]}`);
 
+// t-사다리와 d-사다리는 숫자가 반대로 간다. d3(48px)가 t3(22px)보다 크다.
+// 이름 단추가 text-t1 lg:text-d3를 쓰면서 옛 /^text-t\d$/ 정규식만으로는
+// 안 걸리므로, 토큰 이름 대신 정본(design-tokens.css)에서 읽은 실제 px
+// 크기로 비교한다. lg: 접두 없는(좁은 화면) 크기만 본다. 이 파일의 다른
+// 크기 비교도 그 관례를 따른다
+const FONT_SIZE_PX = new Map(
+  Array.from(TOKENS_CSS.matchAll(/--font-size-([td]\d):\s*([\d.]+)rem/g)).map(
+    (m) => [`text-${m[1]}`, Number(m[2]) * 16]
+  )
+);
+
 function typeRamp(el: Element): number {
-  const hit = classList(el).find((c) => /^text-t\d$/.test(c));
+  const hit = classList(el).find((c) => FONT_SIZE_PX.has(c));
   expect(hit).toBeDefined();
-  return Number(hit!.slice(-1));
+  return FONT_SIZE_PX.get(hit!)!;
 }
 
 describe('ProjectsSection 이름 목록 세로 간격', () => {
@@ -750,16 +862,18 @@ describe('ProjectsSection 프리뷰 캡션', () => {
     expect(preview.getAttribute('aria-hidden')).toBe('true');
     expect(caption().closest('[aria-hidden="true"]')).toBe(preview);
 
-    // 눈으로도 주종이 갈려야 한다. 사다리는 숫자가 클수록 작은 글자다
+    // 눈으로도 주종이 갈려야 한다. typeRamp는 실제 px다. 캡션이 이름보다
+    // 작아야 한다(사다리 스텝 비교가 아니라 크기 비교다)
     const nameRamp = typeRamp(document.querySelector('[data-name="0"]')!);
+    const forbiddenT4 = FONT_SIZE_PX.get('text-t4')!;
     const lines = Array.from(caption().querySelectorAll('p'));
     expect(lines.length).toBeGreaterThan(0);
     for (const line of lines) {
-      expect(typeRamp(line)).toBeGreaterThan(nameRamp);
+      expect(typeRamp(line)).toBeLessThan(nameRamp);
       // t4는 이 저장소에서 닫아 둔 칸이다
-      expect(typeRamp(line)).not.toBe(4);
+      expect(typeRamp(line)).not.toBe(forbiddenT4);
     }
-    expect(nameRamp).not.toBe(4);
+    expect(nameRamp).not.toBe(forbiddenT4);
   });
 
   it('미디어가 깨진 자리에는 캡션을 겹치지 않는다', () => {
@@ -886,149 +1000,6 @@ describe('ProjectsSection 캡션 대비', () => {
     expect(
       contrastRatio(dimmest, whiteUnderScrim(plateau))
     ).toBeGreaterThanOrEqual(AA + 0.5);
-  });
-});
-
-describe('ProjectsSection 이름 광휘', () => {
-  it('이름마다 광휘 겹이 붙고 겹이 베끼는 글자가 진짜 글자와 같다', () => {
-    renderSection();
-    const names = Array.from(document.querySelectorAll<HTMLElement>('[data-name]'));
-    expect(names).toHaveLength(N);
-    for (const name of names) {
-      const box = name.firstElementChild as HTMLElement;
-      expect(classList(box)).toContain('pj-name-glow');
-      // 겹은 content: attr()로 이 값을 그린다. 진짜 글자와 어긋나면
-      // 번짐이 다른 낱말 모양으로 남는다
-      expect(box.getAttribute('data-glow-text')).toBe(box.textContent);
-      // 크롬은 가상 요소의 content를 접근성 이름 계산에 섞는다. 사본이 둘
-      // 있으니 이름이 세 번 읽힌다 - aria-label로 못 박는다.
-      // jsdom은 가상 요소를 안 그리므로 이 위험 자체는 여기서 못 재고,
-      // 못 박아 두었다는 사실만 잠근다
-      expect(name.getAttribute('aria-label')).toBe(box.textContent);
-    }
-  });
-});
-
-describe('Projects 이름 광휘 정본(design-tokens.css)', () => {
-  // 선택자와 본문 쌍을 통째로 긁는다. 규칙 하나가 새로 생겨도 자동으로
-  // 판정 대상에 들어온다 - 손으로 적은 목록에서만 새는 것을 막는다
-  // 주석을 먼저 걷는다. 안 걷으면 규칙 바로 위에 붙은 설명이 선택자로
-  // 딸려 들어와, 주석에 적힌 낱말을 규칙이 쓰는 것으로 잘못 읽는다
-  const CSS = TOKENS_CSS.replace(/\/\*[\s\S]*?\*\//g, '');
-  const GLOW_RULES = Array.from(
-    CSS.matchAll(/([^{}]*pj-name-glow[^{}]*)\{([^}]*)\}/g)
-  ).map((m) => ({ selector: m[1].trim(), body: m[2] }));
-
-  function timings(body: string): string[] {
-    const decl = body.match(/animation:\s*([^;]+);/)?.[1] ?? '';
-    return decl
-      .split(/\s+/)
-      .filter((t) => /^var\(--animate-duration-[a-z]+\)$/.test(t) || /^\d+m?s$/.test(t));
-  }
-
-  function maxBlurPx(body: string): number {
-    const shadow = body.match(/text-shadow:\s*([^;]+);/)?.[1] ?? '';
-    const blurs = Array.from(shadow.matchAll(/\d+\s+\d+\s+(\d+)px/g)).map((m) =>
-      Number(m[1])
-    );
-    return blurs.length > 0 ? Math.max(...blurs) : -1;
-  }
-
-  it('규칙이 존재하고 :hover가 아니라 활성 상태를 따라간다', () => {
-    expect(GLOW_RULES.length).toBeGreaterThan(0);
-    // 이름은 호버로 프로젝트를 바꾸고, 마우스를 떼도 프리뷰는 그 프로젝트를
-    // 계속 보여준다. :hover를 따라가면 어느 이름 이야기인지가 끊긴다.
-    // 키보드 포커스 경로도 aria-selected만 옮기므로 :hover로는 아예 안 켜진다
-    for (const rule of GLOW_RULES) {
-      expect(rule.selector).not.toContain(':hover');
-    }
-    const lit = GLOW_RULES.filter((r) => /opacity:\s*1/.test(r.body));
-    expect(lit.length).toBeGreaterThan(0);
-    for (const rule of lit) {
-      expect(rule.selector).toContain('aria-selected="true"');
-    }
-  });
-
-  it('움직이는 것이 opacity 하나뿐이다', () => {
-    const names = new Set(
-      GLOW_RULES.map((r) => r.body.match(/animation:\s*([a-zA-Z][\w-]*)/)?.[1]).filter(
-        (n): n is string => Boolean(n) && n !== 'none'
-      )
-    );
-    expect(names.size).toBeGreaterThan(0);
-    for (const name of names) {
-      const frames = CSS.match(
-        new RegExp(`@keyframes\\s+${name}\\s*\\{([\\s\\S]*?)\\n\\s*\\}\\n`)
-      );
-      expect(frames).not.toBeNull();
-      // 프레임 안에서 건드리는 속성을 전부 뽑아 본다. 목록을 손으로 적지
-      // 않으므로 모르는 속성이 들어와도 걸린다 - 번짐 반경을 전환하면
-      // 매 프레임 알파를 다시 흐리게 만들어 호버가 끊긴다(Skills 판단)
-      const props = Array.from(frames![1].matchAll(/([a-z-]+)\s*:\s*[^;]+;/g)).map(
-        (m) => m[1]
-      );
-      expect(props.length).toBeGreaterThan(0);
-      expect(Array.from(new Set(props))).toEqual(['opacity']);
-    }
-    // transition으로 번짐을 흘리는 우회로도 막는다
-    for (const rule of GLOW_RULES) {
-      expect(rule.body).not.toContain('transition');
-    }
-  });
-
-  it('좁은 겹이 먼저 켜지고 넓은 겹이 그 뒤를 이어받는다', () => {
-    const shadowRules = GLOW_RULES.filter((r) => maxBlurPx(r.body) >= 0);
-    expect(shadowRules).toHaveLength(2);
-    const wide = shadowRules.reduce((a, b) =>
-      maxBlurPx(a.body) > maxBlurPx(b.body) ? a : b
-    );
-    const narrow = shadowRules.find((r) => r !== wide)!;
-    expect(maxBlurPx(wide.body)).toBeGreaterThan(maxBlurPx(narrow.body));
-
-    // 어느 가상 요소가 넓은 겹인지를 선택자에서 뽑아, 그쪽 애니메이션
-    // 규칙을 찾는다. ::before/::after를 손으로 못 박지 않는다
-    const pseudo = (sel: string) => (sel.includes('::before') ? '::before' : '::after');
-    const animOf = (p: string) =>
-      GLOW_RULES.find((r) => r.selector.includes(p) && /animation:/.test(r.body))!;
-
-    const wideAnim = timings(animOf(pseudo(wide.selector)).body);
-    const narrowAnim = timings(animOf(pseudo(narrow.selector)).body);
-    // 좁은 겹은 바로 켜지고(시간값 하나 = 지속), 넓은 겹은 늦게 따라
-    // 붙는다(시간값 둘 = 지속 + 지연). 뒤집으면 번짐이 바깥에서 안으로
-    // 오므라들어 읽힌다
-    expect(narrowAnim).toHaveLength(1);
-    expect(wideAnim).toHaveLength(2);
-    // 넓은 겹의 지연은 좁은 겹의 지속과 같다. 끊김 없이 이어받는다
-    expect(wideAnim[1]).toBe(narrowAnim[0]);
-  });
-
-  it('reduce에서 전환만 죽이고 최종 상태는 남긴다', () => {
-    const reduced = CSS.match(
-      /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[^{]*pj-name-glow[\s\S]*?\{([^}]*)\}/
-    );
-    expect(reduced).not.toBeNull();
-    expect(reduced![1]).toMatch(/animation:\s*none/);
-    // 활성 표시가 통째로 사라지면 어느 이름 이야기인지 알 수 없다
-    expect(reduced![1]).not.toMatch(/opacity:\s*0/);
-    expect(reduced![1]).not.toMatch(/display:\s*none/);
-    expect(reduced![1]).not.toMatch(/visibility:\s*hidden/);
-  });
-
-  it('겹이 손잡이 상자를 넓히지 않고 정본 시안만 쓴다', () => {
-    const layer = GLOW_RULES.find((r) => /content:\s*attr\(/.test(r.body));
-    expect(layer).toBeDefined();
-    // 이 span은 상세 판 제목과 짝지어 나는 FLIP 손잡이다. 겹이 흐름에
-    // 들어오면 상자가 글자 너비를 벗어나고 비행 첫 프레임이 배율로 부푼다
-    expect(layer!.body).toMatch(/position:\s*absolute/);
-
-    for (const rule of GLOW_RULES) {
-      // 임의 색을 새로 만들지 않는다. 정본 토큰만 쓴다
-      expect(rule.body).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
-      expect(rule.body).not.toMatch(/\brgba?\(/);
-      for (const color of rule.body.match(/var\(--color-[a-z-]+\)/g) ?? []) {
-        expect(color).toMatch(/^var\(--color-cyan-[a-z]+\)$/);
-      }
-    }
   });
 });
 
@@ -1359,11 +1330,13 @@ describe('ProjectsSection 프리뷰 셰이더 모프', () => {
 // 구현이 어떻게 생겼든 늘 0이 나와 참 같은 거짓만 잡는다. 그래서 줄 높이를
 // 크롬 실측값으로 세우고 rAF를 손으로 몰아 프레임을 결정적으로 만든다.
 // 픽셀은 여전히 못 잡는다 - 여기서 잠그는 것은 배치의 원인이다
-const WHEEL_ROW_H = 51; // 크롬 실측(26px 글자 + py-2)
+const WHEEL_ROW_H = 69; // 크롬 실측(48px 글자 + py-2)
 const WHEEL_TILT_DEG = 7;
 const WHEEL_BLUR_PX = 1.6;
 const WHEEL_FADE = 0.3;
 const WHEEL_MIN_OPACITY = 0.18;
+// 소스의 CENTER와 같은 식이다. 활성 항목이 항상 오는 목록의 세로 한가운데
+const WHEEL_CENTER = (N - 1) / 2;
 
 function installWheelRig(rowH = WHEEL_ROW_H) {
   const spies: Array<{ mockRestore: () => void }> = [];
@@ -1472,10 +1445,13 @@ describe('ProjectsSection 이름 휠', () => {
       expect(mid).toBeGreaterThan(0);
       expect(mid).toBeLessThan(N - 1);
 
-      // 활성 항목은 변형이 0이다. 제목 비행의 출발 rect가 여기서 나온다
+      // 활성 항목은 x, rot이 항등이다. 제목 비행의 출발 rect가 여기서
+      // 나온다. y만은 항등이 아니다. 목록의 세로 한가운데로 고정되는
+      // centerShift가 얹힌다(활성이 어디 있든 같은 자리로 온다는 계약은
+      // 바로 아래 별도 테스트가 본다)
       const active = wheelStyle(mid);
       expect(active.x).toBe(0);
-      expect(active.y).toBe(0);
+      expect(active.y).toBeCloseTo((WHEEL_CENTER - mid) * WHEEL_ROW_H, 6);
       expect(active.rot).toBe(0);
       expect(active.opacity).toBe(1);
       expect(active.blur).toBe(0);
@@ -1495,6 +1471,11 @@ describe('ProjectsSection 이름 휠', () => {
         expect(cls, `item ${i} origin`).toContain('origin-left');
         expect(cls, `item ${i} box`).toContain('w-fit');
         expect(cls, `item ${i} box`).not.toContain('w-full');
+        // rowH가 첫 항목 하나로 모든 줄의 간격을 대표하려면 어떤 이름도
+        // 줄바꿈하면 안 된다. jsdom은 레이아웃이 없어 줄바꿈이 실제로
+        // 일어나는지 못 재니, 줄바꿈을 막는 클래스가 있는지로 대신 잠근다.
+        // 약한 대리 검사다
+        expect(cls, `item ${i} wrap`).toContain('whitespace-nowrap');
       }
 
       // 부류로 본다. 값을 손으로 나열하면 나열 안 한 항목에서 샌다
@@ -1553,8 +1534,41 @@ describe('ProjectsSection 이름 휠', () => {
       // 세로 어긋남은 sin 압축분만큼만 나고 줄 간격 자체는 안 바뀐다
       const tiltRad = (WHEEL_TILT_DEG * Math.PI) / 180;
       const R = WHEEL_ROW_H / tiltRad;
-      expect(wheelStyle(2).y!).toBeCloseTo(R * Math.sin(2 * tiltRad) - 2 * WHEEL_ROW_H, 1);
+      // 활성은 0번이라(pos=0) centerShift는 WHEEL_CENTER * WHEEL_ROW_H다
+      const centerShift = WHEEL_CENTER * WHEEL_ROW_H;
+      expect(wheelStyle(2).y!).toBeCloseTo(
+        R * Math.sin(2 * tiltRad) - 2 * WHEEL_ROW_H + centerShift,
+        1
+      );
       expect(wheelStyle(2).x!).toBeCloseTo(R * (1 - Math.cos(2 * tiltRad)), 1);
+    } finally {
+      rig.uninstall();
+    }
+  });
+
+  // 이게 이번 작업이 존재하는 이유 그 자체다: 고른 항목은 어느 것이든
+  // 목록의 세로 한가운데라는 같은 자리로 온다. pos가 다르면 흐름상 자리
+  // (pos * WHEEL_ROW_H)도 다르므로, 그 흐름 자리를 y에 다시 더해야
+  // 숫자를 하드코딩하지 않고 "다 같다"를 볼 수 있다. 그 합이 곧
+  // WHEEL_CENTER * WHEEL_ROW_H이고, pos와 무관하게 항상 같다
+  it('고른 항목의 세로 자리는 처음/가운데/끝 어디를 골라도 같다', () => {
+    const rig = installWheelRig();
+    try {
+      renderWheel();
+      const row = document.querySelector('[role="tablist"]')!;
+      const mid = Math.floor((N - 1) / 2);
+      const positions = [0, mid, N - 1];
+      const centers: number[] = [];
+      for (const pos of positions) {
+        fireEvent.keyDown(row, { key: 'Home' });
+        rig.settle();
+        for (let i = 0; i < pos; i += 1) fireEvent.keyDown(row, { key: 'ArrowDown' });
+        rig.settle();
+        expect(nameEl(pos).getAttribute('aria-selected')).toBe('true');
+        centers.push(wheelStyle(pos).y! + pos * WHEEL_ROW_H);
+      }
+      expect(centers[1]).toBeCloseTo(centers[0], 6);
+      expect(centers[2]).toBeCloseTo(centers[0], 6);
     } finally {
       rig.uninstall();
     }
@@ -1570,7 +1584,7 @@ describe('ProjectsSection 이름 휠', () => {
       for (let i = 1; i < N; i += 1) {
         expect(Number(wheelStyle(i).p), `item ${i}`).toBe(0);
       }
-      fireEvent.mouseEnter(nameEl(1));
+      fireEvent.click(nameEl(1));
       rig.step(50); // 절반쯤 간 자리
       const half = Number(wheelStyle(1).p);
       expect(half).toBeGreaterThan(0);
@@ -1594,7 +1608,9 @@ describe('ProjectsSection 이름 휠', () => {
       const ready = projects.findIndex((p, i) => i > 0 && isProjectModalReady(p));
       expect(ready).toBeGreaterThan(0);
 
-      fireEvent.mouseEnter(nameEl(ready));
+      // 클릭으로 먼저 선택만 옮긴다(훑는 동작의 대리). 다음 클릭이 이미
+      // 활성인 이름을 다시 누르는 것이라 그 클릭 하나로 상세가 열린다
+      fireEvent.click(nameEl(ready));
       // 수렴을 안 기다린다. 아직 옛 자리에 회전이 남아 있어야 시나리오가 산다
       expect(Math.abs(wheelStyle(ready).rot!)).toBeGreaterThan(1);
 
@@ -1615,11 +1631,14 @@ describe('ProjectsSection 이름 휠', () => {
       fireEvent.click(nameEl(ready));
       push.mockRestore();
       expect(atOpen, 'openModal이 실제로 불렸다').not.toBeNull();
-      expect(atOpen).toBe('translate(0.00px, 0.00px) rotate(0.000deg)');
+      // y는 0이 아니라 목록 세로 한가운데로의 centerShift다. ready가
+      // 몇 번이든 이 자리가 못박기의 목표다
+      const expectedY = ((WHEEL_CENTER - ready) * WHEEL_ROW_H).toFixed(2);
+      expect(atOpen).toBe(`translate(0.00px, ${expectedY}px) rotate(0.000deg)`);
 
       const snapped = wheelStyle(ready);
       expect(snapped.x).toBe(0);
-      expect(snapped.y).toBe(0);
+      expect(snapped.y).toBeCloseTo((WHEEL_CENTER - ready) * WHEEL_ROW_H, 6);
       expect(snapped.rot).toBe(0);
       expect(snapped.blur).toBe(0);
       expect(snapped.opacity).toBe(1);
@@ -1710,10 +1729,12 @@ describe('ProjectsSection 이름 휠', () => {
       rig.settle();
       const ready = projects.findIndex((p) => isProjectModalReady(p));
       expect(ready).toBeGreaterThanOrEqual(0);
-      fireEvent.mouseEnter(nameEl(ready === 0 ? 1 : 0));
+      fireEvent.click(nameEl(ready === 0 ? 1 : 0));
       // 열림 직전에는 휠이 프레임을 잡고 있다. 이 사실이 아래 0의 대조군이다
       expect(rig.queue.length).toBeGreaterThan(0);
 
+      // 두 클릭 계약: 먼저 선택을 ready로 옮기고, 다시 눌러야 열린다
+      fireEvent.click(nameEl(ready));
       fireEvent.click(nameEl(ready));
       // 펼친 상태에서는 프로젝트를 못 바꾸니 휠이 움직일 일이 없다
       expect(rig.queue).toHaveLength(0);
@@ -1737,7 +1758,7 @@ describe('ProjectsSection 이름 휠', () => {
       const rig = installWheelRig();
       const view = renderWheel();
       rig.settle();
-      fireEvent.mouseEnter(nameEl(N - 1));
+      fireEvent.click(nameEl(N - 1));
       for (let t = 0; t < totalMs; t += stepMs) rig.step(stepMs);
       const rot = wheelStyle(N - 1).rot!;
       view.unmount();
@@ -1760,8 +1781,8 @@ describe('ProjectsSection 이름 휠', () => {
         expect(nameEl(i).tagName).toBe('BUTTON');
         expect(nameEl(i).getAttribute('role')).toBe('tab');
       }
-      // 호버가 프로젝트를 옮긴다
-      fireEvent.mouseEnter(nameEl(2));
+      // 클릭이 프로젝트를 옮긴다. 아직 활성이 아닌 이름의 첫 클릭은 선택만 옮긴다
+      fireEvent.click(nameEl(2));
       expect(nameEl(2).getAttribute('aria-selected')).toBe('true');
       expect(
         document.querySelector('[data-part="preview"]')!.getAttribute('data-flip-id')
@@ -1800,7 +1821,11 @@ describe('ProjectsSection 이름 휠', () => {
       // 않으면 활성 항목에 회전 부스러기가 남아 비행 첫 프레임이 기운다
       expect(nameEl(1).getAttribute('aria-selected')).toBe('true');
       expect(wheelStyle(1).rot).toBe(0);
-      expect(wheelStyle(1).transform).toBe('translate(0.00px, 0.00px) rotate(0.000deg)');
+      // y는 0이 아니라 목록 세로 한가운데로의 centerShift다(pos=1)
+      const expectedY = ((WHEEL_CENTER - 1) * WHEEL_ROW_H).toFixed(2);
+      expect(wheelStyle(1).transform).toBe(
+        `translate(0.00px, ${expectedY}px) rotate(0.000deg)`
+      );
     } finally {
       rig.uninstall();
     }
@@ -1813,7 +1838,7 @@ describe('ProjectsSection 이름 휠', () => {
     try {
       const view = renderWheel();
       rig.settle();
-      fireEvent.mouseEnter(nameEl(N - 1));
+      fireEvent.click(nameEl(N - 1));
       // 아직 수렴 중이다. 이 사실이 아래 0의 대조군이다
       expect(rig.queue.length).toBeGreaterThan(0);
       view.unmount();

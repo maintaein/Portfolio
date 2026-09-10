@@ -40,6 +40,9 @@ const DynamicPreviewMorph = dynamic(
 );
 
 const N = projects.length;
+// 휠의 중심. 목록의 세로 한가운데이고, 고른 항목이 항상 이 자리로 온다.
+// applyWheel의 centerShift가 이 값을 쓴다
+const CENTER = (N - 1) / 2;
 // 모프가 마운트 직후 받아 둘 도착 이미지 경로. 렌더마다 새 배열을 만들면
 // PreviewMorph의 프리로드 effect가 매번 다시 돈다 - 모듈 상수로 한 번만 만든다
 const PROJECT_IMAGE_PATHS = projects.map((p) => p.image);
@@ -73,9 +76,10 @@ const CYCLE_MS = 3000;
 // 이름 목록의 휠 조형. 조형의 정본은
 // .claude/designRefactoring/optionWheel/optionWheel.tsx의 runFrame이고,
 // 여기로 옮겨 온 것은 배치 수학뿐이다. 휠 스크롤도 드래그도 순환도 안
-// 가져온다 - 이 섹션에는 중첩 스크롤 계약이 이미 있어서 이름 위에서
+// 가져온다. 이 섹션에는 중첩 스크롤 계약이 이미 있어서 이름 위에서
 // wheel을 막으면 페이지 스크롤이 죽고, 여섯 개짜리 목록이 순환하면
-// 어디가 처음인지 사라진다. 선택은 지금처럼 호버·클릭·방향키로만 옮긴다.
+// 어디가 처음인지 사라진다. 선택은 클릭과 방향키로만 옮긴다. 호버도
+// 포커스도 선택을 옮기지 않는다.
 //
 // 값은 optionWheel의 기본값(항목 12개, 3rem 글자)이 아니라 우리 목록
 // (항목 여섯, 26px 글자)에 맞춘 것이다
@@ -638,9 +642,11 @@ export default function ProjectsSection() {
   }, []);
 
   // 휠 배치 한 프레임. 단추는 흐름에 그대로 서 있고 여기서 주는 것은 그
-  // 평평한 자리에서의 어긋남이다. 그래서 d가 0인 활성 항목은 정확히 항등
-  // 변형을 받고, reduce 경로는 이 인라인 스타일을 안 걸기만 하면 지금의
-  // 평평한 목록으로 그대로 돌아간다.
+  // 평평한 자리에서의 어긋남이다. d가 0인 활성 항목은 x와 rot은 항등이지만
+  // y는 아니다. 휠의 중심은 목록의 세로 한가운데로 고정이고, 활성 항목이
+  // 항상 그 자리에 오도록 centerShift((CENTER - pos) * rowH)를 더한다.
+  // reduce 경로는 이 인라인 스타일을 안 걸기만 하면 지금의 평평한 목록으로
+  // 그대로 돌아간다.
   //
   // filter와 opacity는 단추가 받고 안쪽 span은 깨끗이 둔다. filter가 걸린
   // 요소는 새 스택 문맥을 만들고 자손의 fixed 기준을 바꾸는데, 그 span이
@@ -648,7 +654,9 @@ export default function ProjectsSection() {
   const applyWheel = useCallback((pos: number) => {
     const els = nameRefs.current;
     // 줄 높이는 단추의 실제 높이로 잰다. 글자 크기가 lg에서 갈리므로 상수로
-    // 박으면 좁은 화면에서 호가 어긋난다
+    // 박으면 좁은 화면에서 호가 어긋난다. 첫 항목 하나로 전부를 대표하는 것은
+    // 단추의 whitespace-nowrap이 모든 줄을 한 줄로 지켜 줄 간격을 균일하게
+    // 만들기 때문이다
     const rowH = els[0]?.offsetHeight ?? 0;
     const tiltRad = (WHEEL_TILT_DEG * Math.PI) / 180;
     // 이웃 두 항목 사이 호의 길이가 줄 높이와 같아지는 반지름. tilt가 곧
@@ -656,17 +664,21 @@ export default function ProjectsSection() {
     // 줄 높이를 아직 못 재면(첫 그림, 숨은 섹션) rowH가 0이고 R도 0이라
     // 아래 R > 0 가지가 통째로 안 돈다. 호만 안 걸리고 거리 표현은 산다
     const R = rowH / tiltRad;
+    // 고른 항목은 흐름상 pos * rowH 자리에 있다. 이 항을 더하면 그 자리가
+    // 항상 정확히 목록의 세로 한가운데(CENTER * rowH)로 옮겨진다, pos가
+    // 무엇이든 같다. rowH가 0이면 이 항도 0이라 위 NaN 방지와 안 부딪힌다
+    const centerShift = (CENTER - pos) * rowH;
     for (let i = 0; i < N; i += 1) {
       const el = els[i];
       if (!el) continue;
       const d = i - pos;
       const dist = Math.abs(d);
       let x = 0;
-      let y = 0;
+      let y = centerShift;
       let rot = 0;
       if (R > 0) {
         const ang = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, d * tiltRad));
-        y = R * Math.sin(ang) - d * rowH;
+        y = R * Math.sin(ang) - d * rowH + centerShift;
         x = -WHEEL_MIRROR * R * (1 - Math.cos(ang)) * WHEEL_CURVE;
         rot = (WHEEL_MIRROR * ang * 180) / Math.PI;
       }
@@ -759,8 +771,10 @@ export default function ProjectsSection() {
     };
   }, [activeIndex, modalOpen, reducedMotion, startWheel, applyWheel, clearWheel]);
 
-  // 호버·포커스·키보드가 모두 이 하나로 선택을 옮긴다. focus 옵션은 키보드
-  // 경로 전용이다 — 호버가 포커스를 훔치면 방향키 탐색과 스크린리더가 어긋난다
+  // 클릭과 키보드가 이 하나로 선택을 옮긴다. focus 옵션은 키보드 경로
+  // 전용이다. 포커스 자체는 선택을 옮기지 않는다. mousedown이 클릭보다
+  // 먼저 단추에 포커스를 주는데, 거기서 goTo를 부르면 click이 보기 전에
+  // activeIndexRef가 이미 바뀌어 있어 첫 클릭에서 바로 열려버린다
   const goTo = useCallback((next: number, opts?: { focus?: boolean }) => {
     // 모프는 출발 화면을 여기서 굳혀야 한다. 아래 setActiveIndex가 커밋되고
     // effect가 돌 때는 <video>의 src와 poster가 이미 새 프로젝트로 갈려 있어
@@ -777,12 +791,17 @@ export default function ProjectsSection() {
     if (opts?.focus) nameRefs.current[next]?.focus();
   }, []);
 
-  // 클릭은 항상 선택을 옮긴다. 계약을 통과한 프로젝트만 추가로 펼침을 연다.
-  // 계약 미달 프로젝트도 목록에 서고 프리뷰 전환은 되지만 눌러도 안 펼쳐진다
+  // 첫 클릭은 선택만 옮긴다. 이미 고른 이름을 다시 클릭해야 상세를 연다 -
+  // 목록을 훑다가 실수로 상세가 펼쳐지지 않게 하는 장치다. 이미 그 항목인지는
+  // activeIndex state가 아니라 activeIndexRef.current로 본다. goTo가 그 ref를
+  // 쓰고, state를 의존성에 넣으면 이 콜백이 선택이 바뀔 때마다 새로 만들어진다.
+  // 계약을 통과한 프로젝트만 두 번째 클릭에서 펼침을 연다. 계약 미달 프로젝트는
+  // 선택은 되지만 다시 눌러도 안 열린다
   const handleNameClick = useCallback(
     (i: number) => {
+      const alreadyActive = i === activeIndexRef.current;
       goTo(i);
-      if (isProjectModalReady(projects[i])) {
+      if (alreadyActive && isProjectModalReady(projects[i])) {
         // 비행보다 먼저다. 출발 rect를 뜨는 것이 openModal 안이라 순서가 계약이다
         if (!reducedMotion) snapWheel(i);
         openModal(i);
@@ -790,6 +809,16 @@ export default function ProjectsSection() {
     },
     [goTo, openModal, snapWheel, reducedMotion]
   );
+
+  // 프리뷰 클릭은 이름의 두 번째 클릭과 같다. 이미 고른 프로젝트를 다시
+  // 가리키는 것이라 선택은 안 옮기고, 계약을 통과했을 때만 상세를 연다.
+  // 순서는 handleNameClick과 같다: snapWheel이 openModal보다 먼저다
+  const handlePreviewClick = useCallback(() => {
+    const i = activeIndexRef.current;
+    if (!isProjectModalReady(projects[i])) return;
+    if (!reducedMotion) snapWheel(i);
+    openModal(i);
+  }, [openModal, snapWheel, reducedMotion]);
 
   const handleIndexKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLElement>) => {
@@ -920,6 +949,18 @@ export default function ProjectsSection() {
                 </div>
               )}
             </div>
+            {/* 프리뷰 클릭 과녁. previewRef 자신을 단추로 감싸면 그 상자가
+                Flip 손잡이라 바뀌면 안 된다. 그래서 잘라내는 상자 안에
+                과녁만 덧대 얹는다. 자르는 조상이 이미 있어 사각형 모서리가
+                따로 튀지 않는다 */}
+            <button
+              type="button"
+              data-part="preview-open"
+              onClick={handlePreviewClick}
+              aria-label={activeProject.title}
+              disabled={!isProjectModalReady(activeProject)}
+              className="absolute inset-0 block h-full w-full border-0 bg-transparent p-0 text-left [font:inherit] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)]"
+            />
             </div>
           </div>
         </div>
@@ -947,15 +988,9 @@ export default function ProjectsSection() {
                   aria-selected={isActive}
                   tabIndex={isActive ? 0 : -1}
                   onClick={() => handleNameClick(i)}
-                  onMouseEnter={() => goTo(i)}
-                  onFocus={() => goTo(i)}
-                  // 이름이 광휘 겹의 글자를 data-glow-text로 복제한다. 그
-                  // 사본이 접근성 이름에 두 번 섞이지 않게 여기서 이름을
-                  // 못박는다
-                  aria-label={project.title}
                   // 줄 사이를 벌리는 것은 목록의 gap이 아니라 단추 자신의
                   // py다. gap으로 벌리면 줄과 줄 사이에 아무 반응 없는 죽은
-                  // 띠가 생겨, 목록을 세로로 훑을 때 광휘가 그 띠마다 깜빡인다.
+                  // 띠가 생겨, 그 자리를 클릭해도 아무 이름도 안 잡힌다.
                   // py가 단추에 남아 있어야 줄과 줄 사이가 전부 과녁이다
                   //
                   // 휠의 회전축은 글자가 시작하는 왼쪽 모서리다. 그래서 상자가
@@ -964,7 +999,7 @@ export default function ProjectsSection() {
                   // 통째로 실려 올라가 남의 줄 위를 덮고, 이름을 겨냥하지 않은
                   // 자리에서 엉뚱한 프로젝트가 잡힌다. 과녁을 글자 너비로
                   // 줄이면 보이는 것과 잡히는 것이 같아진다
-                  className={`block w-fit origin-left text-left text-t3 lg:text-t2 font-bold tracking-[-0.02em] py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)] ${
+                  className={`block w-fit origin-left whitespace-nowrap text-left text-t1 lg:text-d3 font-bold tracking-[-0.02em] py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)] ${
                     isActive ? 'text-[var(--color-text-primary)]' : ''
                   }`}
                   // 휠이 도는 동안 색도 같이 간다. --pj-wheel-p는 활성에서
@@ -991,12 +1026,7 @@ export default function ProjectsSection() {
                     data-flip-id={
                       isActive && !modalOpen ? `title-${project.title}` : undefined
                     }
-                    // 광휘 겹 둘이 이 글자를 복제해 번짐만 남긴다. 정본은
-                    // styles/design-tokens.css의 .pj-name-glow이고, 그 겹은
-                    // absolute라 이 상자의 너비를 바꾸지 않는다 - 바꾸면
-                    // 비행 첫 프레임이 배율로 부푼다
-                    data-glow-text={project.title}
-                    className="pj-name-glow block w-fit"
+                    className="block w-fit"
                   >
                     {project.title}
                   </span>
