@@ -66,6 +66,25 @@ const MUTED = 'rgb(255 255 255 / 0.62)';
 // 프로젝트 프리뷰 영상 순환 주기. 정본은 스펙 §4.6
 const CYCLE_MS = 3000;
 
+// 이름 목록의 휠 조형. 조형의 정본은
+// .claude/designRefactoring/optionWheel/optionWheel.tsx의 runFrame이고,
+// 여기로 옮겨 온 것은 배치 수학뿐이다. 휠 스크롤도 드래그도 순환도 안
+// 가져온다 - 이 섹션에는 중첩 스크롤 계약이 이미 있어서 이름 위에서
+// wheel을 막으면 페이지 스크롤이 죽고, 여섯 개짜리 목록이 순환하면
+// 어디가 처음인지 사라진다. 선택은 지금처럼 호버·클릭·방향키로만 옮긴다.
+//
+// 값은 optionWheel의 기본값(항목 12개, 3rem 글자)이 아니라 우리 목록
+// (항목 여섯, 26px 글자)에 맞춘 것이다
+const WHEEL_TILT_DEG = 7; // 기본 6은 항목 12개의 곡률이다. 여섯이면 호가 직선으로 보인다
+const WHEEL_CURVE = 1;
+const WHEEL_BLUR_PX = 1.6; // 기본 2는 두 칸만 멀어져도 글자가 뭉갠다
+const WHEEL_FADE = 0.3; // 기본 0.25보다 세게. 항목이 적어 대비를 더 줘야 활성이 산다
+const WHEEL_MIN_OPACITY = 0.18; // 기본 0.05는 사실상 안 보인다. 몇 개인지가 이 목록의 정보다
+const WHEEL_SMOOTHING_MS = 200;
+// optionWheel의 side='right'. 호가 오른쪽으로 부풀어 활성 이름이 프리뷰에
+// 가장 가까운 자리에 남는다. 반대 부호였다면 먼 항목이 프리뷰 열을 침범한다
+const WHEEL_MIRROR = -1;
+
 // 프리뷰 캡션 뒤 국소 그라데이션. 전면 카드로 덮지 않고 글자가 앉는
 // 아래쪽에만 깐다 - SkillsSection의 SKILL_DESCRIPTION_SCRIM, About의
 // ABOUT_SCRIMS_MOBILE와 같은 처방이고 방향(to top)도 같다. 알파 0.78도
@@ -145,9 +164,15 @@ export default function ProjectsSection() {
 
   const nameRefs = useRef<(HTMLButtonElement | null)[]>([]);
   // 이름 단추 안쪽의 글자 상자. 비행 손잡이는 단추가 아니라 이쪽이 쥔다 -
-  // 단추는 호버 과녁이라 w-full이고, 상세 판 제목은 글자 너비라, 단추를
-  // 그대로 태우면 Flip이 그 너비 비율을 첫 프레임 scaleX로 박는다
+  // 단추도 글자 너비지만 py만큼 세로로 더 크므로, 단추를 그대로
+  // 태우면 Flip이 그 높이 비율을 비행 첫 프레임 배율로 박는다
   const nameFlipRefs = useRef<(HTMLSpanElement | null)[]>([]);
+  // 휠의 지금 자리와 목표. 목표는 activeIndex이고 지금 자리는 그리로
+  // 수렴하는 중이라 정수가 아닐 수 있다
+  const wheelPosRef = useRef(0);
+  const wheelTargetRef = useRef(0);
+  const wheelRafRef = useRef<number | null>(null);
+  const wheelLastRef = useRef(0);
   const sectionRef = useRef<HTMLElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
   // 프로젝트 전환 tween이 붙는 겹. previewRef 자신이 아니라 그 안쪽이다 -
@@ -613,6 +638,128 @@ export default function ProjectsSection() {
     );
   }, []);
 
+  // 휠 배치 한 프레임. 단추는 흐름에 그대로 서 있고 여기서 주는 것은 그
+  // 평평한 자리에서의 어긋남이다. 그래서 d가 0인 활성 항목은 정확히 항등
+  // 변형을 받고, reduce 경로는 이 인라인 스타일을 안 걸기만 하면 지금의
+  // 평평한 목록으로 그대로 돌아간다.
+  //
+  // filter와 opacity는 단추가 받고 안쪽 span은 깨끗이 둔다. filter가 걸린
+  // 요소는 새 스택 문맥을 만들고 자손의 fixed 기준을 바꾸는데, 그 span이
+  // 제목 비행의 손잡이다
+  const applyWheel = useCallback((pos: number) => {
+    const els = nameRefs.current;
+    // 줄 높이는 단추의 실제 높이로 잰다. 글자 크기가 lg에서 갈리므로 상수로
+    // 박으면 좁은 화면에서 호가 어긋난다
+    const rowH = els[0]?.offsetHeight ?? 0;
+    const tiltRad = (WHEEL_TILT_DEG * Math.PI) / 180;
+    // 이웃 두 항목 사이 호의 길이가 줄 높이와 같아지는 반지름. tilt가 곧
+    // 얼마나 말리는가다
+    // 줄 높이를 아직 못 재면(첫 그림, 숨은 섹션) rowH가 0이고 R도 0이라
+    // 아래 R > 0 가지가 통째로 안 돈다. 호만 안 걸리고 거리 표현은 산다
+    const R = rowH / tiltRad;
+    for (let i = 0; i < N; i += 1) {
+      const el = els[i];
+      if (!el) continue;
+      const d = i - pos;
+      const dist = Math.abs(d);
+      let x = 0;
+      let y = 0;
+      let rot = 0;
+      if (R > 0) {
+        const ang = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, d * tiltRad));
+        y = R * Math.sin(ang) - d * rowH;
+        x = -WHEEL_MIRROR * R * (1 - Math.cos(ang)) * WHEEL_CURVE;
+        rot = (WHEEL_MIRROR * ang * 180) / Math.PI;
+      }
+      el.style.transform = `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) rotate(${rot.toFixed(3)}deg)`;
+      el.style.opacity = String(Math.max(WHEEL_MIN_OPACITY, 1 - dist * WHEEL_FADE));
+      // 활성 항목에는 filter를 아예 안 건다. blur(0px)도 none이 아닌 이상
+      // 겹을 하나 만들고, 이 단추 안에 비행 출발 손잡이가 들어 있다
+      el.style.filter = dist > 0 ? `blur(${(dist * WHEEL_BLUR_PX).toFixed(2)}px)` : 'none';
+      el.style.setProperty(
+        '--pj-wheel-p',
+        Math.max(0, 1 - Math.min(dist, 1)).toFixed(4)
+      );
+    }
+  }, []);
+
+  // reduce 경로. 휠이 남긴 것을 전부 걷어 평평한 목록으로 되돌린다
+  const clearWheel = useCallback(() => {
+    for (const el of nameRefs.current) {
+      if (!el) continue;
+      el.style.removeProperty('transform');
+      el.style.removeProperty('opacity');
+      el.style.removeProperty('filter');
+      el.style.removeProperty('--pj-wheel-p');
+    }
+  }, []);
+
+  // 지수 감쇠 한 프레임. k를 dt에서 뽑으므로 프레임률이 달라도 같은 시각에
+  // 같은 자리에 있다. 수렴하면 스스로 멈춘다 - 이 목록은 대부분의 시간
+  // 가만히 있고, 가만히 있는 동안 rAF가 도는 것이 이 효과의 유일한 상시 비용이다
+  const runWheelFrame = useCallback(
+    (now: number) => {
+      const dt = Math.min((now - wheelLastRef.current) / 1000, 0.05);
+      wheelLastRef.current = now;
+      const tau = WHEEL_SMOOTHING_MS / 1000;
+      const k = 1 - Math.exp(-dt / tau);
+      const target = wheelTargetRef.current;
+      const cur = wheelPosRef.current;
+      let next = cur + (target - cur) * k;
+      const settled = Math.abs(target - next) < 0.001;
+      if (settled) next = target;
+      wheelPosRef.current = next;
+      applyWheel(next);
+      wheelRafRef.current = settled ? null : requestAnimationFrame(runWheelFrame);
+    },
+    [applyWheel]
+  );
+
+  const startWheel = useCallback(() => {
+    if (wheelRafRef.current != null) cancelAnimationFrame(wheelRafRef.current);
+    wheelLastRef.current = performance.now();
+    wheelRafRef.current = requestAnimationFrame(runWheelFrame);
+  }, [runWheelFrame]);
+
+  // 제목 비행 직전에 휠을 목표에 못박는다. 이름을 훑다가 곧바로 클릭하면
+  // pos가 아직 목표에 못 갔는데 비행이 시작된다. Flip.getState가 뜨는 rect는
+  // 조상의 transform을 반영하므로, 눌린 단추에 회전이 남아 있으면 그 rect가
+  // 회전한 상자의 외접 사각형이 되어 비행 첫 프레임이 기울거나 부푼다
+  const snapWheel = useCallback(
+    (i: number) => {
+      if (wheelRafRef.current != null) {
+        cancelAnimationFrame(wheelRafRef.current);
+        wheelRafRef.current = null;
+      }
+      wheelTargetRef.current = i;
+      wheelPosRef.current = i;
+      applyWheel(i);
+    },
+    [applyWheel]
+  );
+
+  // 휠은 activeIndex를 따라간다. 모달이 펼쳐져 있으면 프로젝트를 못 바꾸니
+  // 휠이 움직일 일이 없다 - rAF를 아예 안 돌린다. reduce에서는 만들지도
+  // 않는다: 평평한 목록 그대로 두고 활성 이름의 색만 갈린다
+  useEffect(() => {
+    if (reducedMotion) {
+      clearWheel();
+      return;
+    }
+    if (modalOpen) return;
+    wheelTargetRef.current = activeIndex;
+    startWheel();
+    // 줄 높이는 글자 크기를 따라가고 글자 크기는 lg에서 갈린다. 창이 바뀌면
+    // 이미 멈춘 휠이 옛 줄 높이로 굳어 있으므로 한 프레임을 다시 그린다
+    const onResize = () => applyWheel(wheelPosRef.current);
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      if (wheelRafRef.current != null) cancelAnimationFrame(wheelRafRef.current);
+      wheelRafRef.current = null;
+    };
+  }, [activeIndex, modalOpen, reducedMotion, startWheel, applyWheel, clearWheel]);
+
   // 호버·포커스·키보드가 모두 이 하나로 선택을 옮긴다. focus 옵션은 키보드
   // 경로 전용이다 — 호버가 포커스를 훔치면 방향키 탐색과 스크린리더가 어긋난다
   const goTo = useCallback((next: number, opts?: { focus?: boolean }) => {
@@ -637,10 +784,12 @@ export default function ProjectsSection() {
     (i: number) => {
       goTo(i);
       if (isProjectModalReady(projects[i])) {
+        // 비행보다 먼저다. 출발 rect를 뜨는 것이 openModal 안이라 순서가 계약이다
+        if (!reducedMotion) snapWheel(i);
         openModal(i);
       }
     },
-    [goTo, openModal]
+    [goTo, openModal, snapWheel, reducedMotion]
   );
 
   const handleIndexKeyDown = useCallback(
@@ -836,16 +985,35 @@ export default function ProjectsSection() {
                   aria-label={project.title}
                   // 줄 사이를 벌리는 것은 목록의 gap이 아니라 단추 자신의
                   // py다. gap으로 벌리면 줄과 줄 사이에 아무 반응 없는 죽은
-                  // 띠가 생겨, 목록을 세로로 훑을 때 광휘가 그 띠마다 깜빡인다
-                  className={`block w-full text-left text-t3 lg:text-t2 font-bold tracking-[-0.02em] py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)] ${
+                  // 띠가 생겨, 목록을 세로로 훑을 때 광휘가 그 띠마다 깜빡인다.
+                  // py가 단추에 남아 있어야 줄과 줄 사이가 전부 과녁이다
+                  //
+                  // 휠의 회전축은 글자가 시작하는 왼쪽 모서리다. 그래서 상자가
+                  // 오른쪽으로 넓을수록 그 오른쪽 끝이 세로로 크게 실린다.
+                  // 상자를 열 전체 너비로 쥐면 글자가 끝난 뒤의 빈 영역이
+                  // 통째로 실려 올라가 남의 줄 위를 덮고, 이름을 겨냥하지 않은
+                  // 자리에서 엉뚱한 프로젝트가 잡힌다. 과녁을 글자 너비로
+                  // 줄이면 보이는 것과 잡히는 것이 같아진다
+                  className={`block w-fit origin-left text-left text-t3 lg:text-t2 font-bold tracking-[-0.02em] py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)] ${
                     isActive ? 'text-[var(--color-text-primary)]' : ''
                   }`}
-                  style={{ color: isActive ? undefined : MUTED }}
+                  // 휠이 도는 동안 색도 같이 간다. --pj-wheel-p는 활성에서
+                  // 1이고 한 칸만 멀어져도 0이라, 선택이 옮겨 가는 사이
+                  // 글자색이 뚝 끊기지 않고 따라 붙는다
+                  style={{
+                    color: reducedMotion
+                      ? isActive
+                        ? undefined
+                        : MUTED
+                      : `color-mix(in srgb, var(--color-text-primary) calc(var(--pj-wheel-p, 0) * 100%), ${MUTED})`,
+                  }}
                 >
-                  {/* 단추는 w-full로 남아 호버 과녁을 지키고, 비행 손잡이는
-                      글자 너비인 이 안쪽 상자가 쥔다. inline-block이 아니라
-                      block인 것은 기준선 밑에 딸려 오는 여백이 단추 높이를
-                      바꾸지 않게 하기 위해서다 */}
+                  {/* 비행 손잡이는 단추가 아니라 글자 너비인 이 안쪽 상자가
+                      쥔다. 단추도 글자 너비지만 py만큼 세로로 더 크므로, 단추를
+                      그대로 태우면 Flip이 그 높이 차이를 비행 첫 프레임의
+                      배율로 박는다. inline-block이 아니라 block인 것은 기준선
+                      밑에 딸려 오는 여백이 단추 높이를 바꾸지 않게 하기
+                      위해서다 */}
                   <span
                     ref={(el) => {
                       nameFlipRefs.current[i] = el;

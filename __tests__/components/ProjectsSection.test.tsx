@@ -127,8 +127,11 @@ describe('ProjectsSection 접힘 레이아웃', () => {
     expect(active.className).toContain('text-t3');
     expect(active.className).toContain('lg:text-t2');
     const inactive = document.querySelector<HTMLElement>('[aria-selected="false"]')!;
-    // jsdom이 CSS 색을 rgba(...) 콤마 표기로 정규화한다. 소스의 리터럴과 다르다
-    expect(inactive.style.color).toBe('rgba(255, 255, 255, 0.62)');
+    // 휠이 --pj-wheel-p로 활성색을 섞어 넣지만 비활성은 그 비율이 0이라 색은
+    // 여전히 MUTED다. 기본값 0이 식 안에 박혀 있어야 휠이 아직 한 프레임도
+    // 안 돈 첫 그림에서도 이 밝기 계약이 지켜진다
+    expect(inactive.style.color).toContain('rgb(255 255 255 / 0.62)');
+    expect(inactive.style.color).toContain('var(--pj-wheel-p, 0)');
   });
 
   // 이름과 상세 판 제목은 GSAP Flip으로 짝지어 날아간다. 두 노드의 글자
@@ -1413,5 +1416,502 @@ describe('ProjectsSection 프리뷰 셰이더 모프', () => {
     expect(tweens).toHaveLength(0);
     expect(layerEl().style.transform).toBe('');
     expect(layerEl().style.opacity).toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 이름 휠
+// ---------------------------------------------------------------------------
+// 조형의 정본은 .claude/designRefactoring/optionWheel/optionWheel.tsx다.
+// jsdom에는 레이아웃 엔진이 없어 offsetHeight가 0이고, 0이면 반지름이 0이 되어
+// 호 수학이 통째로 0으로 무너진다. 그 상태에서 "회전이 걸렸는가"를 물으면
+// 구현이 어떻게 생겼든 늘 0이 나와 참 같은 거짓만 잡는다. 그래서 줄 높이를
+// 크롬 실측값으로 세우고 rAF를 손으로 몰아 프레임을 결정적으로 만든다.
+// 픽셀은 여전히 못 잡는다 - 여기서 잠그는 것은 배치의 원인이다
+const WHEEL_ROW_H = 51; // 크롬 실측(26px 글자 + py-2)
+const WHEEL_TILT_DEG = 7;
+const WHEEL_BLUR_PX = 1.6;
+const WHEEL_FADE = 0.3;
+const WHEEL_MIN_OPACITY = 0.18;
+
+function installWheelRig(rowH = WHEEL_ROW_H) {
+  const spies: Array<{ mockRestore: () => void }> = [];
+  spies.push(
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(rowH)
+  );
+  // 시계까지 우리가 쥔다. 루프가 performance.now()로 기준을 잡으므로 프레임
+  // 시각만 가짜로 주면 첫 dt가 음수가 되어 수렴이 거꾸로 간다
+  let clock = 10_000;
+  spies.push(vi.spyOn(performance, 'now').mockImplementation(() => clock));
+
+  let nextId = 0;
+  const queue: Array<{ id: number; cb: FrameRequestCallback }> = [];
+  const rafSpy = vi
+    .spyOn(window, 'requestAnimationFrame')
+    .mockImplementation((cb: FrameRequestCallback) => {
+      nextId += 1;
+      queue.push({ id: nextId, cb });
+      return nextId;
+    });
+  spies.push(rafSpy);
+  spies.push(
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id: number) => {
+      const at = queue.findIndex((f) => f.id === id);
+      if (at !== -1) queue.splice(at, 1);
+    })
+  );
+
+  const step = (ms = 50) => {
+    const frame = queue.shift();
+    if (!frame) return false;
+    clock += ms;
+    act(() => {
+      frame.cb(clock);
+    });
+    return true;
+  };
+  // dt는 0.05초에서 잘리므로 50ms보다 큰 걸음은 수렴을 왜곡한다
+  const settle = (ms = 50, max = 300) => {
+    let n = 0;
+    while (n < max && step(ms)) n += 1;
+    return n;
+  };
+  return {
+    queue,
+    rafSpy,
+    step,
+    settle,
+    uninstall: () => spies.forEach((s) => s.mockRestore()),
+  };
+}
+
+function nameEl(i: number) {
+  return document.querySelector<HTMLElement>(`[data-name="${i}"]`)!;
+}
+
+function wheelStyle(i: number) {
+  const el = nameEl(i);
+  const m = /^translate\((-?[\d.]+)px, (-?[\d.]+)px\) rotate\((-?[\d.]+)deg\)$/.exec(
+    el.style.transform
+  );
+  const b = /^blur\(([\d.]+)px\)$/.exec(el.style.filter);
+  return {
+    transform: el.style.transform,
+    x: m ? Number(m[1]) : null,
+    y: m ? Number(m[2]) : null,
+    rot: m ? Number(m[3]) : null,
+    opacity: el.style.opacity === '' ? null : Number(el.style.opacity),
+    filter: el.style.filter,
+    blur: el.style.filter === 'none' ? 0 : b ? Number(b[1]) : null,
+    p: el.style.getPropertyValue('--pj-wheel-p'),
+  };
+}
+
+function flipSpan(i: number) {
+  return nameEl(i).firstElementChild as HTMLElement;
+}
+
+function renderWheel(reduced = false) {
+  return render(
+    <SectionActivityProvider
+      active={SECTION_IDS.PROJECTS}
+      entryAnimationTarget={null}
+      pageVisible
+      routeResolved
+      motionReady
+      reducedMotion={reduced}
+    >
+      <ProjectsSection />
+    </SectionActivityProvider>
+  );
+}
+
+describe('ProjectsSection 이름 휠', () => {
+  // 이 작업이 존재하는 이유 그 자체다. 평평하게 쌓인 단추 줄이 원호를 따라
+  // 휘고, 고른 것에서 멀어질수록 흐려지고 번진다
+  it('활성에서 멀어질수록 기울고 흐려지고 번진다 - 위아래 양쪽 다', () => {
+    const rig = installWheelRig();
+    try {
+      renderWheel();
+      const mid = Math.floor((N - 1) / 2);
+      const row = document.querySelector('[role="tablist"]')!;
+      for (let i = 0; i < mid; i += 1) fireEvent.keyDown(row, { key: 'ArrowDown' });
+      rig.settle();
+      expect(nameEl(mid).getAttribute('aria-selected')).toBe('true');
+      expect(mid).toBeGreaterThan(0);
+      expect(mid).toBeLessThan(N - 1);
+
+      // 활성 항목은 변형이 0이다. 제목 비행의 출발 rect가 여기서 나온다
+      const active = wheelStyle(mid);
+      expect(active.x).toBe(0);
+      expect(active.y).toBe(0);
+      expect(active.rot).toBe(0);
+      expect(active.opacity).toBe(1);
+      expect(active.blur).toBe(0);
+      // 'none'이지 blur(0px)가 아니다. filter는 값이 무엇이든 새 스택 문맥을
+      // 만들고 자손 fixed의 기준 상자를 바꾼다. 이 단추 안에 비행 출발
+      // 손잡이가 들어 있으므로 활성에서는 속성 자체가 없어야 한다
+      expect(nameEl(mid).style.filter).toBe('none');
+
+      // 회전축은 글자가 시작하는 왼쪽 모서리이고 상자는 글자 너비다. 축이
+      // 오른쪽으로 가면 한 칸마다 수십 px씩 위아래로 튀고, 상자가 열 전체
+      // 너비로 넓어지면 글자 뒤의 빈 영역이 실려 올라가 남의 줄 위를 덮어
+      // 이름을 겨냥하지 않은 자리에서 엉뚱한 프로젝트가 잡힌다(크롬 실측:
+      // 상자 527px, 글자 87~321px). jsdom에는 레이아웃이 없어 그 결과를 못
+      // 재니 축과 상자 폭을 문자열로 잠근다 - 약한 대리 검사임을 안다
+      for (let i = 0; i < N; i += 1) {
+        const cls = nameEl(i).className.split(/\s+/);
+        expect(cls, `item ${i} origin`).toContain('origin-left');
+        expect(cls, `item ${i} box`).toContain('w-fit');
+        expect(cls, `item ${i} box`).not.toContain('w-full');
+      }
+
+      // 부류로 본다. 값을 손으로 나열하면 나열 안 한 항목에서 샌다
+      for (let i = 0; i < N; i += 1) {
+        const s = wheelStyle(i);
+        const d = i - mid;
+        expect(s.rot, `item ${i} rot`).not.toBeNull();
+        // 회전 부호는 위와 아래가 반대다. 한쪽만 보면 전부 같은 방향으로
+        // 기우는 구현(호가 아니라 미끄러짐)을 놓친다
+        // d === 0을 따로 쓰는 것은 -Math.sign(0)이 -0이라 Object.is가 0과
+        // 갈라지기 때문이다. 부호 계약 자체는 그대로다
+        expect(Math.sign(s.rot!), `item ${i} rot sign`).toBe(d === 0 ? 0 : -Math.sign(d));
+        // 부풂은 양쪽 다 같은 방향(오른쪽)이다. 원기둥이 한쪽으로 누워야
+        // 휠로 읽힌다. side='right'이므로 부호는 +다
+        expect(s.x!, `item ${i} x`).toBeGreaterThanOrEqual(0);
+        expect(s.blur!, `item ${i} blur`).toBeCloseTo(Math.abs(d) * WHEEL_BLUR_PX, 2);
+        expect(s.opacity!, `item ${i} opacity`).toBeCloseTo(
+          Math.max(WHEEL_MIN_OPACITY, 1 - Math.abs(d) * WHEEL_FADE),
+          4
+        );
+      }
+      // 거리에 따라 단조롭게 세진다. 이웃보다 먼 항목이 덜 기울면 호가 아니다
+      for (let d = 1; mid + d < N && mid - d >= 0; d += 1) {
+        expect(Math.abs(wheelStyle(mid + d).rot!)).toBeGreaterThan(
+          Math.abs(wheelStyle(mid + d - 1).rot!)
+        );
+        expect(Math.abs(wheelStyle(mid - d).rot!)).toBeGreaterThan(
+          Math.abs(wheelStyle(mid - d + 1).rot!)
+        );
+        expect(wheelStyle(mid + d).x!).toBeGreaterThan(wheelStyle(mid + d - 1).x!);
+        expect(wheelStyle(mid - d).x!).toBeGreaterThan(wheelStyle(mid - d + 1).x!);
+      }
+    } finally {
+      rig.uninstall();
+    }
+  });
+
+  // 브리프가 못박은 네 숫자를 값 자체가 아니라 그 숫자가 만드는 결과에서
+  // 되짚어 잠근다. 상수 하나를 바꾸면 여기서 갈린다
+  it('기울기 7도, 번짐 1.6px, 감쇠 0.3, 바닥 투명도 0.18이다', () => {
+    const rig = installWheelRig();
+    try {
+      renderWheel();
+      rig.settle();
+      // 활성은 0번이다. d = i
+      expect(Math.abs(wheelStyle(1).rot!)).toBeCloseTo(WHEEL_TILT_DEG, 3);
+      expect(Math.abs(wheelStyle(2).rot!)).toBeCloseTo(WHEEL_TILT_DEG * 2, 3);
+      expect(wheelStyle(1).blur!).toBeCloseTo(WHEEL_BLUR_PX, 3);
+      expect(1 - wheelStyle(1).opacity!).toBeCloseTo(WHEEL_FADE, 4);
+      // 세 칸 이상은 식이 0.18 아래로 내려간다. 바닥이 없으면 여기서 갈린다
+      expect(1 - 3 * WHEEL_FADE).toBeLessThan(WHEEL_MIN_OPACITY);
+      for (let i = 3; i < N; i += 1) {
+        expect(wheelStyle(i).opacity!, `item ${i}`).toBeCloseTo(WHEEL_MIN_OPACITY, 4);
+      }
+      // 반지름은 이웃 사이 호의 길이가 줄 높이와 같아지게 잡는다. 그래서
+      // 세로 어긋남은 sin 압축분만큼만 나고 줄 간격 자체는 안 바뀐다
+      const tiltRad = (WHEEL_TILT_DEG * Math.PI) / 180;
+      const R = WHEEL_ROW_H / tiltRad;
+      expect(wheelStyle(2).y!).toBeCloseTo(R * Math.sin(2 * tiltRad) - 2 * WHEEL_ROW_H, 1);
+      expect(wheelStyle(2).x!).toBeCloseTo(R * (1 - Math.cos(2 * tiltRad)), 1);
+    } finally {
+      rig.uninstall();
+    }
+  });
+
+  it('색은 --pj-wheel-p로 활성색과 기본색 사이를 보간한다', () => {
+    const rig = installWheelRig();
+    try {
+      renderWheel();
+      rig.settle();
+      expect(Number(wheelStyle(0).p)).toBe(1);
+      // 한 칸을 넘으면 0에서 멈춘다. 음수로 내려가면 color-mix가 무효가 된다
+      for (let i = 1; i < N; i += 1) {
+        expect(Number(wheelStyle(i).p), `item ${i}`).toBe(0);
+      }
+      fireEvent.mouseEnter(nameEl(1));
+      rig.step(50); // 절반쯤 간 자리
+      const half = Number(wheelStyle(1).p);
+      expect(half).toBeGreaterThan(0);
+      expect(half).toBeLessThan(1);
+      const color = nameEl(1).style.color;
+      expect(color).toContain('color-mix');
+      expect(color).toContain('--pj-wheel-p');
+    } finally {
+      rig.uninstall();
+    }
+  });
+
+  // 이 과제에서 가장 위험한 곳이다. 훑다가 곧바로 누르면 pos가 아직 목표에
+  // 못 갔는데 제목 비행이 시작된다. Flip.getState가 뜨는 rect는 조상의
+  // transform을 반영하므로 회전이 남아 있으면 첫 프레임이 기운다
+  it('훑다가 곧바로 누르면 눌린 이름을 항등 변형으로 못박는다', () => {
+    const rig = installWheelRig();
+    try {
+      renderWheel();
+      rig.settle();
+      const ready = projects.findIndex((p, i) => i > 0 && isProjectModalReady(p));
+      expect(ready).toBeGreaterThan(0);
+
+      fireEvent.mouseEnter(nameEl(ready));
+      // 수렴을 안 기다린다. 아직 옛 자리에 회전이 남아 있어야 시나리오가 산다
+      expect(Math.abs(wheelStyle(ready).rot!)).toBeGreaterThan(1);
+
+      // 못박기가 openModal '앞'이어야 한다는 것이 계약이다. 뒤로 밀면 아래
+      // 최종 상태 검사는 그대로 통과한다 - 둘 다 같은 tick 안에서 끝나기
+      // 때문이다. 그래서 openModal 안에서 한 점을 잡아 그 시점의 변형을 본다.
+      // 진짜 기준점은 Flip.getState지만 이 스위트는 matchMedia를 좁은 화면으로
+      // 고정해 두어 비행 관문이 닫혀 있다. pushState는 같은 openModal 몸통
+      // 안, getState 바로 뒤라 순서를 똑같이 가른다
+      let atOpen: string | null = null;
+      const push = vi
+        .spyOn(window.history, 'pushState')
+        .mockImplementation(function (this: History, ...args: Parameters<History['pushState']>) {
+          atOpen = nameEl(ready).style.transform;
+          return History.prototype.pushState.apply(this, args);
+        });
+
+      fireEvent.click(nameEl(ready));
+      push.mockRestore();
+      expect(atOpen, 'openModal이 실제로 불렸다').not.toBeNull();
+      expect(atOpen).toBe('translate(0.00px, 0.00px) rotate(0.000deg)');
+
+      const snapped = wheelStyle(ready);
+      expect(snapped.x).toBe(0);
+      expect(snapped.y).toBe(0);
+      expect(snapped.rot).toBe(0);
+      expect(snapped.blur).toBe(0);
+      expect(snapped.opacity).toBe(1);
+      // 못박기는 눌린 항목만이 아니라 판 전체를 목표 배치로 옮긴다
+      expect(Math.abs(wheelStyle(0).rot!)).toBeCloseTo(ready * WHEEL_TILT_DEG, 3);
+    } finally {
+      rig.uninstall();
+    }
+  });
+
+  it('비행 손잡이를 쥔 안쪽 노드에는 filter도 transform도 안 건다', () => {
+    const rig = installWheelRig();
+    try {
+      renderWheel();
+      rig.settle();
+      // 손잡이는 그대로 활성 이름의 안쪽 노드다
+      const handle = document.querySelector<HTMLElement>('[data-flip-id^="title-"]')!;
+      expect(handle).toBe(flipSpan(0));
+      expect(handle.getAttribute('data-flip-id')).toBe(`title-${projects[0].title}`);
+      // filter가 걸린 요소는 새 스택 문맥을 만들고 자손의 fixed 기준을 바꾼다
+      for (let i = 0; i < N; i += 1) {
+        expect(flipSpan(i).style.filter, `span ${i} filter`).toBe('');
+        expect(flipSpan(i).style.transform, `span ${i} transform`).toBe('');
+        expect(flipSpan(i).style.opacity, `span ${i} opacity`).toBe('');
+      }
+      // 반대쪽: 배치는 단추가 받는다. 아무도 안 받으면 휠이 아니다
+      expect(nameEl(1).style.filter).not.toBe('');
+      expect(nameEl(1).style.transform).not.toBe('');
+    } finally {
+      rig.uninstall();
+    }
+  });
+
+  it('reducedMotion이면 휠을 만들지도 돌리지도 않는다', () => {
+    const rig = installWheelRig();
+    try {
+      renderWheel(true);
+      expect(rig.queue).toHaveLength(0);
+      rig.settle();
+      for (let i = 0; i < N; i += 1) {
+        expect(nameEl(i).style.transform, `item ${i}`).toBe('');
+        expect(nameEl(i).style.filter, `item ${i}`).toBe('');
+        expect(nameEl(i).style.opacity, `item ${i}`).toBe('');
+        expect(nameEl(i).style.getPropertyValue('--pj-wheel-p'), `item ${i}`).toBe('');
+      }
+      // 그래도 활성 표시는 남는다. 색만 갈린다
+      expect(classList(nameEl(0))).toContain('text-[var(--color-text-primary)]');
+      expect(nameEl(0).style.color).toBe('');
+      expect(nameEl(1).style.color).not.toBe('');
+      expect(nameEl(1).style.color).not.toContain('color-mix');
+    } finally {
+      rig.uninstall();
+    }
+  });
+
+  it('reduce가 켜지면 이미 걸린 휠을 걷는다', () => {
+    const rig = installWheelRig();
+    try {
+      const view = renderWheel(false);
+      rig.settle();
+      expect(nameEl(1).style.transform).not.toBe('');
+      view.rerender(
+        <SectionActivityProvider
+          active={SECTION_IDS.PROJECTS}
+          entryAnimationTarget={null}
+          pageVisible
+          routeResolved
+          motionReady
+          reducedMotion
+        >
+          <ProjectsSection />
+        </SectionActivityProvider>
+      );
+      for (let i = 0; i < N; i += 1) {
+        expect(nameEl(i).style.transform, `item ${i}`).toBe('');
+        expect(nameEl(i).style.filter, `item ${i}`).toBe('');
+        expect(nameEl(i).style.opacity, `item ${i}`).toBe('');
+      }
+    } finally {
+      rig.uninstall();
+    }
+  });
+
+  it('모달이 펼쳐진 동안은 rAF가 안 돌고, 접으면 다시 돈다', () => {
+    const rig = installWheelRig();
+    try {
+      renderWheel();
+      rig.settle();
+      const ready = projects.findIndex((p) => isProjectModalReady(p));
+      expect(ready).toBeGreaterThanOrEqual(0);
+      fireEvent.mouseEnter(nameEl(ready === 0 ? 1 : 0));
+      // 열림 직전에는 휠이 프레임을 잡고 있다. 이 사실이 아래 0의 대조군이다
+      expect(rig.queue.length).toBeGreaterThan(0);
+
+      fireEvent.click(nameEl(ready));
+      // 펼친 상태에서는 프로젝트를 못 바꾸니 휠이 움직일 일이 없다
+      expect(rig.queue).toHaveLength(0);
+      expect(rig.settle()).toBe(0);
+
+      // 접으면 다시 돈다. popstate로 접는 경로가 동기라 여기서 쓴다
+      window.history.replaceState(null, '', '');
+      act(() => {
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+      expect(rig.queue.length).toBeGreaterThan(0);
+    } finally {
+      rig.uninstall();
+    }
+  });
+
+  it('수렴이 프레임률과 무관하다', () => {
+    // 같은 경과 시간이면 같은 자리다. k를 상수로 박으면 빠른 프레임이 더
+    // 빨리 수렴해 두 값이 갈린다
+    const rotAfter = (stepMs: number, totalMs: number) => {
+      const rig = installWheelRig();
+      const view = renderWheel();
+      rig.settle();
+      fireEvent.mouseEnter(nameEl(N - 1));
+      for (let t = 0; t < totalMs; t += stepMs) rig.step(stepMs);
+      const rot = wheelStyle(N - 1).rot!;
+      view.unmount();
+      rig.uninstall();
+      return rot;
+    };
+    const fast = rotAfter(10, 200);
+    const slow = rotAfter(50, 200);
+    // 아직 수렴 전이어야 비교가 의미 있다
+    expect(Math.abs(fast)).toBeGreaterThan(1);
+    expect(fast).toBeCloseTo(slow, 3);
+  });
+
+  it('휠이 서도 마크업과 이벤트 계약은 그대로다', () => {
+    const rig = installWheelRig();
+    try {
+      renderWheel();
+      rig.settle();
+      for (let i = 0; i < N; i += 1) {
+        expect(nameEl(i).tagName).toBe('BUTTON');
+        expect(nameEl(i).getAttribute('role')).toBe('tab');
+      }
+      // 호버가 프로젝트를 옮긴다
+      fireEvent.mouseEnter(nameEl(2));
+      expect(nameEl(2).getAttribute('aria-selected')).toBe('true');
+      expect(
+        document.querySelector('[data-part="preview"]')!.getAttribute('data-flip-id')
+      ).toBe(`pv-${projects[2].title}`);
+      // 방향키가 옮긴다
+      fireEvent.keyDown(document.querySelector('[role="tablist"]')!, { key: 'ArrowDown' });
+      expect(nameEl(3 % N).getAttribute('aria-selected')).toBe('true');
+    } finally {
+      rig.uninstall();
+    }
+  });
+
+  // 6.E를 갚는 논거가 "가만히 있으면 rAF가 안 돈다"인데, 그 말이 참인지는
+  // 여기서만 잠긴다. 이게 없으면 목록이 놀고 있는 내내 프레임을 태우는
+  // 구현도 위 검사를 전부 통과한다
+  it('수렴하면 rAF가 스스로 멈추고, 선택이 바뀌면 다시 돈다', () => {
+    const rig = installWheelRig();
+    try {
+      renderWheel();
+      const row = document.querySelector('[role="tablist"]')!;
+      rig.settle();
+      // 선택을 옮겨야 수렴할 거리가 생긴다. 처음에는 pos와 target이 같아
+      // 한 프레임에 끝나므로 "멈췄다"가 참 같은 거짓이 된다
+      fireEvent.keyDown(row, { key: 'ArrowDown' });
+      expect(rig.queue.length, '선택이 바뀌면 다시 돈다').toBeGreaterThan(0);
+      const frames = rig.settle();
+      // 실제로 여러 프레임 돌았다. 1이면 감쇠가 아니라 순간이동이다
+      expect(frames).toBeGreaterThan(1);
+      // 그리고 멈췄다. settle은 큐가 빌 때까지 돌리므로 여기서 큐가 비어 있다
+      expect(rig.queue.length, '수렴하면 멈춘다').toBe(0);
+      // 멈춘 뒤 프레임을 더 태우지 않는다
+      const before = rig.rafSpy.mock.calls.length;
+      rig.step();
+      expect(rig.rafSpy.mock.calls.length).toBe(before);
+      // 정확히 목표에 앉았다. 0.001 문턱에서 멈추기만 하고 목표로 못박지
+      // 않으면 활성 항목에 회전 부스러기가 남아 비행 첫 프레임이 기운다
+      expect(nameEl(1).getAttribute('aria-selected')).toBe('true');
+      expect(wheelStyle(1).rot).toBe(0);
+      expect(wheelStyle(1).transform).toBe('translate(0.00px, 0.00px) rotate(0.000deg)');
+    } finally {
+      rig.uninstall();
+    }
+  });
+
+  // 사라진 뒤에도 도는 루프가 이 효과의 유일한 누수 경로다. 정리에서
+  // 프레임을 안 거두면 떼어 낸 노드에 계속 스타일을 바르고 프레임을 태운다
+  it('컴포넌트가 사라지면 잡고 있던 프레임을 거둔다', () => {
+    const rig = installWheelRig();
+    try {
+      const view = renderWheel();
+      rig.settle();
+      fireEvent.mouseEnter(nameEl(N - 1));
+      // 아직 수렴 중이다. 이 사실이 아래 0의 대조군이다
+      expect(rig.queue.length).toBeGreaterThan(0);
+      view.unmount();
+      expect(rig.queue).toHaveLength(0);
+    } finally {
+      rig.uninstall();
+    }
+  });
+
+  // 줄 높이를 못 재는 순간이 실제로 있다. 첫 그림, 숨은 섹션, jsdom.
+  // 그때 반지름이 rowH/tiltRad로 무한대가 되면 좌표가 NaN이 되고,
+  // NaN이 든 transform 문자열은 CSS가 통째로 버려 목록이 제자리에 굳는다
+  it('줄 높이를 못 재면 휠을 안 건다 - NaN을 뱉지 않는다', () => {
+    const rig = installWheelRig(0);
+    try {
+      renderWheel();
+      rig.settle();
+      for (let i = 0; i < N; i += 1) {
+        const s = wheelStyle(i);
+        expect(s.transform, `item ${i}`).not.toContain('NaN');
+        expect(s.x, `item ${i} x`).toBe(0);
+        expect(s.y, `item ${i} y`).toBe(0);
+        expect(s.rot, `item ${i} rot`).toBe(0);
+      }
+      // 그래도 거리 표현은 살아 있다. 높이를 모르는 것은 호일 뿐이다
+      expect(wheelStyle(1).blur).toBeCloseTo(WHEEL_BLUR_PX, 3);
+      expect(wheelStyle(0).opacity).toBe(1);
+    } finally {
+      rig.uninstall();
+    }
   });
 });

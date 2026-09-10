@@ -147,9 +147,9 @@ function nameEl(i: number) {
   return document.querySelector<HTMLButtonElement>(`[data-name="${i}"]`)!;
 }
 
-// 비행 손잡이를 쥔 노드는 단추가 아니라 그 안쪽 글자 상자다. 단추는 호버
-// 과녁이라 w-full이고 상세 판 제목은 글자 너비라, 단추를 그대로 태우면
-// Flip이 그 너비 비율을 첫 프레임 scaleX로 박는다(크롬 실측 5.07배)
+// 비행 손잡이를 쥔 노드는 단추가 아니라 그 안쪽 글자 상자다. 단추가 열 전체
+// 너비였을 때는 그 너비 비율이 첫 프레임 scaleX로 박혔다(크롬 실측 5.07배).
+// 지금은 단추도 글자 너비지만 py만큼 세로로 더 커서 배율이 세로로 남는다
 function nameFlipEl(i: number) {
   return nameEl(i).firstElementChild as HTMLElement;
 }
@@ -206,11 +206,12 @@ describe('ProjectsFlip - 펼치기 비행', { timeout: 30_000 }, () => {
     expect(getState).toHaveBeenCalledWith([preview, pressed]);
   });
 
-  // 이 과제가 존재하는 이유. 두 노드의 상자 너비가 다르면 Flip.from은 그
-  // 비율을 비행 첫 프레임의 scaleX로 박는다. 크롬 실측으로 단추 504px 대
-  // 제목 99.33px, 배율 5.07이었다. jsdom에는 레이아웃이 없어 픽셀은 못 재니
-  // 원인을 잠근다: 상태를 뜨는 노드가 w-full 단추가 아니라 글자 너비 상자다
-  it('상태를 뜨는 노드는 w-full 단추가 아니라 그 안쪽 글자 너비 상자다', async () => {
+  // 이 과제가 존재하는 이유. 두 노드의 상자가 다르면 Flip.from은 그 비율을
+  // 비행 첫 프레임의 배율로 박는다. 크롬 실측으로 단추 504px 대 제목
+  // 99.33px, 배율 5.07이었다. 단추를 글자 너비로 줄인 뒤에도 py만큼 세로가
+  // 남으므로 원인은 그대로다. jsdom에는 레이아웃이 없어 픽셀은 못 재니
+  // 원인을 잠근다: 상태를 뜨는 노드가 단추가 아니라 그 안쪽 글자 상자다
+  it('상태를 뜨는 노드는 단추가 아니라 그 안쪽 글자 너비 상자다', async () => {
     const getState = vi.spyOn(Flip, 'getState');
     renderSection();
     await flushGsapImport();
@@ -218,9 +219,9 @@ describe('ProjectsFlip - 펼치기 비행', { timeout: 30_000 }, () => {
     const button = nameEl(READY_INDEX);
     const handle = nameFlipEl(READY_INDEX);
 
-    // 단추는 호버 과녁이라 오른쪽 열 전체 너비로 남아야 한다. 여기서 w-full을
-    // 떼고 상자를 글자에 맞추면 비행은 맞지만 호버 과녁이 글자 폭으로 줄어든다
-    expect(button.className).toContain('w-full');
+    // 단추는 회전한 빈 영역이 남의 줄을 덮지 않도록 글자 너비다. 여기에
+    // w-full이 돌아오면 히트 영역 겹침도 함께 돌아온다
+    expect(button.className.split(/\s+/)).not.toContain('w-full');
     // 손잡이는 글자 너비다. w-fit이 fit-content 상자를 만든다. block인 것은
     // inline-block의 기준선 여백이 단추 높이를 바꾸지 않게 하기 위해서다
     const handleClasses = handle.className.split(/\s+/);
