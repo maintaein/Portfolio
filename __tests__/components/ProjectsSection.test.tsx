@@ -11,6 +11,46 @@ import { isProjectModalReady } from '@/lib/utils/projectContract';
 import { contrastRatio, relativeLuminance } from '@/lib/utils/contrast';
 import { gsap, SITE_EASE_CUBIC } from '@/lib/gsap';
 
+
+// 셰이더 모프는 WebGL이 있어야 하고 jsdom에는 없다. 이 파일이 잠그는 것은
+// 픽셀이 아니라 배선이다 - 모프가 참을 돌려줄 때와 거짓을 돌려줄 때 두 방향
+// 모두에서 프리뷰 전환 계약이 지켜지는가. 그래서 모듈 경계에서 가짜로 바꾸고
+// 반환값을 테스트가 정한다. 기본값은 거짓이라 이 파일의 나머지 테스트는
+// 지금까지와 같은 폴백 경로를 그대로 본다
+const { morphState } = vi.hoisted(() => ({
+  morphState: {
+    result: false,
+    // morph를 부른 시점에 넘어온 출발 엘리먼트의 상태를 그 자리에서 뜬다.
+    // 나중에 읽으면 이미 새 프로젝트로 갈려 있어 아무것도 증명하지 못한다
+    calls: [] as Array<{ tag: string | null; poster: string | null; to: string }>,
+  },
+}));
+
+vi.mock('@/components/blocks/PreviewMorph', async () => {
+  const { forwardRef, useImperativeHandle } = await import('react');
+  const FakePreviewMorph = forwardRef<
+    { morph: (el: HTMLVideoElement | HTMLImageElement | null, to: string) => boolean },
+    { className?: string }
+  >(function FakePreviewMorph({ className }, ref) {
+    useImperativeHandle(
+      ref,
+      () => ({
+        morph(fromEl, toImageSrc) {
+          morphState.calls.push({
+            tag: fromEl?.tagName ?? null,
+            poster: fromEl?.getAttribute('poster') ?? fromEl?.getAttribute('src') ?? null,
+            to: toImageSrc,
+          });
+          return morphState.result;
+        },
+      }),
+      []
+    );
+    return <canvas data-part="preview-morph" className={className} />;
+  });
+  return { default: FakePreviewMorph };
+});
+
 beforeEach(() => {
   vi.stubGlobal(
     'matchMedia',
@@ -18,6 +58,8 @@ beforeEach(() => {
       matches: false, media: '', addEventListener: () => {}, removeEventListener: () => {},
     })
   );
+  morphState.result = false;
+  morphState.calls.length = 0;
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
   Object.defineProperty(window, 'innerHeight', { configurable: true, value: 900 });
   // History 테스트가 남긴 state가 다음 테스트로 새지 않게 매번 깨끗하게 시작한다
@@ -1209,5 +1251,167 @@ describe('ProjectsSection 곡선 정본', () => {
     // 복제해 둔다. 복제본이 정본에서 떨어져 나가면 CSS 전환과 GSAP 전환이
     // 서로 다른 곡선으로 움직인다
     expect(literal).toBe(SITE_EASE_CUBIC);
+  });
+});
+
+describe('ProjectsSection 프리뷰 셰이더 모프', () => {
+  function fakeTween() {
+    return { kill: vi.fn() };
+  }
+
+  async function renderWithMorph(reduced = false) {
+    const view = render(
+      <SectionActivityProvider
+        active={SECTION_IDS.PROJECTS}
+        entryAnimationTarget={null}
+        pageVisible
+        routeResolved
+        motionReady
+        reducedMotion={reduced}
+      >
+        <ProjectsSection />
+      </SectionActivityProvider>
+    );
+    // gsap 동적 import와 next/dynamic 청크가 둘 다 풀려야 배선이 완성된다
+    await act(async () => {
+      await new Promise((done) => setTimeout(done, 0));
+    });
+    return view;
+  }
+
+  function layerEl() {
+    return document.querySelector<HTMLElement>('[data-part="preview-media"]')!;
+  }
+
+  function morphEl() {
+    return document.querySelector<HTMLElement>('[data-part="preview-morph"]');
+  }
+
+  afterEach(() => {
+    gsap.globalTimeline.clear();
+  });
+
+  it('모프가 태워지면 겹에 gsap 교체를 걸지 않고, 못 태우면 그대로 건다', async () => {
+    const fromTo = vi
+      .spyOn(gsap, 'fromTo')
+      .mockImplementation(() => fakeTween() as unknown as gsap.core.Tween);
+    morphState.result = true;
+    await renderWithMorph();
+
+    goToIndex(1);
+    expect(morphState.calls).toHaveLength(1);
+    // 이것이 이 과제의 표제다. 셰이더가 두 화면을 잇는 동안 겹까지 같이
+    // 움직이면 모프한 그림이 밑에서 또 밀려 올라온다
+    expect(fromTo).not.toHaveBeenCalled();
+    // 죽은 tween이 남긴 인라인 값도 없어야 한다
+    expect(layerEl().style.transform).toBe('');
+    expect(layerEl().style.opacity).toBe('');
+
+    // 반대 방향. WebGL이 없거나 출발 프레임을 못 굳히면 여기로 떨어진다
+    morphState.result = false;
+    goToIndex(2);
+    expect(morphState.calls).toHaveLength(2);
+    expect(fromTo).toHaveBeenCalledTimes(1);
+    expect(fromTo.mock.calls[0][0]).toBe(layerEl());
+  });
+
+  it('모프에 넘기는 출발 화면은 DOM이 새 프로젝트로 갈리기 전의 것이다', async () => {
+    morphState.result = true;
+    await renderWithMorph();
+
+    // 영상 없는 프로젝트는 next/image가 src를 /_next/image?url=...로 바꾼다.
+    // 어느 프로젝트의 그림을 들고 있었는지만 본다
+    const wasShowing = (i: number) => decodeURIComponent(morphState.calls[i].poster ?? '');
+
+    goToIndex(1);
+    // 여기가 이 과제에서 가장 틀리기 쉬운 곳이다. 전환 effect에서 부르면
+    // 그때 <video>의 poster는 이미 새 프로젝트라 두 텍스처가 같은 그림이 되고
+    // 모프가 아무것도 안 한다
+    expect(wasShowing(0)).toContain(projects[0].image);
+    expect(wasShowing(0)).not.toContain(projects[1].image);
+    expect(morphState.calls[0].to).toBe(projects[1].image);
+
+    goToIndex(2);
+    expect(wasShowing(1)).toContain(projects[1].image);
+    expect(wasShowing(1)).not.toContain(projects[2].image);
+    expect(morphState.calls[1].to).toBe(projects[2].image);
+  });
+
+  it('모프 캔버스는 잘라내는 상자 안, 미디어 위, 캡션 아래다', async () => {
+    await renderWithMorph();
+    const canvas = morphEl()!;
+    expect(canvas).not.toBeNull();
+
+    // 잘라내는 상자 밖에 있으면 모서리가 안 깎여 사각형이 삐져나온다
+    const clip = document.querySelector<HTMLElement>('[data-part="preview"] .rounded-media')!;
+    expect(clip.contains(canvas)).toBe(true);
+    expect(layerEl().contains(canvas)).toBe(true);
+
+    // 미디어보다 뒤 = 미디어 위에 그려진다
+    const media = document.querySelector('[data-part="preview-video"], [data-part="preview-image"]')!;
+    expect(
+      media.compareDocumentPosition(canvas) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+
+    // 캡션보다 앞 = 캡션이 위에 남는다. 캡션까지 같이 녹으면 글자가 안 읽힌다
+    const caption = document.querySelector('[data-part="preview-caption"]')!;
+    expect(
+      canvas.compareDocumentPosition(caption) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+
+    expect(canvas.className).toContain('pointer-events-none');
+    expect(canvas.className).toContain('inset-0');
+  });
+
+  it('reduce에서는 캔버스를 아예 만들지 않는다', async () => {
+    morphState.result = true;
+    await renderWithMorph(true);
+    // 셰이더에 분기를 넣는 것보다 캔버스를 안 만드는 쪽이 싸다
+    expect(morphEl()).toBeNull();
+    goToIndex(1);
+    expect(morphState.calls).toHaveLength(0);
+  });
+
+  it('같은 프로젝트에 다시 호버해도 모프를 태우지 않는다', async () => {
+    morphState.result = true;
+    await renderWithMorph();
+    goToIndex(1);
+    expect(morphState.calls).toHaveLength(1);
+    // 같은 그림 사이를 녹이는 것은 아무것도 전하지 않는 모션이다
+    goToIndex(1);
+    expect(morphState.calls).toHaveLength(1);
+  });
+
+  it('순환 재생이 src를 갈아 끼울 때는 모프를 태우지 않는다', async () => {
+    morphState.result = true;
+    await renderWithMorph();
+    const many = projects.findIndex(
+      (p) => (p.implementations ?? []).filter((i) => i.video).length > 1
+    );
+    expect(many).toBeGreaterThan(-1);
+    goToIndex(many);
+    expect(morphState.calls).toHaveLength(1);
+
+    // 같은 프로젝트 안의 다음 장면이다. 상태 전환이 아니다
+    fireEvent.ended(document.querySelector('[data-part="preview-video"]')!);
+    expect(morphState.calls).toHaveLength(1);
+  });
+
+  it('이름을 빠르게 다섯 개 훑어도 남는 gsap tween이 없다', async () => {
+    const tweens: ReturnType<typeof fakeTween>[] = [];
+    vi.spyOn(gsap, 'fromTo').mockImplementation(() => {
+      const t = fakeTween();
+      tweens.push(t);
+      return t as unknown as gsap.core.Tween;
+    });
+    morphState.result = true;
+    await renderWithMorph();
+
+    const sweep = Math.min(5, N);
+    for (let i = 1; i < sweep; i += 1) goToIndex(i);
+    expect(morphState.calls).toHaveLength(sweep - 1);
+    expect(tweens).toHaveLength(0);
+    expect(layerEl().style.transform).toBe('');
+    expect(layerEl().style.opacity).toBe('');
   });
 });

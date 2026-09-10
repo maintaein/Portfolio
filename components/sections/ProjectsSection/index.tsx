@@ -9,9 +9,31 @@ import { SECTION_IDS } from '@/lib/constants';
 import { setProjectModalObscured } from '@/hooks/useProjectModalObscured';
 import { useSectionActivity } from '@/components/common/SectionActivityContext';
 import type { Flip } from '@/lib/gsap';
+import type { PreviewMorphHandle } from '@/components/blocks/PreviewMorph';
 
 const ProjectModal = dynamic(
   () => import('@/components/blocks/ProjectModal'),
+  { ssr: false }
+);
+
+// three는 Hyperspeed와 공유하는 큰 덩어리다. Projects 섹션에 들어오기 전에
+// 정적 번들로 딸려 들어오면 안 되므로 next/dynamic으로 늦게 부른다.
+// next/dynamic의 LoadableComponent는 ref를 로드된 컴포넌트에 전달하지 않는다
+// (HyperspeedBackground.tsx의 주석이 실측을 적어 뒀다). 그래서 핸들은 ref가
+// 아니라 일반 prop으로 받는 다리 컴포넌트를 끼운다
+const DynamicPreviewMorph = dynamic(
+  () =>
+    import('@/components/blocks/PreviewMorph').then(({ default: PreviewMorph }) => ({
+      default: function PreviewMorphRefBridge({
+        className,
+        onHandle,
+      }: {
+        className?: string;
+        onHandle: (handle: PreviewMorphHandle | null) => void;
+      }) {
+        return <PreviewMorph ref={onHandle} className={className} />;
+      },
+    })),
   { ssr: false }
 );
 
@@ -136,6 +158,19 @@ export default function ProjectsSection() {
   // 먼저 죽여야 했을 것이다
   const mediaLayerRef = useRef<HTMLDivElement | null>(null);
   const swapTweenRef = useRef<{ kill: () => void } | null>(null);
+  // 셰이더 모프의 명령형 손잡이. next/dynamic이 늦게 풀어 주므로 처음 몇
+  // 프레임은 null이고, 그동안의 전환은 아래 gsap 폴백이 맡는다
+  const morphHandleRef = useRef<PreviewMorphHandle | null>(null);
+  const handleMorphHandle = useCallback((handle: PreviewMorphHandle | null) => {
+    morphHandleRef.current = handle;
+  }, []);
+  // 이번 activeIndex 변화를 모프가 맡았는가. goTo가 DOM이 갈리기 전에 세우고
+  // 전환 effect가 읽고 지운다
+  const morphStartedRef = useRef(false);
+  // goTo가 "정말 다른 프로젝트로 옮기는가"를 판정하는 데만 쓴다. 이미 켜져
+  // 있는 이름에 다시 호버해도 goTo는 불리는데, 그때 모프를 태우면 같은 그림
+  // 사이를 녹이는 이유 없는 모션이 된다
+  const activeIndexRef = useRef(0);
   // 펼침 stage. 모달이 지연 로드라 부모의 layout effect로는 DOM에 박히는
   // 순간을 못 잡는다 - ProjectModal의 onStageMount 콜백 ref가 채운다
   const stageElRef = useRef<HTMLDivElement | null>(null);
@@ -252,13 +287,18 @@ export default function ProjectsSection() {
   // transform과 opacity만 만진다. 이름을 빠르게 훑으면 전환이 겹치므로
   // 이전 것을 죽이고 다음을 태운다
   useEffect(() => {
+    activeIndexRef.current = activeIndex;
     const layer = mediaLayerRef.current;
     swapTweenRef.current?.kill();
     swapTweenRef.current = null;
+    // 이 전환을 셰이더 모프가 맡았으면 겹에는 아무것도 걸지 않는다. 두 화면을
+    // 녹여 잇는 일을 셰이더가 이미 하고 있고, 겹은 그 아래에서 조용히 갈린다
+    const morphed = morphStartedRef.current;
+    morphStartedRef.current = false;
     if (!layer) return;
     const mod = gsapModuleRef.current;
     // reduce에서는 즉시 교체로 무너진다. 죽은 tween이 남긴 transform도 걷는다
-    if (!mod || !motionReady || reducedMotion) {
+    if (morphed || !mod || !motionReady || reducedMotion) {
       layer.style.removeProperty('transform');
       layer.style.removeProperty('opacity');
       return;
@@ -576,6 +616,16 @@ export default function ProjectsSection() {
   // 호버·포커스·키보드가 모두 이 하나로 선택을 옮긴다. focus 옵션은 키보드
   // 경로 전용이다 — 호버가 포커스를 훔치면 방향키 탐색과 스크린리더가 어긋난다
   const goTo = useCallback((next: number, opts?: { focus?: boolean }) => {
+    // 모프는 출발 화면을 여기서 굳혀야 한다. 아래 setActiveIndex가 커밋되고
+    // effect가 돌 때는 <video>의 src와 poster가 이미 새 프로젝트로 갈려 있어
+    // 그때 굳히면 두 텍스처가 같은 그림이 된다
+    if (next !== activeIndexRef.current) {
+      activeIndexRef.current = next;
+      const fromEl =
+        videoElRef.current ?? mediaLayerRef.current?.querySelector('img') ?? null;
+      morphStartedRef.current =
+        morphHandleRef.current?.morph(fromEl, projects[next].image) ?? false;
+    }
     setActiveIndex(next);
     setCycleIndex(0);
     if (opts?.focus) nameRefs.current[next]?.focus();
@@ -682,6 +732,18 @@ export default function ProjectsSection() {
                   onError={handleMediaError}
                 />
               )}
+
+              {/* 프로젝트가 갈리는 0.56초 동안만 켜지는 셰이더 모프. 미디어
+                  위, 캡션 아래에 놓는다 - 캡션까지 같이 녹으면 글자가 안
+                  읽힌다. 평소에는 opacity 0이고 rAF도 안 돈다. reduce에서는
+                  아예 만들지 않는다(셰이더에 분기를 넣는 것보다 캔버스를
+                  안 만드는 쪽이 싸다) */}
+              {motionReady && !reducedMotion ? (
+                <DynamicPreviewMorph
+                  className="pointer-events-none absolute inset-0 h-full w-full"
+                  onHandle={handleMorphHandle}
+                />
+              ) : null}
 
               {/* 영상 위 캡션. 프리뷰 컨테이너에 aria-hidden이 걸려 있으므로
                   이 글자는 장식이고, 같은 내용을 오른쪽 이름 목록이 이미
