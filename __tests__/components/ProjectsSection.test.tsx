@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { isProjectModalReady } from '@/lib/utils/projectContract';
 import { contrastRatio, relativeLuminance } from '@/lib/utils/contrast';
-import { gsap, SITE_EASE_CUBIC } from '@/lib/gsap';
+import { gsap } from '@/lib/gsap';
 
 
 // 셰이더 모프는 WebGL이 있어야 하고 jsdom에는 없다. 이 파일이 잠그는 것은
@@ -1188,75 +1188,6 @@ describe('ProjectsSection 프로젝트 전환 모션', () => {
   });
 });
 
-describe('ProjectsSection 목록 위치 표시', () => {
-  function bar() {
-    return document.querySelector<HTMLElement>('[data-part="index-progress"]')!;
-  }
-
-  function fill(): number {
-    const hit = bar().style.transform.match(/scaleX\(([^)]+)\)/);
-    expect(hit).not.toBeNull();
-    return Number.parseFloat(hit![1]);
-  }
-
-  it('머리띠 선의 채움이 목록 위치를 그대로 옮긴다', () => {
-    renderSection();
-    const row = document.querySelector('[role="tablist"]')!;
-    // 첫 항목에서 이미 한 칸 차 있다. 0이면 "아무 것도 안 고름"으로 읽힌다
-    expect(fill()).toBeCloseTo(1 / N, 5);
-    fireEvent.keyDown(row, { key: 'End' });
-    expect(fill()).toBeCloseTo(1, 5);
-    goToIndex(2);
-    expect(fill()).toBeCloseTo(3 / N, 5);
-    fireEvent.keyDown(row, { key: 'Home' });
-    expect(fill()).toBeCloseTo(1 / N, 5);
-  });
-
-  it('transform만 움직이고 reduce에서는 즉시 뛴다', () => {
-    renderSection();
-    // 폭이 아니라 배율이다. 폭을 흘리면 매 프레임 배치가 다시 계산된다
-    expect(bar().style.transition).toContain('transform');
-    expect(bar().style.transition).not.toContain('width');
-    expect(classList(bar())).toContain('origin-left');
-
-    render(
-      <SectionActivityProvider
-        active={SECTION_IDS.PROJECTS}
-        entryAnimationTarget={null}
-        pageVisible
-        routeResolved
-        motionReady
-        reducedMotion
-      >
-        <ProjectsSection />
-      </SectionActivityProvider>
-    );
-    const bars = document.querySelectorAll<HTMLElement>('[data-part="index-progress"]');
-    expect(bars[bars.length - 1].style.transition).toBe('none');
-  });
-
-  it('장식이라 스크린리더에 같은 말을 두 번 하지 않는다', () => {
-    renderSection();
-    // 목록 위치는 role=tab의 aria-selected가 이미 말하고 있다
-    expect(bar().closest('[aria-hidden="true"]')).not.toBeNull();
-  });
-});
-
-describe('ProjectsSection 곡선 정본', () => {
-  it('CSS로 적어 둔 이징이 lib/gsap의 정본과 같은 곡선이다', () => {
-    const source = readFileSync(
-      resolve(process.cwd(), 'components/sections/ProjectsSection/index.tsx'),
-      'utf8'
-    );
-    const literal = source.match(/cubic-bezier\([^)]*\)/)?.[0];
-    expect(literal).toBeDefined();
-    // 이 파일은 gsap을 정적 import하면 지연 로드가 깨져서 곡선을 문자열로
-    // 복제해 둔다. 복제본이 정본에서 떨어져 나가면 CSS 전환과 GSAP 전환이
-    // 서로 다른 곡선으로 움직인다
-    expect(literal).toBe(SITE_EASE_CUBIC);
-  });
-});
-
 describe('ProjectsSection 프리뷰 셰이더 모프', () => {
   function fakeTween() {
     return { kill: vi.fn() };
@@ -1913,5 +1844,13 @@ describe('ProjectsSection 이름 휠', () => {
     } finally {
       rig.uninstall();
     }
+  });
+});
+
+describe('ProjectsSection 머리띠 제거', () => {
+  it('MY PROJECTS 글자와 목록 위치 궤도가 문서에 없다', () => {
+    renderSection();
+    expect(screen.queryByText('MY PROJECTS')).toBeNull();
+    expect(document.querySelector('[data-part="index-progress"]')).toBeNull();
   });
 });

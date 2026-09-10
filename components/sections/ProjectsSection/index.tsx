@@ -26,18 +26,23 @@ const DynamicPreviewMorph = dynamic(
     import('@/components/blocks/PreviewMorph').then(({ default: PreviewMorph }) => ({
       default: function PreviewMorphRefBridge({
         className,
+        preload,
         onHandle,
       }: {
         className?: string;
+        preload?: readonly string[];
         onHandle: (handle: PreviewMorphHandle | null) => void;
       }) {
-        return <PreviewMorph ref={onHandle} className={className} />;
+        return <PreviewMorph ref={onHandle} className={className} preload={preload} />;
       },
     })),
   { ssr: false }
 );
 
 const N = projects.length;
+// 모프가 마운트 직후 받아 둘 도착 이미지 경로. 렌더마다 새 배열을 만들면
+// PreviewMorph의 프리로드 effect가 매번 다시 돈다 - 모듈 상수로 한 번만 만든다
+const PROJECT_IMAGE_PATHS = projects.map((p) => p.image);
 
 // history.state에서 projectModalId 키만 걷어내고 나머지 필드(Next.js가
 // 쓰는 것 포함)는 그대로 둔다. state가 객체가 아니면 빈 객체로 시작한다
@@ -60,7 +65,6 @@ export function reconcileProjectModal(historyState: unknown): string | null {
   return id;
 }
 
-const LINE_STRONG = 'rgb(255 255 255 / 0.14)';
 const MUTED = 'rgb(255 255 255 / 0.62)';
 
 // 프로젝트 프리뷰 영상 순환 주기. 정본은 스펙 §4.6
@@ -102,11 +106,6 @@ const PREVIEW_CAPTION_SCRIM =
 // 프로젝트가 갈릴 때 미디어 겹이 자리를 잡는 시간. --animate-duration-base와
 // 같은 값이다. 이름을 훑으면 매번 오는 전환이라 길면 걸리적거린다
 const PREVIEW_SWAP_MS = 300;
-
-// lib/gsap의 SITE_EASE와 같은 곡선을 CSS 표기로 적은 것. 값을 import하면
-// gsap 모듈이 정적 번들로 딸려 들어와 지연 로드가 깨진다 - design-tokens.css도
-// 같은 이유로 이 리터럴을 그대로 쓴다
-const SITE_EASE_CSS = 'cubic-bezier(0.22, 1, 0.36, 1)';
 
 // 접힘 프리뷰와 펼침 stage 사이 비행 시간. 워드마크 FLIP과 같은 값이고
 // 정본은 styles/design-tokens.css의 워드마크 flip 지속 변수다. HomeClient도
@@ -890,6 +889,7 @@ export default function ProjectsSection() {
               {motionReady && !reducedMotion ? (
                 <DynamicPreviewMorph
                   className="pointer-events-none absolute inset-0 h-full w-full"
+                  preload={PROJECT_IMAGE_PATHS}
                   onHandle={handleMorphHandle}
                 />
               ) : null}
@@ -925,42 +925,12 @@ export default function ProjectsSection() {
         </div>
 
         <div className="lg:pl-10">
-          <div className="flex items-center gap-3">
-            <span
-              className="text-t8 uppercase tracking-[0.2em]"
-              style={{ color: MUTED }}
-            >
-              MY PROJECTS
-            </span>
-            {/* 이미 있던 헤어라인이 일을 하나 하게 한다: 목록 여섯 중
-                몇 번째를 보고 있는지. 장식을 하나 더 얹는 대신 있던 선을
-                궤도로 쓴다. transform만 움직이고 reduce에서는 즉시 뛴다.
-                이름 목록이 aria로 이미 말하고 있으니 여기는 장식이다 */}
-            <span
-              aria-hidden="true"
-              className="relative flex-1 h-px overflow-hidden"
-              style={{ background: LINE_STRONG }}
-            >
-              <span
-                data-part="index-progress"
-                className="absolute inset-0 origin-left"
-                style={{
-                  background: 'var(--color-cyan-core)',
-                  transform: `scaleX(${(activeIndex + 1) / N})`,
-                  transition: reducedMotion
-                    ? 'none'
-                    : `transform var(--animate-duration-base) ${SITE_EASE_CSS}`,
-                }}
-              />
-            </span>
-          </div>
-
           <div
             data-part="index"
             role="tablist"
             aria-orientation="vertical"
             aria-label="프로젝트 목록"
-            className="mt-6 flex flex-col"
+            className="flex flex-col"
             onKeyDown={handleIndexKeyDown}
           >
             {projects.map((project, i) => {

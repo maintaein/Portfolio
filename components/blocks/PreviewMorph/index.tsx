@@ -152,6 +152,11 @@ export interface PreviewMorphHandle {
 export interface PreviewMorphProps {
   // 캔버스가 덮을 상자의 크기를 부모가 정한다. 캔버스는 absolute inset-0이다.
   className?: string;
+  // 마운트 직후 받아 둘 도착 이미지 경로들. DOM img의 src와 원본 경로가
+  // 다른 URL이라 브라우저 캐시를 공유하지 않으므로(next/image 최적화),
+  // 이 컴포넌트가 직접 원본 경로로 받아 둔다. 부르는 쪽은 렌더마다 새
+  // 배열을 만들지 말고 안정된 상수를 넘겨야 한다 - 그래야 효과가 한 번만 돈다
+  preload?: readonly string[];
 }
 
 // 도착 이미지가 아직 안 왔을 때 tNext에 물릴 4x4 판. mothSlider의
@@ -186,7 +191,7 @@ interface Engine {
 }
 
 const PreviewMorph = forwardRef<PreviewMorphHandle, PreviewMorphProps>(function PreviewMorph(
-  { className },
+  { className, preload },
   ref
 ) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -292,31 +297,91 @@ const PreviewMorph = forwardRef<PreviewMorphHandle, PreviewMorphProps>(function 
     };
   }, []);
 
+  // 도착 이미지를 마운트 직후 원본 경로로 받아 둔다. DOM의 <img>는 next/image가
+  // 최적화 URL로 받으므로 브라우저 캐시가 둘로 갈린다 - 모프는 이 캐시만 본다.
+  // 언마운트 뒤 도착하는 onload가 죽은 컴포넌트를 위해 아무 일도 안 하게 막는다
+  useEffect(() => {
+    if (!preload) return;
+    let unmounted = false;
+    for (const src of preload) {
+      if (imageCacheRef.current.has(src)) continue;
+      const img = new Image();
+      img.onload = () => {
+        if (unmounted || !img.naturalWidth) return;
+        imageCacheRef.current.set(src, img);
+      };
+      img.src = src;
+    }
+    return () => {
+      unmounted = true;
+    };
+  }, [preload]);
+
   useImperativeHandle(
     ref,
     () => ({
       morph(fromEl, toImageSrc) {
         const engine = engineRef.current;
         const canvas = canvasRef.current;
-        if (!engine || !canvas || !fromEl) return false;
+        // engine·canvas가 없으면 걷을 캔버스 자체가 없다. 유일하게 아래 포기
+        // 함수를 거치지 않는 가드다
+        if (!engine || !canvas) return false;
 
-        // 출발 프레임의 원본 크기. 비디오가 아직 첫 프레임도 못 그렸으면 0이고,
-        // 그때는 굳힐 화면이 없으니 폴백으로 떨어진다
-        const sw = 'videoWidth' in fromEl ? fromEl.videoWidth : fromEl.naturalWidth;
-        const sh = 'videoHeight' in fromEl ? fromEl.videoHeight : fromEl.naturalHeight;
-        if (!sw || !sh) return false;
+        // 어느 return false 앞에서도 돌고 있던 tween을 죽이고 캔버스를 끈다.
+        // 안 그러면 직전 모프가 엉뚱한 두 장을 계속 그리는 동안 DOM은 이미
+        // 새 프로젝트로 갈려 있어 화면에 호버한 것과 무관한 그림이 남는다
+        const giveUp = (): false => {
+          tweenRef.current?.kill();
+          tweenRef.current = null;
+          canvas.style.opacity = '0';
+          return false;
+        };
+
+        // 출발 텍스처는 DOM에서 읽지 않는다. 재생 중인 <video>만 화면에 실제로
+        // 보이는 프레임이 맞으므로 그것만 예외로 읽고, 그 외에는 직전에 도착한
+        // 목적지의 캐시 이미지를 쓴다. fromEl의 <img>는 next/image가 같은 노드의
+        // src만 갈아 끼우는 노드라, 목록을 훑으면 아직 이전 그림을 받아오는
+        // 중일 때가 있다 - 그걸 굳히면 엉뚱한 사진이 남는다
+        const isLiveVideo =
+          !!fromEl && 'videoWidth' in fromEl && fromEl.videoWidth !== 0 && fromEl.videoHeight !== 0;
+        let sourceEl: HTMLVideoElement | HTMLImageElement | null;
+        if (isLiveVideo) {
+          sourceEl = fromEl;
+        } else if (destSrcRef.current !== null) {
+          sourceEl = imageCacheRef.current.get(destSrcRef.current) ?? null;
+        } else {
+          // 이 컴포넌트의 첫 모프다. 아직 쫓아온 도착지가 없으니 지금 떠 있는
+          // 초기 이미지를 그대로 쓴다 - 아직 아무 전환도 안 겹쳤으니 안전하다
+          sourceEl = fromEl;
+        }
+        if (!sourceEl) {
+          destSrcRef.current = toImageSrc;
+          return giveUp();
+        }
+
+        // 출발 프레임의 원본 크기. 비디오가 아직 첫 프레임도 못 그렸으면 0이다
+        const sw = 'videoWidth' in sourceEl ? sourceEl.videoWidth : sourceEl.naturalWidth;
+        const sh = 'videoHeight' in sourceEl ? sourceEl.videoHeight : sourceEl.naturalHeight;
+        if (!sw || !sh) {
+          destSrcRef.current = toImageSrc;
+          return giveUp();
+        }
 
         const box = canvas.getBoundingClientRect();
-        if (box.width < 1 || box.height < 1) return false;
+        if (box.width < 1 || box.height < 1) {
+          destSrcRef.current = toImageSrc;
+          return giveUp();
+        }
 
         // 우리 미디어는 전부 같은 출처라 캔버스가 오염되지 않지만, 디코드 전에
         // 부르면 drawImage가 던지는 경로가 남아 있다
         try {
           engine.freeze.width = sw;
           engine.freeze.height = sh;
-          engine.freezeCtx.drawImage(fromEl, 0, 0, sw, sh);
+          engine.freezeCtx.drawImage(sourceEl, 0, 0, sw, sh);
         } catch {
-          return false;
+          destSrcRef.current = toImageSrc;
+          return giveUp();
         }
         engine.freezeTexture.needsUpdate = true;
 
@@ -324,41 +389,32 @@ const PreviewMorph = forwardRef<PreviewMorphHandle, PreviewMorphProps>(function 
         u.tCurrent.value = engine.freezeTexture;
         u.uCurrentSize.value.set(sw, sh);
 
-        // 도착 이미지. 캐시에 있으면 첫 프레임부터 물리고, 없으면 어두운 판으로
-        // 시작해 도착하는 대로 갈아 끼운다. 이 이미지는 지금 <video>의 poster로도
-        // 쓰이는 파일이라 대개 곧바로 온다
+        // 도착 이미지는 캐시에 없으면 어두운 판으로 시작하지 않고 포기한다.
+        // 시작해 버리면 도착하는 순간 화면이 튀어 들어온다 - 그게 사용자가 본
+        // "버그걸린 이미지가 살짝 나온 다음에 바뀐다"였다. 요청은 캐시에만
+        // 넣어 두고 다음 호버부터 첫 프레임에서 쓴다
         destSrcRef.current = toImageSrc;
         const cached = imageCacheRef.current.get(toImageSrc);
-        if (cached) {
-          engine.nextTexture.image = cached;
-          engine.nextTexture.needsUpdate = true;
-          u.tNext.value = engine.nextTexture;
-          u.uNextSize.value.set(cached.naturalWidth, cached.naturalHeight);
-        } else {
-          u.tNext.value = engine.fallback;
-          u.uNextSize.value.set(1, 1);
+        if (!cached) {
           const img = new Image();
           img.onload = () => {
             if (!img.naturalWidth) return;
             imageCacheRef.current.set(toImageSrc, img);
-            // 그 사이 다음 전환이 시작됐으면 이 이미지는 이미 늦었다. 캐시에는
-            // 넣되(다음 번엔 첫 프레임부터 쓴다) 남의 도착지에 물리지는 않는다.
-            // 두 전환이 겹치면 둘 다 tNext가 fallback이라 그것만으론 못 가른다
-            if (engineRef.current !== engine || destSrcRef.current !== toImageSrc) return;
-            engine.nextTexture.image = img;
-            engine.nextTexture.needsUpdate = true;
-            u.tNext.value = engine.nextTexture;
-            u.uNextSize.value.set(img.naturalWidth, img.naturalHeight);
           };
           img.src = toImageSrc;
+          return giveUp();
         }
+        engine.nextTexture.image = cached;
+        engine.nextTexture.needsUpdate = true;
+        u.tNext.value = engine.nextTexture;
+        u.uNextSize.value.set(cached.naturalWidth, cached.naturalHeight);
 
         engine.renderer.setSize(box.width, box.height, false);
         u.uResolution.value.set(canvas.width, canvas.height);
 
         // 이름을 빠르게 훑으면 전환이 겹친다. 이전 tween을 죽이고 처음부터 새로
         // 태운다 - 출발 텍스처는 직전 모프가 그리던 화면이 아니라 방금 굳힌
-        // fromEl 한 장이다
+        // sourceEl 한 장이다
         tweenRef.current?.kill();
         tweenRef.current = gsap.fromTo(
           u.uProgress,

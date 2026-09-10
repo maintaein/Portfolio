@@ -113,11 +113,27 @@ function makeImg(w = 1280, h = 720): HTMLImageElement {
   return el;
 }
 
-function mount() {
+function mount(preload?: readonly string[]) {
   const ref = createRef<PreviewMorphHandle>();
-  const view = render(<PreviewMorph ref={ref} className="absolute inset-0" />);
+  const view = render(<PreviewMorph ref={ref} className="absolute inset-0" preload={preload} />);
   const canvas = document.querySelector<HTMLCanvasElement>('[data-part="preview-morph"]')!;
   return { ref, view, canvas };
+}
+
+// 캐시를 미리 데운다. 실제로는 preload가 하는 일이다 - 여기서는 morph를 한 번
+// 불러 요청만 내보내고(캐시가 비어 있어 그 호출 자신은 포기한다), 도착을
+// 흉내 내서 다음 호출부터 더워진 캐시를 쓰게 만든다
+function warmCache(
+  ref: { current: PreviewMorphHandle | null },
+  src: string,
+  w = 800,
+  h = 450
+): void {
+  ref.current!.morph(makeVideo(), src);
+  const pending = images[images.length - 1];
+  act(() => {
+    pending.arrive(w, h);
+  });
 }
 
 function renderer() {
@@ -166,6 +182,7 @@ describe('PreviewMorph - 표제 계약: 두 화면을 셰이더로 녹여 잇는
   it('출발 화면을 굳혀 텍스처로 물리고 uProgress를 0에서 1까지 태운다', () => {
     withCanvas();
     const { ref, canvas } = mount();
+    warmCache(ref, '/projects/a.png');
     const from = makeVideo(1920, 1080);
 
     expect(canvas.style.opacity).toBe('0');
@@ -208,9 +225,34 @@ describe('PreviewMorph - 표제 계약: 두 화면을 셰이더로 녹여 잇는
     expect(canvas.style.opacity).toBe('0');
   });
 
+  it('DOM img를 출발 텍스처로 읽지 않는다 - 직전 도착지의 캐시 이미지를 굳힌다', () => {
+    // 원인 1 고정: next/image는 같은 <img> 노드의 src만 갈아 끼운다. 이름을
+    // 빠르게 훑으면 그 노드가 아직 직전 프로젝트 그림을 디코드해 둔 채일 수
+    // 있다. 그 노드를 굳히면 호버한 것과 무관한 그림이 남는다 - 출발 텍스처는
+    // 언제나 직전에 도착이 확정된 목적지의 캐시 이미지여야 한다
+    withCanvas();
+    const { ref } = mount();
+    warmCache(ref, '/projects/a.png', 1000, 500);
+    ref.current!.morph(makeVideo(), '/projects/a.png');
+    const cachedA = images.find((img) => img.src === '/projects/a.png')!;
+
+    // 아직 이전 그림(1920x1080)을 들고 있는, 디코드는 끝난 stale한 <img> 노드.
+    // b.png는 캐시에 없어 이 전환 자체는 결국 포기하지만, 출발 텍스처 선택은
+    // 그보다 먼저 끝난다
+    const staleImg = makeImg(1920, 1080);
+    ref.current!.morph(staleImg, '/projects/b.png');
+
+    expect(drawImage).not.toHaveBeenCalledWith(staleImg, 0, 0, 1920, 1080);
+    expect(drawImage).toHaveBeenCalledWith(cachedA, 0, 0, 1000, 500);
+    const u = uniforms();
+    expect((u.uCurrentSize.value as { x: number; y: number }).x).toBe(1000);
+    expect((u.uCurrentSize.value as { x: number; y: number }).y).toBe(500);
+  });
+
   it('melt 유니폼이 브리프가 정한 값으로 들어간다', () => {
     withCanvas();
     const { ref } = mount();
+    warmCache(ref, '/projects/a.png');
     ref.current!.morph(makeVideo(), '/projects/a.png');
 
     const u = uniforms();
@@ -234,71 +276,39 @@ describe('PreviewMorph - 표제 계약: 두 화면을 셰이더로 녹여 잇는
     const { ref } = mount();
     // devicePixelRatio는 3으로 세워 뒀다. 상한이 없으면 9배 픽셀을 그린다
     expect(renderer().pixelRatio).toBe(2);
+    warmCache(ref, '/projects/a.png');
     ref.current!.morph(makeVideo(), '/projects/a.png');
     // updateStyle=false여야 한다. three가 style width/height를 박으면
     // absolute inset-0이 깨진다
     expect(renderer().sizes).toEqual([[BOX_W, BOX_H, false]]);
   });
 
-  it('도착 이미지가 늦게 와도 도착하는 대로 tNext에 갈아 끼운다', () => {
+  it('늦게 도착한 요청은 캐시에만 들어간다. 다음에 같은 곳으로 가면 곧바로 쓴다', () => {
     withCanvas();
     const { ref } = mount();
     ref.current!.morph(makeVideo(), '/projects/late.png');
-
-    const u = uniforms();
     const pending = images[images.length - 1];
     expect(pending.src).toBe('/projects/late.png');
-    const beforeArrival = u.tNext.value;
 
     act(() => {
       pending.arrive(800, 450);
     });
-    expect(u.tNext.value).not.toBe(beforeArrival);
-    expect((u.uNextSize.value as { x: number; y: number }).x).toBe(800);
-    expect((u.uNextSize.value as { x: number; y: number }).y).toBe(450);
-  });
-
-  it('앞선 전환의 늦은 이미지는 지금 도착지를 덮지 않는다', () => {
-    withCanvas();
-    const { ref } = mount();
-    ref.current!.morph(makeVideo(), '/projects/first.png');
-    const first = images[images.length - 1];
-    // first가 오기 전에 다음 이름으로 넘어갔다
-    ref.current!.morph(makeVideo(), '/projects/second.png');
-    const second = images[images.length - 1];
-    const u = uniforms();
-
-    act(() => {
-      first.arrive(800, 450);
-    });
-    // 두 전환 다 tNext가 폴백 판이라 "폴백이냐"만 물어서는 first를 못 막는다.
-    // 지금 도착지는 second이므로 크기는 폴백 그대로 1x1이어야 한다
-    expect((u.uNextSize.value as { x: number; y: number }).x).toBe(1);
-
-    act(() => {
-      second.arrive(640, 360);
-    });
-    expect((u.uNextSize.value as { x: number; y: number }).x).toBe(640);
-
-    // 물리지만 않았을 뿐 캐시에는 들어갔다. 다음에 first로 가면 곧바로 쓴다
+    // 물리지 않고 캐시에만 들어갔다 - 다시 요청하지 않고 첫 프레임부터 실제 크기다
     const requested = images.length;
-    ref.current!.morph(makeVideo(), '/projects/first.png');
+    ref.current!.morph(makeVideo(), '/projects/late.png');
     expect(images.length).toBe(requested);
+    const u = uniforms();
     expect((u.uNextSize.value as { x: number; y: number }).x).toBe(800);
   });
 
   it('한 번 받은 도착 이미지는 다시 요청하지 않고 첫 프레임부터 물린다', () => {
     withCanvas();
     const { ref } = mount();
-    ref.current!.morph(makeVideo(), '/projects/warm.png');
-    act(() => {
-      images[images.length - 1].arrive(800, 450);
-    });
+    warmCache(ref, '/projects/warm.png', 800, 450);
     const requestsAfterFirst = images.length;
 
     ref.current!.morph(makeVideo(), '/projects/warm.png');
     expect(images.length).toBe(requestsAfterFirst);
-    // 첫 프레임부터 실제 크기다. 1x1이면 어두운 폴백 판으로 시작한 것이다
     const u = uniforms();
     expect((u.uNextSize.value as { x: number; y: number }).x).toBe(800);
   });
@@ -375,12 +385,43 @@ describe('PreviewMorph - 태울 수 없으면 false로 물러난다', () => {
     expect(ref.current!.morph(makeVideo(), '/projects/a.png')).toBe(false);
     expect(canvas.style.opacity).toBe('0');
   });
+
+  it('도착 이미지가 캐시에 없으면 false를 반환하고, 캔버스를 끄며, tween을 태우지 않는다', () => {
+    withCanvas();
+    const fromTo = vi.spyOn(gsap, 'fromTo');
+    const { ref, canvas } = mount();
+    const started = ref.current!.morph(makeVideo(), '/projects/cold.png');
+
+    expect(started).toBe(false);
+    expect(canvas.style.opacity).toBe('0');
+    expect(fromTo).not.toHaveBeenCalled();
+    expect(liveTweens()).toHaveLength(0);
+  });
+
+  it('이른 포기 경로가 돌고 있던 tween의 kill()을 부른다', () => {
+    withCanvas();
+    const { ref, canvas } = mount();
+    warmCache(ref, '/projects/a.png');
+    ref.current!.morph(makeVideo(), '/projects/a.png');
+    const tween = liveTweens()[0];
+    const killSpy = vi.spyOn(tween, 'kill');
+
+    // 다음 프로젝트로 넘어가는데 그쪽 캐시가 비어 있다 - 이른 포기 경로다
+    const started = ref.current!.morph(makeVideo(), '/projects/cold.png');
+
+    expect(started).toBe(false);
+    expect(killSpy).toHaveBeenCalledTimes(1);
+    expect(canvas.style.opacity).toBe('0');
+    expect(liveTweens()).toHaveLength(0);
+  });
 });
 
 describe('PreviewMorph - 겹치는 전환과 뒷정리', () => {
   it('전환 중에 또 부르면 이전 tween을 죽이고 하나만 남긴다', () => {
     withCanvas();
     const { ref } = mount();
+    warmCache(ref, '/projects/a.png');
+    warmCache(ref, '/projects/b.png');
     ref.current!.morph(makeVideo(), '/projects/a.png');
     const first = liveTweens()[0];
     act(() => {
@@ -400,6 +441,7 @@ describe('PreviewMorph - 겹치는 전환과 뒷정리', () => {
   it('언마운트가 렌더러와 GPU 자원을 정리하고 tween도 죽인다', () => {
     withCanvas();
     const { ref, view } = mount();
+    warmCache(ref, '/projects/a.png');
     ref.current!.morph(makeVideo(), '/projects/a.png');
     const u = uniforms();
     const material = (
@@ -427,5 +469,26 @@ describe('PreviewMorph - 겹치는 전환과 뒷정리', () => {
     const handle = ref.current!;
     view.unmount();
     expect(handle.morph(makeVideo(), '/projects/a.png')).toBe(false);
+  });
+});
+
+describe('PreviewMorph - 프리로드', () => {
+  it('preload로 준 경로마다 마운트 직후 Image 인스턴스로 요청한다', () => {
+    withCanvas();
+    const paths = ['/projects/a.png', '/projects/b.png'] as const;
+    mount(paths);
+    expect(images.map((img) => img.src)).toEqual(paths);
+  });
+
+  it('이미 캐시에 있는 경로는 다시 요청하지 않는다', () => {
+    withCanvas();
+    const { ref, view } = mount();
+    warmCache(ref, '/projects/a.png');
+    const requestedBefore = images.length;
+
+    // 같은 컴포넌트가 나중에 preload를 받아도, 이미 캐시에 든 경로는 다시
+    // 요청하지 않는다
+    view.rerender(<PreviewMorph ref={ref} className="absolute inset-0" preload={['/projects/a.png']} />);
+    expect(images.length).toBe(requestedBefore);
   });
 });
