@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   SITE_EASE,
   SITE_EASE_CUBIC,
+  MORPH_EASE,
   REVEAL_IN_MS,
   REVEAL_OUT_MS,
   registerGsap,
@@ -110,13 +111,22 @@ describe('lib/gsap', () => {
     registerGsap();
 
     expect(registerPluginSpy).toHaveBeenCalledTimes(1);
-    expect(customEaseCreateSpy).toHaveBeenCalledTimes(1);
+    // SITE_EASE와 MORPH_EASE, 커브 두 개를 등록한다
+    expect(customEaseCreateSpy).toHaveBeenCalledTimes(2);
 
     const registeredPlugins = registerPluginSpy.mock.calls[0];
     expect(registeredPlugins).toHaveLength(4);
     expect(new Set(registeredPlugins)).toEqual(
       new Set([CustomEase, MotionPathPlugin, Flip, SplitText])
     );
+  });
+
+  // PreviewMorph의 모프 전용 커브. 이름을 잘못 등록하면 gsap.parseEase가
+  // 못 찾아 fromTo가 기본 선형으로 조용히 되돌아간다
+  it('MORPH_EASE 등록명이 SITE_EASE와 다르고 이름으로 참조할 수 있다', () => {
+    registerGsap();
+    expect(MORPH_EASE).not.toBe(SITE_EASE);
+    expect(gsap.parseEase(MORPH_EASE)).toBeTypeOf('function');
   });
 
   it('lib/gsap가 재노출하는 Flip은 gsap/Flip과 동일한 참조다', () => {

@@ -2,7 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import * as THREE from 'three';
-import { gsap, registerGsap, SITE_EASE } from '@/lib/gsap';
+import { gsap, registerGsap, MORPH_EASE } from '@/lib/gsap';
 
 // 프리뷰 전환용 셰이더 모프.
 //
@@ -10,15 +10,15 @@ import { gsap, registerGsap, SITE_EASE } from '@/lib/gsap';
 // 거기서 ogl로 하던 것을 이 저장소에 이미 있는 three로 옮겼다. 옮긴 것은 melt
 // 하나뿐이라 ripple/shear/swirl이 쓰던 uMode·uDir·uPointer·rot()은 없다.
 //
-// 캔버스는 전환 0.56초 동안만 그린다. 프리뷰의 미디어는 계속 재생돼야 하는
+// 캔버스는 전환 0.72초 동안만 그린다. 프리뷰의 미디어는 계속 재생돼야 하는
 // <video>이고 그 위에 캡션이 DOM으로 얹혀 있어서 캔버스가 미디어 자체를 대신할
 // 수 없다. 대신 전환 순간에만 직전 화면 한 장과 도착 이미지 한 장을 텍스처로
 // 물려 그 사이를 녹인다. 전환이 끝나면 tween이 멈추고 캔버스는 다시 투명해진다.
 
-// mothSlider 기본값 1.1초는 클릭으로 넘기는 슬라이더 기준이다. 이름을 훑으면
-// 전환이 연달아 터지므로 그보다 짧아야 하고, 폴백 경로의 300ms로는 melt가
-// 녹을 시간이 안 난다. 0.56이 그 사이다
-const DURATION_S = 0.56;
+// mothSlider 기본값 1.1초는 클릭으로 넘기는 슬라이더 기준이라 길고, 이름을
+// 훑으면 전환이 연달아 터지므로 그보다 짧아야 한다. 다만 0.56은 녹는 과정이
+// 눈에 남기엔 짧아서 0.72로 늘렸다
+const DURATION_S = 0.72;
 const INTENSITY = 0.55;
 const NOISE_SCALE = 2.4;
 // 기본값 0.35는 색테두리가 눈에 띈다. 이 사이트 배경이 순검정이라 더 도드라진다
@@ -113,7 +113,11 @@ void main() {
   float nn = fbm(uv * uScale + uTime * 0.03);
   float warp = fbm(uv * uScale * 1.7 - uTime * 0.02);
   vec2 g = vec2(nn, warp) - 0.5;
-  vec2 uvC = uv + g * uIntensity * 0.5 * p;
+  // 나가는 그림의 일그러짐은 갈아타기보다 앞서 간다. p를 그대로 쓰면 눌러
+  // 놓은 초반에 화면이 굳어 보여 호버가 안 먹은 줄 안다. 0.45제곱이 초반을
+  // 끌어올려 호버 직후부터 녹기 시작한다
+  float w = pow(p, 0.45);
+  vec2 uvC = uv + g * uIntensity * 0.5 * w;
   vec2 uvN = uv - g * uIntensity * 0.5 * (1.0 - p);
   float m = smoothstep(nn - 0.15, nn + 0.15, p);
 
@@ -430,7 +434,7 @@ const PreviewMorph = forwardRef<PreviewMorphHandle, PreviewMorphProps>(function 
           {
             value: 1,
             duration: DURATION_S,
-            ease: SITE_EASE,
+            ease: MORPH_EASE,
             onUpdate: () => {
               u.uTime.value = performance.now() * 0.001;
               engine.renderer.render(engine.scene, engine.camera);

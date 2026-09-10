@@ -1,7 +1,9 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { createRef } from 'react';
 import { act, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { gsap, SITE_EASE } from '@/lib/gsap';
+import { gsap, MORPH_EASE } from '@/lib/gsap';
 import PreviewMorph, { type PreviewMorphHandle } from '@/components/blocks/PreviewMorph';
 
 // jsdom에는 WebGL도 2d 캔버스도 없다(canvas npm 패키지 미설치). 셰이더가 만든
@@ -205,8 +207,8 @@ describe('PreviewMorph - 표제 계약: 두 화면을 셰이더로 녹여 잇는
     expect(tween).toBeDefined();
     // 값은 브리프가 못박은 것이다. 0.3초는 melt가 녹을 시간이 안 나고
     // 1.1초는 이름을 훑을 때 밀린다
-    expect(tween.duration()).toBeCloseTo(0.56, 5);
-    expect(tween.vars.ease).toBe(SITE_EASE);
+    expect(tween.duration()).toBeCloseTo(0.72, 5);
+    expect(tween.vars.ease).toBe(MORPH_EASE);
 
     // 중간 - 두 화면이 섞여 있는 구간이다
     act(() => {
@@ -260,7 +262,7 @@ describe('PreviewMorph - 표제 계약: 두 화면을 셰이더로 녹여 잇는
     expect(u.uScale.value).toBe(2.4);
     // 기본값 0.35는 순검정 배경에서 색테두리가 도드라진다
     expect(u.uAberration.value).toBe(0.22);
-    // 상시 흔들림은 0.56초짜리 전환에서 떨림으로만 보인다
+    // 상시 흔들림은 0.72초짜리 전환에서 떨림으로만 보인다
     expect(u.uDrift.value).toBe(0);
     const overlay = u.uOverlay.value as { x: number; y: number; z: number };
     expect([overlay.x, overlay.y, overlay.z]).toEqual([0, 0, 0]);
@@ -269,6 +271,21 @@ describe('PreviewMorph - 표제 계약: 두 화면을 셰이더로 녹여 잇는
     for (const dead of ['uMode', 'uDir', 'uPointer', 'uReduce']) {
       expect(u[dead]).toBeUndefined();
     }
+  });
+
+  it('나가는 그림은 일그러짐 곡선을, 갈아타기는 진행도를 따로 쓴다', () => {
+    // jsdom에는 GL이 없어 픽셀을 못 본다. 잠글 수 있는 것은 소스의 배선뿐이다.
+    // 나가는 그림(uvC)은 p를 0.45제곱으로 눌러 일찍 일그러지고, 들어오는
+    // 그림(uvN)과 섞임비(m)는 그대로 p를 써서 갈아타기가 뒤에서 가속한다
+    const source = readFileSync(
+      path.join(process.cwd(), 'components/blocks/PreviewMorph/index.tsx'),
+      'utf-8'
+    );
+
+    expect(source).toContain('float w = pow(p, 0.45);');
+    expect(source).toContain('vec2 uvC = uv + g * uIntensity * 0.5 * w;');
+    expect(source).toContain('vec2 uvN = uv - g * uIntensity * 0.5 * (1.0 - p);');
+    expect(source).toContain('float m = smoothstep(nn - 0.15, nn + 0.15, p);');
   });
 
   it('캔버스 픽셀 크기는 상자 크기에 dpr 상한 2를 곱한 값이다', () => {
