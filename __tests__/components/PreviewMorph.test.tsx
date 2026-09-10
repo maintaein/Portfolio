@@ -472,6 +472,41 @@ describe('PreviewMorph - 겹치는 전환과 뒷정리', () => {
   });
 });
 
+describe('PreviewMorph - 텍스처 재할당', () => {
+  it('그림을 올릴 때마다 두 텍스처를 먼저 버린다 - three가 첫 업로드 크기로 GPU 저장소를 고정하기 때문이다', () => {
+    withCanvas();
+    const { ref } = mount();
+    // 크기가 다른 두 도착지를 캐시에 덥힌다
+    warmCache(ref, '/projects/x.png', 800, 450);
+    warmCache(ref, '/projects/y.png', 400, 200);
+
+    // 첫 호버: x.png로 모프한다. 이게 첫 성공한 모프라 uniforms와 render를
+    // 세운다. 스파이는 이 다음에 건다 - 그래야 이 호출의 dispose가 안 섞인다
+    ref.current!.morph(makeVideo(), '/projects/x.png');
+
+    const u = uniforms();
+    const freezeTex = u.tCurrent.value as { dispose: () => void };
+    const nextTex = u.tNext.value as { dispose: () => void; image: unknown };
+    const freezeDispose = vi.spyOn(freezeTex, 'dispose');
+    let imageAtNextDispose: unknown;
+    const nextDispose = vi.spyOn(nextTex, 'dispose').mockImplementation(() => {
+      imageAtNextDispose = nextTex.image;
+    });
+    const xCachedImg = images.find((img) => img.src === '/projects/x.png');
+
+    // 둘째 호버: 소스는 destSrcRef가 가리키는 x.png의 캐시, 도착은 y.png.
+    // 둘 다 캐시에 있어 true 경로로 간다
+    const started = ref.current!.morph(makeImg(), '/projects/y.png');
+
+    expect(started).toBe(true);
+    expect(freezeDispose).toHaveBeenCalledTimes(1);
+    expect(nextDispose).toHaveBeenCalledTimes(1);
+    // dispose가 불린 시점엔 image가 아직 y.png로 갈리기 전, 직전 도착지인
+    // x.png의 캐시 이미지 그대로였다
+    expect(imageAtNextDispose).toBe(xCachedImg);
+  });
+});
+
 describe('PreviewMorph - 프리로드', () => {
   it('preload로 준 경로마다 마운트 직후 Image 인스턴스로 요청한다', () => {
     withCanvas();

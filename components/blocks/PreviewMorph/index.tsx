@@ -383,6 +383,11 @@ const PreviewMorph = forwardRef<PreviewMorphHandle, PreviewMorphProps>(function 
           destSrcRef.current = toImageSrc;
           return giveUp();
         }
+        // three는 텍스처의 GPU 저장소를 첫 업로드 때 이미지 크기로 고정하고,
+        // 그 뒤엔 needsUpdate만으로는 같은 자리에 덮어쓰기만 한다. 프로젝트마다
+        // 원본 이미지 크기가 달라서, 새 그림을 올리기 전에 먼저 버려야 다음
+        // 렌더에서 지금 크기에 맞춰 GPU 저장소를 다시 잡는다
+        engine.freezeTexture.dispose();
         engine.freezeTexture.needsUpdate = true;
 
         const u = engine.material.uniforms;
@@ -404,6 +409,9 @@ const PreviewMorph = forwardRef<PreviewMorphHandle, PreviewMorphProps>(function 
           img.src = toImageSrc;
           return giveUp();
         }
+        // 위 freezeTexture와 같은 이유다. 도착 이미지도 프로젝트마다 크기가
+        // 달라서 먼저 버려야 새 크기로 다시 올라간다
+        engine.nextTexture.dispose();
         engine.nextTexture.image = cached;
         engine.nextTexture.needsUpdate = true;
         u.tNext.value = engine.nextTexture;
