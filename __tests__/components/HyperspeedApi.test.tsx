@@ -1,6 +1,6 @@
 import { createRef } from 'react';
 import { act, render } from '@testing-library/react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, type MockInstance } from 'vitest';
 import Hyperspeed, { App, type HyperspeedHandle } from '@/components/blocks/Hyperspeed';
 
 // jsdom에는 WebGL이 없다(canvas npm 패키지 미설치 — node_modules/jsdom의
@@ -18,11 +18,22 @@ import Hyperspeed, { App, type HyperspeedHandle } from '@/components/blocks/Hype
 // 한 파일 안에서 "mock 없음"과 "mock 있음"을 describe별로 다르게 가져갈 수
 // 없다. 그래서 그 계약들은 __tests__/components/HyperspeedEngine.test.tsx로
 // 분리했다(계획 일탈 — task-4-report.md 참고).
+let getContextSpy: MockInstance<typeof HTMLCanvasElement.prototype.getContext>;
+
 beforeEach(() => {
-  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+  getContextSpy = vi
+    .spyOn(HTMLCanvasElement.prototype, 'getContext')
+    .mockReturnValue(null);
 });
 
 describe('Hyperspeed ref API — WebGL 부재 시 안전성', () => {
+  it('WebGL을 못 주면 탐침이 webgl2를 한 번만 묻고 three는 아예 안 부른다', () => {
+    const ref = createRef<HyperspeedHandle>();
+    render(<Hyperspeed ref={ref} />);
+    expect(getContextSpy).toHaveBeenCalledTimes(1);
+    expect(getContextSpy).toHaveBeenCalledWith('webgl2');
+  });
+
   it('WebGL이 없어도 렌더가 던지지 않는다', () => {
     const ref = createRef<HyperspeedHandle>();
     expect(() => render(<Hyperspeed ref={ref} />)).not.toThrow();

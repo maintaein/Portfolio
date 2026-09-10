@@ -205,6 +205,15 @@ beforeEach(() => {
   rafQueue = [];
   rafIdSeq = 0;
 
+  // 이 파일은 WebGL이 살아 있는 환경을 흉내 낸다. 마운트 effect가 App을
+  // 만들기 전에 raw canvas.getContext('webgl2')로 먼저 묻는데, three
+  // 자체는 위에서 모듈 경계 mock으로 갈아치웠어도 이 탐침은 그 경계 밖의
+  // 진짜 HTMLCanvasElement API라 jsdom 기본값(null)을 그대로 받으면 App이
+  // 아예 안 만들어진다. 탐침이 성공한 것처럼 보이도록 고정한다.
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+    getExtension: vi.fn(() => null)
+  } as unknown as WebGL2RenderingContext);
+
   vi.stubGlobal('Image', FakeImage);
   vi.stubGlobal(
     'requestAnimationFrame',

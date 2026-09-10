@@ -1223,21 +1223,42 @@ const Hyperspeed = forwardRef<HyperspeedHandle, HyperspeedProps>(function Hypers
       options.distortion = distortions[options.distortion];
     }
 
-    // jsdom·구형 브라우저처럼 WebGL 컨텍스트를 못 얻는 환경에서는
-    // THREE.WebGLRenderer 생성자가 던진다. ref API는 그래도 안전한
-    // no-op으로 남아야 한다.
+    // three 0.185의 WebGLRenderer는 webgl2만 시도한다. 컨텍스트가 없는
+    // 브라우저(샌드박스, GPU 비활성 등)에서 그 생성자를 그대로 부르면
+    // three가 실패 원인을 가리려고 getContext를 두 번 부르며 console.error를
+    // 두 줄 찍고, 생성자가 던진 에러를 Next dev 오버레이가 한 줄 더 찍는다.
+    // new App() 전에 컨텍스트를 얻을 수 있는지 직접 물어 그 세 줄을 막는다.
+    // 탐침이 성공하면 컨텍스트를 하나 실제로 만든 것이므로 크롬의 탭당
+    // 컨텍스트 한도를 넘기지 않도록 즉시 반납한다.
+    let canCreateWebGL2 = false;
     try {
-      const app = new App(el, options);
-      appRef.current = app;
-      // 아직 한 프레임도 그리지 않았으므로 수렴시킬 이전 상태가 없다.
-      // 목표와 현재값을 같이 끼워야 배경이 빠르게 시작했다 느려지지 않는다.
-      if (idleScaleRef.current !== null) {
-        app.setIdleScale(idleScaleRef.current);
-        app.idleScale = idleScaleRef.current;
+      const probeCanvas = document.createElement('canvas');
+      const probeGl = probeCanvas.getContext('webgl2');
+      if (probeGl) {
+        canCreateWebGL2 = true;
+        probeGl.getExtension('WEBGL_lose_context')?.loseContext();
       }
-      app.loadAssets().then(() => app.init());
     } catch {
-      appRef.current = null;
+      canCreateWebGL2 = false;
+    }
+
+    // WebGL 컨텍스트를 못 얻는 환경에서는 App을 만들지 않는다. 탐침을
+    // 통과하고도 컨텍스트 한도 같은 이유로 생성이 실패하는 경로가 남아
+    // 있으므로 아래 try/catch는 그대로 둔다.
+    if (canCreateWebGL2) {
+      try {
+        const app = new App(el, options);
+        appRef.current = app;
+        // 아직 한 프레임도 그리지 않았으므로 수렴시킬 이전 상태가 없다.
+        // 목표와 현재값을 같이 끼워야 배경이 빠르게 시작했다 느려지지 않는다.
+        if (idleScaleRef.current !== null) {
+          app.setIdleScale(idleScaleRef.current);
+          app.idleScale = idleScaleRef.current;
+        }
+        app.loadAssets().then(() => app.init());
+      } catch {
+        appRef.current = null;
+      }
     }
 
     return () => {
