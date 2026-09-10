@@ -13,7 +13,7 @@ export const SITE_EASE_CUBIC = 'cubic-bezier(0.22, 1, 0.36, 1)';
 
 // 프리뷰 모프 전용 커브. 사이트 공용 진입 커브(SITE_EASE)는 감속이라
 // 전환이 첫 15%에 다 끝나 버린다. 모프는 반대로 초반을 눌러 두고 중후반에
-// 가속해야 녹는 과정이 보인다. 최고 속도는 타임라인 0.59 지점이다
+// 가속해야 녹는 과정이 보인다. 최고 속도는 타임라인 0.67 지점이다
 export const MORPH_EASE = 'morph';
 
 // ProjectModal 내용의 등장·퇴장 길이. ProjectsSection이 닫기 안무를 짤 때
@@ -30,7 +30,7 @@ export function registerGsap(): void {
 
   gsap.registerPlugin(CustomEase, MotionPathPlugin, Flip, SplitText);
   CustomEase.create(SITE_EASE, '0.22, 1, 0.36, 1');
-  CustomEase.create(MORPH_EASE, '0.85, 0, 0.35, 1');
+  CustomEase.create(MORPH_EASE, '0.85, 0, 0.5, 1');
 
   registered = true;
 }
