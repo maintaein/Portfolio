@@ -316,6 +316,17 @@ describe('ProjectModal 헤더 버튼 묶음', () => {
     const closeButton = screen.getByRole('button', { name: '닫기' });
     expect(closeButton.parentElement!.className).toMatch(/\bshrink-0\b/);
   });
+
+  // FLIP 비행 중 absolute:true가 #pm-title을 flex 흐름에서 빼면 자식이
+  // 이 묶음 하나만 남고, justify-between은 자식이 하나면 flex-start에
+  // 둬서 묶음이 제목 착지 자리로 밀린다. jsdom은 레이아웃 엔진이 없어
+  // 그 좌표 이동 자체는 못 재므로, 원인인 ml-auto 클래스가 붙어 있는지로
+  // 잠근다. ml-auto는 제목이 흐름에 있든 없든 이 묶음을 오른쪽 끝으로 민다
+  it('버튼 묶음이 ml-auto로 제목 유무와 무관하게 오른쪽 끝에 선다', () => {
+    renderModal();
+    const closeButton = screen.getByRole('button', { name: '닫기' });
+    expect(closeButton.parentElement!.className).toMatch(/\bml-auto\b/);
+  });
 });
 
 describe('ProjectModal 판 2', () => {
@@ -592,22 +603,19 @@ describe('ProjectModal 등장·퇴장 안무', () => {
     expect(el('[data-modal-part="stage"]').style.cssText).toBe('');
   });
 
-  it('주장과 부제만 단어 단위로 쪼갠다. 음절로 부수지 않는다', () => {
+  // 우측 열 등장 효과를 하나로 통일했다. claim·sub도 body·meta와 똑같이
+  // 통짜 상승 페이드로 다뤄진다 - 자식 요소가 새로 안 생기고 자기 자신의
+  // opacity만 눌린다
+  it('claim과 sub는 쪼개지지 않고 body·meta처럼 자기 자신의 opacity가 눌린다', () => {
     const { rerender } = renderReveal(false);
     const claim = el('[data-modal-field="claim"]');
-    const words = claim.textContent!.trim().split(/\s+/).length;
+    const sub = el('[data-modal-field="sub"]');
     rerenderReveal(rerender, true);
 
-    // 눌린 조각의 수가 어절 수와 같다. 음절로 쪼갰다면 훨씬 많고, 아예
-    // 안 쪼갰다면 0이다
-    const pressed = Array.from(claim.querySelectorAll<HTMLElement>('*')).filter(
-      (node) => node.style.opacity === '0'
-    );
-    expect(pressed).toHaveLength(words);
-    expect(words).toBeGreaterThan(1);
-    // 통짜로 가는 블록은 쪼개지 않는다. RichText가 섞인 본문을 단어로
-    // 부수면 인라인 요소가 깨진다
-    expect(el('[data-modal-field="body"]').style.opacity).toBe('0');
+    expect(claim.children).toHaveLength(0);
+    expect(sub.children).toHaveLength(0);
+    expect(claim.style.opacity).toBe('0');
+    expect(sub.style.opacity).toBe('0');
   });
 
   it('등장 타임라인은 하나뿐이고 전체가 REVEAL_IN_MS 안에 끝난다', () => {
@@ -648,17 +656,14 @@ describe('ProjectModal 등장·퇴장 안무', () => {
     expect(el('[data-modal-field="meta"]').style.opacity).toBe('');
   });
 
-  it('안무가 끝나면 SplitText 래퍼가 걷혀 원래 글이 그대로 남는다', () => {
+  // 어절 갈래(SplitText)를 완전히 지웠다. 등장 안무 어디서도 더는 불리지
+  // 않는다는 것을 스파이로 확인한다
+  it('SplitText.create가 등장 안무 중 한 번도 안 불린다', () => {
+    const split = vi.spyOn(SplitText, 'create');
     const { rerender } = renderReveal(false);
-    const claim = el('[data-modal-field="claim"]');
-    const text = claim.textContent;
     rerenderReveal(rerender, true);
-    expect(claim.children.length).toBeGreaterThan(0);
-
-    rerenderReveal(rerender, null);
-    // 안 걷으면 다음 열기에 래퍼가 겹쳐 쌓인다
-    expect(claim.children).toHaveLength(0);
-    expect(claim.textContent).toBe(text);
+    expect(split).not.toHaveBeenCalled();
+    split.mockRestore();
   });
 
   // 'head'는 비행 중간 착지점이다. 머리띠 버튼 묶음만 보이고 몸통(논증 열,
@@ -760,8 +765,8 @@ describe('ProjectModal 등장·퇴장 안무', () => {
       return child.startTime();
     }
 
-    // meta와 step은 claim·sub와 달리 단어로 쪼개지 않고 통짜로 뜬다 - tween이
-    // 컨테이너 자신을 target으로 잡으므로 startTime을 그대로 잴 수 있다
+    // 모든 요소가 통짜 트윈이라 tween이 컨테이너 자신을 target으로 잡는다.
+    // startTime을 그대로 잴 수 있다
     const meta = el('[data-modal-field="meta"]');
     const firstStep = document.querySelectorAll('[data-modal-field="step"]')[0] as HTMLElement;
     const firstBody = el('[data-modal-field="body"]');
@@ -773,5 +778,116 @@ describe('ProjectModal 등장·퇴장 안무', () => {
     const h4At = startTimeFor(firstH4);
     expect(stepAt - metaAt).toBeCloseTo(0.06);
     expect(h4At - bodyAt).toBeCloseTo(0.06);
+  });
+
+  // 위 검사는 표본 넷만 본다. 우측 열 전체가 위에서 아래로 읽히는지는
+  // DOM에 나온 순서대로 시작 시각을 훑어야 확인된다. 열 페이드(scroll
+  // 컨테이너 자신)와 영상 설명(clip-path, 다른 규칙)은 뺀다
+  it('우측 열 요소들의 시작 시각이 DOM 순서대로만 커지고 줄지 않는다', () => {
+    const timelines = captureTimelines();
+    const { rerender } = renderReveal(false);
+    rerenderReveal(rerender, true);
+    const tl = timelines[0];
+
+    function startTimeFor(target: HTMLElement): number {
+      const child = tl
+        .getChildren(false, true, true)
+        .find((c): c is gsap.core.Tween => 'targets' in c && c.targets().includes(target));
+      if (!child) throw new Error('tween not found for target');
+      return child.startTime();
+    }
+
+    const targets = [
+      el(HEAD_ACTIONS),
+      ...Array.from(
+        document.querySelectorAll<HTMLElement>(
+          '[data-modal-part="scroll"] [data-modal-field], [data-modal-part="scroll"] h4'
+        )
+      ),
+    ];
+    const startTimes = targets.map(startTimeFor);
+    for (let i = 1; i < startTimes.length; i++) {
+      expect(startTimes[i]).toBeGreaterThanOrEqual(startTimes[i - 1]);
+    }
+  });
+});
+
+// 영상과 구현 기능 목록을 재생 목록으로 잇는다. 넷 중 (4)는 기존 화살표
+// 단추 동작 테스트가 이미 클릭을 잠그고 있으므로 여기서는 모양(클래스)만 본다
+describe('ProjectModal 영상과 구현 기능 목록을 잇는다', () => {
+  it('선택된 줄만 시안 막대와 선택 배경을 갖고, setFeat으로 바뀌면 따라 옮겨 간다', () => {
+    renderModal();
+    const rows = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-modal-panel="1"] [data-feat]')
+    );
+    const [row0, row1] = rows;
+    expect(row0.className).toContain('before:bg-[var(--color-cyan-core)]');
+    expect(row0.className).toContain('bg-[rgb(255_255_255_/_0.05)]');
+    expect(row1.className).not.toContain('before:bg-[var(--color-cyan-core)]');
+    expect(row1.className).not.toContain('bg-[rgb(255_255_255_/_0.05)]');
+
+    fireEvent.click(row1);
+    expect(row1.className).toContain('before:bg-[var(--color-cyan-core)]');
+    expect(row1.className).toContain('bg-[rgb(255_255_255_/_0.05)]');
+    expect(row0.className).not.toContain('before:bg-[var(--color-cyan-core)]');
+    expect(row0.className).not.toContain('bg-[rgb(255_255_255_/_0.05)]');
+  });
+
+  it('선택된 줄의 번호와 영상 밑 인덱스 앞자리가 같은 시안 클래스를 쓴다', () => {
+    renderModal();
+    const activeRow = document.querySelector('[data-modal-panel="1"] [data-feat="0"]')!;
+    const activeNumber = activeRow.querySelector('span')!;
+    expect(activeNumber.className).toContain('text-[var(--color-cyan-core)]');
+
+    const captionIndex = document.querySelector('[data-modal-part="caption"] b')!;
+    expect(captionIndex.className).toBe('text-[var(--color-cyan-core)]');
+  });
+
+  it('구현 기능 줄마다 chevron-right 아이콘이 하나씩 있고 aria-hidden이라 접근성 이름에 안 섞인다', () => {
+    renderModal();
+    const rows = document.querySelectorAll<HTMLElement>('[data-modal-panel="1"] [data-feat]');
+    expect(rows.length).toBeGreaterThan(0);
+    rows.forEach((row) => {
+      const svgs = row.querySelectorAll('svg');
+      expect(svgs).toHaveLength(1);
+      // Icon 아톰은 svg 자체에는 aria-hidden을 안 달므로, 감싼 span에
+      // 달렸는지를 본다. span이 없으면 안 섞인다는 것을 확인할 수 없다
+      const wrapper = svgs[0].closest('[aria-hidden]');
+      expect(wrapper).not.toBeNull();
+    });
+  });
+
+  it('좌우 넘김 단추가 기본 클래스에 hidden을 갖지 않는다', () => {
+    renderModal();
+    const prevBtn = screen.getByRole('button', { name: '이전 기능 영상' });
+    const nextBtn = screen.getByRole('button', { name: '다음 기능 영상' });
+    expect(prevBtn.className.split(/ +/)).not.toContain('hidden');
+    expect(nextBtn.className.split(/ +/)).not.toContain('hidden');
+  });
+
+  // 선택은 호버보다 진해야 한다. 기본 줄의 hover:bg-[.../0.04]가 선택된
+  // 줄에서 이 값에 덮여야 눌렀을 때 배경이 옅어지지 않는다
+  it('선택된 줄만 자기 호버 배경을 따로 갖는다', () => {
+    renderModal();
+    const rows = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-modal-panel="1"] [data-feat]')
+    );
+    const [row0, row1] = rows;
+    expect(row0.className).toContain('hover:bg-[rgb(255_255_255_/_0.08)]');
+    expect(row1.className).not.toContain('hover:bg-[rgb(255_255_255_/_0.08)]');
+  });
+
+  // 모달이 열릴 때 포커스가 이 단추에 앉으므로 무대 전체의
+  // group-focus-within을 쓰면 화살표가 손 없이도 계속 떠 있는다.
+  // 단추 자신의 호버·포커스 채널만 남아야 한다
+  it('좌우 넘김 단추가 무대 전체의 포커스에는 반응하지 않고 자기 자신의 호버·포커스에만 반응한다', () => {
+    renderModal();
+    const prevBtn = screen.getByRole('button', { name: '이전 기능 영상' });
+    const nextBtn = screen.getByRole('button', { name: '다음 기능 영상' });
+    for (const btn of [prevBtn, nextBtn]) {
+      expect(btn.className).not.toContain('group-focus-within');
+      expect(btn.className).toContain('group-hover/stage:opacity-100');
+      expect(btn.className).toContain('focus-visible:opacity-100');
+    }
   });
 });

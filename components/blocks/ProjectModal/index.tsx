@@ -12,14 +12,7 @@ import {
 import Image from 'next/image';
 import Modal from '@/components/atoms/Modal';
 import Icon from '@/components/atoms/Icon';
-import {
-  gsap,
-  registerGsap,
-  REVEAL_IN_MS,
-  REVEAL_OUT_MS,
-  SITE_EASE,
-  SplitText,
-} from '@/lib/gsap';
+import { gsap, registerGsap, REVEAL_OUT_MS, SITE_EASE } from '@/lib/gsap';
 import { cn } from '@/lib/utils/cn';
 import { RichText } from '@/lib/utils/richText';
 import { parseAnalysisEntry, selectFeaturedReview } from '@/lib/utils/projectContract';
@@ -157,7 +150,9 @@ const NARROW_PANEL_CSS = `
     width: 100%;
   }
   #pm-shell [data-modal-part="stage"] { margin: 0 20px; }
-  #pm-shell .pm-vidnav { display: grid; }
+  /* 손가락에는 호버가 없다. 좁은 판에서는 넓은 판의 opacity-0 기본값을
+     덮어 늘 보이게 한다 */
+  #pm-shell .pm-vidnav { display: grid; opacity: 1; }
   #pm-shell .pm-vidnav::after {
     content: "";
     position: absolute;
@@ -238,22 +233,13 @@ function revealOrder(shell: HTMLElement, opts?: { skipHead?: boolean }): HTMLEle
   ];
 }
 
-// 단어로 쪼개 날아 들어오는 것은 주장과 부제뿐이다. 나머지는 통짜로 뜬다 -
-// RichText가 들어가는 블록은 안에 인라인 요소가 섞여 있어 쪼개면 깨진다.
-// 음절 단위 분해는 한국어를 낱자로 부수므로 어떤 대상에도 쓰지 않는다
-const WORDS_SELECTOR = '[data-modal-field="claim"], [data-modal-field="sub"]';
-
 // 등장 예산은 REVEAL_IN_MS(1100ms)다. 요소 간격 60ms를 못박아 위에서
-// 아래로 순서대로 읽히게 하고, 단어 트윈(가장 긴 트윈)은 그 뒤에도 0.5초를
-// 더 쓴다. 영상 설명이 마지막이라 0.55(ELEM_SPAN) + 0.5(WORD_S) = 1.05초로
-// 예산 안에 들어온다
-const IN_S = REVEAL_IN_MS / 1000;
-const WORD_S = 0.5;
+// 아래로 순서대로 뜨게 하고, 통짜 트윈(RISE_S)이 그 뒤로 0.45초를 쓴다.
+// 영상 설명이 마지막이라 0.55(ELEM_SPAN) + 0.45(RISE_S) = 1.0초로 예산
+// 안에 들어온다
 const RISE_S = 0.45;
 const ELEM_STEP = 0.06;
-const WORD_STEP = 0.035;
 const ELEM_SPAN = 0.55;
-const WORD_SPAN = 0.3;
 // 논증 열에는 data-modal-field가 안 붙은 구조 블록(구현 기능 목록, 구분선,
 // 축선)이 섞여 있다. 열 자체를 짧게 페이드해 그것들이 t=0에 툭 서지 않게 한다
 const SCROLL_FADE_S = 0.3;
@@ -263,12 +249,8 @@ const SCROLL_FADE_S = 0.3;
 // 오른쪽으로 드러난다. 다른 요소처럼 12px 상승 페이드면 문단인지 영상 설명인지
 // 구분이 안 된다. clearProps로 clip-path를 지우는 이유는 남겨 두면 캡션 안
 // 글자가 길어졌을 때 잘릴 수 있어서다
-function buildRevealTimeline(
-  shell: HTMLElement,
-  order: HTMLElement[]
-): { tl: gsap.core.Timeline; splits: SplitText[] } {
+function buildRevealTimeline(shell: HTMLElement, order: HTMLElement[]): gsap.core.Timeline {
   const tl = gsap.timeline();
-  const splits: SplitText[] = [];
   const scroll = shell.querySelector<HTMLElement>('[data-modal-part="scroll"]');
   if (scroll) {
     tl.fromTo(scroll, { opacity: 0 }, { opacity: 1, duration: SCROLL_FADE_S, ease: SITE_EASE }, 0);
@@ -293,34 +275,10 @@ function buildRevealTimeline(
       return;
     }
 
-    if (!el.matches(WORDS_SELECTOR)) {
-      tl.fromTo(el, { y: 12, opacity: 0 }, { y: 0, opacity: 1, duration: RISE_S, ease: SITE_EASE }, at);
-      return;
-    }
-    const split = SplitText.create(el, { type: 'words', aria: 'auto' });
-    splits.push(split);
-    if (split.words.length === 0) return;
-    // ELEM_SPAN(0.55)이 WORD_SPAN(0.3)을 남겨 두고 못박혀 있지 않으므로,
-    // 순서 뒤쪽에서 시작하는 단어 트윈은 남은 예산만큼만 벌어진다. 그래야
-    // 논증 열 뒤쪽에 있는 두 번째 주장(트러블 슈팅 제목)도 REVEAL_IN_MS
-    // 예산 안에서 끝난다
-    const wordBudget = Math.max(0, IN_S - WORD_S - at);
-    tl.fromTo(
-      split.words,
-      { y: 14, opacity: 0, filter: 'blur(6px)' },
-      {
-        y: 0,
-        opacity: 1,
-        filter: 'blur(0px)',
-        duration: WORD_S,
-        ease: SITE_EASE,
-        stagger: { amount: Math.min(WORD_STEP * (split.words.length - 1), WORD_SPAN, wordBudget) },
-      },
-      at
-    );
+    tl.fromTo(el, { y: 12, opacity: 0 }, { y: 0, opacity: 1, duration: RISE_S, ease: SITE_EASE }, at);
   });
 
-  return { tl, splits };
+  return tl;
 }
 
 export default function ProjectModal({
@@ -448,10 +406,9 @@ export default function ProjectModal({
     // 않는다 - order에서 뺀다
     if (prev === 'head') {
       gsap.set(body, { visibility: 'visible' });
-      const { tl, splits } = buildRevealTimeline(shell, revealOrder(shell, { skipHead: true }));
+      const tl = buildRevealTimeline(shell, revealOrder(shell, { skipHead: true }));
       return () => {
         tl.kill();
-        splits.forEach((split) => split.revert());
       };
     }
 
@@ -459,10 +416,9 @@ export default function ProjectModal({
     // 함께 등장한다
     if (prev === false) {
       gsap.set([...head, ...body], { visibility: 'visible' });
-      const { tl, splits } = buildRevealTimeline(shell, revealOrder(shell));
+      const tl = buildRevealTimeline(shell, revealOrder(shell));
       return () => {
         tl.kill();
-        splits.forEach((split) => split.revert());
       };
     }
 
@@ -546,7 +502,12 @@ export default function ProjectModal({
           >
             {project.title}
           </h2>
-          <div className="flex shrink-0 items-center gap-1.5">
+          {/* ml-auto: 비행 중 absolute:true가 #pm-title을 flex 흐름에서
+              빼면 자식이 이 묶음 하나만 남는다. justify-between은 자식이
+              하나면 flex-start에 두므로 묶음이 제목 착지 자리로 밀려간다.
+              자동 좌측 여백이 제목 유무와 무관하게 항상 이 묶음을 오른쪽
+              끝으로 민다 */}
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
             {project.githubUrl && (
               <a
                 href={project.githubUrl}
@@ -597,7 +558,7 @@ export default function ProjectModal({
             // 노드라 여기 반경이 없으면 날아가는 동안만 각져 보인다.
             // 자르기를 여기 두는 것은 안전하다 - collectClippedAncestors는
             // 이 노드의 부모부터 걷어내므로 자기 overflow는 안 건드린다
-            className="relative grid justify-items-center gap-0 overflow-hidden rounded-media"
+            className="group/stage relative grid justify-items-center gap-0 overflow-hidden rounded-media"
             onTouchStart={handleStageTouchStart}
             onTouchEnd={handleStageTouchEnd}
           >
@@ -644,15 +605,21 @@ export default function ProjectModal({
 
             {impls.length > 1 && (
               <>
-                {/* 좁은 판 전용 손잡이. 구현 기능 목록이 사라진 자리에서
-                    무대를 넘긴다. 넓은 판에서는 display:none이다 */}
+                {/* 구현 기능 목록이 사라지는 좁은 판에서는 무대를 넘기는 유일한
+                    손잡이다. 넓은 판에서는 목록과 짝을 이루는 보조 수단이다 */}
+                {/* 넓은 판에서는 무대(group/stage)에 호버하거나, 단추 자신이 키보드
+                    포커스를 받을 때만 뜬다. 무대 전체의 group-focus-within은 쓰지
+                    않는다. 모달이 열릴 때 포커스가 이 단추에 앉아 무대가 계속
+                    포커스를 문 상태가 되기 때문이다. 좁은 판은 NARROW_PANEL_CSS가
+                    opacity:1로 되살린다. 손가락에는 호버가 없다 */}
                 <button
                   type="button"
                   onClick={() => goFeat(-1)}
                   aria-label="이전 기능 영상"
                   className={cn(
-                    'pm-vidnav absolute left-2 top-1/2 hidden h-8 w-8 -translate-y-1/2 place-items-center',
-                    'rounded-full bg-[rgb(0_0_0_/_0.55)]',
+                    'pm-vidnav absolute left-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center',
+                    'rounded-full bg-[rgb(0_0_0_/_0.55)] opacity-0 transition-opacity',
+                    'group-hover/stage:opacity-100 focus-visible:opacity-100',
                     'hover:bg-[rgb(0_0_0_/_0.75)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-cyan-hi)]',
                     T1
                   )}
@@ -664,8 +631,9 @@ export default function ProjectModal({
                   onClick={() => goFeat(1)}
                   aria-label="다음 기능 영상"
                   className={cn(
-                    'pm-vidnav absolute right-2 top-1/2 hidden h-8 w-8 -translate-y-1/2 place-items-center',
-                    'rounded-full bg-[rgb(0_0_0_/_0.55)]',
+                    'pm-vidnav absolute right-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center',
+                    'rounded-full bg-[rgb(0_0_0_/_0.55)] opacity-0 transition-opacity',
+                    'group-hover/stage:opacity-100 focus-visible:opacity-100',
                     'hover:bg-[rgb(0_0_0_/_0.75)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-cyan-hi)]',
                     T1
                   )}
@@ -714,7 +682,9 @@ export default function ProjectModal({
                 <p className={cn('mt-1 text-t6 leading-[1.55]', T2)}>{active.items[0]}</p>
               </div>
               <p className={cn('pm-vidx flex-none text-t7 font-bold tabular-nums tracking-[0.08em]', T3)}>
-                <b className={T2}>{String(feat + 1).padStart(2, '0')}</b> /{' '}
+                {/* 목록에서 선택된 줄의 번호와 같은 시안이다. 같은 색 같은 숫자가
+                    두 군데 있어야 영상과 목록 줄이 짝으로 읽힌다 */}
+                <b className="text-[var(--color-cyan-core)]">{String(feat + 1).padStart(2, '0')}</b> /{' '}
                 {String(impls.length).padStart(2, '0')}
               </p>
             </div>
@@ -784,15 +754,26 @@ export default function ProjectModal({
                         aria-current={isActive}
                         onClick={() => setFeat(i)}
                         className={cn(
-                          'grid w-full grid-cols-[auto_1fr] items-baseline gap-3.5 border-b border-b-[rgb(255_255_255_/_0.08)]',
-                          'py-4 pl-0.5 pr-2 text-left transition-colors hover:bg-[rgb(255_255_255_/_0.04)]',
-                          'focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)]'
+                          'group relative grid w-full grid-cols-[auto_1fr_auto] items-baseline gap-3.5',
+                          'border-b border-b-[rgb(255_255_255_/_0.08)] py-4 pl-3 pr-2 text-left',
+                          'transition-colors hover:bg-[rgb(255_255_255_/_0.04)]',
+                          'focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)]',
+                          // 선택된 줄만 배경과 왼쪽 시안 막대를 얻는다. 배경은 호버보다
+                          // 진해야 선택이 다른 줄의 호버에 묻히지 않는다. 막대는
+                          // before 의사요소라 레이아웃을 안 밀어낸다
+                          isActive &&
+                            cn(
+                              'bg-[rgb(255_255_255_/_0.05)]',
+                              // 선택 배경은 호버보다 진해야 한다. 0.05에서 0.08로 눌렀을 때 더 진해진다
+                              'hover:bg-[rgb(255_255_255_/_0.08)]',
+                              'before:absolute before:bottom-0 before:left-0 before:top-0 before:w-[2px] before:content-[""] before:bg-[var(--color-cyan-core)]'
+                            )
                         )}
                       >
                         <span
                           className={cn(
                             'text-t7 font-bold tabular-nums tracking-[0.04em]',
-                            isActive ? T1 : T3
+                            isActive ? 'text-[var(--color-cyan-core)]' : T3
                           )}
                         >
                           {String(i + 1).padStart(2, '0')}
@@ -806,6 +787,19 @@ export default function ProjectModal({
                           <span className={cn('mt-1 block text-t6 leading-[1.6]', isActive ? T2 : T3)}>
                             {impl.items[0]}
                           </span>
+                        </span>
+                        {/* 호버·키보드 포커스에서만 드러나는 손잡이 신호. 목록이
+                            읽을거리가 아니라 누를 수 있는 재생 목록이라는 것을
+                            손이 먼저 안다 */}
+                        <span
+                          aria-hidden
+                          className={cn(
+                            T3,
+                            'self-center opacity-0 transition-opacity',
+                            'group-hover:opacity-100 group-focus-visible:opacity-100'
+                          )}
+                        >
+                          <Icon name="chevron-right" size="small" />
                         </span>
                       </button>
                     );
