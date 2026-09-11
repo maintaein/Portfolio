@@ -31,7 +31,7 @@ const motionSpies = vi.hoisted(() => ({
 
 // HyperspeedBackground는 Task 5의 산출물이다. 실제 WebGL 씬은 여기서
 // 검증하지 않는다(components/blocks/HyperspeedBackground.tsx 자체 테스트가
-// 맡는다) — 여기서는 HomeClient가 단일 useSectionNav·usePageVisibility·
+// 맡는다). 여기서는 HomeClient가 단일 useSectionNav·usePageVisibility·
 // useMotionPreference에서 파생한 값을 그대로 넘기는지, 그리고 재마운트하지
 // 않는지만 probe로 관측한다.
 const hyperspeedBackgroundSpies = vi.hoisted(() => ({
@@ -419,7 +419,7 @@ describe('HomeClient SSR 셸 구조', () => {
     );
     expect(importsNextDynamic).toBe(false);
     // GSAP은 First Load JS 예산 때문에 동적 경계로 뺐다(gsap-lazy-brief.md).
-    // HomeClient가 만드는 동적 import는 정확히 이 하나뿐이어야 한다 — 다른
+    // HomeClient가 만드는 동적 import는 정확히 이 하나뿐이어야 한다. 다른
     // 지연 로딩이 몰래 추가되지 않았는지도 함께 고정한다.
     expect(dynamicImports).toEqual(['@/lib/gsap']);
     expect(timeoutCalls).toEqual([]);
@@ -761,13 +761,13 @@ describe('HomeClient → HyperspeedBackground 배선', { timeout: 30_000 }, () =
     expect(probe).toHaveAttribute('data-obscured', 'true');
 
     // 되돌아오는 방향까지 확인한다. 이 어서션이 없으면 obscured를 한 번
-    // true로 만들고 영원히 두는 구현도 통과한다 — 모달을 닫은 뒤 배경이
+    // true로 만들고 영원히 두는 구현도 통과한다. 모달을 닫은 뒤 배경이
     // 어두운 채로 남는 것이 정확히 그 결함이다.
     // ProjectModal은 next/dynamic이라 클릭 직후에는 아직 DOM에 없다. 이 파일은
     // '@/lib/gsap'을 mock하지 않으므로 HomeClient의 마운트 effect가 실제
     // gsap 패키지를 처음으로 동적 import하면서 겪는 실 transform·평가 비용이
     // ProjectModal 자체의 청크 로드와 겹쳐 기본 1000ms 예산을 종종 넘는다
-    // (실측: 최대 ~1.7초) — 로직 문제가 아니라 타이밍 여유를 넉넉히 준다.
+    // (실측: 최대 ~1.7초). 로직 문제가 아니라 타이밍 여유를 넉넉히 준다.
     fireEvent.click(
       await screen.findByRole('button', { name: '닫기' }, { timeout: 20_000 })
     );
@@ -832,11 +832,41 @@ describe('HomeClient 모달-only History와 셸 격리', { timeout: 30_000 }, ()
 
     fireEvent.click(closeButton);
 
-    // 되돌아오는 방향도 확인한다 — 한 번 inert를 걸고 영원히 두면 모달을
+    // 되돌아오는 방향도 확인한다. 한 번 inert를 걸고 영원히 두면 모달을
     // 닫아도 셸이 죽어 있는 결함이다
     expect(stage).not.toHaveAttribute('inert');
     expect(navButton.closest('[inert]')).toBeNull();
     expect(footerLink.closest('[inert]')).toBeNull();
+  });
+
+  // 계획 5 T2 phase D task S-7. data-obscured는 design-tokens.css가 읽어
+  // nav를 흐리며 물러나게 하는 훅이다. inert와 같은 wrapper에 실려 있지만
+  // 서로 다른 속성이라 따로 잠근다. inert만 잠그면 data-obscured가 빠진
+  // 채로도 통과해 nav가 안 흐려지는 결함을 못 잡는다
+  it('모달이 열리면 nav 래퍼에 data-obscured가 붙고, 닫히면 떨어진다', async () => {
+    window.history.replaceState(null, '', '/#projects');
+    const { container } = render(<HomeClient />);
+    const navButton = screen.getByRole('button', { name: /^about$/i });
+    const navWrapper = navButton.closest('nav')!.parentElement!;
+
+    expect(navWrapper).not.toHaveAttribute('data-obscured');
+
+    const projectsSection = getSection(container, 'projects');
+    const card = projectsSection.querySelector<HTMLElement>('[data-name="0"]');
+    fireEvent.click(card!);
+    const closeButton = await screen.findByRole(
+      'button',
+      { name: '닫기' },
+      { timeout: 20_000 }
+    );
+
+    // 뮤테이션: data-obscured를 안 붙이면 여기서 빈 문자열 속성이 없어
+    // FAIL한다
+    expect(navWrapper).toHaveAttribute('data-obscured', '');
+
+    fireEvent.click(closeButton);
+
+    expect(navWrapper).not.toHaveAttribute('data-obscured');
   });
 
   it('모달이 열려 있으면 스와이프로 섹션이 바뀌지 않는다', async () => {
@@ -880,7 +910,7 @@ describe('HomeClient 모달-only History와 셸 격리', { timeout: 30_000 }, ()
     const dialog = await screen.findByRole('dialog', {}, { timeout: 20_000 });
 
     // main이 inert라도 모달은 main의 자손이 아니라 document.body의 직속
-    // 자손(portal)이라 갇히지 않는다 — 뮤테이션으로 Modal의 portal 대상을
+    // 자손(portal)이라 갇히지 않는다. 뮤테이션으로 Modal의 portal 대상을
     // main 내부로 옮기면 이 어서션이 FAIL한다
     expect(stage).toHaveAttribute('inert');
     expect(stage.contains(dialog)).toBe(false);
@@ -967,10 +997,10 @@ describe('HomeClient 모달-only History와 셸 격리', { timeout: 30_000 }, ()
   });
 });
 
-describe('HomeClient Footer — 표제 계약', () => {
+describe('HomeClient Footer. 표제 계약', () => {
   // "Footer가 더 이상 문서 흐름에서 섹션 뒤로 비치지 않는다"의 구조적 절반이다.
   // 나머지 절반(Footer 자체가 position:fixed인지)은 Footer.test.tsx가 격리된
-  // 컴포넌트로 고정한다 — 여기서는 이 mock으로도 관측 가능한 두 가지만 본다:
+  // 컴포넌트로 고정한다. 여기서는 이 mock으로도 관측 가능한 두 가지만 본다:
   // (1) Footer가 .section-stage 안으로 흡수되지 않았는가(=CONTACT의 위장
   // 일곱 번째 섹션이 되지 않았는가), (2) active와 무관하게 항상 렌더되는가.
   it('Footer는 .section-stage의 자손이 아니며 active가 바뀌어도 항상 렌더된다', () => {
@@ -979,7 +1009,7 @@ describe('HomeClient Footer — 표제 계약', () => {
 
     expect(stage).not.toBeNull();
     const footerLink = screen.getByText('Contact footer');
-    // main(.section-stage) 밖 형제여야 한다 — main 안으로 들어가면 다른
+    // main(.section-stage) 밖 형제여야 한다. main 안으로 들어가면 다른
     // 비활성 섹션과 함께 inert·hidden 처리되어 "항상 보인다"는 계약이
     // 구조적으로 깨진다.
     expect(stage!.contains(footerLink)).toBe(false);
@@ -996,7 +1026,7 @@ describe('HomeClient Footer — 표제 계약', () => {
 
 describe('HomeClient CONTACT 섹션 등록', () => {
   it('CONTACT가 다른 다섯 섹션과 같은 경로(nav·해시·data-section)로 등록된다', () => {
-    // 리터럴 'contact'를 직접 어서션한다 — HOME_SECTION_CONFIG를 순회하는
+    // 리터럴 'contact'를 직접 어서션한다. HOME_SECTION_CONFIG를 순회하는
     // 검사는 CONTACT가 배열에서 통째로 빠져도(뮤테이션 b) 순회 범위 자체가
     // 줄어들 뿐이라 못 잡는다. 존재를 하드코딩해야 그 구멍이 막힌다.
     const { container } = render(<HomeClient />);

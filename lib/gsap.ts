@@ -19,7 +19,7 @@ export const MORPH_EASE = 'morph';
 // ProjectModal 내용의 등장·퇴장 길이. ProjectsSection이 닫기 안무를 짤 때
 // 같은 숫자를 봐야 하는데, ProjectModal은 next/dynamic으로 실리므로 그
 // 모듈에서 상수를 가져오면 지연 로드가 깨진다. 두 쪽이 다 닿는 자리가 여기다.
-export const REVEAL_IN_MS = 620;
+export const REVEAL_IN_MS = 1100;
 export const REVEAL_OUT_MS = 220;
 
 let registered = false;

@@ -273,3 +273,43 @@ describe('Modal 포커스 관리', () => {
     expect(onClose).toHaveBeenCalled();
   });
 });
+
+describe('Modal 배경막', () => {
+  it('backdropClassName을 안 주면 기존 클래스 그대로다', () => {
+    render(
+      <Modal isOpen onClose={() => {}} showCloseButton={false}>
+        <button>내용</button>
+      </Modal>
+    );
+    const dialog = screen.getByRole('dialog');
+    const backdrop = dialog.previousElementSibling as HTMLElement;
+    expect(backdrop.className).toContain('bg-black/20');
+    expect(backdrop.className).toContain('backdrop-blur-md');
+  });
+
+  it('backdropClassName을 주면 기본 클래스 대신 그것만 쓴다', () => {
+    render(
+      <Modal isOpen onClose={() => {}} showCloseButton={false} backdropClassName="bg-transparent">
+        <button>내용</button>
+      </Modal>
+    );
+    const dialog = screen.getByRole('dialog');
+    const backdrop = dialog.previousElementSibling as HTMLElement;
+    expect(backdrop.className).toContain('bg-transparent');
+    expect(backdrop.className).not.toContain('bg-black/20');
+    expect(backdrop.className).not.toContain('backdrop-blur-md');
+  });
+
+  it('backdropClassName을 줘도 배경막 클릭으로 닫히는 동작은 그대로다', async () => {
+    const onClose = vi.fn();
+    render(
+      <Modal isOpen onClose={onClose} showCloseButton={false} backdropClassName="bg-transparent">
+        <button>내용</button>
+      </Modal>
+    );
+    const dialog = screen.getByRole('dialog');
+    const backdrop = dialog.previousElementSibling as HTMLElement;
+    await userEvent.click(backdrop);
+    expect(onClose).toHaveBeenCalled();
+  });
+});

@@ -13,7 +13,7 @@ import { gsap } from '@/lib/gsap';
 
 
 // 셰이더 모프는 WebGL이 있어야 하고 jsdom에는 없다. 이 파일이 잠그는 것은
-// 픽셀이 아니라 배선이다 - 모프가 참을 돌려줄 때와 거짓을 돌려줄 때 두 방향
+// 픽셀이 아니라 배선이다. 모프가 참을 돌려줄 때와 거짓을 돌려줄 때 두 방향
 // 모두에서 프리뷰 전환 계약이 지켜지는가. 그래서 모듈 경계에서 가짜로 바꾸고
 // 반환값을 테스트가 정한다. 기본값은 거짓이라 이 파일의 나머지 테스트는
 // 지금까지와 같은 폴백 경로를 그대로 본다
@@ -160,6 +160,16 @@ describe('ProjectsSection 접힘 레이아웃', () => {
     expect(titleAttrs).not.toContain('text-t4');
     expect(name.className).not.toContain('text-t4');
     expect(name.className).not.toContain('leading-[1.35]');
+    // 착지 직후 제목이 세로로 튀지 않으려면 줄 높이 비율도 같아야 한다.
+    // 이름 쪽은 d3 토큰(line-height)이 주고 제목 쪽은 클래스가 주므로,
+    // 정본에서 읽은 숫자와 제목 클래스에 박힌 숫자를 맞대어 본다
+    const d3LineHeight = TOKENS_CSS.match(/--line-height-d3:\s*([\d.]+)/)![1];
+    expect(titleAttrs).toContain(`leading-[${d3LineHeight}]`);
+    // lg 이상에서는 lg:text-t2가 line-height도 같이 정하는 유틸리티라
+    // 변형 없는 leading-[1.1]을 CSS 소스 순서에서 뒤집는다(lg:text-t2가
+    // Tailwind 출력에서 leading-[1.1]보다 뒤에 온다). lg: 변형이 붙은
+    // leading 유틸리티로 그 lg 블록 안에서도 이겨야 한다
+    expect(titleAttrs).toContain(`lg:leading-[${d3LineHeight}]`);
     // truncate는 좁은 머리띠에서 제목이 버튼을 밀지 않게 하는 배치 장치다.
     // 밀어낼 버튼이 없는 이름 목록에는 오지 않는다
     expect(name.className).not.toContain('truncate');
@@ -446,7 +456,7 @@ function goToIndex(i: number) {
 // ProjectModal은 next/dynamic({ssr:false})로 실제 import()를 거쳐 로드된다
 // (HomeClient.test.tsx의 findByRole(..., {timeout: 20_000}) 관례와 같은 이유).
 // 이 describe 안의 클릭·popstate 시나리오는 dialog가 실제로 그려지길 기다려야
-// 하므로 findByRole/waitFor로 기다린다 — getByRole 동기 단정은 청크 로드 전에
+// 하므로 findByRole/waitFor로 기다린다. getByRole 동기 단정은 청크 로드 전에
 // 거짓 실패한다
 describe('ProjectsSection modal-only History', { timeout: 30_000 }, () => {
   it('이름을 눌러 펼치면 projectModalId를 pushState한다', () => {
@@ -673,7 +683,7 @@ describe('ProjectsSection modal-only History', { timeout: 30_000 }, () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('새로고침으로 복구된 모달을 닫으면 history.back이 아니라 replaceState로 키만 지운다 — 페이지 이탈 방지', async () => {
+  it('새로고침으로 복구된 모달을 닫으면 history.back이 아니라 replaceState로 키만 지운다. 페이지 이탈 방지', async () => {
     const ready = projects.find((p) => isProjectModalReady(p))!;
     window.history.replaceState(
       { projectModalId: ready.title, __NA: 'next가 쓰는 필드' },
@@ -694,7 +704,7 @@ describe('ProjectsSection modal-only History', { timeout: 30_000 }, () => {
     fireEvent.click(closeButton);
 
     // 뮤테이션: closeModal이 push 여부와 무관하게 항상 history.back을 부르면
-    // 여기서 back이 불려 FAIL한다 — 새로고침으로 들어온 항목 앞에는 우리
+    // 여기서 back이 불려 FAIL한다. 새로고침으로 들어온 항목 앞에는 우리
     // 사이트가 아닌 페이지가 있을 수 있다
     expect(back).not.toHaveBeenCalled();
     expect(replace).toHaveBeenCalled();
@@ -721,7 +731,7 @@ const TOKENS_CSS = readFileSync(
 );
 
 // 이 저장소가 직접 연 모서리 토큰들. 목록을 손으로 적지 않고 정본에서
-// 읽는다 - 토큰 이름이 바뀌어도 이 판정은 따라간다
+// 읽는다. 토큰 이름이 바뀌어도 이 판정은 따라간다
 const RADIUS_TOKEN_CLASSES = Array.from(
   TOKENS_CSS.matchAll(/--radius-([a-z0-9-]+)\s*:/g)
 ).map((m) => `rounded-${m[1]}`);
@@ -770,7 +780,7 @@ describe('ProjectsSection 이름 목록 세로 간격', () => {
 describe('ProjectsSection 미디어 모서리', () => {
   // 비행의 두 끝이 같은 반경을 쓰는지가 계약이다. 한쪽만 고치면 날아가는
   // 동안 모서리가 튄다. 그래서 상수를 양쪽에 손으로 적어 두고 비교하지
-  // 않는다 - 접힘 쪽 DOM에서 읽어 낸 값으로 펼침 쪽 소스에 묻는다
+  // 않는다. 접힘 쪽 DOM에서 읽어 낸 값으로 펼침 쪽 소스에 묻는다
   function roundedInPreview(): HTMLElement[] {
     const preview = document.querySelector<HTMLElement>('[data-part="preview"]')!;
     return Array.from(preview.querySelectorAll<HTMLElement>('*')).filter((el) =>
@@ -832,7 +842,7 @@ describe('ProjectsSection 프리뷰 캡션', () => {
       if (projects[i].subtitle) {
         expect(lines[1].textContent).toBe(projects[i].subtitle);
         // subtitle은 길이도 줄바꿈도 제각각이다(TDS 것에는 리터럴 개행이
-        // 들어 있다). 한 줄로 눌러 두는 것이 truncate다 - 이게 없으면
+        // 들어 있다). 한 줄로 눌러 두는 것이 truncate다. 이게 없으면
         // 긴 설명이 두 줄로 접혀 캡션이 영상을 덮는다
         expect(classList(lines[1])).toContain('truncate');
       } else {
@@ -898,7 +908,7 @@ describe('ProjectsSection 캡션 대비', () => {
   const AA = 4.5;
 
   // 순백에 검정을 알파 a로 얹은 뒤 남는 회색. 대비 공식은 이 저장소의
-  // lib/utils/contrast를 그대로 쓴다 - 여기서 다시 짜면 정본과 갈라진다
+  // lib/utils/contrast를 그대로 쓴다. 여기서 다시 짜면 정본과 갈라진다
   function whiteUnderScrim(alpha: number) {
     const channel = Math.round(255 * (1 - alpha))
       .toString(16)
@@ -1153,7 +1163,7 @@ describe('ProjectsSection 프로젝트 전환 모션', () => {
     expect(fromTo).toHaveBeenCalledTimes(1);
 
     // 순환 재생이 src를 갈아 끼운다. 같은 프로젝트 안의 다음 장면이라
-    // 상태 전환이 아니다 - 여기에 걸면 3초마다 영원히 꿈틀대는 잔모션이 된다
+    // 상태 전환이 아니다. 여기에 걸면 3초마다 영원히 꿈틀대는 잔모션이 된다
     fireEvent.ended(document.querySelector('[data-part="preview-video"]')!);
     expect(fromTo).toHaveBeenCalledTimes(1);
   });
@@ -1329,7 +1339,7 @@ describe('ProjectsSection 프리뷰 셰이더 모프', () => {
 // 호 수학이 통째로 0으로 무너진다. 그 상태에서 "회전이 걸렸는가"를 물으면
 // 구현이 어떻게 생겼든 늘 0이 나와 참 같은 거짓만 잡는다. 그래서 줄 높이를
 // 크롬 실측값으로 세우고 rAF를 손으로 몰아 프레임을 결정적으로 만든다.
-// 픽셀은 여전히 못 잡는다 - 여기서 잠그는 것은 배치의 원인이다
+// 픽셀은 여전히 못 잡는다. 여기서 잠그는 것은 배치의 원인이다
 const WHEEL_ROW_H = 69; // 크롬 실측(48px 글자 + py-2)
 const WHEEL_TILT_DEG = 7;
 const WHEEL_BLUR_PX = 1.6;
@@ -1433,7 +1443,7 @@ function renderWheel(reduced = false) {
 describe('ProjectsSection 이름 휠', () => {
   // 이 작업이 존재하는 이유 그 자체다. 평평하게 쌓인 단추 줄이 원호를 따라
   // 휘고, 고른 것에서 멀어질수록 흐려지고 번진다
-  it('활성에서 멀어질수록 기울고 흐려지고 번진다 - 위아래 양쪽 다', () => {
+  it('활성에서 멀어질수록 기울고 흐려지고 번진다. 위아래 양쪽 다', () => {
     const rig = installWheelRig();
     try {
       renderWheel();
@@ -1465,7 +1475,7 @@ describe('ProjectsSection 이름 휠', () => {
       // 너비로 넓어지면 글자 뒤의 빈 영역이 실려 올라가 남의 줄 위를 덮어
       // 이름을 겨냥하지 않은 자리에서 엉뚱한 프로젝트가 잡힌다(크롬 실측:
       // 상자 527px, 글자 87~321px). jsdom에는 레이아웃이 없어 그 결과를 못
-      // 재니 축과 상자 폭을 문자열로 잠근다 - 약한 대리 검사임을 안다
+      // 재니 축과 상자 폭을 문자열로 잠근다. 약한 대리 검사임을 안다
       for (let i = 0; i < N; i += 1) {
         const cls = nameEl(i).className.split(/\s+/);
         expect(cls, `item ${i} origin`).toContain('origin-left');
@@ -1615,7 +1625,7 @@ describe('ProjectsSection 이름 휠', () => {
       expect(Math.abs(wheelStyle(ready).rot!)).toBeGreaterThan(1);
 
       // 못박기가 openModal '앞'이어야 한다는 것이 계약이다. 뒤로 밀면 아래
-      // 최종 상태 검사는 그대로 통과한다 - 둘 다 같은 tick 안에서 끝나기
+      // 최종 상태 검사는 그대로 통과한다. 둘 다 같은 tick 안에서 끝나기
       // 때문이다. 그래서 openModal 안에서 한 점을 잡아 그 시점의 변형을 본다.
       // 진짜 기준점은 Flip.getState지만 이 스위트는 matchMedia를 좁은 화면으로
       // 고정해 두어 비행 관문이 닫혀 있다. pushState는 같은 openModal 몸통
@@ -1868,6 +1878,92 @@ describe('ProjectsSection 이름 휠', () => {
       expect(wheelStyle(0).opacity).toBe(1);
     } finally {
       rig.uninstall();
+    }
+  });
+});
+
+// 계획 5 T2 phase D task S-4. 모달이 열리는 비행 동안 휠의 나머지 이름이
+// 활성 자리에서 갈라져 안쪽(제목이 날아가는 쪽)이 비어 보인다. applyWheel은
+// wheelSpreadRef.current.v(0→1)를 추가항으로만 쓰므로, spread=0이면 이
+// 파일의 다른 휠 테스트가 이미 잠근 값과 바이트 단위로 같아야 한다
+describe('ProjectsSection 휠 벌어짐(spread)', { timeout: 30_000 }, () => {
+  it('모달이 열리는 비행에서 spread가 1이면 활성 아닌 항목만 갈라지고, 0이면 기존 값 그대로다', async () => {
+    // 이 파일의 top beforeEach는 matchMedia.matches를 늘 false로 고정해
+    // FLIP을 끈다(다른 테스트들은 History 배선만 보므로 무관하다). 여기서는
+    // 비행이 실제로 떠야 하므로 넓은 화면으로 다시 세운다
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: query.includes('min-width'),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }))
+    );
+    const rowHeight = vi
+      .spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
+      .mockReturnValue(WHEEL_ROW_H);
+    try {
+      // 0은 초기 활성 인덱스라 열기의 두 클릭 계약(선택 -> 열기)을 못
+      // 구분한다. 0이 아닌 것을 고른다
+      const ready = projects.findIndex((p, i) => i !== 0 && isProjectModalReady(p));
+      expect(ready).toBeGreaterThan(-1);
+      const other = ready === 0 ? 1 : 0;
+
+      // 첫 tick 콜백을 손에 쥔다. 실제 ticker에 맡기면 rAF 실시간에 걸려
+      // findByRole이 보기 전에 이미 불려 버리는 레이스가 생긴다
+      let onFirstTick: (() => void) | undefined;
+      vi.spyOn(gsap.ticker, 'add').mockImplementation(
+        (cb: Parameters<typeof gsap.ticker.add>[0]) => {
+          onFirstTick = cb as unknown as () => void;
+          return cb;
+        }
+      );
+      const to = vi.spyOn(gsap, 'to');
+
+      const view = renderWheel();
+      // gsap은 마운트 직후 동적 import로 온다. 흘려보내지 않으면
+      // flipModule이 아직 비어 있어 비행 자체가 조용히 스킵된다
+      await act(async () => {
+        await new Promise((done) => setTimeout(done, 0));
+      });
+
+      fireEvent.click(nameEl(ready));
+      fireEvent.click(nameEl(ready));
+      await screen.findByRole('dialog', {}, { timeout: 20_000 });
+
+      // spread=0. 이 파일의 다른 휠 테스트들과 같은 baseline이다
+      const before = wheelStyle(other);
+      expect(before.opacity).not.toBe(0);
+
+      expect(onFirstTick).toBeTypeOf('function');
+      act(() => {
+        onFirstTick!();
+      });
+
+      // 스프레드 트윈을 붙잡아 값만 목표(1)로 밀어붙인다. target은
+      // wheelSpreadRef.current 그 자신이라 이렇게 바꾼 값이 다음
+      // applyWheel 호출에 그대로 실린다
+      const spreadCall = to.mock.calls.find(
+        (call) => typeof (call[0] as { v?: unknown }).v === 'number'
+      );
+      expect(spreadCall).toBeDefined();
+      const [target, vars] = spreadCall as [{ v: number }, { onUpdate: () => void }];
+      expect(vars).toMatchObject({ duration: 0.4 });
+      target.v = 1;
+      act(() => {
+        vars.onUpdate();
+      });
+
+      const after = wheelStyle(other);
+      const d = other - ready;
+      // WHEEL_SPLIT_PX(56), WHEEL_SPLIT_BLUR_PX(6). 소스 상수 그대로
+      expect(after.y).toBeCloseTo((before.y ?? 0) + d * 56, 1);
+      expect(after.opacity).toBe(0);
+      expect(after.blur).toBeCloseTo((before.blur ?? 0) + 6, 2);
+      view.unmount();
+    } finally {
+      rowHeight.mockRestore();
     }
   });
 });

@@ -40,12 +40,12 @@ import {
 } from '@/lib/constants';
 import type { Flip } from '@/lib/gsap';
 
-// 워드마크 FLIP 지속(ms) — 네비 겹침 회피의 단일 출처(세 이음매 브리프
+// 워드마크 FLIP 지속(ms). 네비 겹침 회피의 단일 출처(세 이음매 브리프
 // 3절). styles/design-tokens.css의 --wordmark-flip-duration
 // (.nav-strip-visible의 transition-delay)이 반드시 이 값과 같아야
 // "워드마크가 착지한 뒤에만 스트립이 나타난다"가 성립한다. TS와 CSS는
 // 빌드 타임에 값을 공유할 수 없으므로 WordmarkFlip.test.tsx가 두 파일을
-// 각각 읽어 숫자가 같은지 교차 검증한다 — 한쪽만 바뀌면 그 테스트가
+// 각각 읽어 숫자가 같은지 교차 검증한다. 한쪽만 바뀌면 그 테스트가
 // FAIL한다.
 const WORDMARK_FLIP_DURATION_MS = 500;
 
@@ -89,21 +89,21 @@ export default function HomeClient() {
   const wordmarkRef = useRef<HTMLButtonElement>(null);
   // 이름이 "멀리서 도착"하는 scale을 여는 wrapper(Navigation 소유 DOM,
   // 워드마크 버튼 자신이 아니다). BootSequence의 GSAP 타임라인이 이 노드에만
-  // scale을 건다 — 부팅 안무 브리프 1절의 FLIP 불변식.
+  // scale을 건다. 부팅 안무 브리프 1절의 FLIP 불변식.
   const wordmarkScaleRef = useRef<HTMLDivElement>(null);
-  // HERO 재순서 브리프 — 파티클이 뭉쳐 이름이 완성되는 핸드오프 순간
+  // HERO 재순서 브리프. 파티클이 뭉쳐 이름이 완성되는 핸드오프 순간
   // BootSequence가 이 값을 true로 뒤집는다. HyperspeedBackground는 이
   // 값을 기다렸다가 배경을 페이드로 드러낸다(t=0 검은 화면 → 이름 완성 →
   // 배경 등장, 브리프 2·3절). 씬 자체는 이 값과 무관하게 이미 일찍
-  // 로드·렌더되고 있다 — "준비는 일찍, 노출은 늦게".
+  // 로드·렌더되고 있다. "준비는 일찍, 노출은 늦게".
   const [heroRevealed, setHeroRevealed] = useState(false);
   const handleNameRevealed = useCallback(() => setHeroRevealed(true), []);
-  // GSAP은 정적 import에서 뺐다(First Load JS 예산 — gsap-lazy-brief.md).
+  // GSAP은 정적 import에서 뺐다(First Load JS 예산. gsap-lazy-brief.md).
   // 마운트 직후 미리 요청해 ref에 담아 두고, 아래 handleBeforeActiveChange는
-  // 이 ref를 동기적으로만 읽는다 — Flip.getState()는 DOM이 바뀌기 직전에
+  // 이 ref를 동기적으로만 읽는다. Flip.getState()는 DOM이 바뀌기 직전에
   // 동기 호출돼야 해서 await을 넣을 수 있는 자리가 아니기 때문이다. 아직
   // 로드되지 않았으면(사용자가 첫 섹션 이동을 하기까지 보통 수백 ms가
-  // 걸리므로 드물다) FLIP 없이 넘어간다 — 위치는 CSS가 바꾸므로 애니메이션만
+  // 걸리므로 드물다) FLIP 없이 넘어간다. 위치는 CSS가 바꾸므로 애니메이션만
   // 없을 뿐 깨지지 않는다.
   const gsapModuleRef = useRef<typeof import('@/lib/gsap') | null>(null);
 
@@ -113,7 +113,7 @@ export default function HomeClient() {
     });
   }, []);
 
-  // 워드마크 FLIP 브리지 — hero/compact 경계를 넘는 실제 active 변경 직전에
+  // 워드마크 FLIP 브리지. hero/compact 경계를 넘는 실제 active 변경 직전에
   // useSectionNav가 onBeforeActiveChange로 알려주면 Flip.getState()를 여기
   // 담아 둔다. 값이 있으면 React가 hero/compact 클래스를 반영한 다음 커밋의
   // useLayoutEffect([active])에서 꺼내 Flip.from()을 부른다(GSAP React FLIP
@@ -137,7 +137,7 @@ export default function HomeClient() {
       const crossesOverviewBoundary = from === OVERVIEW || to === OVERVIEW;
       if (!crossesOverviewBoundary || !wordmarkRef.current) return;
 
-      // 아직 GSAP 모듈이 로드되지 않았으면 FLIP 없이 넘어간다 — 구조적으로
+      // 아직 GSAP 모듈이 로드되지 않았으면 FLIP 없이 넘어간다. 구조적으로
       // 강제된다: pendingWordmarkStateRef가 비어 있으므로 아래
       // useLayoutEffect([active])의 Flip.from()도 실행되지 않는다.
       const mod = gsapModuleRef.current;
@@ -413,8 +413,9 @@ export default function HomeClient() {
       {/* 모달이 열리면 셸(Navigation)을 inert로 격리한다 — NEXT/스와이프로
           섹션이 바뀌면 모달 뒤에서 배경이 갈리는 모순이 생긴다. Navigation은
           inert를 직접 받지 않으므로 이 wrapper가 대신 짊어진다(계획 5 T2
-          Task 9 §7.4) */}
-      <div inert={isProjectModalOpen}>
+          Task 9 §7.4). data-obscured는 design-tokens.css의 규칙이 읽어
+          nav를 흐리며 물러나게 한다(Task S) */}
+      <div inert={isProjectModalOpen} data-obscured={isProjectModalOpen ? '' : undefined}>
         <Navigation
           items={NAV_ITEMS}
           active={active}
@@ -455,7 +456,7 @@ export default function HomeClient() {
         data-reduced-motion={reducedMotion}
         // jsdom은 inert의 포인터 차단을 구현하지 않으므로(실제 브라우저와
         // 달리 pointerdown이 그대로 발화한다), 모달이 열려 있으면 스와이프
-        // 핸들러 자체를 붙이지 않는다 — inert 하나로는 스와이프를 막지
+        // 핸들러 자체를 붙이지 않는다. inert 하나로는 스와이프를 막지
         // 못한다(계획 5 T2 Task 9 §7.4)
         inert={isProjectModalOpen}
         {...(isProjectModalOpen ? {} : swipeHandlers)}

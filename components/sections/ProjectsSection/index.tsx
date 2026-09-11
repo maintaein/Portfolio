@@ -44,7 +44,7 @@ const N = projects.length;
 // applyWheel의 centerShift가 이 값을 쓴다
 const CENTER = (N - 1) / 2;
 // 모프가 마운트 직후 받아 둘 도착 이미지 경로. 렌더마다 새 배열을 만들면
-// PreviewMorph의 프리로드 effect가 매번 다시 돈다 - 모듈 상수로 한 번만 만든다
+// PreviewMorph의 프리로드 effect가 매번 다시 돈다. 모듈 상수로 한 번만 만든다
 const PROJECT_IMAGE_PATHS = projects.map((p) => p.image);
 
 // history.state에서 projectModalId 키만 걷어내고 나머지 필드(Next.js가
@@ -57,7 +57,7 @@ function stripProjectModalId(state: unknown): Record<string, unknown> {
 }
 
 // mount와 popstate가 공용하는 순수 판정. history를 읽지도 쓰지도 않고
-// 인자만 본다 — 두 경로가 갈리면 새로고침 복구와 뒤로가기 복구가
+// 인자만 본다. 두 경로가 갈리면 새로고침 복구와 뒤로가기 복구가
 // 다르게 동작한다(계획 5 T2 Task 9)
 export function reconcileProjectModal(historyState: unknown): string | null {
   if (!historyState || typeof historyState !== 'object') return null;
@@ -92,6 +92,11 @@ const WHEEL_SMOOTHING_MS = 200;
 // optionWheel의 side='right'. 호가 오른쪽으로 부풀어 활성 이름이 프리뷰에
 // 가장 가까운 자리에 남는다. 반대 부호였다면 먼 항목이 프리뷰 열을 침범한다
 const WHEEL_MIRROR = -1;
+// 모달이 열릴 때 휠의 나머지 이름이 벌어지는 폭과 블러. spread(0→1)가
+// 이 상수들에 곱해진다. 활성 항목(dist 0)은 안 받는다. 비행 손잡이가
+// 거기 있다
+const WHEEL_SPLIT_PX = 56;
+const WHEEL_SPLIT_BLUR_PX = 6;
 
 // 프리뷰 캡션 뒤 국소 그라데이션. 전면 카드로 덮지 않고 글자가 앉는
 // 아래쪽에만 깐다 - SkillsSection의 SKILL_DESCRIPTION_SCRIM, About의
@@ -113,18 +118,21 @@ const PREVIEW_SWAP_MS = 300;
 
 // 접힘 프리뷰와 펼침 stage 사이 비행 시간. 워드마크 FLIP과 같은 값이고
 // 정본은 styles/design-tokens.css의 워드마크 flip 지속 변수다. HomeClient도
-// 같은 값을 복제해 둔다 - 숫자 하나 때문에 공유 모듈을 파지 않는다
+// 같은 값을 복제해 둔다. 숫자 하나 때문에 공유 모듈을 파지 않는다
 const FLIP_DURATION_MS = 500;
+
+// 제목만 100ms 더 날린다. 사용자가 글자 비행을 조금 느리게 보고 싶다고
+// 했다. 100ms는 느리다고 느껴지되 이미지와 따로 논다고 느껴지지는 않는
+// 값이다(설계 문서 "비행의 시작과 끝을 잇는다" 참고)
+const TITLE_FLIP_MS = 600;
+
+// 머리띠가 등장하는 시각. 비행의 정확히 절반이다. 몸통이 등장할 틀이
+// 먼저 서야 한다
+const HEAD_IN_AT_MS = FLIP_DURATION_MS / 2;
 
 // #pm-shell 클래스가 쓰는 판 배경색. gsap 색 파서가 읽는 표기로 적는다
 const SHELL_BG = 'rgba(6, 8, 10, 0.97)';
 const SHELL_BG_CLEAR = 'rgba(6, 8, 10, 0)';
-
-// 셸 배경이 차오르는 구간은 비행의 앞 60%다. 비행 중반에 셸이 아직
-// 반투명하면 뒤에 있는 접힘 섹션 글자가 날아가는 이미지 너머로 비친다.
-// 닫기는 이것을 정확히 뒤집어 비행의 뒤 60%에 뺀다
-const SHELL_FADE_MS = FLIP_DURATION_MS * 0.6;
-const SHELL_FADE_OUT_DELAY_MS = FLIP_DURATION_MS - SHELL_FADE_MS;
 
 // FLIP은 섹션이 두 열로 서는 lg(1024) 위에서만 태운다. 비행의 출발 기하가
 // 섹션의 접힘 프리뷰이므로 모달이 아니라 섹션 쪽 경계를 쓴다
@@ -155,6 +163,44 @@ function collectClippedAncestors(stageEl: Element, shellEl: Element): Element[] 
   return clipped;
 }
 
+// 지금 보이는 미디어 한 프레임을 캔버스에 뜬다. 비행 동안 상자 위에 얹어
+// 그림이 안 바뀌게 하는 다리다. 캔버스를 못 만드는 환경(jsdom)이나 아직
+// 크기가 없는 미디어면 null이고, 그때는 다리 없이 지금처럼 난다
+function snapshotMedia(
+  el: HTMLVideoElement | HTMLImageElement | null
+): HTMLCanvasElement | null {
+  if (!el) return null;
+  const isVideo = el instanceof HTMLVideoElement;
+  const srcWidth = isVideo ? el.videoWidth : el.naturalWidth;
+  const srcHeight = isVideo ? el.videoHeight : el.naturalHeight;
+  if (!srcWidth || !srcHeight) return null;
+
+  // 가로 1280 캡. 그보다 큰 원본을 그대로 뜨면 drawImage가 비싸다
+  const scale = Math.min(1, 1280 / srcWidth);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(srcWidth * scale);
+  canvas.height = Math.round(srcHeight * scale);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  try {
+    ctx.drawImage(el, 0, 0, canvas.width, canvas.height);
+  } catch {
+    // 오염된 원본(CORS) 등으로 drawImage가 던지면 다리 없이 넘어간다
+    return null;
+  }
+
+  canvas.dataset.part = 'media-bridge';
+  // object-fit은 캔버스에도 먹는다. 프리뷰의 object-cover와 같은 잘림이라
+  // 출발 프레임이 프리뷰와 겹친다
+  canvas.style.position = 'absolute';
+  canvas.style.inset = '0';
+  canvas.style.width = '100%';
+  canvas.style.height = '100%';
+  canvas.style.objectFit = 'cover';
+  canvas.style.pointerEvents = 'none';
+  return canvas;
+}
+
 export default function ProjectsSection() {
   const { active, pageVisible, routeResolved, motionReady, reducedMotion } =
     useSectionActivity();
@@ -162,8 +208,9 @@ export default function ProjectsSection() {
   const [modalOpen, setModalOpen] = useState(false);
   // 상세 판 내용의 등장 소유권은 ProjectModal에 있다. 여기는 비행과 셸 배경과
   // 배경 알림만 갖고, 안무가 언제 시작하는지만 이 값으로 알린다.
-  // null = 안무 없음(관문이 닫힌 경로), false = 비행 중, true = 등장
-  const [revealed, setRevealed] = useState<boolean | null>(null);
+  // null = 안무 없음(관문이 닫힌 경로), false = 비행 중(머리띠도 없음),
+  // 'head' = 머리띠만 등장, true = 몸통까지 등장
+  const [revealed, setRevealed] = useState<boolean | 'head' | null>(null);
 
   const nameRefs = useRef<(HTMLButtonElement | null)[]>([]);
   // 이름 단추 안쪽의 글자 상자. 비행 손잡이는 단추가 아니라 이쪽이 쥔다 -
@@ -176,6 +223,10 @@ export default function ProjectsSection() {
   const wheelTargetRef = useRef(0);
   const wheelRafRef = useRef<number | null>(null);
   const wheelLastRef = useRef(0);
+  // 휠이 벌어지는 정도(0→1). GSAP이 트윈할 수 있게 객체로 감싼다.
+  // applyWheel이 매 프레임 이 값을 읽는다
+  const wheelSpreadRef = useRef({ v: 0 });
+  const spreadTweenRef = useRef<{ kill: () => void } | null>(null);
   const sectionRef = useRef<HTMLElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
   // 프로젝트 전환 tween이 붙는 겹. previewRef 자신이 아니라 그 안쪽이다 -
@@ -186,6 +237,9 @@ export default function ProjectsSection() {
   // 먼저 죽여야 했을 것이다
   const mediaLayerRef = useRef<HTMLDivElement | null>(null);
   const swapTweenRef = useRef<{ kill: () => void } | null>(null);
+  // 비행 앞뒤로 접힘 프리뷰(previewRef 자신)에 거는 opacity tween. 전환
+  // tween(swapTweenRef, mediaLayerRef 담당)과는 대상도 시점도 다르다
+  const previewTweenRef = useRef<{ kill: () => void } | null>(null);
   // 셰이더 모프의 명령형 손잡이. next/dynamic이 늦게 풀어 주므로 처음 몇
   // 프레임은 null이고, 그동안의 전환은 아래 gsap 폴백이 맡는다
   const morphHandleRef = useRef<PreviewMorphHandle | null>(null);
@@ -209,25 +263,32 @@ export default function ProjectsSection() {
   const gsapModuleRef = useRef<typeof import('@/lib/gsap') | null>(null);
   const pendingFlipStateRef = useRef<Flip.FlipState | null>(null);
   const flightRef = useRef<{ kill: () => void } | null>(null);
-  // 닫기에서 제목을 되돌리는 두 번째 비행. 여는 쪽은 Flip.from 하나가
-  // stage와 제목을 같이 태우지만 닫기는 Flip.fit이라 대상마다 호출이 하나다
+  // 제목을 되돌리는 두 번째 비행. stage와 길이가 달라(S-1) 열기·닫기
+  // 둘 다 Flip 호출이 stage와 제목으로 갈린다
   const titleFlightRef = useRef<{ kill: () => void } | null>(null);
+  // 모달 틀(셸·머리띠·증거 열) 트윈. 닫기 쪽만 담는다. 열기 쪽은
+  // flightRef의 kill에 같이 묶여 있다(handleStageMount)
+  const frameTweenRef = useRef<{ kill: () => void } | null>(null);
   // 닫기 비행 동안 감춰 둔 착지점 이름. 착지든 중도 정리든 되돌릴 자리를
   // 잃지 않으려고 노드 자체를 들고 있는다
   const hiddenNameRef = useRef<HTMLElement | null>(null);
+  // 닫기 비행이 프리뷰 상자 안에 얹어 둔 미디어 다리. 모달이 내려간 뒤(정리
+  // effect)에야 서서히 지운다. 그 전에 지우면 아직 안 돈 프리뷰 영상의
+  // poster/검은 화면이 그대로 드러난다
+  const previewBridgeRef = useRef<HTMLCanvasElement | null>(null);
   // 모달을 연 시점의 인덱스. 착지점은 이 값으로 집는다. 펼친 상태에서는
   // 프로젝트를 못 바꾸니 지금은 activeIndex와 같지만, 같다는 사실에 기대는
   // 코드는 언젠가 깨진다
   const openedIndexRef = useRef(0);
   // 붕괴가 끝나기를 기다렸다 닫기 비행을 띄우는 예약. setTimeout이 아니라
-  // GSAP 시계를 쓴다 - 탭이 백그라운드에 갔다 와도 타임라인과 안 어긋난다
+  // GSAP 시계를 쓴다. 탭이 백그라운드에 갔다 와도 타임라인과 안 어긋난다
   const collapseCallRef = useRef<{ kill: () => void } | null>(null);
   // 비행 500ms 동안 모달은 아직 열려 있고 포커스 트랩도 살아 있다. Escape를
   // 또 누르거나 배경을 또 클릭하면 closeModal이 다시 불린다
   const closingRef = useRef(false);
   // 지금 열린 모달이 우리가 pushState한 항목인지 기억한다. 새로고침으로
   // 복구된 모달(우리가 push한 적 없는 항목)을 history.back()으로 닫으면
-  // 직전 항목이 우리 사이트가 아닐 수 있어 페이지를 떠난다 — 그래서
+  // 직전 항목이 우리 사이트가 아닐 수 있어 페이지를 떠난다. 그래서
   // pushedRef가 false일 때는 back() 대신 replaceState로 키만 지운다
   const pushedRef = useRef(false);
 
@@ -310,7 +371,7 @@ export default function ProjectsSection() {
 
   // 프로젝트 전환. 이 모션이 전하는 것 하나: "보고 있는 프로젝트가 바뀌었다".
   // 새 화면이 조금 크게 아래에서 들어와 제자리에 앉는다. 순환 재생(3초)이
-  // 도는 중의 src 교체에는 안 걸린다 - 그건 같은 프로젝트 안의 다음 장면이라
+  // 도는 중의 src 교체에는 안 걸린다. 그건 같은 프로젝트 안의 다음 장면이라
   // 상태 전환이 아니고, 걸면 3초마다 영원히 꿈틀대는 잔모션이 된다.
   // transform과 opacity만 만진다. 이름을 빠르게 훑으면 전환이 겹치므로
   // 이전 것을 죽이고 다음을 태운다
@@ -370,6 +431,48 @@ export default function ProjectsSection() {
     collapseCallRef.current?.kill();
     collapseCallRef.current = null;
     setRevealed(null);
+
+    // 여기부터는 "모달이 방금 닫혔지만 비행을 끝까지 마쳤다는 보장이
+    // 없는" 경로(좁은 화면, reduce, 비행 중 popstate로 강제로 닫힌 경우)를
+    // 위한 정리다. 비행이 끝까지 돌았다면 각 tween이 이미 스스로 제값에
+    // 도착해 있어 아래는 덮어쓸 뿐 해가 없다
+    spreadTweenRef.current?.kill();
+    spreadTweenRef.current = null;
+    wheelSpreadRef.current.v = 0;
+    applyWheel(wheelPosRef.current);
+
+    previewTweenRef.current?.kill();
+    previewTweenRef.current = null;
+    if (previewRef.current) {
+      gsapModuleRef.current?.gsap.set(previewRef.current, { clearProps: 'opacity' });
+    }
+
+    // 닫기 비행이 프리뷰 상자에 얹어 둔 다리를 크로스페이드로 걷는다. 이
+    // 시점에는 playable이 다시 참이 되어 프리뷰 영상이 이어서 돈다
+    if (previewBridgeRef.current) {
+      const bridge = previewBridgeRef.current;
+      previewBridgeRef.current = null;
+      const mod = gsapModuleRef.current;
+      if (mod) {
+        mod.gsap.to(bridge, {
+          opacity: 0,
+          duration: 0.25,
+          ease: mod.SITE_EASE,
+          onComplete: () => bridge.remove(),
+        });
+      } else {
+        bridge.remove();
+      }
+    }
+
+    frameTweenRef.current?.kill();
+    frameTweenRef.current = null;
+    // applyWheel은 이 effect보다 뒤에서 선언되지만 useCallback([])이라
+    // 항등성이 고정이다. 이 클로저가 실제로 도는 시점(커밋 이후, 렌더
+    // 함수 전체가 끝난 뒤)에는 이미 만들어져 있어 안전하다. deps 배열에
+    // 넣으면 이 useEffect 호출 자체가 평가되는 순간(렌더 도중, applyWheel의
+    // const 선언보다 앞)에 그 이름을 읽어 TDZ에 걸리므로 여기서는 뺀다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modalOpen, restoreLandingName]);
 
   // 비행 도중 컴포넌트가 통째로 사라지는 경우
@@ -411,7 +514,7 @@ export default function ProjectsSection() {
   }, [modalOpen, activeIndex]);
 
   // modal-only History. mount와 단일 popstate 구독이 같은 함수
-  // (applyReconciliation)를 쓴다 — 새로고침 복구와 뒤로가기 복구가 갈리지
+  // (applyReconciliation)를 쓴다. 새로고침 복구와 뒤로가기 복구가 갈리지
   // 않게 하는 것이 이 배선의 요점이다. 유효한 id면 그 프로젝트로
   // activeIndex를 맞추고 모달을 열 뿐 push도 replace도 하지 않는다.
   // 무효한 id는 그 키만 replaceState로 지운다
@@ -467,7 +570,7 @@ export default function ProjectsSection() {
         // 호버 없이 클릭이 곧장 오는 경로(터치, 프로그램적 클릭)에서는 goTo(i)가
         // 아직 커밋 전이라 접힘 손잡이가 이전 프로젝트 것이거나 아예 없다.
         // Flip.getState가 읽는 게 이 속성이므로 뜨기 직전에만 눌린 프로젝트
-        // 것으로 맞춘다. 이름은 곧바로 되돌린다 - 안 되돌리면 펼침 제목과 같은
+        // 것으로 맞춘다. 이름은 곧바로 되돌린다. 안 되돌리면 펼침 제목과 같은
         // 손잡이를 가진 노드가 화면에 둘이 돼 짝짓기가 깨진다. 프리뷰는
         // 되돌릴 필요가 없다. 다음 렌더가 modalOpen 때문에 어차피 지운다
         const nameHandle = nameEl.dataset.flipId;
@@ -480,7 +583,7 @@ export default function ProjectsSection() {
       // 비행을 실제로 태울 수 있을 때만 내용을 감춘다. 관문이 닫혔으면
       // null로 둬서 상세 판이 처음부터 그냥 보이게 한다
       setRevealed(pendingFlipStateRef.current ? false : null);
-      // 기존 state를 펼쳐 담는다 — Next.js가 쓰는 필드를 날리면 안 된다
+      // 기존 state를 펼쳐 담는다. Next.js가 쓰는 필드를 날리면 안 된다
       window.history.pushState(
         { ...window.history.state, projectModalId: projects[i].title },
         '',
@@ -495,7 +598,7 @@ export default function ProjectsSection() {
   // 실제로 닫는 몸통. 즉시 닫기와 비행 착지 뒤 닫기가 이 하나를 공유한다
   const finishClose = useCallback(() => {
     if (pushedRef.current) {
-      // 우리가 push한 항목이다 — 그 앞 항목은 항상 우리 사이트다
+      // 우리가 push한 항목이다. 그 앞 항목은 항상 우리 사이트다
       window.history.back();
     } else {
       // 새로고침으로 복구된 모달이다. 앞 항목이 우리 사이트가 아닐 수
@@ -512,7 +615,7 @@ export default function ProjectsSection() {
 
   // 닫기는 Flip.fit이다. 펼침 노드를 접힘 프리뷰 자리로 되돌린 뒤 착지하고 나서
   // 모달을 내린다. 접힘 노드를 날리면 비행 초반이 섹션 상자 밖이라
-  // .section-stage의 overflow에 잘린다 - 펼침 노드는 그 자르기를 안 받는다.
+  // .section-stage의 overflow에 잘린다. 펼침 노드는 그 자르기를 안 받는다.
   // Flip.from을 역방향으로 못 쓰는 이유는 이 시점에 두 노드가 다 살아 있어서
   // 상태를 뜨고 DOM을 바꾸는 순서 자체가 성립하지 않기 때문이다
   const closeModal = useCallback(() => {
@@ -526,8 +629,9 @@ export default function ProjectsSection() {
     }
 
     closingRef.current = true;
-    // 0ms: 붕괴 시작. 내용 접기는 ProjectModal이 갖는다
-    setRevealed(false);
+    // 0ms: 붕괴 시작. 몸통만 접는다(내용 접기는 ProjectModal이 갖는다).
+    // 머리띠는 비행이 뜨는 순간(아래 delayedCall)까지 남는다
+    setRevealed('head');
 
     collapseCallRef.current = asKillable(
       mod.gsap.delayedCall(mod.REVEAL_OUT_MS / 1000, () => {
@@ -535,20 +639,101 @@ export default function ProjectsSection() {
         // 배경 복원은 비행과 같은 시점에 시작한다. finishClose를 통해
         // 간접적으로 두면 착지한 뒤에야 돌아와 열기와 대칭이 아니다
         setProjectModalObscured(false);
+        // 머리띠가 비행과 함께 사라진다
+        setRevealed(false);
 
         const seconds = FLIP_DURATION_MS / 1000;
+        const titleSeconds = TITLE_FLIP_MS / 1000;
         const shellEl = document.getElementById('pm-shell');
+        const headEl = document.querySelector<HTMLElement>('[data-modal-part="head"]');
+        const evidenceEl = document.querySelector<HTMLElement>(
+          '[data-modal-part="evidence"]'
+        );
         const clipped = shellEl ? collectClippedAncestors(stageEl, shellEl) : [];
 
         mod.gsap.set(clipped, { overflow: 'visible' });
-        if (shellEl) {
-          mod.gsap.to(shellEl, {
-            backgroundColor: SHELL_BG_CLEAR,
-            duration: SHELL_FADE_MS / 1000,
-            delay: SHELL_FADE_OUT_DELAY_MS / 1000,
-            ease: mod.SITE_EASE,
-          });
+
+        // 착지 직전 마지막으로 보이던 stage의 그림을 캔버스 둘에 각각 뜬다.
+        // 하나는 날아 내려가는 stage 위에(모달과 함께 사라지니 따로 안
+        // 지운다), 하나는 착지할 프리뷰 상자 안에 놓아 착지 순간과 프리뷰
+        // 영상이 다시 도는 순간 사이에 그림이 바뀌어 튀지 않게 한다
+        const stageMediaEl = stageEl.querySelector<HTMLVideoElement | HTMLImageElement>(
+          'figure:not([hidden]) video, figure:not([hidden]) img'
+        );
+        const stageBridge = snapshotMedia(stageMediaEl);
+        if (stageBridge) stageEl.appendChild(stageBridge);
+        const previewLayer = mediaLayerRef.current;
+        if (previewLayer) {
+          const previewBridge = snapshotMedia(stageMediaEl);
+          if (previewBridge) {
+            // 캡션(preview-caption)은 이 상자의 마지막 자식이다. 다리는
+            // 그 앞에 꽂아야 미디어 위, 캡션 아래에 선다. 캡션 뒤에 두면
+            // 다리가 글자를 덮는다
+            const caption = previewLayer.querySelector('[data-part="preview-caption"]');
+            if (caption) previewLayer.insertBefore(previewBridge, caption);
+            else previewLayer.appendChild(previewBridge);
+            previewBridgeRef.current = previewBridge;
+          }
         }
+
+        // 모달 틀(셸·머리띠·증거 열)이 비행 전체 길이에 걸쳐 빠진다. 열기의
+        // 역이라 커브도 뒤집는다(power2.out). 제값은 이미 인라인에 있으므로
+        // (열기 쪽 clearProps가 걸어 둔 값이거나 애초에 안 열렸던 값) 읽지
+        // 않고 곧장 투명으로 보낸다
+        const shellTween = shellEl
+          ? mod.gsap.to(shellEl, {
+              backgroundColor: SHELL_BG_CLEAR,
+              duration: seconds,
+              ease: 'power2.out',
+            })
+          : null;
+        const headTween = headEl
+          ? mod.gsap.to(headEl, {
+              backgroundColor: 'transparent',
+              borderColor: 'transparent',
+              duration: seconds,
+              ease: 'power2.out',
+            })
+          : null;
+        const evidenceTween = evidenceEl
+          ? mod.gsap.to(evidenceEl, {
+              backgroundColor: 'transparent',
+              borderColor: 'transparent',
+              duration: seconds,
+              ease: 'power2.out',
+            })
+          : null;
+        frameTweenRef.current = {
+          kill: () => {
+            shellTween?.kill();
+            headTween?.kill();
+            evidenceTween?.kill();
+          },
+        };
+
+        // 휠이 제자리로 모인다(spread 1 → 0)
+        spreadTweenRef.current?.kill();
+        spreadTweenRef.current = asKillable(
+          mod.gsap.to(wheelSpreadRef.current, {
+            v: 0,
+            duration: seconds,
+            ease: mod.SITE_EASE,
+            onUpdate: () => applyWheel(wheelPosRef.current),
+          })
+        );
+
+        // 접힘 프리뷰가 돌아온다. stage가 착지하기(500ms 뒤) 전에 다
+        // 차 있어야 한다
+        previewTweenRef.current?.kill();
+        previewTweenRef.current = asKillable(
+          mod.gsap.to(previewEl, {
+            opacity: 1,
+            duration: 0.3,
+            delay: 0.2,
+            ease: mod.SITE_EASE,
+            clearProps: 'opacity',
+          })
+        );
 
         flightRef.current = asKillable(
           mod.Flip.fit(stageEl, previewEl, {
@@ -557,16 +742,19 @@ export default function ProjectsSection() {
             scale: true,
             onComplete: () => {
               mod.gsap.set(clipped, { clearProps: 'overflow' });
-              finishClose();
+              // 제목 비행이 없으면 여기가 모달을 내리는 마지막 자리다.
+              // 있으면 제목의 onComplete가 100ms 뒤에 대신 부른다. 먼저
+              // 내리면 제목이 허공에서 사라진다(S-1)
+              if (!titleFlightRef.current) finishClose();
             },
           })
         );
 
-        // 제목도 같은 시점에 같은 길이로 되돌린다. 어긋나면 이미지와 제목이
-        // 따로 논다. 착지점 이름은 비행 동안 감춘다 - 셸 배경이 뒤 60%에
-        // 빠지므로 그냥 두면 날아오는 제목과 제자리 이름이 겹쳐 읽힌다.
-        // visibility가 아니라 opacity인 것은 이 노드가 착지 좌표의 기준이라
-        // 레이아웃이 살아 있어야 하기 때문이다
+        // 제목도 같은 시점에 시작하지만 100ms 더 걸린다(S-1). 착지점 이름은
+        // 비행 동안 감춘다. 셸 배경이 비행 전체에 걸쳐 빠지므로 그냥 두면
+        // 날아오는 제목과 제자리 이름이 겹쳐 읽힌다. visibility가 아니라
+        // opacity인 것은 이 노드가 착지 좌표의 기준이라 레이아웃이 살아
+        // 있어야 하기 때문이다
         const titleEl = document.getElementById('pm-title');
         const landingEl = nameFlipRefs.current[openedIndexRef.current];
         if (titleEl && landingEl) {
@@ -574,15 +762,26 @@ export default function ProjectsSection() {
           hiddenNameRef.current = landingEl;
           titleFlightRef.current = asKillable(
             mod.Flip.fit(titleEl, landingEl, {
-              duration: seconds,
+              duration: titleSeconds,
               ease: mod.SITE_EASE,
               scale: true,
-              onComplete: restoreLandingName,
+              onComplete: () => {
+                restoreLandingName();
+                finishClose();
+              },
             })
           );
+        } else {
+          titleFlightRef.current = null;
         }
       })
     );
+    // applyWheel은 이 함수보다 뒤에서 선언된다(useCallback([])이라 항등은
+    // 고정이지만, deps 배열은 이 useCallback 호출 자체가 평가되는 시점에
+    // 즉시 읽히므로 여기 넣으면 그 const 선언보다 앞서 읽어 TDZ에 걸린다.
+    // 실제 호출은 delayedCall 콜백 안(마운트가 끝난 뒤)이라 참조 자체는
+    // 안전하다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finishClose, flipModule, restoreLandingName]);
 
   // stage가 DOM에 박히는 커밋에서, 브라우저가 그리기 전에 불린다. 관문을 여기서
@@ -605,40 +804,169 @@ export default function ProjectsSection() {
     }
 
     const seconds = FLIP_DURATION_MS / 1000;
+    const titleSeconds = TITLE_FLIP_MS / 1000;
     const clipped = collectClippedAncestors(el, shellEl);
     mod.gsap.set(clipped, { overflow: 'visible' });
 
+    // 출발 순간 접힘 프리뷰가 보여 주고 있던 그림을 캔버스에 떠서 stage
+    // 위에 얹는다. stage의 video는 이 순간 막 마운트돼 poster 또는 검은
+    // 화면이므로, 다리가 없으면 그 자리에서 그림이 한 번 바뀌어 튄다.
+    // 프리뷰 노드는 아직 살아 있다(modalOpen이 data-flip-id만 뗀다)
+    const previewMediaEl =
+      videoElRef.current ?? mediaLayerRef.current?.querySelector('img') ?? null;
+    const bridge = snapshotMedia(previewMediaEl);
+    // stage는 relative grid ... overflow-hidden이라 absolute 자식이 상자를
+    // 꽉 채운다. stage의 rounded-media가 잘라 준다
+    if (bridge) el.appendChild(bridge);
+
     // targets를 명시해야 한다. 넘기지 않으면 GSAP은 상태를 뜬 접힘 노드를
-    // 날리려 든다. 우리가 날릴 건 펼침 노드다
+    // 날리려 든다. 우리가 날릴 건 펼침 노드다. stage와 제목은 길이가 달라
+    // (S-1, 500 vs 600) Flip.from을 둘로 가른다
     const titleEl = document.getElementById('pm-title');
-    flightRef.current = asKillable(
-      mod.Flip.from(state, {
-        targets: titleEl ? [el, titleEl] : [el],
-        duration: seconds,
+    const tl = mod.Flip.from(state, {
+      targets: [el],
+      duration: seconds,
+      ease: mod.SITE_EASE,
+      scale: true,
+      absolute: true,
+      // 새로고침 뒤 첫 열기는 이 콜백 자체가 무거운 커밋(청크 평가, 첫
+      // 렌더) 안에서 불린다. GSAP은 마지막 tick을 기준으로 시작 시각을
+      // 잡으므로, 만들자마자 재생하면 그 막힌 시간이 통째로 첫 프레임
+      // 진행도에 실린다(node 실측: 60ms 막으면 +46ms). paused로 만들고
+      // 다음 gsap tick에 play하면 막힘이 안 실린다
+      paused: true,
+      onComplete: () => {
+        mod.gsap.set(clipped, { clearProps: 'overflow' });
+        // 비행이 끝난 뒤에 몸통이 등장한다. 머리띠는 이미 비행 중반에
+        // 나와 있다(바로 아래 tl.call, S-3)
+        setRevealed(true);
+        // 착지 시점에는 stage 영상이 이미 돌고 있으니 다리를 걷으면 뒤가
+        // 살아 있는 영상이다
+        if (bridge) {
+          mod.gsap.to(bridge, {
+            opacity: 0,
+            duration: 0.25,
+            ease: mod.SITE_EASE,
+            onComplete: () => bridge.remove(),
+          });
+        }
+      },
+    });
+    // 비행 절반 지점에 머리띠가 먼저 등장한다. 몸통이 등장할 틀이
+    // 먼저 서야 한다
+    tl.call(() => setRevealed('head'), undefined, HEAD_IN_AT_MS / 1000);
+
+    let titleTl: typeof tl | null = null;
+    if (titleEl) {
+      // 착지점 이름은 제목이 그 위에서 출발하는 순간 감춘다(S-5). 노드째
+      // hiddenNameRef에 담아야 중도에 정리돼도 되돌릴 자리를 잃지 않는다.
+      // 닫기 쪽은 이미 같은 일을 한다
+      const landingEl = nameFlipRefs.current[openedIndexRef.current];
+      if (landingEl) {
+        landingEl.style.opacity = '0';
+        hiddenNameRef.current = landingEl;
+      }
+      titleTl = mod.Flip.from(state, {
+        targets: [titleEl],
+        duration: titleSeconds,
         ease: mod.SITE_EASE,
         scale: true,
         absolute: true,
-        onComplete: () => {
-          mod.gsap.set(clipped, { clearProps: 'overflow' });
-          // 비행이 끝난 뒤에 내용이 등장한다. 동시에 하면 날아가는 이미지
-          // 너머로 논증 열이 이미 다 그려진 채 착지한다
-          setRevealed(true);
-        },
-      })
-    );
+        paused: true,
+      });
+    }
+    titleFlightRef.current = titleTl ? asKillable(titleTl) : null;
 
-    // stage 자신은 끝까지 불투명하게 둔다 - 착지 순간 접힘 프리뷰와 같은
-    // 사각형에 있어야 교대가 눈에 안 띈다. 같이 페이드하면 유령이 겹친다
-    mod.gsap.fromTo(
+    // 모달 틀(셸·머리띠·증거 열)이 비행 전체 길이에 걸쳐 찬다. power2.in -
+    // 느리게 시작해 끝에서 덮어야 앞 절반 동안 뒤가 비쳐 휠과 프리뷰가
+    // 빠지는 게 보인다(S-2). 머리띠·증거 열의 제값은 클래스가 바뀌어도
+    // 따라가도록 트윈 만들기 직전에 getComputedStyle로 읽고, 끝나면
+    // clearProps로 CSS에 색 소유권을 돌려준다. 셸은 소스 상수 그대로다
+    const headEl = document.querySelector<HTMLElement>('[data-modal-part="head"]');
+    const evidenceEl = document.querySelector<HTMLElement>('[data-modal-part="evidence"]');
+    const frameTl = mod.gsap.timeline({ paused: true });
+    frameTl.fromTo(
       shellEl,
       { backgroundColor: SHELL_BG_CLEAR },
-      {
-        backgroundColor: SHELL_BG,
-        duration: SHELL_FADE_MS / 1000,
-        ease: mod.SITE_EASE,
-        clearProps: 'backgroundColor',
-      }
+      { backgroundColor: SHELL_BG, duration: seconds, ease: 'power2.in' },
+      0
     );
+    if (headEl) {
+      const headStyle = getComputedStyle(headEl);
+      frameTl.fromTo(
+        headEl,
+        { backgroundColor: 'transparent', borderColor: 'transparent' },
+        {
+          backgroundColor: headStyle.backgroundColor,
+          borderColor: headStyle.borderColor,
+          duration: seconds,
+          ease: 'power2.in',
+          clearProps: 'backgroundColor,borderColor',
+        },
+        0
+      );
+    }
+    if (evidenceEl) {
+      const evidenceStyle = getComputedStyle(evidenceEl);
+      frameTl.fromTo(
+        evidenceEl,
+        { backgroundColor: 'transparent', borderColor: 'transparent' },
+        {
+          backgroundColor: evidenceStyle.backgroundColor,
+          borderColor: evidenceStyle.borderColor,
+          duration: seconds,
+          ease: 'power2.in',
+          clearProps: 'backgroundColor,borderColor',
+        },
+        0
+      );
+    }
+
+    // 첫 tick이 오기 전에 모달이 걷혀 kill이 먼저 올 수 있다. 그때도
+    // ticker에서 콜백을 빼야 죽은 timeline을 붙든 채로 남지 않는다.
+    // 콜백이 이미 돌아 play가 끝난 뒤에 kill이 와도 ticker.remove는
+    // 그저 헛돌 뿐이라 따로 가지치기하지 않는다
+    const previewEl = previewRef.current;
+    const onFirstTick = () => {
+      mod.gsap.ticker.remove(onFirstTick);
+      tl.play();
+      titleTl?.play();
+      frameTl.play();
+
+      // 휠의 나머지 이름이 벌어지며 흐려진다(S-4)
+      spreadTweenRef.current?.kill();
+      spreadTweenRef.current = asKillable(
+        mod.gsap.to(wheelSpreadRef.current, {
+          v: 1,
+          duration: 0.4,
+          ease: mod.SITE_EASE,
+          // applyWheel은 이 파일 뒤쪽에서 선언되지만 useCallback([])이라
+          // 항등이 고정이고, 이 콜백은 다음 gsap tick에야 실행되므로 참조
+          // 시점에는 이미 만들어져 있다
+          onUpdate: () => applyWheel(wheelPosRef.current),
+        })
+      );
+
+      // 접힘 프리뷰가 빠진다(S-6). stage가 그 위에서 출발하므로 빠르게
+      // 빼도 바뀜이 안 보인다
+      if (previewEl) {
+        previewTweenRef.current?.kill();
+        previewTweenRef.current = asKillable(
+          mod.gsap.to(previewEl, { opacity: 0, duration: 0.25, ease: mod.SITE_EASE })
+        );
+      }
+    };
+    mod.gsap.ticker.add(onFirstTick);
+    flightRef.current = {
+      kill: () => {
+        mod.gsap.ticker.remove(onFirstTick);
+        tl.kill();
+        frameTl.kill();
+        // 이미 remove된 노드에 remove를 다시 불러도 해가 없다
+        bridge?.remove();
+      },
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 휠 배치 한 프레임. 단추는 흐름에 그대로 서 있고 여기서 주는 것은 그
@@ -668,6 +996,9 @@ export default function ProjectsSection() {
     // 항상 정확히 목록의 세로 한가운데(CENTER * rowH)로 옮겨진다, pos가
     // 무엇이든 같다. rowH가 0이면 이 항도 0이라 위 NaN 방지와 안 부딪힌다
     const centerShift = (CENTER - pos) * rowH;
+    // 모달이 열리며 벌어지는 정도(0→1). handleStageMount·closeModal의
+    // tween이 이 값을 매 프레임 바꾸고 applyWheel을 다시 부른다
+    const spread = wheelSpreadRef.current.v;
     for (let i = 0; i < N; i += 1) {
       const el = els[i];
       if (!el) continue;
@@ -682,11 +1013,20 @@ export default function ProjectsSection() {
         x = -WHEEL_MIRROR * R * (1 - Math.cos(ang)) * WHEEL_CURVE;
         rot = (WHEEL_MIRROR * ang * 180) / Math.PI;
       }
-      el.style.transform = `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) rotate(${rot.toFixed(3)}deg)`;
-      el.style.opacity = String(Math.max(WHEEL_MIN_OPACITY, 1 - dist * WHEEL_FADE));
-      // 활성 항목에는 filter를 아예 안 건다. blur(0px)도 none이 아닌 이상
+      let opacity = Math.max(WHEEL_MIN_OPACITY, 1 - dist * WHEEL_FADE);
+      // 활성 항목에는 blur를 아예 안 건다. blur(0px)도 none이 아닌 이상
       // 겹을 하나 만들고, 이 단추 안에 비행 출발 손잡이가 들어 있다
-      el.style.filter = dist > 0 ? `blur(${(dist * WHEEL_BLUR_PX).toFixed(2)}px)` : 'none';
+      let blurPx = dist > 0 ? dist * WHEEL_BLUR_PX : 0;
+      // spread는 활성이 아닌 항목만 받는다. 활성(dist 0)의 span은 S-5가
+      // 따로 감춘다. 여기서 더 손대면 그 감춤과 겹친다
+      if (dist > 0) {
+        y += spread * d * WHEEL_SPLIT_PX;
+        opacity *= 1 - spread;
+        blurPx += spread * WHEEL_SPLIT_BLUR_PX;
+      }
+      el.style.transform = `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) rotate(${rot.toFixed(3)}deg)`;
+      el.style.opacity = String(opacity);
+      el.style.filter = blurPx > 0 ? `blur(${blurPx.toFixed(2)}px)` : 'none';
       el.style.setProperty(
         '--pj-wheel-p',
         Math.max(0, 1 - Math.min(dist, 1)).toFixed(4)
@@ -706,7 +1046,7 @@ export default function ProjectsSection() {
   }, []);
 
   // 지수 감쇠 한 프레임. k를 dt에서 뽑으므로 프레임률이 달라도 같은 시각에
-  // 같은 자리에 있다. 수렴하면 스스로 멈춘다 - 이 목록은 대부분의 시간
+  // 같은 자리에 있다. 수렴하면 스스로 멈춘다. 이 목록은 대부분의 시간
   // 가만히 있고, 가만히 있는 동안 rAF가 도는 것이 이 효과의 유일한 상시 비용이다
   const runWheelFrame = useCallback(
     (now: number) => {
@@ -757,7 +1097,15 @@ export default function ProjectsSection() {
       clearWheel();
       return;
     }
-    if (modalOpen) return;
+    if (modalOpen) {
+      // 새로고침으로 복구된 모달은 openModal을 안 거치므로 snapWheel도 안
+      // 불렸다. 여기서 못박지 않으면 휠 pos가 마운트 기본값에 멈춘 채라,
+      // 닫기 비행이 이 이름의 rect로 착지한 뒤에야 휠이 돌아 제자리로
+      // 옮겨 가며 튄다. 일반 열기 경로에서는 handleNameClick이 이미 같은
+      // 값으로 못박아 둔 것을 한 번 더 못박을 뿐이라 해가 없다
+      snapWheel(activeIndex);
+      return;
+    }
     wheelTargetRef.current = activeIndex;
     startWheel();
     // 줄 높이는 글자 크기를 따라가고 글자 크기는 lg에서 갈린다. 창이 바뀌면
@@ -769,7 +1117,7 @@ export default function ProjectsSection() {
       if (wheelRafRef.current != null) cancelAnimationFrame(wheelRafRef.current);
       wheelRafRef.current = null;
     };
-  }, [activeIndex, modalOpen, reducedMotion, startWheel, applyWheel, clearWheel]);
+  }, [activeIndex, modalOpen, reducedMotion, startWheel, applyWheel, clearWheel, snapWheel]);
 
   // 클릭과 키보드가 이 하나로 선택을 옮긴다. focus 옵션은 키보드 경로
   // 전용이다. 포커스 자체는 선택을 옮기지 않는다. mousedown이 클릭보다

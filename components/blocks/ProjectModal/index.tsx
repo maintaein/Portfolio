@@ -34,9 +34,10 @@ interface ProjectModalProps {
   // GSAP Flip을 태운다. 모달이 지연 로드라 부모의 layout effect로는 못 잡는다
   onStageMount?: (el: HTMLDivElement | null) => void;
   // 내용의 등장·퇴장 소유권. null(또는 미전달)이면 안무가 없고 내용이 처음부터
-  // 그냥 보인다 - 좁은 화면, reducedMotion, gsap 미준비가 이 경로다.
-  // false는 비행 중(감춤), true는 등장 타임라인 한 번이다
-  reveal?: boolean | null;
+  // 그냥 보인다. 좁은 화면, reducedMotion, gsap 미준비가 이 경로다.
+  // false는 다 감춤(비행 중), 'head'는 머리띠 내용만 보임(비행 중), true는
+  // 다 보임(등장 타임라인 한 번)이다
+  reveal?: boolean | 'head' | null;
 }
 
 // 색은 세 단만 쓴다. T1이 가장 밝고, T3가 검정 판 위에서 7.76:1을 지키는
@@ -201,35 +202,37 @@ const NARROW_PANEL_CSS = `
 }
 `;
 
-// 감추는 단위 셋. 머리띠의 버튼 묶음, 논증 열, 증거 열 설명이다.
+// 감추는 단위는 머리띠와 몸통 둘로 갈린다. 'head' 상태에서 머리띠만
+// 보이고 몸통은 아직 감춰져 있어야 하므로 따로 골라낼 수 있어야 한다.
 // h2#pm-title과 [data-modal-part="stage"]는 비행 대상이라 여기 들어오지
-// 않는다 - 비행이 방금 앉혀 놓은 것을 다시 건드리면 튄다.
+// 않는다. 비행이 방금 앉혀 놓은 것을 다시 건드리면 튄다.
 //
 // 감추는 수단은 visibility다. display를 쓰면 레이아웃이 사라져 비행 착지
 // 좌표가 어긋나고, opacity 0은 안 보이는 채로 클릭·포커스가 되는 단추를
 // 남긴다. visibility는 접근성 트리에서도 같이 빠지므로 비행 500ms 동안
 // 아직 오지 않은 내용이 화면에도 스크린 리더에도 없다. Escape는 Modal
 // 아톰이 document에 걸어 두므로 이 구간에도 그대로 닫힌다
-function revealRoots(shell: HTMLElement): HTMLElement[] {
+function headRoots(shell: HTMLElement): HTMLElement[] {
   const head = shell.querySelector('[data-modal-part="head"]');
+  return head
+    ? (Array.from(head.children).filter((el) => el.id !== 'pm-title') as HTMLElement[])
+    : [];
+}
+
+function bodyRoots(shell: HTMLElement): HTMLElement[] {
   return [
-    ...(head
-      ? (Array.from(head.children).filter((el) => el.id !== 'pm-title') as HTMLElement[])
-      : []),
     shell.querySelector<HTMLElement>('[data-modal-part="scroll"]'),
     shell.querySelector<HTMLElement>('[data-modal-part="caption"]'),
   ].filter((el): el is HTMLElement => el !== null);
 }
 
-// 등장 순서. 머리 -> 논증 열 DOM 순서 -> 증거 열 설명.
-function revealOrder(shell: HTMLElement): HTMLElement[] {
-  const head = shell.querySelector('[data-modal-part="head"]');
+// 등장 순서. 머리 -> 논증 열 DOM 순서 -> 증거 열 설명. 'head' -> true
+// 전이는 머리띠가 이미 나와 있으므로 skipHead로 목록에서 뺀다.
+function revealOrder(shell: HTMLElement, opts?: { skipHead?: boolean }): HTMLElement[] {
   const scroll = shell.querySelector('[data-modal-part="scroll"]');
   const caption = shell.querySelector<HTMLElement>('[data-modal-part="caption"]');
   return [
-    ...(head
-      ? (Array.from(head.children).filter((el) => el.id !== 'pm-title') as HTMLElement[])
-      : []),
+    ...(opts?.skipHead ? [] : headRoots(shell)),
     ...(scroll ? Array.from(scroll.querySelectorAll<HTMLElement>('[data-modal-field], h4')) : []),
     ...(caption ? [caption] : []),
   ];
@@ -240,19 +243,85 @@ function revealOrder(shell: HTMLElement): HTMLElement[] {
 // 음절 단위 분해는 한국어를 낱자로 부수므로 어떤 대상에도 쓰지 않는다
 const WORDS_SELECTOR = '[data-modal-field="claim"], [data-modal-field="sub"]';
 
-// 등장 예산은 REVEAL_IN_MS 하나다. 가장 긴 트윈(단어)이 예산을 다 쓰도록
-// 남는 시간을 요소 간격과 단어 간격이 6:4로 나눠 갖는다 - 예산이 바뀌면
-// 두 상한이 같이 따라간다. 통짜 블록은 더 짧아서 언제나 예산 안이다
+// 등장 예산은 REVEAL_IN_MS(1100ms)다. 요소 간격 60ms를 못박아 위에서
+// 아래로 순서대로 읽히게 하고, 단어 트윈(가장 긴 트윈)은 그 뒤에도 0.5초를
+// 더 쓴다. 영상 설명이 마지막이라 0.55(ELEM_SPAN) + 0.5(WORD_S) = 1.05초로
+// 예산 안에 들어온다
 const IN_S = REVEAL_IN_MS / 1000;
 const WORD_S = 0.5;
 const RISE_S = 0.45;
-const ELEM_STEP = 0.03;
+const ELEM_STEP = 0.06;
 const WORD_STEP = 0.035;
-const ELEM_SPAN = (IN_S - WORD_S) * 0.6;
-const WORD_SPAN = (IN_S - WORD_S) * 0.4;
+const ELEM_SPAN = 0.55;
+const WORD_SPAN = 0.3;
 // 논증 열에는 data-modal-field가 안 붙은 구조 블록(구현 기능 목록, 구분선,
 // 축선)이 섞여 있다. 열 자체를 짧게 페이드해 그것들이 t=0에 툭 서지 않게 한다
 const SCROLL_FADE_S = 0.3;
+
+// false -> true와 'head' -> true 두 전이가 같은 방식으로 몸통을 등장시킨다.
+// 차이는 order에 머리띠가 섞여 있는지뿐이다. 영상 설명은 clip-path로 왼쪽에서
+// 오른쪽으로 드러난다. 다른 요소처럼 12px 상승 페이드면 문단인지 영상 설명인지
+// 구분이 안 된다. clearProps로 clip-path를 지우는 이유는 남겨 두면 캡션 안
+// 글자가 길어졌을 때 잘릴 수 있어서다
+function buildRevealTimeline(
+  shell: HTMLElement,
+  order: HTMLElement[]
+): { tl: gsap.core.Timeline; splits: SplitText[] } {
+  const tl = gsap.timeline();
+  const splits: SplitText[] = [];
+  const scroll = shell.querySelector<HTMLElement>('[data-modal-part="scroll"]');
+  if (scroll) {
+    tl.fromTo(scroll, { opacity: 0 }, { opacity: 1, duration: SCROLL_FADE_S, ease: SITE_EASE }, 0);
+  }
+
+  order.forEach((el, i) => {
+    const at = Math.min(i * ELEM_STEP, ELEM_SPAN);
+
+    if (el.getAttribute('data-modal-part') === 'caption') {
+      tl.fromTo(
+        el,
+        { clipPath: 'inset(0 100% 0 0)', opacity: 0 },
+        {
+          clipPath: 'inset(0 0% 0 0)',
+          opacity: 1,
+          duration: 0.5,
+          ease: SITE_EASE,
+          clearProps: 'clipPath',
+        },
+        at
+      );
+      return;
+    }
+
+    if (!el.matches(WORDS_SELECTOR)) {
+      tl.fromTo(el, { y: 12, opacity: 0 }, { y: 0, opacity: 1, duration: RISE_S, ease: SITE_EASE }, at);
+      return;
+    }
+    const split = SplitText.create(el, { type: 'words', aria: 'auto' });
+    splits.push(split);
+    if (split.words.length === 0) return;
+    // ELEM_SPAN(0.55)이 WORD_SPAN(0.3)을 남겨 두고 못박혀 있지 않으므로,
+    // 순서 뒤쪽에서 시작하는 단어 트윈은 남은 예산만큼만 벌어진다. 그래야
+    // 논증 열 뒤쪽에 있는 두 번째 주장(트러블 슈팅 제목)도 REVEAL_IN_MS
+    // 예산 안에서 끝난다
+    const wordBudget = Math.max(0, IN_S - WORD_S - at);
+    tl.fromTo(
+      split.words,
+      { y: 14, opacity: 0, filter: 'blur(6px)' },
+      {
+        y: 0,
+        opacity: 1,
+        filter: 'blur(0px)',
+        duration: WORD_S,
+        ease: SITE_EASE,
+        stagger: { amount: Math.min(WORD_STEP * (split.words.length - 1), WORD_SPAN, wordBudget) },
+      },
+      at
+    );
+  });
+
+  return { tl, splits };
+}
 
 export default function ProjectModal({
   isOpen,
@@ -270,9 +339,9 @@ export default function ProjectModal({
   const touchStartXRef = useRef<number | null>(null);
   const shellElRef = useRef<HTMLDivElement | null>(null);
   // 콜백 ref는 커밋마다 최신 reveal을 봐야 한다. 렌더마다 갱신한다
-  const revealRef = useRef<boolean | null | undefined>(reveal);
+  const revealRef = useRef<boolean | 'head' | null | undefined>(reveal);
   revealRef.current = reveal;
-  const prevRevealRef = useRef<boolean | null | undefined>(undefined);
+  const prevRevealRef = useRef<boolean | 'head' | null | undefined>(undefined);
 
   // 프로젝트가 바뀔 때마다 무대를 첫 기능으로 되돌리고 재생을 재개한다.
   useEffect(() => {
@@ -303,7 +372,7 @@ export default function ProjectModal({
     shellElRef.current = el;
     if (el && revealRef.current === false) {
       registerGsap();
-      gsap.set(revealRoots(el), { visibility: 'hidden' });
+      gsap.set([...headRoots(el), ...bodyRoots(el)], { visibility: 'hidden' });
     }
   }, []);
 
@@ -316,16 +385,24 @@ export default function ProjectModal({
     const shell = shellElRef.current;
     if (!shell || reveal == null) return;
     registerGsap();
-    const roots = revealRoots(shell);
+    const head = headRoots(shell);
+    const body = bodyRoots(shell);
 
     if (reveal === false) {
-      // 비행 시작. 등장한 적이 없으면 그냥 감춘다
-      if (prev !== true) {
-        gsap.set(roots, { visibility: 'hidden' });
+      // 등장한 적이 없으면(비행 시작 전) 그냥 감춘다
+      if (prev == null) {
+        gsap.set([...head, ...body], { visibility: 'hidden' });
         return;
       }
-      // 퇴장. 나갈 때까지 글자를 쪼개면 산만하다 - 통짜로 접는다
-      const out = gsap.to(roots, {
+      // 'head' -> false. 머리띠만 접는다. 몸통은 이미 감춰져 있다
+      if (prev === 'head') {
+        const out = gsap.to(head, { opacity: 0, y: -6, duration: 0.2, ease: SITE_EASE });
+        return () => {
+          out.kill();
+        };
+      }
+      // true -> false. 나갈 때까지 글자를 쪼개면 산만하다. 통짜로 접는다
+      const out = gsap.to([...head, ...body], {
         opacity: 0,
         y: 10,
         duration: REVEAL_OUT_MS / 1000,
@@ -336,52 +413,62 @@ export default function ProjectModal({
       };
     }
 
-    // 감춰 둔 적이 없으면 등장도 없다. 안무 없이 그냥 보이던 판을 뒤늦게
-    // 0에서 끌어올리면 그게 곧 번쩍임이다
-    if (prev !== false) return;
-
-    gsap.set(roots, { visibility: 'visible' });
-    const tl = gsap.timeline();
-    const splits: SplitText[] = [];
-    const scroll = shell.querySelector<HTMLElement>('[data-modal-part="scroll"]');
-    if (scroll) {
-      tl.fromTo(scroll, { opacity: 0 }, { opacity: 1, duration: SCROLL_FADE_S, ease: SITE_EASE }, 0);
-    }
-
-    revealOrder(shell).forEach((el, i) => {
-      const at = Math.min(i * ELEM_STEP, ELEM_SPAN);
-      if (!el.matches(WORDS_SELECTOR)) {
-        tl.fromTo(
-          el,
-          { y: 12, opacity: 0 },
-          { y: 0, opacity: 1, duration: RISE_S, ease: SITE_EASE },
-          at
-        );
-        return;
-      }
-      const split = SplitText.create(el, { type: 'words', aria: 'auto' });
-      splits.push(split);
-      if (split.words.length === 0) return;
-      tl.fromTo(
-        split.words,
-        { y: 14, opacity: 0, filter: 'blur(6px)' },
-        {
+    if (reveal === 'head') {
+      // false -> 'head'. 머리띠 내용만 보이고 등장한다
+      if (prev === false) {
+        gsap.set(head, { visibility: 'visible', y: 8, opacity: 0 });
+        const tween = gsap.to(head, {
           y: 0,
           opacity: 1,
-          filter: 'blur(0px)',
-          duration: WORD_S,
+          duration: 0.4,
           ease: SITE_EASE,
-          stagger: { amount: Math.min(WORD_STEP * (split.words.length - 1), WORD_SPAN) },
-        },
-        at
-      );
-    });
+          stagger: 0.04,
+        });
+        return () => {
+          tween.kill();
+        };
+      }
+      // true -> 'head'. 몸통만 접는다. 머리띠는 남는다
+      if (prev === true) {
+        const out = gsap.to(body, {
+          opacity: 0,
+          y: 10,
+          duration: REVEAL_OUT_MS / 1000,
+          ease: SITE_EASE,
+        });
+        return () => {
+          out.kill();
+        };
+      }
+      return;
+    }
 
-    return () => {
-      tl.kill();
-      // 되돌리지 않으면 SplitText가 남긴 래퍼가 다음 열기에 겹쳐 쌓인다
-      splits.forEach((split) => split.revert());
-    };
+    // reveal === true
+    // 'head' -> true. 몸통이 등장한다. 머리띠는 이미 나와 있으니 다시 건드리지
+    // 않는다 - order에서 뺀다
+    if (prev === 'head') {
+      gsap.set(body, { visibility: 'visible' });
+      const { tl, splits } = buildRevealTimeline(shell, revealOrder(shell, { skipHead: true }));
+      return () => {
+        tl.kill();
+        splits.forEach((split) => split.revert());
+      };
+    }
+
+    // false -> true. 비행 없이 바로 여는 경로. 머리띠와 몸통이 한 timeline으로
+    // 함께 등장한다
+    if (prev === false) {
+      gsap.set([...head, ...body], { visibility: 'visible' });
+      const { tl, splits } = buildRevealTimeline(shell, revealOrder(shell));
+      return () => {
+        tl.kill();
+        splits.forEach((split) => split.revert());
+      };
+    }
+
+    // 감춰 둔 적이 없으면 등장도 없다. 안무 없이 그냥 보이던 판을 뒤늦게
+    // 0에서 끌어올리면 그게 곧 번쩍임이다
+    return;
   }, [reveal]);
 
   if (!project) return null;
@@ -424,6 +511,7 @@ export default function ProjectModal({
       showCloseButton={false}
       ariaLabelledBy="pm-title"
       className="max-w-none max-h-none bg-transparent shadow-none [&>div]:min-h-0 [&>div]:overflow-visible [&>div]:p-0"
+      backdropClassName="bg-transparent"
     >
       <div
         id="pm-shell"
@@ -451,7 +539,10 @@ export default function ProjectModal({
           <h2
             id="pm-title"
             data-flip-id={`title-${project.title}`}
-            className={cn('truncate text-t3 lg:text-t2 font-bold tracking-[-0.02em]', T1)}
+            className={cn(
+              'truncate text-t3 lg:text-t2 font-bold leading-[1.1] lg:leading-[1.1] tracking-[-0.02em]',
+              T1
+            )}
           >
             {project.title}
           </h2>

@@ -249,6 +249,20 @@ describe('ProjectModal 전체 화면 셸과 FLIP 손잡이', () => {
   });
 });
 
+describe('ProjectModal 배경막', () => {
+  // Modal 아톰의 기본 배경막(bg-black/20 backdrop-blur-md)은 화면 전체를 한
+  // 프레임에 흐리고 어둡게 만든다. #pm-shell이 이미 자기 배경을 그리고
+  // Hyperspeed가 obscured로 제 걸음으로 물러나므로 이 막은 중복이고 해롭다
+  it('배경막이 투명하고 backdrop-blur를 쓰지 않는다', () => {
+    renderModal();
+    const dialog = screen.getByRole('dialog');
+    const backdrop = dialog.previousElementSibling as HTMLElement;
+    expect(backdrop.getAttribute('aria-hidden')).toBe('true');
+    expect(backdrop.className).toContain('bg-transparent');
+    expect(backdrop.className).not.toContain('backdrop-blur-md');
+  });
+});
+
 describe('ProjectModal 좁은 판', () => {
   it('경계가 1100px이다', () => {
     // 901px에서 우열 본문이 256px이라 판 2 제목이 세 줄로 쪼개졌다
@@ -471,7 +485,7 @@ describe('ProjectModal 아이콘과 글자 크기 한 칸 내리기', () => {
 
   // 제목은 실제로 그려진 class로 잠근다. 이 잠금은 cn이 크기 클래스를
   // 색과 헷갈려 지워 버리는 회귀도 같이 잡는다.
-  // text-t3 lg:text-t2는 접힘 이름 목록과 짝을 맞춘 반응형 짝이다 - 두 노드는
+  // text-t3 lg:text-t2는 접힘 이름 목록과 짝을 맞춘 반응형 짝이다. 두 노드는
   // Flip으로 날아가는 짝이라 어느 폭에서든 글자 크기가 갈리면 비행 첫
   // 프레임이 배율로 늘어난다. 짝이 맞는지는 ProjectsSection.test.tsx의
   // 교차 잠금이 보고, 여기서는 이 파일이 혼자 반쪽만 올리거나 금지 칸인
@@ -487,7 +501,7 @@ describe('ProjectModal 아이콘과 글자 크기 한 칸 내리기', () => {
 
   // 좁은 화면 전용 축소 규칙을 여기에 되살리면 안 된다. FLIP은 lg(1024)
   // 위에서 도는데 NARROW_PANEL_CSS는 1100px 아래에 걸려 있어, 1024~1100
-  // 구간에서 제목만 줄어들고 접힘 이름은 t2로 남는다 - 비행 첫 프레임이
+  // 구간에서 제목만 줄어들고 접힘 이름은 t2로 남는다. 비행 첫 프레임이
   // 그 비율만큼 배율로 어긋난다. 제목이 버튼을 미는 문제는 truncate가 맡는다
   it('NARROW_PANEL_CSS에 head h2 font-size 규칙이 남지 않는다', () => {
     expect(SOURCE).not.toMatch(/\[data-modal-part="head"\]\s*h2\s*\{[^}]*font-size/);
@@ -533,12 +547,12 @@ describe('ProjectModal 등장·퇴장 안무', () => {
     }) as typeof gsap.to);
     return made;
   }
-  function renderReveal(value: boolean | null | undefined) {
+  function renderReveal(value: boolean | 'head' | null | undefined) {
     return render(<ProjectModal project={project} isOpen onClose={() => {}} reveal={value} />);
   }
   function rerenderReveal(
     rerender: (ui: React.ReactElement) => void,
-    value: boolean | null | undefined
+    value: boolean | 'head' | null | undefined
   ) {
     rerender(<ProjectModal project={project} isOpen onClose={() => {}} reveal={value} />);
   }
@@ -556,7 +570,7 @@ describe('ProjectModal 등장·퇴장 안무', () => {
     renderReveal(false);
     for (const root of roots()) expect(root.style.visibility).toBe('hidden');
     // 제목과 stage는 Flip이 나르는 중이다. 여기서 손대면 착지가 튄다.
-    // 감추는 수단이 display가 아닌 것도 같은 이유다 - 레이아웃이 사라지면
+    // 감추는 수단이 display가 아닌 것도 같은 이유다. 레이아웃이 사라지면
     // 착지 좌표가 어긋난다
     expect(document.getElementById('pm-title')!.style.visibility).toBe('');
     expect(el('[data-modal-part="stage"]').style.visibility).toBe('');
@@ -578,7 +592,7 @@ describe('ProjectModal 등장·퇴장 안무', () => {
     expect(el('[data-modal-part="stage"]').style.cssText).toBe('');
   });
 
-  it('주장과 부제만 단어 단위로 쪼갠다 - 음절로 부수지 않는다', () => {
+  it('주장과 부제만 단어 단위로 쪼갠다. 음절로 부수지 않는다', () => {
     const { rerender } = renderReveal(false);
     const claim = el('[data-modal-field="claim"]');
     const words = claim.textContent!.trim().split(/\s+/).length;
@@ -609,7 +623,7 @@ describe('ProjectModal 등장·퇴장 안무', () => {
     expect(timelines[0].duration()).toBeGreaterThan(REVEAL_IN_MS / 2000);
   });
 
-  it('reveal이 true에서 false가 되면 통짜로 접힌다 - 단어를 다시 쪼개지 않는다', () => {
+  it('reveal이 true에서 false가 되면 통짜로 접힌다. 단어를 다시 쪼개지 않는다', () => {
     const { rerender } = renderReveal(false);
     rerenderReveal(rerender, true);
 
@@ -626,7 +640,7 @@ describe('ProjectModal 등장·퇴장 안무', () => {
     for (const root of roots()) expect(root.style.opacity).toBe('0');
   });
 
-  it('감춘 적이 없는 판에는 등장을 걸지 않는다 - 그게 곧 번쩍임이다', () => {
+  it('감춘 적이 없는 판에는 등장을 걸지 않는다. 그게 곧 번쩍임이다', () => {
     const timelines = captureTimelines();
     const { rerender } = renderReveal(null);
     rerenderReveal(rerender, true);
@@ -645,5 +659,119 @@ describe('ProjectModal 등장·퇴장 안무', () => {
     // 안 걷으면 다음 열기에 래퍼가 겹쳐 쌓인다
     expect(claim.children).toHaveLength(0);
     expect(claim.textContent).toBe(text);
+  });
+
+  // 'head'는 비행 중간 착지점이다. 머리띠 버튼 묶음만 보이고 몸통(논증 열,
+  // 영상 설명)은 아직 감춰져 있다
+  it("reveal='head'면 머리띠 자식은 visible이고 몸통은 hidden이다", () => {
+    const { rerender } = renderReveal(false);
+    rerenderReveal(rerender, 'head');
+    expect(el(HEAD_ACTIONS).style.visibility).toBe('visible');
+    expect(el(SCROLL).style.visibility).toBe('hidden');
+    expect(el(CAPTION).style.visibility).toBe('hidden');
+    // 비행 대상은 여전히 무사하다
+    expect(document.getElementById('pm-title')!.style.cssText).toBe('');
+    expect(el('[data-modal-part="stage"]').style.cssText).toBe('');
+  });
+
+  it("false → 'head' 전이가 머리띠에만 tween을 만든다", () => {
+    const { rerender } = renderReveal(false);
+    const tweens = captureTweens();
+    rerenderReveal(rerender, 'head');
+
+    expect(tweens).toHaveLength(1);
+    act(() => {
+      tweens[0].progress(1);
+    });
+    expect(el(HEAD_ACTIONS).style.opacity).toBe('1');
+    // 몸통은 이번 전이가 손대지 않는다. 여전히 감춰진 채다
+    expect(el(SCROLL).style.visibility).toBe('hidden');
+    expect(el(SCROLL).style.opacity).toBe('');
+    expect(el(CAPTION).style.visibility).toBe('hidden');
+  });
+
+  it("'head' → true 전이가 몸통에만 tween을 만들고 머리띠는 다시 안 건드린다", () => {
+    const { rerender } = renderReveal(false);
+    rerenderReveal(rerender, 'head');
+    const headStyleBefore = el(HEAD_ACTIONS).style.cssText;
+
+    const timelines = captureTimelines();
+    rerenderReveal(rerender, true);
+
+    expect(timelines).toHaveLength(1);
+    expect(el(SCROLL).style.visibility).toBe('visible');
+    expect(el(CAPTION).style.visibility).toBe('visible');
+    // 머리띠 스타일은 직전 전이가 눌러 둔 값 그대로다. 새 tween이 안 걸렸다
+    expect(el(HEAD_ACTIONS).style.cssText).toBe(headStyleBefore);
+  });
+
+  it("true → 'head' 전이가 몸통만 접는다", () => {
+    const { rerender } = renderReveal(false);
+    rerenderReveal(rerender, true);
+    const tweens = captureTweens();
+    rerenderReveal(rerender, 'head');
+
+    expect(tweens).toHaveLength(1);
+    act(() => {
+      tweens[0].progress(1);
+    });
+    expect(el(SCROLL).style.opacity).toBe('0');
+    expect(el(CAPTION).style.opacity).toBe('0');
+    // 머리띠는 접히지 않는다
+    expect(el(HEAD_ACTIONS).style.visibility).toBe('visible');
+  });
+
+  it("'head' → false 전이가 머리띠만 접는다", () => {
+    const { rerender } = renderReveal(false);
+    rerenderReveal(rerender, 'head');
+    const tweens = captureTweens();
+    rerenderReveal(rerender, false);
+
+    expect(tweens).toHaveLength(1);
+    expect(tweens[0].duration()).toBeCloseTo(0.2);
+    act(() => {
+      tweens[0].progress(1);
+    });
+    expect(el(HEAD_ACTIONS).style.opacity).toBe('0');
+    // 몸통은 원래도 hidden이었고 이번 전이가 새로 건드리지 않는다
+    expect(el(SCROLL).style.visibility).toBe('hidden');
+  });
+
+  it('영상 설명의 등장 tween이 clipPath를 쓴다', () => {
+    const { rerender } = renderReveal(false);
+    rerenderReveal(rerender, true);
+    const caption = el(CAPTION);
+    // fromTo는 immediateRender라 시작 상태가 이 자리에서 이미 눌려 있다
+    expect(caption.style.clipPath).toBe('inset(0 100% 0 0)');
+    expect(caption.style.opacity).toBe('0');
+  });
+
+  it('논증 열 요소들의 출발 시각이 60ms 간격으로 늘어난다', () => {
+    const timelines = captureTimelines();
+    const { rerender } = renderReveal(false);
+    rerenderReveal(rerender, true);
+    const tl = timelines[0];
+
+    function startTimeFor(target: HTMLElement): number {
+      const child = tl
+        .getChildren(false, true, true)
+        .find((c): c is gsap.core.Tween => 'targets' in c && c.targets().includes(target));
+      if (!child) throw new Error('tween not found for target');
+      return child.startTime();
+    }
+
+    // meta와 step은 claim·sub와 달리 단어로 쪼개지 않고 통짜로 뜬다 - tween이
+    // 컨테이너 자신을 target으로 잡으므로 startTime을 그대로 잴 수 있다
+    const meta = el('[data-modal-field="meta"]');
+    const firstStep = document.querySelectorAll('[data-modal-field="step"]')[0] as HTMLElement;
+    const firstBody = el('[data-modal-field="body"]');
+    const firstH4 = document.querySelector('h4') as HTMLElement;
+
+    const metaAt = startTimeFor(meta);
+    const stepAt = startTimeFor(firstStep);
+    const bodyAt = startTimeFor(firstBody);
+    const h4At = startTimeFor(firstH4);
+    expect(stepAt - metaAt).toBeCloseTo(0.06);
+    expect(h4At - bodyAt).toBeCloseTo(0.06);
   });
 });

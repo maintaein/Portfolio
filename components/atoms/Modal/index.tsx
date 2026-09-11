@@ -20,6 +20,10 @@ interface ModalProps {
   className?: string;
   onRestoreFocusFallback?: () => void;
   ariaLabelledBy?: string;
+  // 배경막 클래스 교체. 미전달이면 지금과 같은 불투명 배경막이다. 셸이
+  // 자기 배경을 직접 그리는 모달(ProjectModal)은 화면 전체 backdrop-filter가
+  // 중복이라 투명으로 넘긴다
+  backdropClassName?: string;
 }
 
 const sizeStyles: Record<ModalSize, string> = {
@@ -42,6 +46,7 @@ export default function Modal({
   className,
   onRestoreFocusFallback,
   ariaLabelledBy,
+  backdropClassName,
 }: ModalProps) {
   const [mounted, setMounted] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -157,7 +162,10 @@ export default function Modal({
       style={{ zIndex: 1050 }}
     >
       <div
-        className="absolute inset-0 bg-black/20 backdrop-blur-md transition-opacity duration-base"
+        className={cn(
+          'absolute inset-0',
+          backdropClassName ?? 'bg-black/20 backdrop-blur-md transition-opacity duration-base'
+        )}
         onClick={closeOnBackdropClick ? onClose : undefined}
         aria-hidden="true"
       />

@@ -67,7 +67,7 @@
   --color-text-secondary: #b0bac5;
   --color-cyan-core: #03b3c3;
   --color-cyan-hi: #7fe3ee;
-  /* 장식 전용. 본문 텍스트로 쓰지 말 것 — 검정 위 3.16:1 */
+  /* 장식 전용. 본문 텍스트로 쓰지 말 것. 검정 위 3.16:1 */
   --color-cyan-dim: #0e5ea5;
   --color-hairline: rgb(3 179 195 / 0.35);
   --color-elevation-near: rgb(3 179 195 / 0.6);
@@ -154,7 +154,7 @@
   --tunnel-vanishing-x: 53%;
   --tunnel-vanishing-y: 52%;
 
-  /* 워드마크 FLIP 지속(세 이음매 브리프 3절) — HomeClient의
+  /* 워드마크 FLIP 지속(세 이음매 브리프 3절). HomeClient의
      Flip.from({ duration: WORDMARK_FLIP_DURATION_MS / 1000 })과 반드시 같은
      값이어야 한다. 워드마크가 hero→compact로 착지하는 시간과 정확히 같은
      시간만큼 .nav-strip-visible의 등장을 늦춰야("이름이 자리를 잡고, 그다음
@@ -164,14 +164,14 @@
      검증한다 — 한쪽만 바뀌면 그 테스트가 FAIL한다. */
   --wordmark-flip-duration: 500ms;
 
-  /* 부팅 화면 중앙 정렬 — 이름(Navigation 워드마크)과 캡션(BootSequence
+  /* 부팅 화면 중앙 정렬. 이름(Navigation 워드마크)과 캡션(BootSequence
      역할·START)은 서로 다른 컴포넌트라 DOM은 합칠 수 없지만, 뷰포트 50%
      지점을 공유 기준점으로 삼는다. 이름은 top:50%에서 -translate-y-full로
      자기 높이만큼 위로 올라가 바닥이 항상 50% 선에 닿고, 캡션은 top:50%에서
      이 간격만큼 margin-top으로 내려가 시작한다 — 겹침이 폰트 크기·
      브레이크포인트와 무관하게 구조적으로 불가능해진다(계획 3 boot-composition
      브리프, "구멍 3"). */
-  /* 96px 이름 아래에선 고정값이 붙어 보인다(부팅 안무 브리프) — 이름과 함께
+  /* 96px 이름 아래에선 고정값이 붙어 보인다(부팅 안무 브리프). 이름과 함께
      자라도록 clamp로 바꾼다. 겹침 방지 계약(위 주석)은 유지된다: 이름의
      바닥은 여전히 정확히 50%에 붙고, 캡션은 이 gap만큼 그 아래에서
      시작하므로 값이 얼마든 겹침은 구조적으로 불가능하다. */
@@ -294,7 +294,7 @@
     animation: shimmer 2s linear infinite;
   }
 
-  /* START 클릭 반짝임 — 클릭 링(이전 .animate-ripple/@keyframes
+  /* START 클릭 반짝임. 클릭 링(이전 .animate-ripple/@keyframes
      ripple-expand)을 터널 진입 브리프(3차) 사용자 판단으로 대체했다.
      "에너지가 차오르듯이" — 글자 색이 text-primary에서 cyan-hi로
      차올랐다(40% 지점) text-primary로 돌아온다. 1회성(infinite가 아니다)
@@ -518,7 +518,7 @@
     animation: bob 3s ease-in-out infinite;
   }
 
-  /* touch-action은 스크롤 컨테이너에 걸어야 한다 — .section-stage가 아니다.
+  /* touch-action은 스크롤 컨테이너에 걸어야 한다. .section-stage가 아니다.
 
      실기기(Galaxy S25/Chrome) 계측이 증명한 것: 브라우저는 터치가 시작된
      요소부터 올라가며 touch-action을 교집합하되 스크롤 컨테이너에서 멈춘다.
@@ -616,7 +616,7 @@
     display: none;
   }
 
-  /* 섹션 은닉 — 전 섹션이 DOM에 상주한다. 진짜 이유는 SEO다(크롤러는
+  /* 섹션 은닉. 전 섹션이 DOM에 상주한다. 진짜 이유는 SEO다(크롤러는
      HTML을 읽지 Ctrl+F를 쓰지 않는다). content-visibility는 반드시 auto를
      쓴다 — 비활성 섹션의 렌더(레이아웃·페인트)를 건너뛰는 성능 이득이
      있고, hidden과 달리 접근성 트리에서 사라지지 않는다.
@@ -840,7 +840,7 @@
     }
   }
 
-  /* overview에서는 nav-strip(섹션 링크 목록)을 숨긴다 — 워드마크는 절대
+  /* overview에서는 nav-strip(섹션 링크 목록)을 숨긴다. 워드마크는 절대
      숨기지 않는다(LCP 요소). display가 아니라 opacity+visibility로 숨겨
      레이아웃을 흔들지 않는다(CLS 0). visibility:hidden은 opacity와 달리
      탭 순서·접근성 트리에서도 제외한다 — 그래서 별도 aria-hidden/inert
@@ -874,7 +874,7 @@
     }
   }
 
-  /* 부팅 캡션(역할·START) 은닉 — 워드마크와 마찬가지로 셸 레벨(overview
+  /* 부팅 캡션(역할·START) 은닉. 워드마크와 마찬가지로 셸 레벨(overview
      섹션 밖)에 산다(부팅 안무 브리프 3절). overview의 `.section-hidden`은
      `content-visibility: auto`를 쓰는데, 콘텐츠가 스킵되는 순간 그 서브트리가
      paint containment를 얻어 `position: fixed` 자손을 뷰포트가 아니라 그
@@ -906,7 +906,7 @@
     }
   }
 
-  /* BootSequence의 역할 라벨·START pre-boot 상태 — JS의 낙관적 boolean이
+  /* BootSequence의 역할 라벨·START pre-boot 상태. JS의 낙관적 boolean이
      아니라 이 미디어쿼리가 소유한다(계획 3 Task 6, "구멍 6"). 기본 규칙은
      최종 상태(보임)다. 모션을 허용하는 사용자에게만 미디어쿼리가 pre-boot
      은닉 상태로 덮어써서, BootSequence의 GSAP 타임라인이 1.4초 스윕 뒤
@@ -932,7 +932,7 @@
       0 0 2px var(--color-cyan-core);
   }
 
-  /* 워드마크(이름)의 pre-boot opacity — data-wordmark-mode는 Navigation이
+  /* 워드마크(이름)의 pre-boot opacity. data-wordmark-mode는 Navigation이
      이미 붙이는 속성이라 별도 클래스·matchMedia 없이 재사용한다. 기본
      규칙(모션 비허용 포함)은 항상 보인다. opacity — 터널 진입 브리프(3차)가
      "opacity: 0으로 시작하지 않는다" LCP 계약을 사용자 판단으로 폐기하며
@@ -957,6 +957,25 @@
      containing block이 예기치 않게 바뀌지 않도록 항상 'none'을 유지한다. */
   .wordmark-scale-wrapper {
     transform: none;
+  }
+
+  /* ProjectModal이 열리면 헤더가 흐려지며 물러난다. 필터는 nav 자신에
+     건다. 감싸는 div에 걸면 그 div가 fixed nav의 containing block이 돼
+     nav가 자리를 잃는다. 전환 길이는 비행(500ms)과 같다 */
+  [data-obscured] > nav {
+    opacity: 0;
+    filter: blur(6px);
+  }
+  nav[aria-label="메인 네비게이션"] {
+    transition:
+      opacity var(--animate-duration-slow) cubic-bezier(0.22, 1, 0.36, 1),
+      filter var(--animate-duration-slow) cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    nav[aria-label="메인 네비게이션"] {
+      transition: none;
+    }
   }
 
   /* About 레일의 구분선. 선 하나만 있으면 멋이 없다는 피드백에 굵기와
@@ -1230,7 +1249,7 @@
     }
 
     [data-wordmark-mode='hero'] {
-      /* opacity: 0 — LCP 계약 변경(터널 진입 브리프 3절). BootSequence의
+      /* opacity: 0. LCP 계약 변경(터널 진입 브리프 3절). BootSequence의
          GSAP 타임라인이 핸드오프 시각(NAME_HANDOFF_AT)에 1로 열거나,
          타임라인이 돌지 않는 모든 경로(청크 실패·타임아웃·언마운트 등)에서
          revealFinalState()가 인라인으로 강제 노출한다 — 그러지 않으면
@@ -1238,7 +1257,7 @@
       opacity: 0;
     }
 
-    /* START 호버 — 전기 충전 이펙트(HERO 재순서 브리프 4절, Magnet을
+    /* START 호버. 전기 충전 이펙트(HERO 재순서 브리프 4절, Magnet을
        대체한다. "호버 시 전기적 에너지가 글씨에 충전되는듯한" 사용자
        요청). 광휘가 위 .boot-start의 transition(0.5s)을 타고 0에서
        최대로 차오르고, 호버를 벗어나면 같은 transition이 대칭으로
