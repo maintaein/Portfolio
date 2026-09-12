@@ -546,33 +546,10 @@
     touch-action: pan-y pinch-zoom;
   }
 
-  /* Footer 높이(45px)와 여기 하단 여백은 같은 숫자를 공유해야 한다. Footer가
-     .section-stage 위에 fixed로 얹히므로, 이 여백이 Footer 실제 높이보다
-     작으면 겹치고 크면 빈 공간이 남는다. 320px 폭에서 이메일, 저작권,
-     github 링크 세 항목이 각자 줄바꿈되면 45px보다 커지므로(아래
-     .site-footer의 좁은 화면 오버라이드 참고) 이 규칙도 같은 폭에서 같은
-     값으로 늘려 겹침을 막는다. */
-  @media (max-width: 479px) {
-    .section-stage {
-      inset: 72px 0 calc(64px + env(safe-area-inset-bottom, 0px));
-    }
-  }
-
-  /* 320px 폭에서 이메일, 저작권, github 링크 세 항목이 한 줄에 다 들어가지
-     못해 각자 줄바꿈된다(간격 포함 약 57px, t8 line-height 16.5px 세 줄 +
-     gap-y-1 4px 두 개). 기본 45px 띠로는 넘친다. 내용을 지우는 대신 좁은
-     화면에서만 띠를 64px로 늘려 세 줄이 다 들어가게 한다(overflow 대신
-     배치로 해결). 위 .section-stage의 좁은 화면 오버라이드와 반드시 같은
-     값(64px)을 써야 한다. 다르면 Footer가 섹션 콘텐츠 위로 겹치거나 그
-     아래에 빈 공간이 남는다. */
+  /* 이 height와 .section-stage 하단 여백은 같은 숫자여야 한다. 다르면
+     Footer가 콘텐츠 위로 겹치거나 아래에 빈 공간이 남는다. */
   .site-footer {
     height: calc(45px + env(safe-area-inset-bottom, 0px));
-  }
-
-  @media (max-width: 479px) {
-    .site-footer {
-      height: calc(64px + env(safe-area-inset-bottom, 0px));
-    }
   }
 
   .section-stage-horizontal {

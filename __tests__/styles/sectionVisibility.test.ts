@@ -163,25 +163,20 @@ describe('section visibility utilities', () => {
     );
   });
 
-  it('grows .site-footer and .section-stage together under 480px so three wrapped lines fit', () => {
-    const footerNarrow = narrowViewportRuleBody('.site-footer');
-    const stageNarrow = narrowViewportRuleBody('.section-stage');
-
-    expect(footerNarrow, '.site-footer의 좁은 화면 오버라이드가 없다').toBeDefined();
-    expect(stageNarrow, '.section-stage의 좁은 화면 오버라이드가 없다').toBeDefined();
-
-    const footerHeight = footerNarrow!.match(/height\s*:\s*calc\((\d+)px/)?.[1];
-    const stageBottom = stageNarrow!.match(
-      /inset\s*:\s*72px 0 calc\((\d+)px/
-    )?.[1];
-
-    expect(footerHeight, '.site-footer 좁은 화면 height를 못 찾았다').toBeDefined();
-    expect(stageBottom, '.section-stage 좁은 화면 inset을 못 찾았다').toBeDefined();
-    // 이 값이 서로 다르면 Footer가 섹션 콘텐츠 위로 겹치거나 그 아래에
-    // 빈 공간이 남는다.
-    expect(footerHeight).toBe(stageBottom);
-    // 기본 45px보다는 커야 한다. 안 커지면 320px 오버플로가 그대로 남는다.
-    expect(Number(footerHeight)).toBeGreaterThan(45);
+  // Footer가 이메일 복사 버튼과 github 링크 두 액션짜리 한 줄 레일로
+  // 바뀌면서(저작권은 sm 미만에서 감춰진다) 320px에서도 줄바꿈이 나지
+  // 않는다. 세 줄로 접히던 옛 문제(H4)를 풀던 좁은 화면 오버라이드가 이제
+  // 없어야 한다는 것을 반대 방향으로 고정한다 — 오버라이드가 되살아나면
+  // 이 어서션이 FAIL해야 한다.
+  it('한 줄 레일이라 좁은 화면에서도 .site-footer와 .section-stage 띠가 커지지 않는다', () => {
+    expect(
+      narrowViewportRuleBody('.site-footer'),
+      '.site-footer의 좁은 화면 오버라이드가 남아 있다'
+    ).toBeUndefined();
+    expect(
+      narrowViewportRuleBody('.section-stage'),
+      '.section-stage의 좁은 화면 오버라이드가 남아 있다'
+    ).toBeUndefined();
   });
 
   it('defines each section as an independent vertical scroll container', () => {
