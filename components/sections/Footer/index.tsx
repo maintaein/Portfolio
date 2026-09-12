@@ -41,7 +41,7 @@ export default function Footer() {
       : '';
 
   return (
-    <footer className="site-footer fixed inset-x-0 bottom-0 z-40 flex items-center justify-center gap-x-6 border-t border-[rgb(3_179_195_/_0.45)] bg-[var(--color-ink)] px-4 pb-[env(safe-area-inset-bottom,0px)] text-t8 text-[var(--color-text-secondary)]">
+    <footer className="site-footer fixed inset-x-0 bottom-0 z-40 flex items-center justify-center gap-x-6 border-t border-[rgb(255_255_255_/_0.08)] bg-[rgb(0_0_0_/_0.35)] backdrop-blur-md px-4 pb-[env(safe-area-inset-bottom,0px)] text-t8 text-[var(--color-text-secondary)]">
       <button
         type="button"
         onClick={handleCopyEmail}
