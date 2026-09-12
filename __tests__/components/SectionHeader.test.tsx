@@ -219,3 +219,29 @@ describe('SectionHeader: NEXT 미리보기(호버/포커스)', () => {
     }
   });
 });
+
+describe('SectionHeader: 트랙 폭은 문구 길이에 흔들리지 않는다', () => {
+  it('트랙이 남는 폭을 먹지 않고, 루트가 lg에서 좌우 고정 폭 3열 그리드다', () => {
+    // 트랙이 flex-1이면 좌우 이웃(01/05 ABOUT, NEXT · PROJECTS)의 글자 폭을
+    // 따라 트랙의 시작과 끝이 같이 움직인다. 실제 브라우저 1440px에서 눈금
+    // 다섯 개가 섹션을 옮길 때마다 최대 68px씩 밀렸다. 커서가 0.5초에 걸쳐
+    // 부드럽게 움직이는 바로 그 위에서 눈금이 순간이동하니 진행도 자
+    // 노릇을 못 한다. jsdom에는 레이아웃 엔진이 없어 폭을 잴 수 없으므로
+    // 클래스 문자열로 잠근다.
+    render(<SectionHeader {...baseProps()} />);
+    const rail = screen.getByTestId('section-rail');
+    const root = screen.getByRole('group', { name: '섹션 진행도' });
+
+    expect(rail.className).not.toMatch(/(^|\s)(lg:)?flex-1(\s|$)/);
+    expect(root.className).toMatch(/(^|\s)lg:grid(\s|$)/);
+
+    // 좌우 칸이 같은 고정 폭이어야 트랙이 가운데에서 항상 같은 자리를
+    // 차지한다. 한쪽이라도 auto나 fr이면 글자 폭이 다시 새어 들어온다.
+    const cols = root.className.match(/lg:grid-cols-\[([^\]]+)\]/);
+    expect(cols, 'lg 3열 그리드 정의를 찾지 못했다').not.toBeNull();
+    const [left, middle, right] = cols![1]!.split('_');
+    expect(middle).toBe('1fr');
+    expect(left).toBe(right);
+    expect(left).not.toMatch(/auto|fr/);
+  });
+});

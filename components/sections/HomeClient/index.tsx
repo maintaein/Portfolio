@@ -455,9 +455,11 @@ export default function HomeClient() {
         />
         {/* overview는 BootSequence 소유다. 거기서 레일이 보이면 00/05가
             읽힌다. active가 실제 섹션일 때만 렌더한다. 위치는 레일이 아니라
-            여기 className이 준다: top-[72px]가 내비게이션 높이, h-8(32px)이
-            띠 자신이다. 둘을 더한 값이 styles/design-tokens.css의
-            .section-stage 상단 여백과 같아야 본문이 띠 뒤로 들어가지 않는다. */}
+            여기 className이 준다. 위 여백 76px은 내비게이션의 실측 높이이고
+            띠 자신은 32px이다. 내비게이션이 z-50이라 그보다 위로 올리면 띠의
+            윗부분이 클릭을 못 받는다. 76과 32를 더한 값이
+            styles/design-tokens.css의 .section-stage 상단 여백과 같아야
+            본문이 띠 뒤로 들어가지 않는다. */}
         {active !== OVERVIEW && (
           <SectionHeader
             current={activeIndex + 1}
@@ -467,7 +469,7 @@ export default function HomeClient() {
             onAction={handleRailAction}
             motionReady={motionReady}
             reducedMotion={reducedMotion}
-            className="fixed inset-x-0 top-[72px] z-40 px-6"
+            className="fixed inset-x-0 top-[76px] z-40 px-6"
           />
         )}
       </div>

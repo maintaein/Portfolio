@@ -540,12 +540,13 @@
 
      .section-stage의 pan-y는 섹션 바깥 여백에 닿는 터치를 위해 남겨둔다.
 
-     상단 104px은 내비게이션(72px)과 그 바로 아래 진행도 레일 띠(32px)를
-     더한 값이다. 레일 띠 높이가 바뀌면 이 숫자도 같이 바뀌어야 한다.
-     안 그러면 본문이 띠 뒤로 들어가거나 그 사이에 빈 줄이 생긴다. */
+     상단 108px은 내비게이션의 실측 높이(76px)와 그 바로 아래 진행도 레일
+     띠(32px)를 더한 값이다. 둘 중 하나라도 높이가 바뀌면 이 숫자도 같이
+     바뀌어야 한다. 안 그러면 본문이 띠 뒤로 들어가거나 그 사이에 빈 줄이
+     생긴다. */
   .section-stage {
     position: fixed;
-    inset: 104px 0 calc(45px + env(safe-area-inset-bottom, 0px));
+    inset: 108px 0 calc(45px + env(safe-area-inset-bottom, 0px));
     overflow: hidden;
     touch-action: pan-y pinch-zoom;
   }

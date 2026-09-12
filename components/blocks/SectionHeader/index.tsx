@@ -124,12 +124,17 @@ export default function SectionHeader({
   const paddedCurrent = String(current).padStart(2, '0');
   const paddedTotal = String(total).padStart(2, '0');
 
+  // 가운데 트랙의 폭은 라벨과 액션 문구 길이에 흔들리면 안 된다. 한 줄
+  // flex로 두면 좌우 칸이 글자 폭을 따라 늘고 줄어서, 섹션을 옮길 때마다
+  // 눈금 전체가 옆으로 밀린다. lg부터는 좌우 칸 폭을 고정한 3열 그리드로
+  // 바꿔 트랙의 시작과 끝을 항상 같은 자리에 둔다. lg 미만에서는 트랙
+  // 자체를 감추므로 라벨과 액션 두 칸만 남고, 그 둘을 양 끝에 붙인다.
   return (
     <div
       role="group"
       aria-label="섹션 진행도"
       className={cn(
-        'flex h-8 items-center gap-4 text-t8 tracking-[0.08em] text-[var(--color-text-secondary)]',
+        'flex h-8 items-center justify-between gap-4 text-t8 tracking-[0.08em] text-[var(--color-text-secondary)] lg:grid lg:grid-cols-[13rem_1fr_13rem] lg:justify-normal',
         className
       )}
     >
@@ -146,7 +151,7 @@ export default function SectionHeader({
       <div
         aria-hidden="true"
         data-testid="section-rail"
-        className="relative hidden h-3 min-w-0 flex-1 lg:block"
+        className="relative hidden h-3 min-w-0 lg:block"
       >
         <span className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-[rgb(3_179_195_/_0.35)]" />
         <span
@@ -191,7 +196,7 @@ export default function SectionHeader({
         onMouseLeave={() => setPreviewing(false)}
         onFocus={() => setPreviewing(true)}
         onBlur={() => setPreviewing(false)}
-        className="ml-auto flex h-8 shrink-0 items-center uppercase transition-colors duration-300 hover:text-[var(--color-cyan-core)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)]"
+        className="flex h-8 shrink-0 items-center uppercase transition-colors duration-300 hover:text-[var(--color-cyan-core)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)] lg:justify-self-end"
       >
         <span className="relative">
           {actionLabel}
