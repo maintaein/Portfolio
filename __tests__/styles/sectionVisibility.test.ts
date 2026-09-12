@@ -181,6 +181,47 @@ describe('section visibility utilities', () => {
     ).toBeUndefined();
   });
 
+  // overview에서 footer를 감추는 규칙 쌍. 자리를 옮기는 수단이 transform이어야
+  // 한다. height를 줄이면 같은 숫자를 쥔 .section-stage 하단 여백과 어긋나
+  // 본문이 매 프레임 다시 앉는다(바로 위 두 테스트가 잠근 계약이다).
+  it('overview에서는 .site-footer를 화면 밖으로 내리고 탭 순서에서도 뺀다', () => {
+    const hidden = ruleBody('.site-footer-hidden');
+
+    expect(hidden, '.site-footer-hidden 규칙이 없다').toBeDefined();
+    expect(hidden).toMatch(/transform\s*:\s*translateY\(100%\)\s*;/);
+    expect(hidden).toMatch(/opacity\s*:\s*0\s*;/);
+    // opacity만으로는 안 보이는 채로 탭이 들어간다.
+    expect(hidden).toMatch(/visibility\s*:\s*hidden\s*;/);
+    expect(hidden).not.toMatch(/height\s*:/);
+    // 페이드가 끝난 뒤에 탭 순서에서 빠지도록 visibility에만 지연을 준다.
+    expect(hidden).toMatch(
+      /visibility 0s linear var\(--animate-duration-slow\)/
+    );
+  });
+
+  it('섹션에서는 .site-footer가 제자리로 올라온다', () => {
+    const visible = ruleBody('.site-footer-visible');
+
+    expect(visible, '.site-footer-visible 규칙이 없다').toBeDefined();
+    expect(visible).toMatch(/transform\s*:\s*translateY\(0\)\s*;/);
+    expect(visible).toMatch(/opacity\s*:\s*1\s*;/);
+    expect(visible).toMatch(/visibility\s*:\s*visible\s*;/);
+    // 올라오는 쪽은 지연이 없다. 섹션이 앉는 것과 같은 시간에 움직인다.
+    expect(visible).toMatch(
+      /transform var\(--animate-duration-slow\) cubic-bezier\(0\.22, 1, 0\.36, 1\)/
+    );
+  });
+
+  it('reduce에서는 footer가 움직이지 않고 바로 자리를 잡는다', () => {
+    const reduceBlock = css.match(
+      /@media \(prefers-reduced-motion: reduce\) \{\n {4}\.site-footer-hidden,[\s\S]*?\n {2}\}/
+    )?.[0];
+
+    expect(reduceBlock, 'footer용 reduce 블록이 없다').toBeDefined();
+    expect(reduceBlock).toMatch(/\.site-footer-visible/);
+    expect(reduceBlock).toMatch(/transition\s*:\s*none\s*;/);
+  });
+
   it('defines each section as an independent vertical scroll container', () => {
     const scroll = ruleBody('.section-scroll');
 

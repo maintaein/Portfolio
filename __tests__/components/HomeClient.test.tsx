@@ -164,7 +164,11 @@ vi.mock('@/components/sections', async () => {
     ExperienceSection: () => (
       <SectionShell label="Experience" marker="Frontend Experience" />
     ),
-    Footer: () => <a href="mailto:test@example.com">Contact footer</a>,
+    Footer: ({ atOverview }: { atOverview: boolean }) => (
+      <a href="mailto:test@example.com" data-at-overview={String(atOverview)}>
+        Contact footer
+      </a>
+    ),
     // 실제 BootSequence는 wordmarkRef 등 여러 prop을 받지만, 이 mock의
     // 관심사는 HomeClient가 단일 matchMedia listener로 motion 소비자
     // 여럿(WhenVisible 3개)을 함께 정지·재개시키는지이지 BootSequence 자체
@@ -1011,7 +1015,7 @@ describe('HomeClient Footer. 표제 계약', () => {
     expect(stage).not.toBeNull();
     const footerLink = screen.getByText('Contact footer');
     // main(.section-stage) 밖 형제여야 한다. main 안으로 들어가면 다른
-    // 비활성 섹션과 함께 inert·hidden 처리되어 "항상 보인다"는 계약이
+    // 비활성 섹션과 함께 inert·hidden 처리되어 "섹션 위에 상주한다"는 계약이
     // 구조적으로 깨진다.
     expect(stage!.contains(footerLink)).toBe(false);
 
@@ -1022,6 +1026,23 @@ describe('HomeClient Footer. 표제 계약', () => {
     // overview에서만 렌더하도록 되돌리면(뮤테이션 g) 이 시점엔 이미 overview를
     // 벗어났으므로 이 어서션이 FAIL해야 한다.
     expect(screen.getByText('Contact footer')).toBeInTheDocument();
+  });
+
+  it('overview에서만 Footer에 은닉 신호를 주고 섹션에 들어가면 푼다', () => {
+    // DOM에 상주하는 것과 화면에 보이는 것은 다른 계약이다. 위 테스트가
+    // 상주를, 이 테스트가 노출을 맡는다. 실제 내려가기·올라오기는
+    // design-tokens.css의 site-footer-hidden/-visible이 하고, 여기서는
+    // HomeClient가 active를 그 신호로 옳게 번역하는지만 본다.
+    render(<HomeClient />);
+    const footer = () => screen.getByText('Contact footer');
+
+    expect(footer().dataset.atOverview).toBe('true');
+
+    navigateTo(/^about$/i);
+    expect(footer().dataset.atOverview).toBe('false');
+
+    navigateTo(/^awards$/i);
+    expect(footer().dataset.atOverview).toBe('false');
   });
 });
 

@@ -545,7 +545,7 @@ export default function HomeClient() {
       {/* Footer도 셸의 일부다 — 모달이 열려 있는 동안 포커스 순서에서
           빠지도록 inert로 격리한다 */}
       <div inert={isProjectModalOpen}>
-        <Footer />
+        <Footer atOverview={active === OVERVIEW} />
       </div>
     </SectionActivityProvider>
   );
