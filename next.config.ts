@@ -50,7 +50,7 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     // 실제 사용하는 대형 패키지의 import 최적화
-    optimizePackageImports: ['framer-motion', '@heroicons/react'],
+    optimizePackageImports: ['@heroicons/react'],
   },
   images: {
     remotePatterns: [
