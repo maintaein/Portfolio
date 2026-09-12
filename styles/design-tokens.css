@@ -331,31 +331,6 @@
   /* AboutSection Animations */
   /* ============================================ */
 
-  /* Tech Particle Storm - Chaos Orbits */
-  @keyframes orbit-chaos-1 {
-    0% { transform: translate(0, 0) rotate(0deg); }
-    25% { transform: translate(60px, -40px) rotate(90deg); }
-    50% { transform: translate(-30px, 50px) rotate(180deg); }
-    75% { transform: translate(-50px, -30px) rotate(270deg); }
-    100% { transform: translate(0, 0) rotate(360deg); }
-  }
-
-  @keyframes orbit-chaos-2 {
-    0% { transform: translate(0, 0) rotate(0deg); }
-    25% { transform: translate(-45px, 55px) rotate(90deg); }
-    50% { transform: translate(40px, -35px) rotate(180deg); }
-    75% { transform: translate(55px, 40px) rotate(270deg); }
-    100% { transform: translate(0, 0) rotate(360deg); }
-  }
-
-  @keyframes orbit-chaos-3 {
-    0% { transform: translate(0, 0) rotate(0deg); }
-    25% { transform: translate(-55px, -45px) rotate(90deg); }
-    50% { transform: translate(50px, 30px) rotate(180deg); }
-    75% { transform: translate(-40px, 50px) rotate(270deg); }
-    100% { transform: translate(0, 0) rotate(360deg); }
-  }
-
   @keyframes motion-trail {
     0%, 100% {
       opacity: 0;
@@ -369,41 +344,6 @@
     }
   }
 
-  /* Empathy Radar - Rotations */
-  @keyframes radar-rotate-slow {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-
-  @keyframes radar-rotate-medium {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(-360deg); }
-  }
-
-  @keyframes radar-rotate-fast {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-
-  @keyframes radar-sweep {
-    0% {
-      opacity: 0;
-      transform: rotate(0deg) scale(0.8);
-    }
-    50% {
-      opacity: 0.6;
-    }
-    100% {
-      opacity: 0;
-      transform: rotate(360deg) scale(1.2);
-    }
-  }
-
-  @keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
-  }
-
   @keyframes pulse-glow {
     0%, 100% {
       box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
@@ -414,11 +354,6 @@
   }
 
   /* Collaboration Mesh - Network */
-  @keyframes bob {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-8px); }
-  }
-
   @keyframes line-draw {
     from {
       stroke-dashoffset: 1000;
@@ -483,39 +418,6 @@
     to {
       opacity: 1;
     }
-  }
-
-  /* Utility classes for new animations */
-  .animate-orbit-1 {
-    animation: orbit-chaos-1 4s ease-in-out infinite;
-  }
-
-  .animate-orbit-2 {
-    animation: orbit-chaos-2 5s ease-in-out infinite;
-  }
-
-  .animate-orbit-3 {
-    animation: orbit-chaos-3 6s ease-in-out infinite;
-  }
-
-  .animate-radar-slow {
-    animation: radar-rotate-slow 20s linear infinite;
-  }
-
-  .animate-radar-medium {
-    animation: radar-rotate-medium 15s linear infinite;
-  }
-
-  .animate-radar-fast {
-    animation: radar-rotate-fast 10s linear infinite;
-  }
-
-  .animate-float {
-    animation: float 3s ease-in-out infinite;
-  }
-
-  .animate-bob {
-    animation: bob 3s ease-in-out infinite;
   }
 
   /* touch-action은 스크롤 컨테이너에 걸어야 한다. .section-stage가 아니다.
@@ -1311,17 +1213,6 @@
 
   /* Reduced motion support */
   @media (prefers-reduced-motion: reduce) {
-    .animate-orbit-1,
-    .animate-orbit-2,
-    .animate-orbit-3,
-    .animate-radar-slow,
-    .animate-radar-medium,
-    .animate-radar-fast,
-    .animate-float,
-    .animate-bob {
-      animation: none;
-    }
-
     /* direction이 'none'이라 위 애니메이션 자체가 안 걸리지만, 선택자가
        나중에 바뀌어도 안전하도록 여기서도 끊는다. 명시도를 forward·
        backward 선택자([data-about-direction='...'] [data-about-title]
