@@ -140,12 +140,14 @@ describe('section visibility utilities', () => {
     }
   });
 
-  it('keeps the stage fixed between navigation and the contact rail', () => {
+  // 상단 여백은 내비 72 + 진행도 레일 32 = 104다. 레일 띠 높이가 바뀌면
+  // 이 숫자도 같이 바뀌어야 한다.
+  it('keeps the stage fixed between the navigation/rail band and the contact rail', () => {
     const stage = ruleBody('.section-stage');
 
     expect(stage).toMatch(/position\s*:\s*fixed\s*;/);
     expect(stage).toMatch(
-      /inset\s*:\s*72px 0 calc\(45px \+ env\(safe-area-inset-bottom, 0px\)\)\s*;/
+      /inset\s*:\s*104px 0 calc\(45px \+ env\(safe-area-inset-bottom, 0px\)\)\s*;/
     );
     expect(stage).toMatch(/overflow\s*:\s*hidden\s*;/);
   });

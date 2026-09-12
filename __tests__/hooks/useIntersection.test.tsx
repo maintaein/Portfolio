@@ -2,9 +2,11 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const WHILE_IN_VIEW_DEBT = {
-  'components/blocks/SectionHeader/index.tsx': { plan: 5, count: 1 },
-} as const;
+// SectionHeader가 마지막 whileInView 사용자였다. 계획 5 T5-C가 그 컴포넌트를
+// 진행도 레일로 다시 쓰면서 이 원장을 비웠다. 다음에 whileInView를 쓰는
+// 컴포넌트가 생기면 여기 다시 담아 count까지 잠글 수 있도록 타입은 남겨
+// 둔다(빈 객체 리터럴만 두면 keyof가 never가 되어 아래 인덱싱이 깨진다).
+const WHILE_IN_VIEW_DEBT: Record<string, { plan: number; count: number }> = {};
 
 function collectComponentFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {

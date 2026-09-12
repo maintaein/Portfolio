@@ -8,6 +8,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import {
   afterEach,
@@ -23,6 +24,7 @@ import {
   HOME_SECTION_CONFIG,
   type HomeSectionId,
 } from '@/lib/constants';
+import { contact } from '@/lib/data';
 
 const motionSpies = vi.hoisted(() => ({
   dynamicLoader: vi.fn(),
@@ -268,7 +270,11 @@ function getSection(container: HTMLElement, id: string) {
 }
 
 function navigateTo(label: RegExp) {
-  fireEvent.click(screen.getByRole('button', { name: label }));
+  // 진행도 레일의 액션 버튼도 'NEXT · PROJECTS'처럼 섹션 이름을 문구에 담는다.
+  // 느슨한 정규식(/projects/i 등)이 레일과 내비게이션 양쪽에 동시에 걸려
+  // "여러 개 찾음" 에러가 나므로, 메인 내비게이션 안으로만 질의를 좁힌다.
+  const nav = screen.getByRole('navigation', { name: '메인 네비게이션' });
+  fireEvent.click(within(nav).getByRole('button', { name: label }));
 }
 
 beforeEach(() => {
@@ -1334,4 +1340,98 @@ describe('HomeClient 전환 방향 표식', () => {
       'data-section-leaving'
     );
   });
+});
+
+// 계획 5 T5-C. SectionHeader(진행도 레일)는 HomeClient가 단 하나만
+// 마운트해 섹션 사이 커서 이동이 실제로 보이게 한다(섹션마다 마운트하면
+// 매번 새 인스턴스라 이동 자체가 없다). 여기서 그 단일 마운트 배선을
+// 검증한다. 레일 자체의 눈금·커서 애니메이션은 SectionHeader.test.tsx가
+// 이미 실제 gsap.to/gsap.set spy로 고정하므로, 이 파일은 HomeClient가
+// 레일에 무엇을 넘기는지(current/label/actionLabel/onAction)와 언제
+// 렌더하는지만 본다.
+describe('HomeClient → 진행도 레일(SectionHeader) 배선', { timeout: 30_000 }, () => {
+  function getRail() {
+    return screen.getByRole('group', { name: '섹션 진행도' });
+  }
+
+  it('overview에서는 레일이 없고, 섹션으로 이동하면 나타나고, 다시 overview로 돌아오면 사라진다', () => {
+    render(<HomeClient />);
+
+    // 뮤테이션: active !== OVERVIEW 게이트를 지우면 overview에서도 00/05가
+    // 보여 이 질의가 null이 아닌 값을 돌려줘 FAIL한다.
+    expect(screen.queryByRole('group', { name: '섹션 진행도' })).toBeNull();
+
+    navigateTo(/^about$/i);
+    expect(getRail()).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('wordmark')); // wordmark 클릭 = overview로 복귀
+    expect(screen.queryByRole('group', { name: '섹션 진행도' })).toBeNull();
+  });
+
+  it('다음 섹션이 있으면 액션 라벨이 NEXT · <다음 섹션>이고, 마지막 섹션이면 EMAIL이다', () => {
+    render(<HomeClient />);
+
+    navigateTo(/^about$/i);
+    expect(within(getRail()).getByRole('button').textContent).toBe(
+      'NEXT · PROJECTS'
+    );
+
+    // 마지막 섹션의 id를 HOME_SECTION_CONFIG에서 다시 유도하면, 배열 순서를
+    // 바꾸는 뮤테이션에도 이 테스트가 똑같이 "마지막"을 따라가 구멍이 된다.
+    // 리터럴 라벨로 고정해 순서 자체가 계약이라는 것을 함께 잠근다.
+    navigateTo(/^awards$/i);
+    expect(within(getRail()).getByRole('button').textContent).toBe('EMAIL');
+  });
+
+  it('마지막 섹션에서 액션을 클릭하면 navigator.clipboard.writeText가 이메일 주소로 불린다', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+
+    render(<HomeClient />);
+    navigateTo(/^awards$/i);
+    const railButton = within(getRail()).getByRole('button');
+    expect(railButton.textContent).toBe('EMAIL');
+
+    await act(async () => {
+      fireEvent.click(railButton);
+    });
+
+    expect(writeText).toHaveBeenCalledWith(contact.email);
+
+    Reflect.deleteProperty(navigator, 'clipboard');
+  });
+
+  it('모달이 열리면 레일도 Navigation과 같은 inert 경계 안에 들어가고, 닫히면 함께 풀린다', async () => {
+    window.history.replaceState(null, '', '/#projects');
+    const { container } = render(<HomeClient />);
+    const navButton = screen.getByRole('button', { name: /^about$/i });
+    const rail = getRail();
+
+    expect(navButton.closest('[inert]')).toBeNull();
+    expect(rail.closest('[inert]')).toBeNull();
+
+    const projectsSection = getSection(container, 'projects');
+    const card = projectsSection.querySelector<HTMLElement>('[data-name="0"]');
+    fireEvent.click(card!);
+    const closeButton = await screen.findByRole(
+      'button',
+      { name: '닫기' },
+      { timeout: 20_000 }
+    );
+
+    // 뮤테이션: 레일을 Navigation과 다른 wrapper에 두거나 밖으로 빼내면
+    // 두 closest 값이 서로 달라지거나(둘 다 null이 아니어도 다른 노드) 여기서
+    // FAIL한다. "같은 inert 서브트리"라는 계약을 노드 동일성으로 고정한다.
+    const navBoundary = navButton.closest('[inert]');
+    expect(navBoundary).not.toBeNull();
+    expect(rail.closest('[inert]')).toBe(navBoundary);
+
+    fireEvent.click(closeButton);
+
+    expect(navButton.closest('[inert]')).toBeNull();
+    expect(rail.closest('[inert]')).toBeNull();
+  }, 30_000);
 });

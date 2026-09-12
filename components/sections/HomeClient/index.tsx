@@ -11,6 +11,7 @@ import {
 } from 'react';
 import HyperspeedBackground from '@/components/blocks/HyperspeedBackground';
 import Navigation from '@/components/blocks/Navigation';
+import SectionHeader from '@/components/blocks/SectionHeader';
 import { SectionActivityProvider } from '@/components/common/SectionActivityContext';
 import {
   AboutSection,
@@ -21,6 +22,7 @@ import {
   ProjectsSection,
   SkillsSection,
 } from '@/components/sections';
+import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import { useMotionPreference } from '@/hooks/useMotionPreference';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useProjectModalObscured } from '@/hooks/useProjectModalObscured';
@@ -37,7 +39,12 @@ import {
   SECTION_IDS,
   type HomeSectionId,
 } from '@/lib/constants';
+import { contact } from '@/lib/data';
 import type { Flip } from '@/lib/gsap';
+
+// 진행도 레일(SectionHeader)이 쓰는 종결 이메일 복사 키. Footer도 같은 훅을
+// 쓰지만('footer-email') 두 인스턴스가 상태를 공유하면 안 되므로 키를 분리한다.
+const RAIL_EMAIL_KEY = 'rail-email';
 
 // 워드마크 FLIP 지속(ms). 네비 겹침 회피의 단일 출처(세 이음매 브리프
 // 3절). styles/design-tokens.css의 --wordmark-flip-duration
@@ -287,6 +294,30 @@ export default function HomeClient() {
       : HOME_SECTION_CONFIG.find(({ id }) => id === active)?.label ??
         'Overview';
 
+  // 진행도 레일이 쓰는 파생값. activeIndex가 -1이면(overview) 레일 자체를
+  // 렌더하지 않으므로(아래 return문) nextSection의 폴백 값은 쓰이지 않는다.
+  const activeIndex = HOME_SECTION_CONFIG.findIndex(({ id }) => id === active);
+  const nextSection = HOME_SECTION_CONFIG[activeIndex + 1];
+  const { state: railCopyState, copy: copyRailEmail } = useCopyToClipboard();
+  const isRailEmailCopied =
+    railCopyState?.key === RAIL_EMAIL_KEY && railCopyState.status === 'copied';
+  const isRailEmailFailed =
+    railCopyState?.key === RAIL_EMAIL_KEY && railCopyState.status === 'failed';
+  const railActionLabel = nextSection
+    ? `NEXT · ${nextSection.label.toUpperCase()}`
+    : isRailEmailCopied
+      ? 'COPIED'
+      : isRailEmailFailed
+        ? 'SELECT EMAIL'
+        : 'EMAIL';
+  const handleRailAction = () => {
+    if (nextSection) {
+      goNext();
+      return;
+    }
+    void copyRailEmail(contact.email, RAIL_EMAIL_KEY);
+  };
+
   // reduced-motion이나 0초 전환에서는 CSS 이벤트가 없으므로 계산값으로 닫는다.
   useLayoutEffect(() => {
     if (!motionReady) return;
@@ -422,6 +453,23 @@ export default function HomeClient() {
           wordmarkRef={wordmarkRef}
           wordmarkScaleRef={wordmarkScaleRef}
         />
+        {/* overview는 BootSequence 소유다. 거기서 레일이 보이면 00/05가
+            읽힌다. active가 실제 섹션일 때만 렌더한다. 위치는 레일이 아니라
+            여기 className이 준다: top-[72px]가 내비게이션 높이, h-8(32px)이
+            띠 자신이다. 둘을 더한 값이 styles/design-tokens.css의
+            .section-stage 상단 여백과 같아야 본문이 띠 뒤로 들어가지 않는다. */}
+        {active !== OVERVIEW && (
+          <SectionHeader
+            current={activeIndex + 1}
+            total={HOME_SECTION_CONFIG.length}
+            label={HOME_SECTION_CONFIG[activeIndex]?.label.toUpperCase() ?? ''}
+            actionLabel={railActionLabel}
+            onAction={handleRailAction}
+            motionReady={motionReady}
+            reducedMotion={reducedMotion}
+            className="fixed inset-x-0 top-[72px] z-40 px-6"
+          />
+        )}
       </div>
 
       {/* 워드마크와 같은 셸 레벨 — overview 섹션(.section-hidden의
