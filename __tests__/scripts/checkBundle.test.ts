@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
-import { gzipSize, resolveBundleMetrics } from '@/scripts/check-bundle.mjs';
+import { checkBudget, gzipSize, resolveBundleMetrics } from '@/scripts/check-bundle.mjs';
 
 const fixtureRoot = path.resolve(process.cwd(), '__tests__/fixtures/bundle-manifests/valid');
 const scriptPath = path.resolve(process.cwd(), 'scripts/check-bundle.mjs');
@@ -197,5 +197,39 @@ describe('check-bundle resolver', { timeout: 30_000 }, () => {
     const result = spawnSync(process.execPath, [scriptPath, '--measure', fixtureRoot], { encoding: 'utf8' });
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toMatchObject({ hyperspeedStatus: 'measured' });
+  });
+});
+
+describe('checkBudget', () => {
+  const budget = {
+    target: { firstLoad: 200, chunk: 180 },
+    hardCap: { firstLoad: 210, chunk: 212 },
+  };
+
+  it('target 안이면 pass', () => {
+    expect(checkBudget({ firstLoad: 180, chunk: 150 }, budget).status).toBe('pass');
+  });
+
+  it('target 초과·hard cap 이하면 warn', () => {
+    const r = checkBudget({ firstLoad: 205, chunk: 190 }, budget);
+    expect(r.status).toBe('warn');
+    expect(r.warnings).toHaveLength(2);
+  });
+
+  it('First Load hard cap 초과는 fail', () => {
+    const r = checkBudget({ firstLoad: 211, chunk: 180 }, budget);
+    expect(r.status).toBe('fail');
+    expect(r.violations[0]).toContain('First Load');
+  });
+
+  it('두 hard cap을 모두 초과하면 둘 다 보고한다', () => {
+    const r = checkBudget({ firstLoad: 211, chunk: 213 }, budget);
+    expect(r.status).toBe('fail');
+    expect(r.violations).toHaveLength(2);
+  });
+
+  it('target과 정확히 같으면 pass, hard cap과 같으면 warn', () => {
+    expect(checkBudget({ firstLoad: 200, chunk: 180 }, budget).status).toBe('pass');
+    expect(checkBudget({ firstLoad: 210, chunk: 212 }, budget).status).toBe('warn');
   });
 });
