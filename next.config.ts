@@ -6,9 +6,14 @@ const isCspEnforced = process.env.CSP_ENFORCE === 'true';
 
 // 정적 렌더링을 유지하는 1차 CSP. Preview에서 Report-Only 위반을 확인한 뒤
 // CSP_ENFORCE=true를 빌드 환경에 설정하면 동일 정책을 강제 모드로 전환한다.
+//
+// Analytics/SpeedInsights는 basePath나 dsn을 넘기지 않았으므로 프로덕션에서
+// 스크립트와 수집 엔드포인트가 전부 동일 출처 상대 경로다
+// (/_vercel/insights/script.js, /_vercel/speed-insights/vitals). 'self'가
+// 이미 덮는다. va.vercel-scripts.com은 개발 모드 디버그 스크립트에서만 쓰인다.
 const contentSecurityPolicy = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval'" : ''}`,
+  `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval' https://va.vercel-scripts.com" : ''}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' blob: data: https://images.unsplash.com https://i.pravatar.cc",
   "font-src 'self'",
