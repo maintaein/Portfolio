@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import HomeClient from '@/components/sections/HomeClient';
 import {
   awards,
-  contact,
   coreValues,
   experiences,
   projects,
@@ -25,7 +24,6 @@ const semanticMarkerBySection = {
   [SECTION_IDS.EXPERIENCE]: experiences[0].position,
   [SECTION_IDS.SKILLS]: reactSkill.description,
   [SECTION_IDS.AWARDS_CERTIFICATES]: awards[0].title,
-  [SECTION_IDS.CONTACT]: contact.email,
 } satisfies Record<HomeSectionId, string>;
 
 describe('HomeClient 실제 섹션 SSR 상주', () => {
@@ -48,13 +46,13 @@ describe('HomeClient 실제 섹션 SSR 상주', () => {
     }
   });
 
-  it('CONTACT(여섯 번째 섹션)가 실제 이메일과 함께 SSR HTML에 상주한다', () => {
-    // 위 테스트는 HOME_SECTION_CONFIG를 순회하므로 CONTACT가 설정에서
-    // 통째로 빠지면(뮤테이션 b) 순회 범위 자체가 줄어 못 잡는다. 'contact'를
-    // 리터럴로 직접 찾는 이 테스트가 그 구멍을 막는다.
+  it('AWARDS-CERTIFICATES(다섯 번째 섹션)가 실제 데이터와 함께 SSR HTML에 상주한다', () => {
+    // 위 테스트는 HOME_SECTION_CONFIG를 순회하므로 AWARDS-CERTIFICATES가
+    // 설정에서 통째로 빠지면(뮤테이션 b) 순회 범위 자체가 줄어 못 잡는다.
+    // 'awards-certificates'를 리터럴로 직접 찾는 이 테스트가 그 구멍을 막는다.
     const html = renderToString(<HomeClient />);
 
-    expect(html).toContain('data-section="contact"');
-    expect(html).toContain(contact.email);
+    expect(html).toContain('data-section="awards-certificates"');
+    expect(html).toContain(awards[0].title);
   });
 });

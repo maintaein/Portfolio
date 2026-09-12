@@ -160,9 +160,6 @@ vi.mock('@/components/sections', async () => {
     AwardAndCertificateSection: () => (
       <SectionShell label="Awards" marker="Grand Prize" />
     ),
-    ContactSection: () => (
-      <SectionShell label="Contact" marker="Say hello" />
-    ),
     ExperienceSection: () => (
       <SectionShell label="Experience" marker="Frontend Experience" />
     ),
@@ -410,7 +407,6 @@ describe('HomeClient SSR 셸 구조', () => {
         'AboutSection',
         'AwardAndCertificateSection',
         'BootSequence',
-        'ContactSection',
         'ExperienceSection',
         'Footer',
         'ProjectsSection',
@@ -1001,8 +997,8 @@ describe('HomeClient Footer. 표제 계약', () => {
   // "Footer가 더 이상 문서 흐름에서 섹션 뒤로 비치지 않는다"의 구조적 절반이다.
   // 나머지 절반(Footer 자체가 position:fixed인지)은 Footer.test.tsx가 격리된
   // 컴포넌트로 고정한다. 여기서는 이 mock으로도 관측 가능한 두 가지만 본다:
-  // (1) Footer가 .section-stage 안으로 흡수되지 않았는가(=CONTACT의 위장
-  // 일곱 번째 섹션이 되지 않았는가), (2) active와 무관하게 항상 렌더되는가.
+  // (1) Footer가 .section-stage 안으로 흡수되지 않았는가(=위장 여섯 번째
+  // 섹션이 되지 않았는가), (2) active와 무관하게 항상 렌더되는가.
   it('Footer는 .section-stage의 자손이 아니며 active가 바뀌어도 항상 렌더된다', () => {
     const { container } = render(<HomeClient />);
     const stage = container.querySelector('.section-stage');
@@ -1017,30 +1013,31 @@ describe('HomeClient Footer. 표제 계약', () => {
     navigateTo(/^about$/i);
     expect(screen.getByText('Contact footer')).toBeInTheDocument();
 
-    navigateTo(/^contact$/i);
+    navigateTo(/^awards$/i);
     // overview에서만 렌더하도록 되돌리면(뮤테이션 g) 이 시점엔 이미 overview를
     // 벗어났으므로 이 어서션이 FAIL해야 한다.
     expect(screen.getByText('Contact footer')).toBeInTheDocument();
   });
 });
 
-describe('HomeClient CONTACT 섹션 등록', () => {
-  it('CONTACT가 다른 다섯 섹션과 같은 경로(nav·해시·data-section)로 등록된다', () => {
-    // 리터럴 'contact'를 직접 어서션한다. HOME_SECTION_CONFIG를 순회하는
-    // 검사는 CONTACT가 배열에서 통째로 빠져도(뮤테이션 b) 순회 범위 자체가
-    // 줄어들 뿐이라 못 잡는다. 존재를 하드코딩해야 그 구멍이 막힌다.
+describe('HomeClient AWARDS-CERTIFICATES 섹션 등록', () => {
+  it('AWARDS-CERTIFICATES가 다른 네 섹션과 같은 경로(nav·해시·data-section)로 등록된다', () => {
+    // 리터럴 'awards-certificates'를 직접 어서션한다. HOME_SECTION_CONFIG를
+    // 순회하는 검사는 AWARDS-CERTIFICATES가 배열에서 통째로 빠져도(뮤테이션 b)
+    // 순회 범위 자체가 줄어들 뿐이라 못 잡는다. 존재를 하드코딩해야 그
+    // 구멍이 막힌다.
     const { container } = render(<HomeClient />);
 
     expect(
-      screen.getByRole('button', { name: /^contact$/i })
+      screen.getByRole('button', { name: /^awards$/i })
     ).toBeInTheDocument();
 
-    navigateTo(/^contact$/i);
+    navigateTo(/^awards$/i);
 
-    expect(window.location.hash).toBe('#contact');
-    const contact = getSection(container, 'contact');
-    expect(contact).toHaveClass('section-visible');
-    expect(contact).toHaveTextContent('Say hello');
+    expect(window.location.hash).toBe('#awards-certificates');
+    const awardsSection = getSection(container, 'awards-certificates');
+    expect(awardsSection).toHaveClass('section-visible');
+    expect(awardsSection).toHaveTextContent('Grand Prize');
   });
 });
 
@@ -1178,21 +1175,21 @@ describe('HomeClient 유휴 예열', { timeout: 30_000 }, () => {
   // opacity·pointer-events·inert는 .section-hidden 값 그대로 둬야 한다.
   it('유휴로 데워진 섹션도 여전히 보이지 않는다, section-hidden·inert·aria-hidden 유지', async () => {
     const { container } = render(<HomeClient />);
-    // contact는 HOME_SECTION_CONFIG 마지막이라 prewarmId가 아니라 유휴
-    // 경로로만 데워진다. 이 테스트가 실제로 유휴 경로를 관측하고 있음을
-    // 보장한다.
-    const contact = getSection(container, 'contact');
+    // awards-certificates는 HOME_SECTION_CONFIG 마지막이라 prewarmId가
+    // 아니라 유휴 경로로만 데워진다. 이 테스트가 실제로 유휴 경로를
+    // 관측하고 있음을 보장한다.
+    const lastSection = getSection(container, 'awards-certificates');
 
     await waitFor(() => {
-      expect(contact).toHaveClass('section-prewarm');
+      expect(lastSection).toHaveClass('section-prewarm');
     }, IDLE_WARM_WAIT);
 
     // 뮤테이션: 유휴 예열이 opacity나 pointer-events까지 함께 열어주는
     // 구현으로 바뀌면(section-hidden을 걷어내거나 inert를 벗기면) 아래
     // 셋 중 하나가 FAIL한다.
-    expect(contact).toHaveClass('section-hidden');
-    expect(contact).toHaveAttribute('inert');
-    expect(contact).toHaveAttribute('aria-hidden', 'true');
+    expect(lastSection).toHaveClass('section-hidden');
+    expect(lastSection).toHaveAttribute('inert');
+    expect(lastSection).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('전환 중에는 유휴 예열이 새로 진행되지 않는다', async () => {
