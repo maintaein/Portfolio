@@ -298,147 +298,43 @@ describe('ProjectsSection 이름 목록', () => {
   });
 });
 
-const CYCLE_MS = 3000;
-const withVideo = projects.findIndex((p) =>
-  p.implementations?.some((impl) => impl.video)
-);
+describe('ProjectsSection 프리뷰 미디어', () => {
+  it('영상을 가진 프로젝트여도 프리뷰에는 그림만 놓는다', () => {
+    // 영상은 상세 판에서만 튼다. 섹션 프리뷰는 어느 프로젝트든 그림 한 장이다.
+    // 영상을 섹션 프리뷰로 되돌리면 이 어서션이 FAIL해야 한다
+    const withVideo = projects.findIndex((p) =>
+      p.implementations?.some((impl) => impl.video)
+    );
+    expect(withVideo).toBeGreaterThan(-1);
 
-describe('ProjectsSection 영상', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    // jsdom에는 play/pause가 없다
-    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
-    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('영상이 있는 프로젝트가 활성이면 첫 구현 기능 영상을 건다', () => {
     renderSection();
     goToIndex(withVideo);
-    const video = document.querySelector<HTMLVideoElement>('[data-part="preview-video"]')!;
-    expect(video.getAttribute('src')).toBe(
-      projects[withVideo].implementations!.filter((i) => i.video)[0].video
-    );
-    // 프리뷰는 손잡이일 뿐 클릭은 이름 버튼이 받는다
-    expect(video.getAttribute('aria-hidden')).toBe('true');
-    expect(video.hasAttribute('controls')).toBe(false);
-    expect(video.muted).toBe(true);
-    expect(video.hasAttribute('loop')).toBe(false);
-    expect(video.getAttribute('poster')).toBe(projects[withVideo].image);
-  });
 
-  it('3초마다 다음 구현 기능으로 넘어가고 마지막에서 처음으로 감긴다', () => {
-    renderSection();
-    goToIndex(withVideo);
-    const videos = projects[withVideo].implementations!
-      .filter((i) => i.video)
-      .map((i) => i.video);
-    for (let step = 1; step <= videos.length; step += 1) {
-      act(() => {
-        vi.advanceTimersByTime(CYCLE_MS);
-      });
-      const video = document.querySelector<HTMLVideoElement>('[data-part="preview-video"]')!;
-      expect(video.getAttribute('src')).toBe(videos[step % videos.length]);
-    }
-  });
-
-  it('3초가 차기 전에 영상이 끝나면 그 자리에서 다음으로 넘어간다', () => {
-    renderSection();
-    goToIndex(withVideo);
-    const videos = projects[withVideo].implementations!
-      .filter((i) => i.video)
-      .map((i) => i.video);
-    const video = document.querySelector<HTMLVideoElement>('[data-part="preview-video"]')!;
-    fireEvent.ended(video);
-    expect(
-      document.querySelector('[data-part="preview-video"]')!.getAttribute('src')
-    ).toBe(videos[1]);
-  });
-
-  it('프로젝트가 바뀌면 src를 놓고 순환 인덱스가 0으로 되돌아온다', () => {
-    renderSection();
-    goToIndex(withVideo);
-    act(() => {
-      vi.advanceTimersByTime(CYCLE_MS);
-    });
-    // withVideo는 계약을 통과하는 프로젝트라 같은 단추를 다시 누르면 이제
-    // 정당하게 상세가 열린다. 그래서 곧장 재클릭하지 않고, 다른 프로젝트를
-    // 거쳐 한 바퀴 돌아 되돌아온다. goToIndex는 이미 활성인 인덱스에서는
-    // 아무 일도 안 하므로, 다른 곳을 먼저 거쳐야 진짜 선택 전환이 된다
-    goToIndex((withVideo + 1) % N);
-    goToIndex(withVideo);
-    const video = document.querySelector<HTMLVideoElement>('[data-part="preview-video"]')!;
-    expect(video.getAttribute('src')).toBe(
-      projects[withVideo].implementations!.filter((i) => i.video)[0].video
-    );
-  });
-
-  it('섹션이 비활성이면 영상을 걸지 않는다', () => {
-    renderSection(SECTION_IDS.ABOUT);
-    goToIndex(withVideo);
-    const video = document.querySelector<HTMLVideoElement>('[data-part="preview-video"]');
-    expect(video?.getAttribute('src') ?? null).toBeNull();
-  });
-
-  it('reducedMotion이면 영상을 걸지 않고 poster만 남는다', () => {
-    render(
-      <SectionActivityProvider
-        active={SECTION_IDS.PROJECTS}
-        entryAnimationTarget={null}
-        pageVisible
-        routeResolved
-        motionReady
-        reducedMotion
-      >
-        <ProjectsSection />
-      </SectionActivityProvider>
-    );
-    goToIndex(withVideo);
-    expect(
-      document.querySelector('[data-part="preview-video"]')?.getAttribute('src') ?? null
-    ).toBeNull();
-  });
-
-  it('pageVisible이 false면 3초 타이머가 멈춘다', () => {
-    const { rerender } = renderSection();
-    goToIndex(withVideo);
-    const before = document
-      .querySelector('[data-part="preview-video"]')!
-      .getAttribute('src');
-    rerender(
-      <SectionActivityProvider
-        active={SECTION_IDS.PROJECTS}
-        entryAnimationTarget={null}
-        pageVisible={false}
-        routeResolved
-        motionReady
-        reducedMotion={false}
-      >
-        <ProjectsSection />
-      </SectionActivityProvider>
-    );
-    act(() => {
-      vi.advanceTimersByTime(CYCLE_MS * 3);
-    });
-    expect(
-      document.querySelector('[data-part="preview-video"]')!.getAttribute('src')
-    ).toBe(before);
-  });
-
-  it('video가 없는 프로젝트는 image로 떨어진다', () => {
-    const noVideo = projects.findIndex(
-      (p) => !p.implementations?.some((impl) => impl.video)
-    );
-    renderSection();
-    goToIndex(noVideo);
     expect(document.querySelector('[data-part="preview-video"]')).toBeNull();
     const img = document.querySelector('[data-part="preview-image"]')!;
     expect(img.getAttribute('src')).toContain(
-      projects[noVideo].image.split('/').pop()
+      projects[withVideo].image.split('/').pop()
     );
+  });
+
+  it('그림 위에 옅은 어둠 한 겹이 상시로 깔려 있다', () => {
+    // 상세를 한 번도 안 연 화면과 갔다 온 화면이 달라 보이면 안 되므로
+    // 이 겹은 전환과 무관하게 늘 있다
+    renderSection();
+    const veil = document.querySelector<HTMLElement>('[data-part="preview-veil"]');
+    expect(veil).not.toBeNull();
+    expect(veil!.className).toContain('pointer-events-none');
+    expect(veil!.className).toContain('bg-[rgb(0_0_0_/_0.14)]');
+
+    // 그림보다 뒤 = 그림 위에 깔린다. 캡션보다 앞 = 글자는 안 어두워진다
+    const img = document.querySelector('[data-part="preview-image"]')!;
+    const caption = document.querySelector('[data-part="preview-caption"]')!;
+    expect(
+      img.compareDocumentPosition(veil!) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      veil!.compareDocumentPosition(caption) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
   });
 });
 
@@ -1146,27 +1042,6 @@ describe('ProjectsSection 프로젝트 전환 모션', () => {
     expect(layerEl().style.transform).toBe('');
     expect(layerEl().style.opacity).toBe('');
   });
-
-  it('같은 프로젝트 안의 다음 장면으로 넘어갈 때는 전환을 안 태운다', async () => {
-    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
-    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
-    const fromTo = vi
-      .spyOn(gsap, 'fromTo')
-      .mockImplementation(() => fakeTween() as unknown as gsap.core.Tween);
-    await renderReady();
-
-    const many = projects.findIndex(
-      (p) => (p.implementations ?? []).filter((i) => i.video).length > 1
-    );
-    expect(many).toBeGreaterThan(-1);
-    goToIndex(many);
-    expect(fromTo).toHaveBeenCalledTimes(1);
-
-    // 순환 재생이 src를 갈아 끼운다. 같은 프로젝트 안의 다음 장면이라
-    // 상태 전환이 아니다. 여기에 걸면 3초마다 영원히 꿈틀대는 잔모션이 된다
-    fireEvent.ended(document.querySelector('[data-part="preview-video"]')!);
-    expect(fromTo).toHaveBeenCalledTimes(1);
-  });
 });
 
 describe('ProjectsSection 프리뷰 셰이더 모프', () => {
@@ -1263,7 +1138,7 @@ describe('ProjectsSection 프리뷰 셰이더 모프', () => {
     expect(layerEl().contains(canvas)).toBe(true);
 
     // 미디어보다 뒤 = 미디어 위에 그려진다
-    const media = document.querySelector('[data-part="preview-video"], [data-part="preview-image"]')!;
+    const media = document.querySelector('[data-part="preview-image"]')!;
     expect(
       media.compareDocumentPosition(canvas) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
@@ -1294,21 +1169,6 @@ describe('ProjectsSection 프리뷰 셰이더 모프', () => {
     expect(morphState.calls).toHaveLength(1);
     // 같은 그림 사이를 녹이는 것은 아무것도 전하지 않는 모션이다
     goToIndex(1);
-    expect(morphState.calls).toHaveLength(1);
-  });
-
-  it('순환 재생이 src를 갈아 끼울 때는 모프를 태우지 않는다', async () => {
-    morphState.result = true;
-    await renderWithMorph();
-    const many = projects.findIndex(
-      (p) => (p.implementations ?? []).filter((i) => i.video).length > 1
-    );
-    expect(many).toBeGreaterThan(-1);
-    goToIndex(many);
-    expect(morphState.calls).toHaveLength(1);
-
-    // 같은 프로젝트 안의 다음 장면이다. 상태 전환이 아니다
-    fireEvent.ended(document.querySelector('[data-part="preview-video"]')!);
     expect(morphState.calls).toHaveLength(1);
   });
 

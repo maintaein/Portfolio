@@ -690,6 +690,33 @@ describe('ProjectsFlip. 닫기 비행', { timeout: 30_000 }, () => {
     }
   });
 
+  it('닫기 비행이 뜨면 캡션이 왼쪽에서 제자리로 들어오고 착지와 같은 시각에 끝난다', async () => {
+    const reservations = stubDelayedCall();
+    const fromTo = vi.spyOn(gsap, 'fromTo');
+    const closeButton = await openAndGetCloseButton();
+    vi.spyOn(window.history, 'back').mockImplementation(() => {});
+
+    fireEvent.click(closeButton);
+    act(() => {
+      reservations[0].run();
+    });
+
+    const caption = document.querySelector('[data-part="preview-caption"]')!;
+    const call = fromTo.mock.calls.find((c) => c[0] === caption);
+    expect(call).toBeDefined();
+    expect(call![1]).toMatchObject({ xPercent: -8, opacity: 0 });
+
+    const vars = call![2] as Record<string, unknown>;
+    expect(vars.xPercent).toBe(0);
+    expect(vars.opacity).toBe(1);
+    expect(vars.ease).toBe(SITE_EASE);
+    // 딜레이와 길이를 합치면 stage 착지와 같은 시각(0.5초)이다. 글자가
+    // 제자리에 선 채로 판이 내려앉아야 두 움직임이 하나로 읽힌다
+    expect((vars.delay as number) + (vars.duration as number)).toBeCloseTo(0.5);
+    // 인라인 값을 안 걷으면 다음 전환이 이 자리에서 시작한다
+    expect(vars.clearProps).toBe('transform,opacity');
+  });
+
   it('붕괴 중에 모달이 걷혀 가면 예약된 비행이 취소된다', async () => {
     const reservations = stubDelayedCall();
     const fit = vi.spyOn(Flip, 'fit');

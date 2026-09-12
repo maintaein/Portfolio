@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { isProjectModalReady } from '@/lib/utils/projectContract';
@@ -69,9 +69,6 @@ export function reconcileProjectModal(historyState: unknown): string | null {
 }
 
 const MUTED = 'rgb(255 255 255 / 0.62)';
-
-// 프로젝트 프리뷰 영상 순환 주기. 정본은 스펙 §4.6
-const CYCLE_MS = 3000;
 
 // 이름 목록의 휠 조형. 조형의 정본은
 // .claude/designRefactoring/optionWheel/optionWheel.tsx의 runFrame이고,
@@ -202,7 +199,7 @@ function snapshotMedia(
 }
 
 export default function ProjectsSection() {
-  const { active, pageVisible, routeResolved, motionReady, reducedMotion } =
+  const { routeResolved, motionReady, reducedMotion } =
     useSectionActivity();
   const [activeIndex, setActiveIndex] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
@@ -240,6 +237,9 @@ export default function ProjectsSection() {
   // 비행 앞뒤로 접힘 프리뷰(previewRef 자신)에 거는 opacity tween. 전환
   // tween(swapTweenRef, mediaLayerRef 담당)과는 대상도 시점도 다르다
   const previewTweenRef = useRef<{ kill: () => void } | null>(null);
+  // 닫기 비행에서만 도는 캡션 등장 tween. 프리뷰 상자 전체를 채우는
+  // previewTweenRef와 대상도 구간도 다르므로 ref를 따로 둔다
+  const captionTweenRef = useRef<{ kill: () => void } | null>(null);
   // 셰이더 모프의 명령형 손잡이. next/dynamic이 늦게 풀어 주므로 처음 몇
   // 프레임은 null이고, 그동안의 전환은 아래 gsap 폴백이 맡는다
   const morphHandleRef = useRef<PreviewMorphHandle | null>(null);
@@ -273,8 +273,8 @@ export default function ProjectsSection() {
   // 잃지 않으려고 노드 자체를 들고 있는다
   const hiddenNameRef = useRef<HTMLElement | null>(null);
   // 닫기 비행이 프리뷰 상자 안에 얹어 둔 미디어 다리. 모달이 내려간 뒤(정리
-  // effect)에야 서서히 지운다. 그 전에 지우면 아직 안 돈 프리뷰 영상의
-  // poster/검은 화면이 그대로 드러난다
+  // effect)에야 서서히 지운다. 그 전에 지우면 착지 순간에 프리뷰 그림이
+  // 한 번 바뀌어 튄다
   const previewBridgeRef = useRef<HTMLCanvasElement | null>(null);
   // 모달을 연 시점의 인덱스. 착지점은 이 값으로 집는다. 펼친 상태에서는
   // 프로젝트를 못 바꾸니 지금은 activeIndex와 같지만, 같다는 사실에 기대는
@@ -293,67 +293,11 @@ export default function ProjectsSection() {
   const pushedRef = useRef(false);
 
   const activeProject = projects[activeIndex];
-  const videoList = useMemo(
-    () =>
-      (activeProject.implementations ?? [])
-        .map((impl) => impl.video)
-        .filter((v): v is string => Boolean(v)),
-    [activeProject]
-  );
-  const hasVideo = videoList.length > 0;
-
-  // 정지 조건은 하나로 모은다. 정본은 스펙 §4.6. 호버로 프리뷰가 갈려도
-  // 이 식에 호버는 안 들어가므로 계속 재생한다
-  const playable =
-    active === SECTION_IDS.PROJECTS &&
-    !modalOpen &&
-    pageVisible &&
-    motionReady &&
-    !reducedMotion;
-
-  const [cycleIndex, setCycleIndex] = useState(0);
   const [mediaError, setMediaError] = useState(false);
-  const videoElRef = useRef<HTMLVideoElement | null>(null);
-  const currentSrc = hasVideo ? (videoList[cycleIndex] ?? null) : null;
-
-  // 실제로 그릴 src. playable일 때만 currentSrc를 따라가고, 아니면 멈춘 자리를
-  // 그대로 둔다. src를 놓는 것은 활성 프로젝트가 바뀔 때(goTo가 cycleIndex를
-  // 0으로 되돌릴 때)뿐이다
-  const [committedSrc, setCommittedSrc] = useState<string | null>(null);
-  useEffect(() => {
-    if (playable) setCommittedSrc(currentSrc);
-  }, [playable, currentSrc]);
 
   useEffect(() => {
     setMediaError(false);
   }, [activeIndex]);
-
-  useEffect(() => {
-    const video = videoElRef.current;
-    if (!video) return;
-    if (!playable) {
-      video.pause();
-      return;
-    }
-    // jsdom의 play()는 Promise를 돌려주지 않는다. 실제 브라우저의 거절만 조용히 삼킨다
-    const playResult = video.play();
-    if (playResult && typeof playResult.catch === 'function') {
-      playResult.catch(() => {});
-    }
-  }, [playable, committedSrc]);
-
-  // 영상이 하나뿐이면 순환하지 않는다. onEnded가 3초를 기다리지 않고 다음으로 넘긴다
-  useEffect(() => {
-    if (!playable || videoList.length < 2) return;
-    const timeout = setTimeout(() => {
-      setCycleIndex((i) => (i + 1) % videoList.length);
-    }, CYCLE_MS);
-    return () => clearTimeout(timeout);
-  }, [playable, videoList.length, cycleIndex]);
-
-  const handleVideoEnded = useCallback(() => {
-    setCycleIndex((i) => (videoList.length > 0 ? (i + 1) % videoList.length : 0));
-  }, [videoList.length]);
 
   const handleMediaError = useCallback(() => {
     setMediaError(true);
@@ -447,8 +391,18 @@ export default function ProjectsSection() {
       gsapModuleRef.current?.gsap.set(previewRef.current, { clearProps: 'opacity' });
     }
 
-    // 닫기 비행이 프리뷰 상자에 얹어 둔 다리를 크로스페이드로 걷는다. 이
-    // 시점에는 playable이 다시 참이 되어 프리뷰 영상이 이어서 돈다
+    captionTweenRef.current?.kill();
+    captionTweenRef.current = null;
+    const abortedCaption = mediaLayerRef.current?.querySelector<HTMLElement>(
+      '[data-part="preview-caption"]'
+    );
+    if (abortedCaption) {
+      gsapModuleRef.current?.gsap.set(abortedCaption, {
+        clearProps: 'transform,opacity',
+      });
+    }
+
+    // 닫기 비행이 프리뷰 상자에 얹어 둔 다리를 크로스페이드로 걷는다
     if (previewBridgeRef.current) {
       const bridge = previewBridgeRef.current;
       previewBridgeRef.current = null;
@@ -655,8 +609,8 @@ export default function ProjectsSection() {
 
         // 착지 직전 마지막으로 보이던 stage의 그림을 캔버스 둘에 각각 뜬다.
         // 하나는 날아 내려가는 stage 위에(모달과 함께 사라지니 따로 안
-        // 지운다), 하나는 착지할 프리뷰 상자 안에 놓아 착지 순간과 프리뷰
-        // 영상이 다시 도는 순간 사이에 그림이 바뀌어 튀지 않게 한다
+        // 지운다), 하나는 착지할 프리뷰 상자 안에 놓아 착지 순간에 그림이
+        // 바뀌어 튀지 않게 한다
         const stageMediaEl = stageEl.querySelector<HTMLVideoElement | HTMLImageElement>(
           'figure:not([hidden]) video, figure:not([hidden]) img'
         );
@@ -666,11 +620,14 @@ export default function ProjectsSection() {
         if (previewLayer) {
           const previewBridge = snapshotMedia(stageMediaEl);
           if (previewBridge) {
-            // 캡션(preview-caption)은 이 상자의 마지막 자식이다. 다리는
-            // 그 앞에 꽂아야 미디어 위, 캡션 아래에 선다. 캡션 뒤에 두면
-            // 다리가 글자를 덮는다
-            const caption = previewLayer.querySelector('[data-part="preview-caption"]');
-            if (caption) previewLayer.insertBefore(previewBridge, caption);
+            // 어둠 겹(preview-veil)과 캡션(preview-caption)이 이 상자의
+            // 마지막 두 자식이다. 다리는 어둠 겹 앞에 꽂아야 미디어와 같은
+            // 어둠을 받는다. 뒤에 꽂으면 다리만 밝아 크로스페이드 동안
+            // 밝기가 한 번 튄다
+            const anchor =
+              previewLayer.querySelector('[data-part="preview-veil"]') ??
+              previewLayer.querySelector('[data-part="preview-caption"]');
+            if (anchor) previewLayer.insertBefore(previewBridge, anchor);
             else previewLayer.appendChild(previewBridge);
             previewBridgeRef.current = previewBridge;
           }
@@ -734,6 +691,33 @@ export default function ProjectsSection() {
             clearProps: 'opacity',
           })
         );
+
+        // 상세에서 섹션으로 돌아오는 이 순간에만 캡션이 왼쪽에서 들어온다.
+        // 프리뷰 상자가 opacity로 차는 구간과 겹쳐 두고, 착지와 같은
+        // 시각(FLIP_DURATION_MS)에 끝내 글자가 제자리에 선 채로 내려앉게
+        // 한다. 움직이는 것은 캡션 한 겹뿐이고 그림도 모프 캔버스도 그대로다.
+        // fromTo의 기본 immediateRender가 시작값을 지금 박아 주는데, 이
+        // 시점의 프리뷰 상자는 아직 투명이라 그 박힘이 화면에 안 보인다
+        const captionEl = previewLayer?.querySelector<HTMLElement>(
+          '[data-part="preview-caption"]'
+        );
+        captionTweenRef.current?.kill();
+        captionTweenRef.current = captionEl
+          ? asKillable(
+              mod.gsap.fromTo(
+                captionEl,
+                { xPercent: -8, opacity: 0 },
+                {
+                  xPercent: 0,
+                  opacity: 1,
+                  duration: 0.32,
+                  delay: 0.18,
+                  ease: mod.SITE_EASE,
+                  clearProps: 'transform,opacity',
+                }
+              )
+            )
+          : null;
 
         flightRef.current = asKillable(
           mod.Flip.fit(stageEl, previewEl, {
@@ -813,7 +797,7 @@ export default function ProjectsSection() {
     // 화면이므로, 다리가 없으면 그 자리에서 그림이 한 번 바뀌어 튄다.
     // 프리뷰 노드는 아직 살아 있다(modalOpen이 data-flip-id만 뗀다)
     const previewMediaEl =
-      videoElRef.current ?? mediaLayerRef.current?.querySelector('img') ?? null;
+      mediaLayerRef.current?.querySelector('img') ?? null;
     const bridge = snapshotMedia(previewMediaEl);
     // stage는 relative grid ... overflow-hidden이라 absolute 자식이 상자를
     // 꽉 채운다. stage의 rounded-media가 잘라 준다
@@ -1125,17 +1109,16 @@ export default function ProjectsSection() {
   // activeIndexRef가 이미 바뀌어 있어 첫 클릭에서 바로 열려버린다
   const goTo = useCallback((next: number, opts?: { focus?: boolean }) => {
     // 모프는 출발 화면을 여기서 굳혀야 한다. 아래 setActiveIndex가 커밋되고
-    // effect가 돌 때는 <video>의 src와 poster가 이미 새 프로젝트로 갈려 있어
+    // effect가 돌 때는 프리뷰 <Image>의 src가 이미 새 프로젝트로 갈려 있어
     // 그때 굳히면 두 텍스처가 같은 그림이 된다
     if (next !== activeIndexRef.current) {
       activeIndexRef.current = next;
       const fromEl =
-        videoElRef.current ?? mediaLayerRef.current?.querySelector('img') ?? null;
+        mediaLayerRef.current?.querySelector('img') ?? null;
       morphStartedRef.current =
         morphHandleRef.current?.morph(fromEl, projects[next].image) ?? false;
     }
     setActiveIndex(next);
-    setCycleIndex(0);
     if (opts?.focus) nameRefs.current[next]?.focus();
   }, []);
 
@@ -1209,7 +1192,7 @@ export default function ProjectsSection() {
             data-flip-id={modalOpen ? undefined : `pv-${activeProject.title}`}
             className="w-full lg:w-[80%] aspect-video"
           >
-            {/* 자르는 쪽이 여기다. 영상은 object-cover로 상자를 넘치므로
+            {/* 자르는 쪽이 여기다. 그림은 object-cover로 상자를 넘치므로
                 반경만 줘서는 모서리가 안 깎인다. rounded-media는 상세 판
                 무대와 같은 토큰이다(비행 양 끝의 모서리가 같아야 한다).
                 이 상자는 전환 tween이 안 붙는다 - 잘라내는 틀은 제자리에
@@ -1231,21 +1214,6 @@ export default function ProjectsSection() {
                     MEDIA UNAVAILABLE
                   </span>
                 </div>
-              ) : hasVideo ? (
-                <video
-                  ref={(el) => {
-                    videoElRef.current = el;
-                  }}
-                  data-part="preview-video"
-                  aria-hidden="true"
-                  muted
-                  playsInline
-                  poster={activeProject.image}
-                  src={committedSrc ?? undefined}
-                  onEnded={handleVideoEnded}
-                  onError={handleMediaError}
-                  className="absolute inset-0 h-full w-full object-cover pointer-events-none"
-                />
               ) : (
                 <Image
                   data-part="preview-image"
@@ -1271,7 +1239,19 @@ export default function ProjectsSection() {
                 />
               ) : null}
 
-              {/* 영상 위 캡션. 프리뷰 컨테이너에 aria-hidden이 걸려 있으므로
+              {/* 그림 위에 늘 깔리는 옅은 어둠. 캡션 글자가 어느 그림 위에
+                  앉든 같은 바닥을 받게 하고, 상세에서 돌아올 때 들어오는
+                  캡션이 그림과 섞이지 않게 한다. 상세를 한 번도 안 연
+                  화면과 갔다 온 화면이 달라 보이면 안 되므로 상시로 둔다.
+                  모프 캔버스 위에 놓아야 전환 0.56초 동안 밝기가 안
+                  흔들린다 */}
+              <div
+                data-part="preview-veil"
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 bg-[rgb(0_0_0_/_0.14)]"
+              />
+
+              {/* 그림 위 캡션. 프리뷰 컨테이너에 aria-hidden이 걸려 있으므로
                   이 글자는 장식이고, 같은 내용을 오른쪽 이름 목록이 이미
                   스크린리더에 준다. 그래서 이름 목록보다 작고 흐리다 -
                   같은 제목이 화면에 둘이니 어느 쪽이 주인공인지 크기와
