@@ -118,6 +118,17 @@ const PREVIEW_SWAP_MS = 300;
 // 같은 값을 복제해 둔다. 숫자 하나 때문에 공유 모듈을 파지 않는다
 const FLIP_DURATION_MS = 500;
 
+// 상세에서 돌아온 뒤 캡션이 들어오는 시간. 비행(500ms)보다 길다. 이 등장은
+// 비행이 다 끝나고 혼자 도는 구간이라 서둘 이유가 없고, 천천히 열려야 띠와
+// 글자가 한 몸으로 읽힌다
+const CAPTION_ENTER_MS = 800;
+
+// 캡션이 왼쪽부터 열릴 때 쓰는 두 끝값. 오른쪽 변만 움직이므로 왼쪽 끝에
+// 붙은 채로 폭이 자란다. 네 값 모두 같은 단위로 적어야 GSAP이 문자열을
+// 숫자 단위로 갈라 보간한다
+const CAPTION_CLIP_CLOSED = 'inset(0% 100% 0% 0%)';
+const CAPTION_CLIP_OPEN = 'inset(0% 0% 0% 0%)';
+
 // 제목만 100ms 더 날린다. 사용자가 글자 비행을 조금 느리게 보고 싶다고
 // 했다. 100ms는 느리다고 느껴지되 이미지와 따로 논다고 느껴지지는 않는
 // 값이다(설계 문서 "비행의 시작과 끝을 잇는다" 참고)
@@ -394,34 +405,54 @@ export default function ProjectsSection() {
       gsapModuleRef.current?.gsap.set(previewRef.current, { clearProps: 'opacity' });
     }
 
-    // 상세에서 돌아왔다면 여기가 캡션 글자를 들여보내는 자리다. 모달이 막
-    // 사라져 프리뷰가 처음으로 온전히 보이는 순간이기 때문이다. 비행이 도는
-    // 500ms 안에 밀어 봐야 소용이 없다. 그 구간의 프리뷰 상자는 바로 위
+    // 상세에서 돌아왔다면 여기가 캡션을 들여보내는 자리다. 모달이 막 사라져
+    // 프리뷰가 처음으로 온전히 보이는 순간이기 때문이다. 비행이 도는 500ms
+    // 안에 열어 봐야 소용이 없다. 그 구간의 프리뷰 상자는 바로 위
     // previewTween이 투명에서 채우는 중인 데다, 착지하는 stage가 그 위를
-    // 덮고 내려앉아 무엇을 움직여도 화면에 안 나온다. 글자를 왼쪽으로
-    // 치워 두는 것은 closeModal이 비행을 띄우는 시점에 이미 해 두었다.
-    // 비행 도중에 모달이 걷혀 갔거나(popstate) 애초에 안 열렸다면 밀 것이
+    // 덮고 내려앉아 무엇을 움직여도 화면에 안 나온다. 미리 닫아 두는 것은
+    // closeModal이 비행을 띄우는 시점에 이미 해 두었다.
+    // 어둠 띠와 글자가 같은 길이로 같이 움직여 한 덩어리로 들어온다.
+    // 비행 도중에 모달이 걷혀 갔거나(popstate) 애초에 안 열렸다면 열 것이
     // 없으니 인라인 값만 걷는다
     captionTweenRef.current?.kill();
     captionTweenRef.current = null;
+    const captionEl = mediaLayerRef.current?.querySelector<HTMLElement>(
+      '[data-part="preview-caption"]'
+    );
     const captionTextEl = mediaLayerRef.current?.querySelector<HTMLElement>(
       '[data-part="preview-caption-text"]'
     );
     const captionMod = flipModule();
-    if (captionTextEl && returning && captionMod) {
-      captionTweenRef.current = asKillable(
-        captionMod.gsap.to(captionTextEl, {
-          xPercent: 0,
-          opacity: 1,
-          duration: 0.45,
-          ease: captionMod.SITE_EASE,
-          clearProps: 'transform,opacity',
-        })
-      );
-    } else if (captionTextEl) {
-      gsapModuleRef.current?.gsap.set(captionTextEl, {
+    if (captionEl && captionTextEl && returning && captionMod) {
+      const seconds = CAPTION_ENTER_MS / 1000;
+      const bandTween = captionMod.gsap.to(captionEl, {
+        clipPath: CAPTION_CLIP_OPEN,
+        duration: seconds,
+        ease: captionMod.SITE_EASE,
+        clearProps: 'clipPath',
+      });
+      const textTween = captionMod.gsap.to(captionTextEl, {
+        xPercent: 0,
+        opacity: 1,
+        duration: seconds,
+        ease: captionMod.SITE_EASE,
         clearProps: 'transform,opacity',
       });
+      captionTweenRef.current = {
+        kill: () => {
+          bandTween.kill();
+          textTween.kill();
+        },
+      };
+    } else {
+      if (captionEl) {
+        gsapModuleRef.current?.gsap.set(captionEl, { clearProps: 'clipPath' });
+      }
+      if (captionTextEl) {
+        gsapModuleRef.current?.gsap.set(captionTextEl, {
+          clearProps: 'transform,opacity',
+        });
+      }
     }
 
     // 닫기 비행이 프리뷰 상자에 얹어 둔 다리를 크로스페이드로 걷는다
@@ -712,17 +743,24 @@ export default function ProjectsSection() {
           })
         );
 
-        // 돌아간 화면에서 왼쪽으로부터 들어올 글자를 지금 미리 치워 둔다.
-        // 실제로 미는 것은 모달이 다 내려간 뒤이고(modalOpen 정리 effect),
-        // 치우기만 여기서 하는 이유는 이 순간의 프리뷰 상자가 아직 투명이라
-        // 글자가 사라지는 장면 자체가 안 보이기 때문이다. 움직이는 것은 글자
-        // 묶음 하나뿐이다. 어둠 띠는 제자리에 있어야 오른쪽 끝에 안 어두워진
-        // 구간이 안 생기고, 그림도 모프 캔버스도 그대로다
+        // 돌아간 화면에서 왼쪽부터 열릴 캡션을 지금 미리 닫아 둔다. 실제로
+        // 여는 것은 모달이 다 내려간 뒤이고(modalOpen 정리 effect), 닫기만
+        // 여기서 하는 이유는 이 순간의 프리뷰 상자가 아직 투명이라 캡션이
+        // 사라지는 장면 자체가 안 보이기 때문이다.
+        // 어둠 띠는 clip으로 연다. 띠를 글자처럼 밀면 민 폭만큼 오른쪽 끝이
+        // 안 어두운 채로 남는다. clip은 자리를 안 옮기니 그 구간이 안 생긴다.
+        // 그림도 모프 캔버스도 그대로다
+        const captionEl = previewLayer?.querySelector<HTMLElement>(
+          '[data-part="preview-caption"]'
+        );
         const captionTextEl = previewLayer?.querySelector<HTMLElement>(
           '[data-part="preview-caption-text"]'
         );
         captionTweenRef.current?.kill();
         captionTweenRef.current = null;
+        if (captionEl) {
+          mod.gsap.set(captionEl, { clipPath: CAPTION_CLIP_CLOSED });
+        }
         if (captionTextEl) {
           mod.gsap.set(captionTextEl, { xPercent: -8, opacity: 0 });
         }
@@ -1250,7 +1288,7 @@ export default function ProjectsSection() {
               {/* 그림 아래쪽에 늘 깔리는 어둠 띠. 캡션 글자가 어느 그림 위에
                   앉든 같은 바닥을 받게 한다. 상세를 한 번도 안 연 화면과 갔다
                   온 화면이 달라 보이면 안 되므로 띠는 상시로 있고, 상세에서
-                  돌아올 때 왼쪽에서 들어오는 것은 안에 든 글자 묶음뿐이다.
+                  돌아올 때만 clip으로 왼쪽부터 열린다.
                   absolute라 subtitle이 있든 없든 프리뷰 높이가 안 흔들린다
                   (FLIP 출발 좌표가 곧 이 높이다). 오류 화면에는 이미 제목이
                   크게 있어 통째로 뺀다 */}
@@ -1260,15 +1298,15 @@ export default function ProjectsSection() {
                   className="pointer-events-none absolute inset-x-0 bottom-0 px-5 pb-4 pt-12"
                   style={{ background: PREVIEW_CAPTION_SCRIM }}
                 >
-                  {/* 미는 것은 이 안쪽 묶음이다. 바깥 띠까지 같이 밀면 민
-                      폭만큼 오른쪽 끝이 안 어두운 채로 남는다. 프리뷰
-                      컨테이너에 aria-hidden이 걸려 있으므로 이 글자는
-                      장식이고, 같은 내용을 오른쪽 이름 목록이 이미
-                      스크린리더에 준다. 그래서 이름 목록보다 작고 흐리다.
-                      같은 제목이 화면에 둘이니 어느 쪽이 주인공인지 크기와
-                      색으로 갈라야 한다. subtitle은 선택 필드이고 TDS 것에는
-                      리터럴 줄바꿈이 들어 있는데, HTML 공백 접기가 그것을 한
-                      칸으로 만들고 truncate가 한 줄로 고정한다 */}
+                  {/* 자리를 옮기는 것은 이 안쪽 묶음뿐이다. 바깥 띠까지 같이
+                      밀면 민 폭만큼 오른쪽 끝이 안 어두운 채로 남아서, 띠는
+                      clip으로 연다. 프리뷰 컨테이너에 aria-hidden이 걸려
+                      있으므로 이 글자는 장식이고, 같은 내용을 오른쪽 이름
+                      목록이 이미 스크린리더에 준다. 그래서 이름 목록보다 작고
+                      흐리다. 같은 제목이 화면에 둘이니 어느 쪽이 주인공인지
+                      크기와 색으로 갈라야 한다. subtitle은 선택 필드이고 TDS
+                      것에는 리터럴 줄바꿈이 들어 있는데, HTML 공백 접기가
+                      그것을 한 칸으로 만들고 truncate가 한 줄로 고정한다 */}
                   <div data-part="preview-caption-text">
                     <p className="text-t5 font-semibold text-[var(--color-text-primary)]">
                       {activeProject.title}

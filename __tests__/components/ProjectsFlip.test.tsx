@@ -690,7 +690,7 @@ describe('ProjectsFlip. 닫기 비행', { timeout: 30_000 }, () => {
     }
   });
 
-  it('비행 동안에는 캡션 글자를 치워만 두고 모달이 내려간 뒤에 들여보낸다', async () => {
+  it('비행 동안에는 캡션을 치워만 두고 모달이 내려간 뒤에 띠와 글자를 같이 들여보낸다', async () => {
     const reservations = stubDelayedCall();
     const fit = vi.spyOn(Flip, 'fit');
     const set = vi.spyOn(gsap, 'set');
@@ -703,14 +703,22 @@ describe('ProjectsFlip. 닫기 비행', { timeout: 30_000 }, () => {
       reservations[0].run();
     });
 
+    const band = document.querySelector('[data-part="preview-caption"]')!;
     const text = document.querySelector('[data-part="preview-caption-text"]')!;
     // 비행이 뜨는 순간에는 치우기만 한다. 이 구간의 프리뷰 상자는 아직
-    // 투명한 데다 착지하는 stage가 그 위를 덮으므로, 여기서 밀면 아무도
-    // 못 본다. 여기서 미는 코드로 되돌리면 이 어서션이 FAIL해야 한다
-    const stash = set.mock.calls.filter((call) => call[0] === text);
-    expect(stash).toHaveLength(1);
-    expect(stash[0][1]).toMatchObject({ xPercent: -8, opacity: 0 });
-    expect(to.mock.calls.some((call) => call[0] === text)).toBe(false);
+    // 투명한 데다 착지하는 stage가 그 위를 덮으므로, 여기서 열면 아무도
+    // 못 본다. 여기서 여는 코드로 되돌리면 이 어서션이 FAIL해야 한다
+    const bandStash = set.mock.calls.filter((call) => call[0] === band);
+    expect(bandStash).toHaveLength(1);
+    // 띠는 폭이 0인 채로 왼쪽 변에 붙어 있다. 오른쪽 변만 100퍼센트 안으로
+    // 들어와 있는 값이다
+    expect(bandStash[0][1]).toMatchObject({ clipPath: 'inset(0% 100% 0% 0%)' });
+    const textStash = set.mock.calls.filter((call) => call[0] === text);
+    expect(textStash).toHaveLength(1);
+    expect(textStash[0][1]).toMatchObject({ xPercent: -8, opacity: 0 });
+    expect(
+      to.mock.calls.some((call) => call[0] === band || call[0] === text)
+    ).toBe(false);
 
     // 착지 둘을 다 태워야 모달이 내려간다(S-1과 같은 순서)
     act(() => {
@@ -720,15 +728,27 @@ describe('ProjectsFlip. 닫기 비행', { timeout: 30_000 }, () => {
       (fit.mock.calls[1][2] as { onComplete: () => void }).onComplete();
     });
 
+    const open = to.mock.calls.find((call) => call[0] === band);
+    expect(open).toBeDefined();
+    const bandVars = open![1] as Record<string, unknown>;
+    expect(bandVars.clipPath).toBe('inset(0% 0% 0% 0%)');
+    // 인라인 값을 안 걷으면 다음 전환이 이 자리에서 시작한다
+    expect(bandVars.clearProps).toBe('clipPath');
+
     const slide = to.mock.calls.find((call) => call[0] === text);
     expect(slide).toBeDefined();
-    const vars = slide![1] as Record<string, unknown>;
-    expect(vars.xPercent).toBe(0);
-    expect(vars.opacity).toBe(1);
-    expect(vars.ease).toBe(SITE_EASE);
-    expect(vars.duration as number).toBeGreaterThan(0);
-    // 인라인 값을 안 걷으면 다음 전환이 이 자리에서 시작한다
-    expect(vars.clearProps).toBe('transform,opacity');
+    const textVars = slide![1] as Record<string, unknown>;
+    expect(textVars.xPercent).toBe(0);
+    expect(textVars.opacity).toBe(1);
+    expect(textVars.clearProps).toBe('transform,opacity');
+
+    // 띠와 글자가 한 덩어리로 읽히려면 길이와 이징이 같아야 한다. 하나라도
+    // 어긋나면 어둠이 글자를 앞지르거나 뒤처져 두 겹으로 보인다
+    expect(bandVars.ease).toBe(SITE_EASE);
+    expect(textVars.ease).toBe(SITE_EASE);
+    expect(textVars.duration).toBe(bandVars.duration);
+    // 이 등장은 비행이 다 끝나고 혼자 도는 구간이라 비행(500ms)보다 길다
+    expect(textVars.duration as number).toBeGreaterThan(0.5);
   });
 
   it('붕괴 중에 모달이 걷혀 가면 예약된 비행이 취소된다', async () => {

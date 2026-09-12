@@ -318,9 +318,9 @@ describe('ProjectsSection 프리뷰 미디어', () => {
   });
 
   it('그림 아래쪽 어둠 띠 안에 글자 묶음이 따로 들어 있다', () => {
-    // 띠는 전환과 무관하게 늘 있고, 상세에서 돌아올 때 왼쪽에서 들어오는
-    // 것은 안쪽 묶음뿐이다. 띠까지 같이 밀면 민 폭만큼 오른쪽 끝이 안
-    // 어두운 채로 남는다
+    // 띠는 전환과 무관하게 늘 있다. 상세에서 돌아올 때 띠와 글자가 같이
+    // 왼쪽부터 열리는데, 띠는 clip으로 열고 글자만 민다. 띠까지 같이 밀면
+    // 민 폭만큼 오른쪽 끝이 안 어두운 채로 남기 때문이다
     renderSection();
     const caption = document.querySelector<HTMLElement>(
       '[data-part="preview-caption"]'
