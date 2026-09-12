@@ -690,9 +690,11 @@ describe('ProjectsFlip. 닫기 비행', { timeout: 30_000 }, () => {
     }
   });
 
-  it('닫기 비행이 뜨면 캡션이 왼쪽에서 제자리로 들어오고 착지와 같은 시각에 끝난다', async () => {
+  it('비행 동안에는 캡션 글자를 치워만 두고 모달이 내려간 뒤에 들여보낸다', async () => {
     const reservations = stubDelayedCall();
-    const fromTo = vi.spyOn(gsap, 'fromTo');
+    const fit = vi.spyOn(Flip, 'fit');
+    const set = vi.spyOn(gsap, 'set');
+    const to = vi.spyOn(gsap, 'to');
     const closeButton = await openAndGetCloseButton();
     vi.spyOn(window.history, 'back').mockImplementation(() => {});
 
@@ -701,18 +703,30 @@ describe('ProjectsFlip. 닫기 비행', { timeout: 30_000 }, () => {
       reservations[0].run();
     });
 
-    const caption = document.querySelector('[data-part="preview-caption"]')!;
-    const call = fromTo.mock.calls.find((c) => c[0] === caption);
-    expect(call).toBeDefined();
-    expect(call![1]).toMatchObject({ xPercent: -8, opacity: 0 });
+    const text = document.querySelector('[data-part="preview-caption-text"]')!;
+    // 비행이 뜨는 순간에는 치우기만 한다. 이 구간의 프리뷰 상자는 아직
+    // 투명한 데다 착지하는 stage가 그 위를 덮으므로, 여기서 밀면 아무도
+    // 못 본다. 여기서 미는 코드로 되돌리면 이 어서션이 FAIL해야 한다
+    const stash = set.mock.calls.filter((call) => call[0] === text);
+    expect(stash).toHaveLength(1);
+    expect(stash[0][1]).toMatchObject({ xPercent: -8, opacity: 0 });
+    expect(to.mock.calls.some((call) => call[0] === text)).toBe(false);
 
-    const vars = call![2] as Record<string, unknown>;
+    // 착지 둘을 다 태워야 모달이 내려간다(S-1과 같은 순서)
+    act(() => {
+      (fit.mock.calls[0][2] as { onComplete: () => void }).onComplete();
+    });
+    act(() => {
+      (fit.mock.calls[1][2] as { onComplete: () => void }).onComplete();
+    });
+
+    const slide = to.mock.calls.find((call) => call[0] === text);
+    expect(slide).toBeDefined();
+    const vars = slide![1] as Record<string, unknown>;
     expect(vars.xPercent).toBe(0);
     expect(vars.opacity).toBe(1);
     expect(vars.ease).toBe(SITE_EASE);
-    // 딜레이와 길이를 합치면 stage 착지와 같은 시각(0.5초)이다. 글자가
-    // 제자리에 선 채로 판이 내려앉아야 두 움직임이 하나로 읽힌다
-    expect((vars.delay as number) + (vars.duration as number)).toBeCloseTo(0.5);
+    expect(vars.duration as number).toBeGreaterThan(0);
     // 인라인 값을 안 걷으면 다음 전환이 이 자리에서 시작한다
     expect(vars.clearProps).toBe('transform,opacity');
   });

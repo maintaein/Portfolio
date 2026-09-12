@@ -317,23 +317,27 @@ describe('ProjectsSection 프리뷰 미디어', () => {
     );
   });
 
-  it('그림 위에 옅은 어둠 한 겹이 상시로 깔려 있다', () => {
-    // 상세를 한 번도 안 연 화면과 갔다 온 화면이 달라 보이면 안 되므로
-    // 이 겹은 전환과 무관하게 늘 있다
+  it('그림 아래쪽 어둠 띠 안에 글자 묶음이 따로 들어 있다', () => {
+    // 띠는 전환과 무관하게 늘 있고, 상세에서 돌아올 때 왼쪽에서 들어오는
+    // 것은 안쪽 묶음뿐이다. 띠까지 같이 밀면 민 폭만큼 오른쪽 끝이 안
+    // 어두운 채로 남는다
     renderSection();
-    const veil = document.querySelector<HTMLElement>('[data-part="preview-veil"]');
-    expect(veil).not.toBeNull();
-    expect(veil!.className).toContain('pointer-events-none');
-    expect(veil!.className).toContain('bg-[rgb(0_0_0_/_0.14)]');
+    const caption = document.querySelector<HTMLElement>(
+      '[data-part="preview-caption"]'
+    )!;
+    const text = caption.querySelector<HTMLElement>(
+      '[data-part="preview-caption-text"]'
+    );
+    expect(text).not.toBeNull();
+    // 글자가 한 줄도 밖에 남으면 안 된다. 남은 줄은 안 움직여 따로 논다
+    expect(caption.querySelectorAll('p')).toHaveLength(
+      text!.querySelectorAll('p').length
+    );
 
-    // 그림보다 뒤 = 그림 위에 깔린다. 캡션보다 앞 = 글자는 안 어두워진다
+    // 그림보다 뒤 = 그림 위에 깔린다
     const img = document.querySelector('[data-part="preview-image"]')!;
-    const caption = document.querySelector('[data-part="preview-caption"]')!;
     expect(
-      img.compareDocumentPosition(veil!) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
-    expect(
-      veil!.compareDocumentPosition(caption) & Node.DOCUMENT_POSITION_FOLLOWING
+      img.compareDocumentPosition(caption) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
   });
 });
