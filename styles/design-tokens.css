@@ -280,20 +280,6 @@
     transition-duration: 500ms !important;
   }
 
-  /* Skeleton Animation */
-  @keyframes shimmer {
-    from {
-      background-position: -200% 0;
-    }
-    to {
-      background-position: 200% 0;
-    }
-  }
-
-  .animate-shimmer {
-    animation: shimmer 2s linear infinite;
-  }
-
   /* START 클릭 반짝임. 클릭 링(이전 .animate-ripple/@keyframes
      ripple-expand)을 터널 진입 브리프(3차) 사용자 판단으로 대체했다.
      "에너지가 차오르듯이" — 글자 색이 text-primary에서 cyan-hi로

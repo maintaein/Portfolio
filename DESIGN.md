@@ -82,20 +82,25 @@
 
 아래는 더 이상 쓰지 않는다. **새 코드에 넣지 마라.**
 
-다만 폐기가 곧 제거 완료는 아니다. 아직 남아 있는 것들이 있고, 그것들은
-옛 문서가 아니라 지금 HEAD의 살아 있는 소스 파일에 있다. 상태 열을 보고
-"이미 이렇게 돼 있겠지" 하고 넘겨짚지 마라.
+아래 표는 2026-09-13 기준 실측이다. 여덟 행 모두 소스에서 직접 세어 확인했다.
+다음에 이 표를 고칠 때도 문서가 아니라 소스를 세라.
 
 | 폐기 | 지금 | 상태 |
 |---|---|---|
 | 섹션을 `next/dynamic`으로 코드 스플리팅 | 다섯 섹션 전부 정적 import, SSR 상주 | 적용됨 |
-| `whileInView`로 진입 애니메이션 | `WhenVisible`의 `shouldEnter`를 소비한다 | 남아 있음 (계획 5 T2~T5) |
-| `AnimatePresence`로 모달 진입과 퇴장 | 공용 `Modal`이 소유한다 | ProjectModal에 남아 있음 (T2) |
-| framer-motion | 걷어낸다 | 여덟 파일에 남아 있음 (T2~T5, 최종 게이트는 계획 6) |
+| `whileInView`로 진입 애니메이션 | `WhenVisible`의 `shouldEnter`를 소비한다 | 적용됨 (소스 0건) |
+| `AnimatePresence`로 모달 진입과 퇴장 | 공용 `Modal`이 소유한다 | 적용됨 (소스 0건) |
+| framer-motion | 걷어낸다 | 적용됨 (의존성에서 제거) |
 | About의 좌우 교차 카드 | 12칸 격자와 라벨 레일 | 적용됨 |
-| Experience의 좌우 교차 타임라인 | 단일 방향 레저 | **남아 있음** (T4) |
-| Skills의 탭과 아이콘 격자와 숙련도 막대 | 증거 우선 레저 | **남아 있음** (T3) |
-| Awards의 탭과 트로피 이모지 | 단일 레저 | **남아 있음** (T4) |
+| Experience의 좌우 교차 타임라인 | 단일 방향 레저 | 적용됨 |
+| Skills의 탭과 아이콘 격자와 숙련도 막대 | 증거 우선 레저 | 적용됨 |
+| Awards의 탭과 트로피 이모지 | 단일 레저 | 적용됨 |
+
+재유입을 막는 장치는 셋이다. `ProjectModal`·`ProjectsSection`·`SkillsSection`의
+소스 잠금 테스트가 `framer-motion`과 `AnimatePresence` 문자열을 거부하고,
+`__tests__/hooks/useIntersection.test.tsx`가 `whileInView` 사용처 목록을 빈
+배열로 잠근다. 셋 다 파일 목록을 하드코딩하므로, 새 파일에서 되살리면
+목록이 어긋나 테스트가 깨진다.
 
 계획 5의 태스크 정의는
 [`.claude/designRefactoring/plans/plan5-section-rewrites.md`](./.claude/designRefactoring/plans/plan5-section-rewrites.md)에 있다.
