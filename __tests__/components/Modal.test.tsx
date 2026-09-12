@@ -313,3 +313,31 @@ describe('Modal 배경막', () => {
     expect(onClose).toHaveBeenCalled();
   });
 });
+
+describe('Modal 다크 테마', () => {
+  it('기본 렌더의 패널 className에 bg-white가 없다', () => {
+    render(
+      <Modal isOpen onClose={() => {}} showCloseButton={false}>
+        <button>내용</button>
+      </Modal>
+    );
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.className).not.toContain('bg-white');
+  });
+
+  it('제목과 닫기 단추를 켜면 머리줄 쪽 className 어디에도 grey- 클래스가 없다', () => {
+    render(
+      <Modal isOpen onClose={() => {}} title="제목" showCloseButton>
+        <button>내용</button>
+      </Modal>
+    );
+    const dialog = screen.getByRole('dialog');
+    const header = dialog.firstElementChild as HTMLElement;
+    const heading = screen.getByText('제목');
+    const closeButton = screen.getByRole('button', { name: '닫기' });
+
+    expect(header.className).not.toMatch(/grey-/);
+    expect(heading.className).not.toMatch(/grey-/);
+    expect(closeButton.className).not.toMatch(/grey-/);
+  });
+});

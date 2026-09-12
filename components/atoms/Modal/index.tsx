@@ -173,7 +173,7 @@ export default function Modal({
       <div
         ref={panelRef}
         className={cn(
-          'relative bg-white rounded-xl shadow-xl w-full transition-all duration-base',
+          'relative bg-[rgb(6_8_10_/_0.97)] rounded-xl shadow-xl w-full transition-all duration-base',
           'flex flex-col max-h-[90vh]', // 최대 높이 제한
           sizeStyles[size],
           className
@@ -183,9 +183,9 @@ export default function Modal({
         aria-labelledby={title ? 'modal-title' : ariaLabelledBy}
       >
         {(title || headerAction || showCloseButton) && (
-          <div className="flex items-center justify-between p-6 border-b border-grey-200 flex-shrink-0">
+          <div className="flex items-center justify-between p-6 border-b border-[rgb(255_255_255_/_0.08)] flex-shrink-0">
             {title && (
-              <h2 id="modal-title" className="text-t3 font-bold text-grey-900">
+              <h2 id="modal-title" className="text-t3 font-bold text-[var(--color-text-primary)]">
                 {title}
               </h2>
             )}
@@ -194,7 +194,7 @@ export default function Modal({
               {showCloseButton && (
                 <button
                   onClick={onClose}
-                  className="p-3 min-w-[44px] min-h-[44px] flex items-center justify-center text-grey-500 hover:text-grey-700 hover:bg-grey-100 rounded-lg transition-colors duration-fast"
+                  className="p-3 min-w-[44px] min-h-[44px] flex items-center justify-center text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[rgb(255_255_255_/_0.06)] rounded-lg transition-colors duration-fast"
                   aria-label="닫기"
                 >
                   <Icon name="close" size="medium" />

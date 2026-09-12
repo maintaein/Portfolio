@@ -48,7 +48,7 @@ portfolio/
 │   ├── robots.ts           # 로봇 설정
 │   └── manifest.ts         # PWA 매니페스트
 ├── components/
-│   ├── atoms/              # 기본 UI 컴포넌트 (Button, Badge, Modal 등)
+│   ├── atoms/              # 기본 UI 컴포넌트 (Modal, Icon 등)
 │   ├── blocks/             # 조합 컴포넌트 (Navigation, ProjectModal 등)
 │   ├── sections/           # 페이지 섹션 (Hero, About, Skills 등)
 │   └── seo/                # SEO 컴포넌트 (JSON-LD)
@@ -101,7 +101,7 @@ npm run lint
 
 ## 디자인 원칙
 
-- **Atomic Design** — Atoms(Button, Badge) → Blocks(Navigation, ProjectModal) → Sections(BootSequence, SkillsSection) 계층 구조
+- **Atomic Design** — Atoms(Modal, Icon) → Blocks(Navigation, ProjectModal) → Sections(BootSequence, SkillsSection) 계층 구조
 - **SRP** — 각 컴포넌트는 단일 책임 원칙을 준수
 - **타입 안정성** — 모든 데이터 모델에 TypeScript 인터페이스 정의
 - **커스텀 Hooks** — `useModal`, `useIntersection`으로 로직 재사용
