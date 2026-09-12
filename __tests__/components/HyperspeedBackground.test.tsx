@@ -560,3 +560,81 @@ describe('HyperspeedBackground — 구멍 4: 컨텍스트 손실 복구 정책',
     }
   });
 });
+
+// 계획 6 Task 5a. Playwright가 픽셀이나 내부 state 대신 붙잡을 관측 속성.
+// 루트(hyperspeed-background)는 폴백일 때도 살아 있는 유일한 요소라 여기에
+// 단다. 우선순위 두 줄(fallback이 boost·slow보다 우선, obscured가 overview·
+// section보다 우선)을 반드시 양쪽 다 잠근다.
+describe('HyperspeedBackground. data-hyperspeed-motion·data-hyperspeed-visibility 관측 속성', () => {
+  it('씬이 뜬 상태에서 전환 중이면 boost다', async () => {
+    await renderReady({ isTransitioning: true });
+    expect(screen.getByTestId('hyperspeed-background')).toHaveAttribute(
+      'data-hyperspeed-motion',
+      'boost'
+    );
+  });
+
+  it('씬이 뜬 상태에서 전환이 끝났으면 slow다', async () => {
+    await renderReady({ isTransitioning: false });
+    expect(screen.getByTestId('hyperspeed-background')).toHaveAttribute(
+      'data-hyperspeed-motion',
+      'slow'
+    );
+  });
+
+  it('reduced-motion이면 전환 중이어도 fallback이 boost보다 우선한다', () => {
+    render(<HyperspeedBackground {...readyProps} reducedMotion isTransitioning />);
+    expect(screen.getByTestId('hyperspeed-background')).toHaveAttribute(
+      'data-hyperspeed-motion',
+      'fallback'
+    );
+  });
+
+  it('준비 전(routeResolved=false)이면 fallback이다', () => {
+    render(<HyperspeedBackground {...readyProps} routeResolved={false} />);
+    expect(screen.getByTestId('hyperspeed-background')).toHaveAttribute(
+      'data-hyperspeed-motion',
+      'fallback'
+    );
+  });
+
+  it('준비 전(motionReady=false)이면 fallback이다', () => {
+    render(<HyperspeedBackground {...readyProps} motionReady={false} />);
+    expect(screen.getByTestId('hyperspeed-background')).toHaveAttribute(
+      'data-hyperspeed-motion',
+      'fallback'
+    );
+  });
+
+  it('overview에 있으면 visibility가 overview다', async () => {
+    await renderReady({ active: OVERVIEW });
+    expect(screen.getByTestId('hyperspeed-background')).toHaveAttribute(
+      'data-hyperspeed-visibility',
+      'overview'
+    );
+  });
+
+  it('섹션에 있으면 visibility가 section이다', async () => {
+    await renderReady({ active: 'about' });
+    expect(screen.getByTestId('hyperspeed-background')).toHaveAttribute(
+      'data-hyperspeed-visibility',
+      'section'
+    );
+  });
+
+  it('obscured가 true면 overview에서도 obscured가 overview보다 우선한다', async () => {
+    await renderReady({ active: OVERVIEW, obscured: true });
+    expect(screen.getByTestId('hyperspeed-background')).toHaveAttribute(
+      'data-hyperspeed-visibility',
+      'obscured'
+    );
+  });
+
+  it('obscured가 true면 섹션에서도 obscured가 section보다 우선한다', async () => {
+    await renderReady({ active: 'about', obscured: true });
+    expect(screen.getByTestId('hyperspeed-background')).toHaveAttribute(
+      'data-hyperspeed-visibility',
+      'obscured'
+    );
+  });
+});

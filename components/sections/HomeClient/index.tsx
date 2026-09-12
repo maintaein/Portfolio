@@ -452,6 +452,10 @@ export default function HomeClient() {
         data-route-resolved={routeResolved}
         data-motion-ready={motionReady}
         data-reduced-motion={reducedMotion}
+        // 계획 6 Task 5a. Playwright가 붙잡을 관측 속성. entryAnimationTarget은
+        // useSectionNav의 captureFirstEntry가 최초 방문 id 또는(재방문) null로
+        // 이미 소유하고 있다. WhenVisible.tsx의 shouldEnter와 같은 비교식이다.
+        data-entry-motion={entryAnimationTarget === active ? 'enter' : 'steady'}
         // jsdom은 inert의 포인터 차단을 구현하지 않으므로(실제 브라우저와
         // 달리 pointerdown이 그대로 발화한다), 모달이 열려 있으면 스와이프
         // 핸들러 자체를 붙이지 않는다. inert 하나로는 스와이프를 막지

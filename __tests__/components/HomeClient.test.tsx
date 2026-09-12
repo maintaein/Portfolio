@@ -1361,3 +1361,40 @@ describe('HomeClient 전환 방향 표식', () => {
     );
   });
 });
+
+// 계획 6 Task 5a. Playwright가 붙잡을 관측 속성. entryAnimationTarget은
+// useSectionNav의 captureFirstEntry가 소유한다(최초 방문 id 또는 재방문
+// null). main.section-stage에 그 값과 active의 일치 여부를 그대로 편다.
+describe('HomeClient. data-entry-motion 관측 속성', () => {
+  it('최초 진입한 섹션(overview)이 활성이면 enter다', () => {
+    const { container } = render(<HomeClient />);
+    const stage = container.querySelector<HTMLElement>('.section-stage');
+
+    expect(stage).toHaveAttribute('data-entry-motion', 'enter');
+  });
+
+  it('처음 방문하는 섹션으로 이동하면 그 섹션에서도 enter다', () => {
+    const { container } = render(<HomeClient />);
+    navigateTo(/about/i);
+    const stage = container.querySelector<HTMLElement>('.section-stage');
+
+    expect(stage).toHaveAttribute('data-entry-motion', 'enter');
+  });
+
+  it('재방문이면 steady다', () => {
+    const { container } = render(<HomeClient />);
+    const stage = container.querySelector<HTMLElement>('.section-stage');
+
+    // about을 처음 방문(enter)한 뒤 overview로 돌아온다. overview는 이미
+    // 최초 마운트 때 한 번 본 섹션이라 재방문 시 entryAnimationTarget이
+    // null로 떨어져야 한다.
+    navigateTo(/about/i);
+    fireEvent.click(screen.getByTestId('wordmark'));
+
+    expect(stage).toHaveAttribute('data-entry-motion', 'steady');
+
+    // about도 재방문하면 같은 이유로 steady다.
+    navigateTo(/about/i);
+    expect(stage).toHaveAttribute('data-entry-motion', 'steady');
+  });
+});

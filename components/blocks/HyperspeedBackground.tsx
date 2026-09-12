@@ -294,10 +294,25 @@ export default function HyperspeedBackground({
     ? 'none'
     : 'opacity var(--animate-duration-slow) ease-out, filter var(--animate-duration-slow) ease-out';
 
+  // 계획 6 Task 5a. Playwright가 픽셀이나 내부 state 대신 붙잡을 관측
+  // 속성. 둘 다 기존 값의 순수 파생이고 새 state를 만들지 않는다. 폴백일
+  // 때도 이 div는 살아 있으므로(엔진 container는 청크가 풀려야 존재한다)
+  // 여기에 단다. fallback은 boost·slow보다, obscured는 overview·section보다
+  // 우선한다. 더 자세한 폴백 사유는 이미 HyperspeedFallback의
+  // data-fallback-reason이 맡는다.
+  const motionState = !showScene ? 'fallback' : isTransitioning ? 'boost' : 'slow';
+  const visibilityState = obscured
+    ? 'obscured'
+    : active === OVERVIEW
+      ? 'overview'
+      : 'section';
+
   return (
     <div
       ref={rootRef}
       data-testid="hyperspeed-background"
+      data-hyperspeed-motion={motionState}
+      data-hyperspeed-visibility={visibilityState}
       aria-hidden="true"
       className="fixed inset-0 -z-10 pointer-events-none"
       style={{ opacity, filter, transition }}
