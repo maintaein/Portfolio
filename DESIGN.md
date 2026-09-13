@@ -35,7 +35,16 @@
 - 지속과 이징은 토큰만 쓴다. 새 숫자를 넣지 않는다
 - `prefers-reduced-motion: reduce`에서는 움직임이 없다. 이 저장소는
   `transition: none`과 `animation: none`을 언제나 짝지어 왔다
-- 무한 루프 장식은 두지 않는다. 지속 모션은 Hyperspeed 배경이 소유한다
+- 무한 모션은 섹션이 활성일 때만 돈다. 비활성 섹션도 DOM에 남아 있으므로
+  거기서 계속 도는 장식은 보이지도 않으면서 메인 스레드와 GPU를 먹는다.
+  CSS 키프레임은 `.section-hidden`의 `content-visibility: auto`가 대신
+  멈춰 준다(건너뛴 콘텐츠 안에서는 애니메이션이 돌지 않는다). 그래서
+  Experience의 3.2초 충전 애니메이션에는 따로 활성 조건이 없다.
+  **rAF를 도는 것은 스스로 멈춰야 한다.** 활성 여부를 props로 받는다.
+  `IntersectionObserver`에만 맡기지 않는다. 교차 관찰은 그리기 여부가
+  아니라 기하를 보고, 관찰 대상이 건너뛴 서브트리 안에 있으면 판정이
+  브라우저마다 갈린다. 활성 여부는 이미 `HomeClient`가 알고 있으므로
+  그것을 내려 주는 쪽이 싸고 확실하다(`AboutRings`의 `running`이 그 예다)
 
 ### 섹션 전환
 

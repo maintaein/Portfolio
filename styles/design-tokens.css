@@ -920,6 +920,121 @@
       0 0 5px var(--color-cyan-core);
   }
 
+  /* About BASICS의 폴더(components/blocks/AboutFolder). 문항이 활성이면
+     열린다. 호버는 관여하지 않는다.
+
+     기하는 전부 백분율이다. 폭 하나(clamp)만 바꾸면 종이도 탭도 같이
+     따라온다. 시안은 100x80px 고정이었는데, 이 자리는 12칸 격자의 4칸을
+     받으므로 화면 폭에 따라 커져야 한다. 5:4는 그 100x80의 비율이다.
+
+     움직이는 것은 transform뿐이다. 시안은 transition: all이라 종이 높이도
+     같이 변했는데, 높이는 레이아웃 속성이라 이 저장소가 애니메이션하지
+     않기로 한 것이다. 대신 세 장의 높이를 같게 두고 폭만 다르게 해서
+     닫혔을 때 층이 보이게 한다. */
+  .about-folder {
+    position: relative;
+    width: clamp(150px, 19vw, 230px);
+    aspect-ratio: 5 / 4;
+    border-radius: 0 10px 10px 10px;
+    background: rgb(14 94 165 / 0.45);
+    transition: transform var(--animate-duration-slow) cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  [data-about-folder][data-open='true'] {
+    transform: translateY(-8px);
+  }
+
+  /* 폴더 탭. 뒤판과 같은 색이라 한 덩어리로 읽힌다. */
+  .about-folder-tab {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    width: 30%;
+    height: 12.5%;
+    border-radius: 5px 5px 0 0;
+    background: rgb(14 94 165 / 0.45);
+  }
+
+  /* 기술스택 종이. 닫혀 있을 때는 앞판(z 30) 뒤에 완전히 가린다. */
+  .about-folder-paper {
+    position: absolute;
+    bottom: 10%;
+    left: 50%;
+    z-index: 20;
+    display: flex;
+    height: 78%;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    padding: 0 8%;
+    border: 1px solid rgb(3 179 195 / 0.45);
+    border-radius: 10px;
+    background: var(--color-ink);
+    transform: translate(-50%, 10%);
+    transition: transform var(--animate-duration-slow) cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .about-folder-paper[data-paper='0'] {
+    width: 64%;
+  }
+
+  .about-folder-paper[data-paper='1'] {
+    width: 72%;
+  }
+
+  .about-folder-paper[data-paper='2'] {
+    width: 80%;
+  }
+
+  [data-about-folder][data-open='true'] .about-folder-paper[data-paper='0'] {
+    transform: translate(-112%, -48%) rotate(-15deg);
+  }
+
+  [data-about-folder][data-open='true'] .about-folder-paper[data-paper='1'] {
+    transform: translate(12%, -48%) rotate(15deg);
+  }
+
+  [data-about-folder][data-open='true'] .about-folder-paper[data-paper='2'] {
+    transform: translate(-50%, -128%) rotate(3deg);
+  }
+
+  /* 앞판 두 장. 아래를 축으로 서로 반대로 기울어 벌어진다. */
+  .about-folder-front {
+    position: absolute;
+    z-index: 30;
+    inset: 0;
+    transform-origin: bottom;
+    border: 1px solid var(--color-hairline);
+    border-radius: 5px 10px 10px 10px;
+    background: linear-gradient(180deg, rgb(3 179 195 / 0.5) 0%, rgb(14 94 165 / 0.72) 100%);
+    transition: transform var(--animate-duration-slow) cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  [data-about-folder][data-open='true'] .about-folder-front[data-side='left'] {
+    transform: skew(15deg) scaleY(0.6);
+  }
+
+  [data-about-folder][data-open='true'] .about-folder-front[data-side='right'] {
+    transform: skew(-15deg) scaleY(0.6);
+  }
+
+  /* 모션을 끈 사용자에게는 열린 모습이 즉시 나타난다. 이 저장소가
+     .section-hidden부터 매번 짝지어 온 방어다. */
+  @media (prefers-reduced-motion: reduce) {
+    .about-folder,
+    .about-folder-paper,
+    .about-folder-front {
+      transition: none;
+    }
+  }
+
+  /* About AI WORKFLOW의 링(components/blocks/AboutRings). WebGL 캔버스가
+     이 상자를 채운다. 정사각이라야 링이 타원으로 찌그러지지 않는다. */
+  .about-rings {
+    width: clamp(220px, 26vw, 340px);
+    aspect-ratio: 1 / 1;
+  }
+
   /* Skills 아이콘(계획 5 T3). mask-image로 SVG를 색칠한다. <img>로 쓰면
      CSS로 색을 못 바꾸고, filter: brightness(0) invert(1)로 흰 실루엣을
      만들면 JavaScript·TypeScript 로고처럼 글자를 파낸 구멍이 래스터에서

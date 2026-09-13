@@ -50,7 +50,23 @@ describe('AboutSection', () => {
     );
     expect(source).not.toMatch(/blocks\/Cubes/);
     expect(source).not.toMatch(/blocks\/Orbit/);
-    expect(source).not.toMatch(/next\/dynamic/);
+  });
+
+  // 위 잠금은 한때 next/dynamic 자체를 금지했다. 그 금지가 겨눈 것은
+  // "섹션을 코드 스플리팅하지 않는다"는 폐기 처방(DESIGN.md)인데, 섹션이
+  // 제 안의 WebGL 블록을 가르는 것은 그 처방이 아니라 오히려 번들 예산이
+  // 요구하는 바다(ProjectsSection이 PreviewMorph를 같은 방식으로 가른다).
+  // 그래서 금지를 "WebGL 블록 하나만 갈린다"로 좁힌다. 섹션 자체가
+  // 갈리는 회귀는 HomeClient 쪽 잠금이 잡는다.
+  it('동적으로 가르는 것은 링 블록 하나뿐이다', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'components/sections/AboutSection/index.tsx'),
+      'utf8'
+    );
+    const dynamicImports = [...source.matchAll(/dynamic\(\s*\(\)\s*=>\s*import\('([^']+)'\)/g)].map(
+      (m) => m[1]
+    );
+    expect(dynamicImports).toEqual(['@/components/blocks/AboutRings']);
   });
 
   it('인덱스 항목 3개를 렌더한다', () => {
@@ -430,6 +446,154 @@ describe('AboutSection', () => {
     const grid = container.querySelector('[data-about-grid]') as HTMLElement;
     expect(grid.dataset.aboutDirection).toBe('none');
   });
+
+  // 시각 증거(계획 외 사용자 요청, 2026-09-14). 레일과 콘텐츠 사이 빈 칸에
+  // BASICS는 폴더, AI WORKFLOW는 링이 붙는다.
+  describe('시각 증거', () => {
+    it('BASICS와 AI WORKFLOW에만 자리를 두고 TEAMWORK에는 두지 않는다', () => {
+      const { container } = renderAboutSection();
+      const indexes = [...container.querySelectorAll('[data-about-visual]')].map((el) =>
+        el.getAttribute('data-about-visual-index')
+      );
+      expect(indexes).toEqual(['0', '1']);
+    });
+
+    // lg 미만에서는 격자가 세로로 쌓인다. 거기서 장식이 제목보다 먼저 나오면
+    // 읽는 순서가 망가지므로 아예 그리지 않는다.
+    it('좁은 화면에서는 자리 자체가 숨는다', () => {
+      const { container } = renderAboutSection();
+      for (const el of container.querySelectorAll('[data-about-visual]')) {
+        const layer = el.parentElement;
+        expect(layer?.className).toMatch(/\bhidden\b/);
+        expect(layer?.className).toMatch(/\blg:grid\b/);
+      }
+    });
+
+    // 콘텐츠는 7칸째부터다. 6칸째를 비워 두지 않으면 장식이 본문에 붙는다.
+    it('자리가 레일과 콘텐츠 사이 칸을 쓰고 콘텐츠와 한 칸 떨어진다', () => {
+      const { container } = renderAboutSection();
+      const slot = container.querySelector('[data-about-visual-index="0"]');
+      expect(slot?.className).toMatch(/\bcol-start-2\b/);
+      expect(slot?.className).toMatch(/\bcol-span-4\b/);
+    });
+
+    // 증거 겹은 본문 격자와 따로 놓인 겹이다. 두 겹의 칸 수와 여백이
+    // 어긋나면 폴더가 본문과 다른 열에 선다. 같은 값인지 잠근다.
+    it('증거 겹의 격자가 본문 격자와 같은 칸과 여백을 쓴다', () => {
+      const { container } = renderAboutSection();
+      const layer = container.querySelector('[data-about-visual]')?.parentElement;
+      const grid = container.querySelector('[data-about-grid]');
+      for (const token of ['grid-cols-12', 'grid-rows-6', 'gap-x-6', 'gap-y-2', 'px-10', 'py-8']) {
+        expect(layer?.className).toContain(token);
+        expect(grid?.className).toContain(`lg:${token}`);
+      }
+    });
+
+    it('폴더가 기술스택 6개를 담는다', () => {
+      renderAboutSection();
+      for (const name of ['React', 'TypeScript', 'Next.js', 'Tailwind CSS', 'Zustand', 'React Query']) {
+        expect(screen.getByText(name)).toBeInTheDocument();
+      }
+    });
+
+    // 호버가 아니라 선택이 연다. 이게 이 컴포넌트를 시안에서 바꾼 이유다.
+    it('BASICS가 활성이면 폴더가 열리고 다른 문항으로 가면 닫힌다', async () => {
+      const user = userEvent.setup();
+      const { container } = renderAboutSection();
+      // 노드를 붙잡아 두지 않고 매번 다시 찾는다. 붙잡아 두면 격자가
+      // 다시 만들어질 때 떨어져 나간 옛 노드를 검사하게 되고, 그것은
+      // 클릭 전 속성을 그대로 들고 있어 아무것도 잡지 못한다.
+      const folder = () => container.querySelector('[data-about-folder]');
+      expect(folder()).toHaveAttribute('data-open', 'true');
+
+      await user.click(screen.getByRole('button', { name: /AI WORKFLOW/ }));
+      expect(folder()).toHaveAttribute('data-open', 'false');
+
+      await user.click(screen.getByRole('button', { name: /BASICS/ }));
+      expect(folder()).toHaveAttribute('data-open', 'true');
+    });
+
+    // About을 떠나면 다음에 돌아왔을 때 여는 동작을 다시 볼 수 있어야 한다.
+    it('About이 비활성이면 BASICS가 골라져 있어도 폴더가 닫혀 있다', () => {
+      const { container } = renderAboutSection('overview' as NavId);
+      expect(container.querySelector('[data-about-folder]')).toHaveAttribute('data-open', 'false');
+    });
+
+    // three를 끌고 오는 청크다. AI WORKFLOW를 고르기 전에는 내려받지 않는다.
+    it('링은 AI WORKFLOW를 고르기 전에는 DOM에 없다', async () => {
+      const user = userEvent.setup();
+      const { container } = renderAboutSection();
+      expect(container.querySelector('.about-rings')).toBeNull();
+
+      await user.click(screen.getByRole('button', { name: /AI WORKFLOW/ }));
+      expect(container.querySelector('.about-rings')).not.toBeNull();
+    });
+
+    // 한 번 받은 청크를 문항을 옮겼다고 버릴 이유가 없다. 다시 받게 된다.
+    it('한 번 켜진 링은 다른 문항으로 가도 DOM에 남는다', async () => {
+      const user = userEvent.setup();
+      const { container } = renderAboutSection();
+      await user.click(screen.getByRole('button', { name: /AI WORKFLOW/ }));
+      await user.click(screen.getByRole('button', { name: /TEAMWORK/ }));
+      expect(container.querySelector('.about-rings')).not.toBeNull();
+    });
+
+    // 무한히 도는 장식이라 정지 화면으로 대신할 것이 없다. 아예 안 켠다.
+    it('모션을 끈 사용자에게는 링을 켜지 않는다', async () => {
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn().mockReturnValue({
+          matches: true, media: '', addEventListener: () => {}, removeEventListener: () => {},
+        })
+      );
+      const user = userEvent.setup();
+      const { container } = renderAboutSection();
+      await user.click(screen.getByRole('button', { name: /AI WORKFLOW/ }));
+      expect(container.querySelector('.about-rings')).toBeNull();
+    });
+  });
+
+  // 폴더의 기하와 전환은 전부 design-tokens.css에 있다. TSX에는 값이 없다.
+  describe('폴더 CSS 계약', () => {
+    const css = readFileSync(resolve(process.cwd(), 'styles/design-tokens.css'), 'utf8');
+
+    // 시안은 transition: all이라 종이 높이도 함께 변했다. 높이는 레이아웃
+    // 속성이라 이 저장소가 애니메이션하지 않기로 한 것이다(DESIGN.md).
+    it('열림 상태가 바꾸는 것은 transform뿐이다', () => {
+      const openRules = [
+        ...css.matchAll(/\[data-about-folder\]\[data-open='true'\][^{]*\{([^}]*)\}/g),
+      ].map((m) => m[1]);
+      expect(openRules.length).toBeGreaterThanOrEqual(6);
+      for (const body of openRules) {
+        const props = [...body.matchAll(/([a-z-]+)\s*:/g)].map((m) => m[1]);
+        expect(props).toEqual(['transform']);
+      }
+    });
+
+    it('전환에 토큰 지속과 사이트 이징을 쓴다', () => {
+      expect(css).toMatch(
+        /\.about-folder \{[\s\S]*?transition: transform var\(--animate-duration-slow\) cubic-bezier\(0\.22, 1, 0\.36, 1\);/
+      );
+    });
+
+    // 이 저장소가 .section-hidden부터 매번 짝지어 온 방어다.
+    it('모션을 끄면 폴더 전환이 끊긴다', () => {
+      const reduceBlocks = [
+        ...css.matchAll(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n {2}\}/g),
+      ].map((m) => m[1]);
+      const folderGuard = reduceBlocks.find((b) => b.includes('.about-folder'));
+      expect(folderGuard).toBeDefined();
+      expect(folderGuard).toMatch(/\.about-folder-paper/);
+      expect(folderGuard).toMatch(/\.about-folder-front/);
+      expect(folderGuard).toMatch(/transition: none/);
+    });
+
+    // 링 상자가 정사각이 아니면 동심원이 타원으로 찌그러진다.
+    it('링 상자가 정사각이다', () => {
+      expect(css).toMatch(/\.about-rings \{[\s\S]*?aspect-ratio: 1 \/ 1;/);
+    });
+  });
+
 });
 
 // AboutSection이 WhenVisible의 paused/shouldLoad를 Cubes·Orbit에 곧이곧대로

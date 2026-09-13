@@ -11,9 +11,14 @@ export interface AboutRailProps {
 // 터널 안으로 들어간 것이다.
 const TOP_PERCENT = [20, 46, 72];
 
+// lg부터 레일을 오른쪽으로 더 들인다. 왼쪽 끝에 붙어 있으면 화면
+// 가장자리와 선이 한 덩어리로 읽히고, 선과 상세 콘텐츠(격자 7칸째) 사이에
+// 생기는 빈 칸이 시각 증거(폴더·링)의 자리다. lg 미만은 그대로 둔다.
+// 거기서는 버튼이 흐름 안에 세로로 쌓여서 왼쪽 여백을 더 주면 라벨만
+// 좁아진다.
 export default function AboutRail({ activeIndex, onSelect }: AboutRailProps) {
   return (
-    <nav aria-label="About 문항" className="relative ml-6 w-44 shrink-0">
+    <nav aria-label="About 문항" className="relative ml-6 w-44 shrink-0 lg:ml-24">
       <div aria-hidden="true" className="about-rail-line absolute bottom-8 left-1 top-8" />
       {coreValues.map((value, index) => {
         const isActive = index === activeIndex;

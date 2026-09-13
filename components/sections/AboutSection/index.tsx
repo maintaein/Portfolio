@@ -1,10 +1,12 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { coreValues } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
 import { useSectionActivity } from '@/components/common/SectionActivityContext';
+import AboutFolder from '@/components/blocks/AboutFolder';
 import AboutRail from './rail';
 import { ABOUT_SCRIMS, ABOUT_SCRIMS_MOBILE } from './scrim';
 
@@ -26,6 +28,25 @@ type AboutTransition = {
   direction: 'forward' | 'backward' | 'none';
   distance: number;
 };
+
+// 링은 three를 끌고 온다. 정적으로 들여오면 About이 정적 import라
+// 공유 번들에 three가 얹힌다. Hyperspeed와 같은 방식으로 갈라 두고, AI
+// WORKFLOW를 처음 고를 때 내려받는다.
+const DynamicAboutRings = dynamic(() => import('@/components/blocks/AboutRings'), {
+  ssr: false,
+});
+
+// BASICS 폴더가 펼치는 기술스택. 이름은 lib/data/skills.tsx가 핵심 6개로
+// 못 박은 것을 그대로 쓴다. 종이 한 장에 둘씩 세 장이다.
+const BASICS_STACK: readonly (readonly string[])[] = [
+  ['React', 'TypeScript'],
+  ['Next.js', 'Tailwind CSS'],
+  ['Zustand', 'React Query'],
+];
+
+// 시각 증거가 붙는 문항. TEAMWORK(2)는 증거 블록 자체가 세 줄짜리
+// 레저라 이미 왼쪽이 찼다. 셋 다 채우면 장식이 서로 경쟁한다.
+const VISUAL_INDEXES = new Set([0, 1]);
 
 // 증거 블록. 자리는 셋이 같고 내용만 다르다. 콘텐츠가 확정되면 이 배열만
 // 바꾼다. 라벨은 t8, 값은 크게 둬서 대충 봐도 값이 먼저 읽힌다.
@@ -88,6 +109,17 @@ export default function AboutSection() {
   // 포털 JSX 바로 위 주석 참고, C1 재수정).
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  // 링 모듈을 언제 내려받을지. AI WORKFLOW를 한 번이라도 고른 뒤에만
+  // 켜지고, 그 뒤로는 도로 끄지 않는다(청크를 다시 받게 만들 이유가 없다).
+  // 모션을 끈 사용자에게는 영영 켜지지 않는다. 무한히 도는 장식이라
+  // 정지 화면을 대신 보여 줄 것이 없다.
+  const ringsWanted =
+    !reducedMotion && active === SECTION_IDS.ABOUT && activeIndex === 1;
+  const [ringsArmed, setRingsArmed] = useState(false);
+  useEffect(() => {
+    if (ringsWanted) setRingsArmed(true);
+  }, [ringsWanted]);
 
   function handleSelect(next: number) {
     const delta = next - activeIndex;
@@ -213,6 +245,46 @@ export default function AboutSection() {
                   : 'absolute inset-0 opacity-0 pointer-events-none'
               }`}
             >
+              {/* 시각 증거. 레일과 콘텐츠(7칸째) 사이 빈 칸을 쓴다. 6칸째는
+                  비워 콘텐츠와 붙지 않게 한다.
+
+                  아래 격자 안이 아니라 형제로 두는 이유가 있다. 격자는
+                  transitionSeq를 key로 받아 문항을 고를 때마다 통째로 다시
+                  만들어지는데(전환 애니메이션 재생 보장), 그 안에 폴더를
+                  두면 BASICS로 돌아올 때 폴더가 이미 열린 노드로 새로
+                  태어난다. 여는 동작 자체가 사라지는 것이다. 그래서 열고
+                  닫힘을 보여야 하는 것은 key 바깥에 둔다.
+
+                  칸 수와 여백은 아래 격자와 같은 값을 쓴다. 두 겹이 같은
+                  자리에 포개져야 열이 맞는다(테스트가 이 일치를 잠근다).
+
+                  lg 미만에서는 격자가 4칸으로 줄고 전부 세로로 쌓이는데,
+                  거기서 장식이 제목보다 먼저 나오면 읽는 순서가 망가진다.
+                  그래서 lg 미만에서는 아예 그리지 않는다. */}
+              {VISUAL_INDEXES.has(index) ? (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 hidden grid-cols-12 grid-rows-6 gap-x-6 gap-y-2 px-10 py-8 lg:grid"
+                >
+                  <div
+                    data-about-visual
+                    data-about-visual-index={index}
+                    className="col-span-4 col-start-2 row-span-4 row-start-2 flex items-center justify-center"
+                  >
+                    {index === 0 ? (
+                      <AboutFolder
+                        open={isActive && active === SECTION_IDS.ABOUT}
+                        papers={BASICS_STACK}
+                      />
+                    ) : null}
+                    {index === 1 && ringsArmed ? (
+                      <div className="about-rings">
+                        <DynamicAboutRings running={isActive && active === SECTION_IDS.ABOUT} />
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
               <div
                 key={transitionSeq}
                 data-about-grid
