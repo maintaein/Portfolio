@@ -484,32 +484,6 @@
     }
   }
 
-  /* 첫 진입 hero. HyperspeedBackground가 최초 overview(pending)와 첫 섹션
-     진입(surge, settle) 동안 루트에 data-hyperspeed-hero를 단다. 그동안
-     배경을 소실점(--tunnel-vanishing-*, 섹션 전환의 transform-origin과
-     같은 점)에서 자라는 부드러운 원형 마스크로 자른다. 그라데이션 중심과
-     mask-position이 같은 비율 지점을 가리켜야 mask-size가 자라도 중심이
-     소실점에 고정된다. 320vmax는 circle의 farthest-corner 기준 35% 지점
-     (약 0.25 × 320 = 80vmax)이 소실점에서 가장 먼 뷰포트 모서리(약
-     75vmax)를 덮는 값이다. 다 자란 뒤 done에서 속성이 빠져 마스크가
-     사라져도 화면이 바뀌지 않는다. mask-size의 transition은 여기 없다.
-     HyperspeedBackground의 인라인 transition이 맡는다(인라인이 이 규칙의
-     transition을 덮기 때문). pending은 크기 0이라 아무것도 그리지 않는다. */
-  [data-hyperspeed-hero] {
-    mask-image: radial-gradient(
-      circle at var(--tunnel-vanishing-x) var(--tunnel-vanishing-y),
-      #000 35%,
-      transparent 70%
-    );
-    mask-repeat: no-repeat;
-    mask-position: var(--tunnel-vanishing-x) var(--tunnel-vanishing-y);
-    mask-size: 320vmax 320vmax;
-  }
-
-  [data-hyperspeed-hero='pending'] {
-    mask-size: 0px 0px;
-  }
-
   .section-stage-horizontal {
     touch-action: pan-x pan-y pinch-zoom;
   }

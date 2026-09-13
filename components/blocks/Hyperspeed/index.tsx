@@ -10,7 +10,10 @@
 import { BloomEffect, EffectComposer, EffectPass, RenderPass, SMAAEffect, SMAAPreset } from 'postprocessing';
 import * as THREE from 'three';
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
-import { HYPERSPEED_DENSITY_POOL } from '@/lib/constants';
+import {
+  HYPERSPEED_BOOST_TIME_SCALE,
+  HYPERSPEED_DENSITY_POOL,
+} from '@/lib/constants';
 import { FrameQualityGovernor, type QualityTier } from '@/lib/deviceQuality';
 import { distortions, distortion_uniforms, distortion_vertex, type Distortion, type UniformValue } from './distortions';
 import { CYAN_PALETTE, QUALITY_PROFILES, type QualityProfile } from './presets';
@@ -87,9 +90,9 @@ export interface HyperspeedHandle {
 // 요구가 다르다. 섹션에서는 본문을 읽으므로 setIdleScale로 더 낮춰 끼운다.
 const IDLE_TIME_SCALE = 0.3;
 
-// boost가 더하는 시간 배속의 목표치. 원본 2에서 두 번 낮췄다. 1.15에서도
-// 전환 순간의 흐름이 눈에 튀어 본문으로 시선이 돌아오는 데 시간이 걸렸다.
-const BOOST_TIME_SCALE = 0.7;
+// boost가 더하는 시간 배속의 목표치는 lib/constants.ts가 소유한다. 첫 진입
+// hero가 오르는 속도의 상한도 같은 숫자여야 해서(HyperspeedBackground가
+// 읽는다) 엔진 밖으로 뺐다. 원본 2에서 세 번 낮췄다.
 
 // speedUp이 목표로 수렴하는 시간 상수의 역수(1/초). 원본은
 // Math.exp(-k*delta)를 그대로 비율로 써서 60fps에서 한 프레임에 간극의 86%를
@@ -107,7 +110,7 @@ const defaultOptions: HyperspeedOptions = {
   lanesPerRoad: 4,
   fov: 90,
   fovSpeedUp: 112,
-  speedUp: BOOST_TIME_SCALE,
+  speedUp: HYPERSPEED_BOOST_TIME_SCALE,
   carLightsFade: 0.4,
   totalSideLightSticks: 20,
   lightPairsPerRoadWay: 40,

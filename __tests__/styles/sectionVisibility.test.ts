@@ -472,22 +472,4 @@ describe('첫 진입 hero', () => {
     }
   });
 
-  it('배경 마스크는 소실점 토큰에서 자라고 pending은 크기 0이다', () => {
-    const mask = ruleBody('[data-hyperspeed-hero]');
-    expect(mask, '마스크 규칙이 없다').toBeDefined();
-    expect(mask).toMatch(/mask-image:\s*radial-gradient\(/);
-    expect(mask).toMatch(
-      /circle at var\(--tunnel-vanishing-x\) var\(--tunnel-vanishing-y\)/
-    );
-    expect(mask).toMatch(
-      /mask-position:\s*var\(--tunnel-vanishing-x\) var\(--tunnel-vanishing-y\)/
-    );
-    expect(mask).toMatch(/mask-repeat:\s*no-repeat/);
-    expect(mask).toMatch(/mask-size:\s*320vmax 320vmax/);
-    // 전환은 HyperspeedBackground의 인라인이 맡는다. 여기 두면 인라인에 덮인다.
-    expect(mask).not.toMatch(/transition/);
-    expect(ruleBody("[data-hyperspeed-hero='pending']")).toMatch(
-      /mask-size:\s*0px 0px/
-    );
-  });
 });

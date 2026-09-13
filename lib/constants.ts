@@ -135,23 +135,34 @@ export const PERSONAL_INFO = {
   // 나중에 한쪽만 바뀌어 어긋나기 쉬우므로 여기 하나로 둔다.
   export const BOOT_DURATION_SECONDS = 2;
 
-// 첫 진입 hero. overview에서 처음 섹션으로 넘어갈 때 배경이 소실점에서
-// 자라며 밀도와 속도가 치솟았다가 섹션 기본치로 가라앉고, 그때 셸과 섹션
-// 내용이 들어온다. HomeClient가 단계(HeroPhase)를 소유하고,
+// 첫 진입 hero. overview에서 처음 섹션으로 넘어갈 때 배경이 흐림에서
+// 풀리며 오버뷰 밝기로 떠오르고, 밀도와 속도가 치솟았다가, 섹션 밝기까지
+// 서서히 어두워지면서 속도도 가라앉는다. 그 어두워짐이 끝나는 순간에 셸과
+// 섹션 내용이 들어온다. HomeClient가 단계(HeroPhase)를 소유하고,
 // HyperspeedBackground가 반응하며, CSS 지연(--hero-delay)도 같은 숫자를
 // 쓴다. 셋이 각자 숫자를 들고 있으면 한쪽만 바뀌어 어긋나므로 여기 하나로
 // 둔다.
 //
-// HERO_SURGE_MS: 배경만 보이는 구간. 마스크가 자라는 시간이자 셸과 섹션의
-//   진입 전환이 기다리는 지연이다.
-// HERO_SETTLE_MS: 지연된 진입 전환(섹션 500ms, 워드마크 FLIP 500ms, 그 뒤
-//   내비 스트립 300ms)이 전부 끝날 때까지 --hero-delay를 유지하는 여유.
-//   도중에 변수가 빠지면 animation-delay가 0으로 바뀌어 아직 도는
-//   애니메이션이 끝 상태로 튄다.
+// HERO_SURGE_MS: 배경이 떠올라 상한 속도까지 오르는 구간. 떠오르는 전환
+//   자체는 모달 복귀와 같은 --animate-duration-slow이고, 나머지는 속도가
+//   차오르는 시간이다.
+// HERO_DIM_MS: 섹션 밝기까지 어두워지는 전환의 길이. settle이 시작될 때
+//   같이 시작하므로 셸과 섹션이 기다리는 지연은 SURGE + DIM이다.
+// HERO_SETTLE_MS: settle 단계 자체의 길이. DIM이 끝난 뒤로도 지연된 진입
+//   전환(섹션 500ms, 워드마크 FLIP 500ms, 그 뒤 내비 스트립 300ms)이 전부
+//   끝날 때까지 --hero-delay를 유지해야 한다. 도중에 변수가 빠지면
+//   animation-delay가 0으로 바뀌어 아직 도는 애니메이션이 끝 상태로 튄다.
+// HYPERSPEED_BOOST_TIME_SCALE: 섹션 전환의 boost가 더하는 시간 배속이자
+//   hero가 오르는 속도의 상한. 두 곳이 같은 숫자를 봐야 첫 진입의 최고
+//   속도와 그 뒤 전환의 속도가 한 몸으로 읽힌다. 엔진과 배경 래퍼 양쪽이
+//   읽으므로 엔진 모듈이 아니라 여기 산다(래퍼는 엔진을 동적으로만 불러
+//   온다).
 // HYPERSPEED_DENSITY_POOL: 엔진이 lightPairsPerRoadWay의 몇 배를 미리
 //   만들어 두는지. 기본은 그중 1/POOL만 보이고 surge에서 전부 보인다.
 //   기하를 다시 만들지 않고 밀도를 올리려면 여유분이 있어야 한다.
-export const HERO_SURGE_MS = 1800;
-export const HERO_SETTLE_MS = 1000;
+export const HERO_SURGE_MS = 1000;
+export const HERO_DIM_MS = 800;
+export const HERO_SETTLE_MS = 1800;
+export const HYPERSPEED_BOOST_TIME_SCALE = 0.55;
 export const HYPERSPEED_DENSITY_POOL = 2;
 export type HeroPhase = 'pending' | 'surge' | 'settle' | 'done';

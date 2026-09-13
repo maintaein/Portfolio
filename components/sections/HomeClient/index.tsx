@@ -34,6 +34,7 @@ import {
   type NavId,
 } from '@/hooks/useSectionNav';
 import {
+  HERO_DIM_MS,
   HERO_SURGE_MS,
   HOME_SECTION_CONFIG,
   NAV_ITEMS,
@@ -94,9 +95,10 @@ export default function HomeClient() {
   const wordmarkScaleRef = useRef<HTMLDivElement>(null);
   // 첫 진입 hero(hooks/useHeroPhase.ts). 최초 overview는 pending으로
   // 배경이 숨어 있고, overview를 처음 떠나는 순간 surge가 되어 배경이
-  // 소실점에서 자라며 치솟는다. HERO_SURGE_MS 뒤 settle에서 배경이
-  // 섹션 체류 속도로 내려가는 동안 셸(내비 스트립, 푸터)과 섹션의 지연된
-  // 진입이 들어오고, HERO_SETTLE_MS 뒤 done으로 굳는다. 워드마크 FLIP은
+  // 흐림에서 풀리며 떠오르고 치솟는다. HERO_SURGE_MS 뒤 settle에서 배경이
+  // 섹션 밝기와 섹션 체류 속도로 내려가고, 그 내려감이 끝나는 HERO_DIM_MS
+  // 뒤에 셸(내비 스트립, 푸터)과 섹션의 지연된 진입이 들어온다. settle은
+  // 그 진입이 다 끝날 때까지 이어지다 HERO_SETTLE_MS 뒤 done으로 굳는다. 워드마크 FLIP은
   // 이 지연을 쓰지 않는다. 이름은 surge가 시작되는 그 프레임에 같이
   // 출발해 제 길이대로 착지한다. 딥링크로
   // 다른 섹션에서 시작하면 재생할 overview가 없으므로 곧바로 done이고,
@@ -199,14 +201,15 @@ export default function HomeClient() {
     resolveHero(false);
   }, [active, resolveHero, routeResolved]);
 
-  // surge와 settle 동안 셸과 섹션의 진입 전환을 붙잡는 지연.
+  // 셸과 섹션의 진입 전환을 붙잡는 지연. 배경이 떠올라(surge) 섹션
+  // 밝기까지 내려앉는(settle의 앞 HERO_DIM_MS) 동안 기다린다.
   // design-tokens.css의 .section-visible, 진입 키프레임, .site-footer-visible,
   // .nav-strip-visible이 var(--hero-delay, 0ms)로 읽는다. settle 동안에도
   // 유지하는 이유: 지연된 진입 애니메이션이 아직 도는 중에 animation-delay가
   // 0으로 바뀌면 그 애니메이션이 끝 상태로 튄다.
   const heroDelayStyle: CSSProperties | undefined =
     heroPhase === 'surge' || heroPhase === 'settle'
-      ? ({ '--hero-delay': `${HERO_SURGE_MS}ms` } as CSSProperties)
+      ? ({ '--hero-delay': `${HERO_SURGE_MS + HERO_DIM_MS}ms` } as CSSProperties)
       : undefined;
 
   // 전환 끊김 완화. 비활성 섹션은 .section-hidden의 content-visibility:

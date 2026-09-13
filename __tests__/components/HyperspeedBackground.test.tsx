@@ -6,6 +6,7 @@ import HyperspeedBackground, {
   type HyperspeedBackgroundProps,
 } from '@/components/blocks/HyperspeedBackground';
 import { OVERVIEW } from '@/hooks/useSectionNav';
+import { HERO_DIM_MS, HYPERSPEED_BOOST_TIME_SCALE } from '@/lib/constants';
 import type { QualityTier } from '@/lib/deviceQuality';
 
 // 이 파일 전체에서 '@/components/blocks/Hyperspeed'는 항상 "성공적으로
@@ -379,43 +380,55 @@ describe('HyperspeedBackground — detectQuality 초기 적용', () => {
   });
 });
 
-// 첫 진입 hero. HomeClient가 소유한 단계를 받아 밝기, 마스크 속성, 배율,
-// 밀도로 반응한다. 최초 overview(pending)는 검은 화면이고 surge에서
-// 소실점부터 자라며 치솟았다가 settle에서 기본치로 내려간다.
+// 첫 진입 hero. HomeClient가 소유한 단계를 받아 밝기, 초점, 배율, 밀도로
+// 반응한다. 최초 overview(pending)는 검은 화면이고 surge에서 흐림이 풀리며
+// 오버뷰 밝기로 떠올랐다가 settle에서 섹션 밝기로 내려간다.
 describe('HyperspeedBackground. 첫 진입 hero 단계', () => {
   // 뮤테이션 (a). heroState 계산에서 pending을 무시하고 항상 보이게 하면
   // opacity가 '1'로 나와 FAIL해야 한다.
-  it('pending + overview + 모션 허용이면 opacity 0, 마스크 속성 pending, 배율과 밀도가 낮다', async () => {
+  it('pending + overview + 모션 허용이면 opacity 0, 블러, 배율과 밀도가 낮다', async () => {
     await renderReady({ active: OVERVIEW, hero: 'pending' });
     const root = screen.getByTestId('hyperspeed-background');
     expect(root.style.opacity).toBe('0');
     expect(root).toHaveAttribute('data-hyperspeed-hero', 'pending');
+    // 모달을 닫고 섹션으로 돌아올 때와 같은 블러다. surge에서 이게 풀리며
+    // 밝기가 차오르는 것이 첫 진입의 등장 그 자체다.
+    expect(root.style.filter).toBe('blur(8px)');
     expect(hyperspeedSpies.setIdleScale).toHaveBeenLastCalledWith(0.05);
     expect(hyperspeedSpies.setDensity).toHaveBeenLastCalledWith(0.3);
   });
 
-  it('surge면 마스크 속성 surge, 섹션 밝기, 오버뷰 배율 0.3, 밀도 2다', async () => {
+  // 뮤테이션: surge의 밝기를 섹션 값으로 두면 첫 진입에서 어두워지는
+  // 구간이 사라진다. 섹션(about)으로 가는 중인데도 오버뷰 밝기여야 한다.
+  it('surge면 블러가 풀리고 오버뷰 밝기로 떠오르며 배율은 전환 배속, 밀도는 2다', async () => {
     const { rerender } = await renderReady({ active: OVERVIEW, hero: 'pending' });
     rerender(
       <HyperspeedBackground {...readyProps} active="about" isTransitioning hero="surge" />
     );
     const root = screen.getByTestId('hyperspeed-background');
     expect(root).toHaveAttribute('data-hyperspeed-hero', 'surge');
-    expect(root.style.opacity).toBe('0.35');
-    expect(hyperspeedSpies.setIdleScale).toHaveBeenLastCalledWith(0.3);
+    expect(root.style.opacity).toBe('1');
+    expect(root.style.filter).toBe('none');
+    expect(hyperspeedSpies.setIdleScale).toHaveBeenLastCalledWith(
+      HYPERSPEED_BOOST_TIME_SCALE
+    );
     expect(hyperspeedSpies.setDensity).toHaveBeenLastCalledWith(2);
   });
 
-  it('settle이면 마스크 속성은 남고 배율과 밀도는 섹션 기본치다', async () => {
+  // 어두워지는 전환의 지속은 HERO_DIM_MS다. 이 숫자가 --hero-delay의
+  // 뒷부분이라 셸과 섹션이 들어오는 시각과 한 몸이다.
+  it('settle이면 섹션 밝기로 HERO_DIM_MS 동안 내려가고 배율과 밀도는 섹션 기본치다', async () => {
     const { rerender } = await renderReady({ active: 'about', hero: 'surge' });
     rerender(<HyperspeedBackground {...readyProps} active="about" hero="settle" />);
     const root = screen.getByTestId('hyperspeed-background');
     expect(root).toHaveAttribute('data-hyperspeed-hero', 'settle');
+    expect(root.style.opacity).toBe('0.35');
+    expect(root.style.transition).toContain(`opacity ${HERO_DIM_MS}ms`);
     expect(hyperspeedSpies.setIdleScale).toHaveBeenLastCalledWith(0.1);
     expect(hyperspeedSpies.setDensity).toHaveBeenLastCalledWith(1);
   });
 
-  it('done + overview면 마스크 속성이 없고 overview 밝기(1)다', async () => {
+  it('done + overview면 hero 속성이 없고 overview 밝기(1)다', async () => {
     await renderReady({ active: OVERVIEW, hero: 'done' });
     const root = screen.getByTestId('hyperspeed-background');
     expect(root).not.toHaveAttribute('data-hyperspeed-hero');
@@ -506,13 +519,17 @@ describe('HyperspeedBackground. 첫 진입 hero 단계', () => {
   });
 
   // 2차 감사 지적. 래퍼에 전환이 없으면 씬이 풀리는 순간 캔버스가 튀어
-  // 들어온다. 뮤테이션 (b). transition을 지우면 FAIL한다. mask-size 전환은
-  // 인라인에 있어야 CSS 규칙을 덮지 않는다.
-  it('모션 허용이면 opacity와 mask-size 트랜지션이 걸려 있고 mask-size는 surge 길이다', async () => {
+  // 들어온다. 뮤테이션 (b). transition을 지우면 FAIL한다. 밝기와 초점은
+  // 같은 지속이어야 배경이 한 몸으로 움직인다.
+  it('모션 허용이면 밝기와 초점에 같은 지속의 트랜지션이 걸려 있다', async () => {
     await renderReady({ active: OVERVIEW, hero: 'pending' });
     const root = screen.getByTestId('hyperspeed-background');
-    expect(root.style.transition).toMatch(/opacity/);
-    expect(root.style.transition).toMatch(/mask-size 1800ms/);
+    expect(root.style.transition).toContain(
+      'opacity var(--animate-duration-slow) ease-out'
+    );
+    expect(root.style.transition).toContain(
+      'filter var(--animate-duration-slow) ease-out'
+    );
   });
 
   it('reducedMotion이면 트랜지션 자체를 걸지 않는다(즉시 최종 상태)', () => {

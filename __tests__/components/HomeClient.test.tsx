@@ -22,6 +22,7 @@ import { firePointer } from '@/__tests__/helpers/pointerEvents';
 import HomeClient from '@/components/sections/HomeClient';
 import {
   HERO_SETTLE_MS,
+  HERO_DIM_MS,
   HERO_SURGE_MS,
   HOME_SECTION_CONFIG,
   type HomeSectionId,
@@ -1410,7 +1411,9 @@ describe('HomeClient. data-entry-motion 관측 속성', () => {
 describe('HomeClient 첫 진입 hero 단계', () => {
   function heroDelayed(container: HTMLElement) {
     return Array.from(container.querySelectorAll<HTMLElement>('*')).filter(
-      (el) => el.style.getPropertyValue('--hero-delay') === `${HERO_SURGE_MS}ms`
+      (el) =>
+        el.style.getPropertyValue('--hero-delay') ===
+        `${HERO_SURGE_MS + HERO_DIM_MS}ms`
     );
   }
 
