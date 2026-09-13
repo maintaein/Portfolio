@@ -1,12 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { HERO_SETTLE_MS, HERO_SURGE_MS, type HeroPhase } from '@/lib/constants';
 
 export interface UseHeroPhaseReturn {
   heroPhase: HeroPhase;
-  // setActive 안에서 동기로 읽어야 하는 호출부(HomeClient의
-  // handleBeforeActiveChange, 워드마크 FLIP layout effect)를 위한 거울.
-  // state와 같은 함수로만 바뀌므로 둘이 어긋나지 않는다.
-  heroPhaseRef: RefObject<HeroPhase>;
   // pending을 끝낸다. animate면 surge로 재생을 시작하고, 아니면(모션 준비
   // 전, reducedMotion, 딥링크) 재생 없이 done으로 굳힌다. pending이 아니면
   // 아무것도 하지 않는다.
@@ -29,6 +25,8 @@ export interface UseHeroPhaseReturn {
  */
 export function useHeroPhase(): UseHeroPhaseReturn {
   const [heroPhase, setHeroPhaseState] = useState<HeroPhase>('pending');
+  // state의 거울. resolveHero가 같은 배치 안에서 두 번 불릴 수 있어(setActive
+  // 안의 호출과 딥링크 effect) 아직 커밋되지 않은 state 대신 이걸 본다.
   const heroPhaseRef = useRef<HeroPhase>('pending');
   const setHeroPhase = useCallback((next: HeroPhase) => {
     heroPhaseRef.current = next;
@@ -57,5 +55,5 @@ export function useHeroPhase(): UseHeroPhaseReturn {
     return undefined;
   }, [heroPhase, setHeroPhase]);
 
-  return { heroPhase, heroPhaseRef, resolveHero };
+  return { heroPhase, resolveHero };
 }

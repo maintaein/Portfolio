@@ -95,12 +95,14 @@ export default function HomeClient() {
   // 첫 진입 hero(hooks/useHeroPhase.ts). 최초 overview는 pending으로
   // 배경이 숨어 있고, overview를 처음 떠나는 순간 surge가 되어 배경이
   // 소실점에서 자라며 치솟는다. HERO_SURGE_MS 뒤 settle에서 배경이
-  // 기본치로 내려가는 동안 셸(내비 스트립, 워드마크 FLIP, 푸터)과 섹션의
-  // 지연된 진입이 들어오고, HERO_SETTLE_MS 뒤 done으로 굳는다. 딥링크로
+  // 섹션 체류 속도로 내려가는 동안 셸(내비 스트립, 푸터)과 섹션의 지연된
+  // 진입이 들어오고, HERO_SETTLE_MS 뒤 done으로 굳는다. 워드마크 FLIP은
+  // 이 지연을 쓰지 않는다. 이름은 surge가 시작되는 그 프레임에 같이
+  // 출발해 제 길이대로 착지한다. 딥링크로
   // 다른 섹션에서 시작하면 재생할 overview가 없으므로 곧바로 done이고,
   // reducedMotion도 마찬가지다. 씬 자체는 단계와 무관하게 일찍 로드된다.
   // "준비는 일찍, 노출은 늦게".
-  const { heroPhase, heroPhaseRef, resolveHero } = useHeroPhase();
+  const { heroPhase, resolveHero } = useHeroPhase();
   // GSAP은 정적 import에서 뺐다(First Load JS 예산. gsap-lazy-brief.md).
   // 마운트 직후 미리 요청해 ref에 담아 두고, 아래 handleBeforeActiveChange는
   // 이 ref를 동기적으로만 읽는다. Flip.getState()는 DOM이 바뀌기 직전에
@@ -310,14 +312,8 @@ export default function HomeClient() {
       ease: mod.SITE_EASE,
       scale: true,
       absolute: true,
-      // 첫 진입 hero의 surge 동안은 이름이 화면 중앙에 남아 배경이 피어나는
-      // 동안의 닻이 된다. settle 시점에 compact 자리로 난다. surge가 아니면
-      // 인자 형태가 예전과 같다.
-      ...(heroPhaseRef.current === 'surge'
-        ? { delay: HERO_SURGE_MS / 1000 }
-        : {}),
     });
-  }, [active, heroPhaseRef]);
+  }, [active]);
 
   const activeLabel =
     active === OVERVIEW

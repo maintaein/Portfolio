@@ -113,12 +113,14 @@ const BASE_OPACITY_SECTION = 0.35;
 const IDLE_SCALE_OVERVIEW = 0.3;
 const IDLE_SCALE_SECTION = 0.1;
 // 첫 진입 hero의 흐름 배율과 밀도. pending(숨김) 동안 낮은 값으로 수렴해
-// 있어야 surge가 "느린 데서 시작해 빨라지는" 곡선이 된다. surge 목표는
-// 엔진의 지수 수렴(1/초)을 거치므로 1.8초 안에 다 닿지 않고 그 근처까지
-// 올랐다가 settle에서 섹션 기본치로 내려간다. 밀도 단위는 엔진의
-// setDensity와 같다. 1이 기본, HYPERSPEED_DENSITY_POOL이 최대.
+// 있어야 surge가 "느린 데서 시작해 빨라지는" 곡선이 된다. surge의 상한은
+// 오버뷰 체류 속도다. 배경이 처음 보이는 동안 오버뷰만큼 빨라졌다가
+// settle에서 섹션 체류 속도로 내려가고, 그 내려가는 구간에 셸과 섹션
+// 내용이 들어온다. 엔진의 지수 수렴(1/초)을 거치므로 1.8초 안에 상한에
+// 다 닿지는 않고 그 근처까지 오른다. 밀도 단위는 엔진의 setDensity와
+// 같다. 1이 기본, HYPERSPEED_DENSITY_POOL이 최대.
 const HERO_IDLE_PENDING = 0.05;
-const HERO_IDLE_SURGE = 1.2;
+const HERO_IDLE_SURGE = IDLE_SCALE_OVERVIEW;
 const HERO_DENSITY_PENDING = 0.3;
 const HERO_DENSITY_SURGE = HYPERSPEED_DENSITY_POOL;
 // obscured(ProjectModal 열림) 동안 배경에서 초점을 빼는 블러 반경.
@@ -186,6 +188,13 @@ export default function HyperspeedBackground({
         ? 'none'
         : hero;
   const heroPending = heroState === 'pending';
+  // surge와 settle 동안에는 전환 boost를 걸지 않는다. boost는 섹션이 바뀌는
+  // 순간을 속도로 덮는 장치인데, hero에서는 배경 자체가 안무다. 얹으면
+  // 올라가는 구간이 상한(오버뷰 체류 속도)을 넘고, 내려가야 할 settle
+  // 구간에도 boost가 아직 오르는 중이라 감속이 보이지 않는다. hero가 done이
+  // 될 때까지 흐름은 idleScale 하나만 몬다.
+  const heroSuppressesBoost =
+    heroState === 'surge' || heroState === 'settle';
 
   const idleScale = heroPending
     ? HERO_IDLE_PENDING
@@ -205,6 +214,10 @@ export default function HyperspeedBackground({
   idleScaleRef.current = idleScale;
   const densityRef = useRef(density);
   densityRef.current = density;
+  // boost effect의 의존성은 isTransitioning 하나로 유지한다(연속 전환에
+  // settle 0회). 그래서 최신값을 ref로 건넨다.
+  const heroSuppressesBoostRef = useRef(heroSuppressesBoost);
+  heroSuppressesBoostRef.current = heroSuppressesBoost;
   const [contextLost, setContextLost] = useState(false);
   const contextRetriesRef = useRef(0);
 
@@ -256,7 +269,7 @@ export default function HyperspeedBackground({
     const prev = prevTransitioningRef.current;
     prevTransitioningRef.current = isTransitioning;
     if (prev === isTransitioning) return;
-    if (isTransitioning) {
+    if (isTransitioning && !heroSuppressesBoostRef.current) {
       handleRef.current?.boost();
     } else {
       handleRef.current?.settle();
@@ -290,7 +303,7 @@ export default function HyperspeedBackground({
     }
 
     handleRef.current?.resume();
-    if (isTransitioningRef.current) {
+    if (isTransitioningRef.current && !heroSuppressesBoostRef.current) {
       handleRef.current?.boost();
     } else {
       handleRef.current?.settle();
@@ -349,8 +362,14 @@ export default function HyperspeedBackground({
   // 때도 이 div는 살아 있으므로(엔진 container는 청크가 풀려야 존재한다)
   // 여기에 단다. fallback은 boost·slow보다, obscured는 overview·section보다
   // 우선한다. 더 자세한 폴백 사유는 이미 HyperspeedFallback의
-  // data-fallback-reason이 맡는다.
-  const motionState = !showScene ? 'fallback' : isTransitioning ? 'boost' : 'slow';
+  // data-fallback-reason이 맡는다. hero 구간은 전환 중이어도 엔진에 boost를
+  // 걸지 않으므로 slow로 읽힌다. 속성이 엔진과 어긋나면 관측용으로 쓸모가
+  // 없다. hero가 도는 중인지는 data-hyperspeed-hero가 따로 말한다.
+  const motionState = !showScene
+    ? 'fallback'
+    : isTransitioning && !heroSuppressesBoost
+      ? 'boost'
+      : 'slow';
   const visibilityState = obscured
     ? 'obscured'
     : active === OVERVIEW

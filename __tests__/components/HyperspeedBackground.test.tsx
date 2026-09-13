@@ -394,7 +394,7 @@ describe('HyperspeedBackground. 첫 진입 hero 단계', () => {
     expect(hyperspeedSpies.setDensity).toHaveBeenLastCalledWith(0.3);
   });
 
-  it('surge면 마스크 속성 surge, 섹션 밝기, 배율 1.2, 밀도 2다', async () => {
+  it('surge면 마스크 속성 surge, 섹션 밝기, 오버뷰 배율 0.3, 밀도 2다', async () => {
     const { rerender } = await renderReady({ active: OVERVIEW, hero: 'pending' });
     rerender(
       <HyperspeedBackground {...readyProps} active="about" isTransitioning hero="surge" />
@@ -402,7 +402,7 @@ describe('HyperspeedBackground. 첫 진입 hero 단계', () => {
     const root = screen.getByTestId('hyperspeed-background');
     expect(root).toHaveAttribute('data-hyperspeed-hero', 'surge');
     expect(root.style.opacity).toBe('0.35');
-    expect(hyperspeedSpies.setIdleScale).toHaveBeenLastCalledWith(1.2);
+    expect(hyperspeedSpies.setIdleScale).toHaveBeenLastCalledWith(0.3);
     expect(hyperspeedSpies.setDensity).toHaveBeenLastCalledWith(2);
   });
 
@@ -422,6 +422,57 @@ describe('HyperspeedBackground. 첫 진입 hero 단계', () => {
     expect(root.style.opacity).toBe('1');
     expect(hyperspeedSpies.setIdleScale).toHaveBeenLastCalledWith(0.3);
     expect(hyperspeedSpies.setDensity).toHaveBeenLastCalledWith(1);
+  });
+
+  // hero 구간의 속도는 idleScale 하나가 몬다. boost가 얹히면 올라가는
+  // 구간이 상한(오버뷰 체류 속도 0.3)을 넘고, settle에서 내려가야 하는데
+  // boost는 아직 오르는 중이라 감속이 보이지 않는다. 뮤테이션: boost 호출에서
+  // hero 조건을 빼면 첫 줄에서 FAIL한다.
+  it('surge와 settle 동안에는 전환이 시작돼도 boost 대신 settle을 부른다', async () => {
+    const { rerender } = await renderReady({
+      active: OVERVIEW,
+      hero: 'pending',
+      isTransitioning: false,
+    });
+    hyperspeedSpies.boost.mockClear();
+    hyperspeedSpies.settle.mockClear();
+
+    rerender(
+      <HyperspeedBackground {...readyProps} active="about" isTransitioning hero="surge" />
+    );
+    expect(hyperspeedSpies.boost).not.toHaveBeenCalled();
+    expect(hyperspeedSpies.settle).toHaveBeenCalledTimes(1);
+    // 관측 속성도 엔진을 따라간다. 전환 중이지만 boost가 아니다.
+    expect(screen.getByTestId('hyperspeed-background')).toHaveAttribute(
+      'data-hyperspeed-motion',
+      'slow'
+    );
+
+    rerender(
+      <HyperspeedBackground
+        {...readyProps}
+        active="about"
+        isTransitioning={false}
+        hero="settle"
+      />
+    );
+    expect(hyperspeedSpies.boost).not.toHaveBeenCalled();
+  });
+
+  // hero가 끝난 뒤의 전환은 평소와 같아야 한다. 억제가 done까지 새면 이후
+  // 모든 섹션 전환에서 가속이 사라진다.
+  it('done 뒤의 전환에서는 다시 boost를 부른다', async () => {
+    const { rerender } = await renderReady({
+      active: 'about',
+      hero: 'done',
+      isTransitioning: false,
+    });
+    hyperspeedSpies.boost.mockClear();
+
+    rerender(
+      <HyperspeedBackground {...readyProps} active="skills" isTransitioning hero="done" />
+    );
+    expect(hyperspeedSpies.boost).toHaveBeenCalledTimes(1);
   });
 
   // 씬 로드는 단계와 무관하게 이미 진행 중이어야 한다. 뮤테이션 (c) 대응:

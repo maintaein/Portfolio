@@ -15,13 +15,11 @@ describe('useHeroPhase', () => {
   it('pending에서 시작해 resolveHero(true)로 surge, 시간이 흐르면 settle과 done을 거친다', () => {
     const { result } = renderHook(() => useHeroPhase());
     expect(result.current.heroPhase).toBe('pending');
-    expect(result.current.heroPhaseRef.current).toBe('pending');
 
     act(() => {
       result.current.resolveHero(true);
     });
     expect(result.current.heroPhase).toBe('surge');
-    expect(result.current.heroPhaseRef.current).toBe('surge');
 
     act(() => {
       vi.advanceTimersByTime(HERO_SURGE_MS - 1);
@@ -40,7 +38,6 @@ describe('useHeroPhase', () => {
       vi.advanceTimersByTime(1);
     });
     expect(result.current.heroPhase).toBe('done');
-    expect(result.current.heroPhaseRef.current).toBe('done');
   });
 
   it('resolveHero(false)는 재생 없이 곧바로 done이다', () => {
@@ -79,13 +76,15 @@ describe('useHeroPhase', () => {
     expect(result.current.heroPhase).toBe('done');
   });
 
-  // setActive 안에서 같은 배치로 불리는 호출부는 다음 렌더 전에 ref로 읽는다.
-  it('ref는 state 커밋을 기다리지 않고 호출 즉시 바뀐다', () => {
+  // resolveHero는 한 배치에서 두 번 불릴 수 있다(setActive 안의 호출과 딥링크
+  // effect). 아직 커밋되지 않은 state를 보면 둘 다 통과해 시작하자마자 끊긴다.
+  it('한 배치에서 두 번 불려도 첫 호출만 반영된다', () => {
     const { result } = renderHook(() => useHeroPhase());
     act(() => {
       result.current.resolveHero(true);
-      expect(result.current.heroPhaseRef.current).toBe('surge');
+      result.current.resolveHero(false);
     });
+    expect(result.current.heroPhase).toBe('surge');
   });
 
   it('언마운트하면 예약한 타이머를 취소한다', () => {
