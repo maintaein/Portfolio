@@ -10,6 +10,7 @@
 import { BloomEffect, EffectComposer, EffectPass, RenderPass, SMAAEffect, SMAAPreset } from 'postprocessing';
 import * as THREE from 'three';
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { HYPERSPEED_DENSITY_POOL } from '@/lib/constants';
 import { FrameQualityGovernor, type QualityTier } from '@/lib/deviceQuality';
 import { distortions, distortion_uniforms, distortion_vertex, type Distortion, type UniformValue } from './distortions';
 import { CYAN_PALETTE, QUALITY_PROFILES, type QualityProfile } from './presets';
@@ -74,6 +75,9 @@ export interface HyperspeedHandle {
   boost(): void;
   settle(): void;
   setIdleScale(scale: number): void;
+  // 광선 밀도. 1이 기본(lightPairsPerRoadWay가 전부 보임),
+  // HYPERSPEED_DENSITY_POOL이 최대, 0이 없음. [0, POOL]로 잘린다.
+  setDensity(scale: number): void;
   isLost(): boolean;
 }
 
@@ -196,7 +200,13 @@ class CarLights {
     const geometry = new THREE.TubeGeometry(curve, 40, 1, 8, false);
 
     const instanced = new THREE.InstancedBufferGeometry().copy(geometry as unknown as THREE.InstancedBufferGeometry);
-    instanced.instanceCount = options.lightPairsPerRoadWay * 2;
+    // 밀도 풀. lightPairsPerRoadWay의 POOL배를 만들어 두고 uDensity로 몇 할을
+    // 그릴지 정한다. 기하를 다시 만들면 배치가 섞여 눈에 튀므로 여유분을
+    // 미리 두는 쪽을 택했다. 루프 순서는 그대로라 같은 seed에서 앞쪽
+    // lightPairsPerRoadWay쌍은 풀이 없던 때와 같은 난수를 받아 같은 자리에
+    // 놓인다. 기본 화면은 픽셀 단위로 변하지 않는다.
+    const totalPairs = options.lightPairsPerRoadWay * HYPERSPEED_DENSITY_POOL;
+    instanced.instanceCount = totalPairs * 2;
 
     const laneWidth = options.roadWidth / options.lanesPerRoad;
 
@@ -205,8 +215,9 @@ class CarLights {
     const aOffset: number[] = [];
     const aMetrics: number[] = [];
     const aColor: number[] = [];
+    const aRank: number[] = [];
 
-    for (let i = 0; i < options.lightPairsPerRoadWay; i++) {
+    for (let i = 0; i < totalPairs; i++) {
       const radius = random(options.carLightsRadius, rng);
       const length = random(options.carLightsLength, rng);
       const spd = random(this.speed, rng);
@@ -226,11 +237,16 @@ class CarLights {
       aOffset.push(laneX - carWidth / 2, offsetY, offsetZ, laneX + carWidth / 2, offsetY, offsetZ);
       aMetrics.push(radius, length, spd, radius, length, spd);
       aColor.push(color.r, color.g, color.b, color.r, color.g, color.b);
+      // 쌍의 두 인스턴스가 같은 순위를 받는다. 0.5를 더해 uDensity가 정확히
+      // 1/POOL일 때 부동소수 경계에서 앞 절반이 흔들리지 않게 한다.
+      const rank = (i + 0.5) / totalPairs;
+      aRank.push(rank, rank);
     }
 
     instanced.setAttribute('aOffset', new THREE.InstancedBufferAttribute(new Float32Array(aOffset), 3, false));
     instanced.setAttribute('aMetrics', new THREE.InstancedBufferAttribute(new Float32Array(aMetrics), 3, false));
     instanced.setAttribute('aColor', new THREE.InstancedBufferAttribute(new Float32Array(aColor), 3, false));
+    instanced.setAttribute('aRank', new THREE.InstancedBufferAttribute(new Float32Array(aRank), 1, false));
 
     const material = new THREE.ShaderMaterial({
       fragmentShader: carLightsFragment,
@@ -240,7 +256,8 @@ class CarLights {
         {
           uTime: { value: 0 },
           uTravelLength: { value: options.length },
-          uFade: { value: this.fade }
+          uFade: { value: this.fade },
+          uDensity: { value: this.webgl.density / HYPERSPEED_DENSITY_POOL }
         },
         this.webgl.fogUniforms,
         (typeof this.options.distortion === 'object' ? this.options.distortion.uniforms : {}) || {}
@@ -260,10 +277,14 @@ class CarLights {
     this.mesh = mesh;
   }
 
-  update(time: number) {
+  update(time: number, density: number) {
     if (!this.mesh) return;
-    if (this.mesh.material.uniforms.uTime) {
-      this.mesh.material.uniforms.uTime.value = time;
+    const { uniforms } = this.mesh.material;
+    if (uniforms.uTime) {
+      uniforms.uTime.value = time;
+    }
+    if (uniforms.uDensity) {
+      uniforms.uDensity.value = density;
     }
   }
 }
@@ -289,8 +310,10 @@ const carLightsVertex = `
   attribute vec3 aOffset;
   attribute vec3 aMetrics;
   attribute vec3 aColor;
+  attribute float aRank;
   uniform float uTravelLength;
   uniform float uTime;
+  uniform float uDensity;
   varying vec2 vUv;
   varying vec3 vColor;
   #include <getDistortion_vertex>
@@ -310,7 +333,10 @@ const carLightsVertex = `
     transformed.xyz += getDistortion(progress);
 
     vec4 mvPosition = modelViewMatrix * vec4(transformed, 1.);
-    gl_Position = projectionMatrix * mvPosition;
+    // 밀도. 순위가 uDensity를 넘는 인스턴스는 클립 볼륨 밖 한 점으로 보내
+    // 래스터라이즈되지 않게 한다. 분기 없이 mix로 고른다.
+    float visible = step(aRank, uDensity);
+    gl_Position = mix(vec4(2.0, 2.0, 2.0, 1.0), projectionMatrix * mvPosition, visible);
     vUv = uv;
     vColor = aColor;
     ${THREE.ShaderChunk['fog_vertex']}
@@ -666,6 +692,11 @@ class App {
   baseTime: number;
   idleScale: number;
   idleScaleTarget: number;
+  // 광선 밀도(setDensity 단위). 셰이더에는 density / HYPERSPEED_DENSITY_POOL이
+  // 들어간다. 기하를 다시 만들지 않고 uDensity 유니폼으로 몇 할을 그릴지
+  // 정하므로 값이 바뀌어도 광선 배치가 섞이지 않는다.
+  density: number;
+  densityTarget: number;
   timeOffset: number;
   hasValidSize: boolean;
 
@@ -741,6 +772,10 @@ class App {
     // update(timestamp)를 먼저 호출해야 한다 — tick()에서 매 프레임 갱신한다.
     this.timer = new THREE.Timer();
     this.assets = {};
+
+    // CarLights.init이 초기 uDensity 값으로 읽으므로 광선을 만들기 전에 둔다.
+    this.density = 1;
+    this.densityTarget = 1;
 
     this.road = new Road(this, options);
     this.leftCarLights = new CarLights(
@@ -982,6 +1017,11 @@ class App {
     this.idleScaleTarget = scale;
   }
 
+  // 밀도도 목표만 옮긴다. 수렴은 update()에서 idleScale과 같은 상수로 한다.
+  setDensity(scale: number) {
+    this.densityTarget = Math.min(HYPERSPEED_DENSITY_POOL, Math.max(0, scale));
+  }
+
   onMouseDown(ev: MouseEvent) {
     if (this.options.onSpeedUp) this.options.onSpeedUp(ev);
     this.boost();
@@ -1014,13 +1054,15 @@ class App {
     const speedSmoothing = 1 - Math.exp(-SPEED_SMOOTHING_RATE * delta);
     this.speedUp += (this.speedUpTarget - this.speedUp) * speedSmoothing;
     this.idleScale += (this.idleScaleTarget - this.idleScale) * speedSmoothing;
+    this.density += (this.densityTarget - this.density) * speedSmoothing;
 
     this.baseTime += delta * this.idleScale;
     this.timeOffset += this.speedUp * delta;
     const time = this.baseTime + this.timeOffset;
 
-    this.rightCarLights.update(time);
-    this.leftCarLights.update(time);
+    const shaderDensity = this.density / HYPERSPEED_DENSITY_POOL;
+    this.rightCarLights.update(time, shaderDensity);
+    this.leftCarLights.update(time, shaderDensity);
     this.leftSticks.update(time);
     this.road.update(time);
 
@@ -1209,6 +1251,8 @@ const Hyperspeed = forwardRef<HyperspeedHandle, HyperspeedProps>(function Hypers
   // 다시 바뀔 일이 없어 배경이 오버뷰 속도 그대로 흘렀다. 마지막 요청을
   // 들고 있다가 App이 생기는 순간 끼운다.
   const idleScaleRef = useRef<number | null>(null);
+  // 밀도도 같은 이유로 마지막 요청을 들고 있다가 App이 생기는 순간 끼운다.
+  const densityRef = useRef<number | null>(null);
 
   useEffect(() => {
     const el = container.current;
@@ -1255,6 +1299,10 @@ const Hyperspeed = forwardRef<HyperspeedHandle, HyperspeedProps>(function Hypers
           app.setIdleScale(idleScaleRef.current);
           app.idleScale = idleScaleRef.current;
         }
+        if (densityRef.current !== null) {
+          app.setDensity(densityRef.current);
+          app.density = app.densityTarget;
+        }
         app.loadAssets().then(() => app.init());
       } catch {
         appRef.current = null;
@@ -1278,6 +1326,10 @@ const Hyperspeed = forwardRef<HyperspeedHandle, HyperspeedProps>(function Hypers
       setIdleScale: (scale: number) => {
         idleScaleRef.current = scale;
         appRef.current?.setIdleScale(scale);
+      },
+      setDensity: (scale: number) => {
+        densityRef.current = scale;
+        appRef.current?.setDensity(scale);
       },
       isLost: () => appRef.current?.isLost() ?? false
     }),

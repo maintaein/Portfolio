@@ -3,6 +3,7 @@ import path from 'node:path';
 import { createRef, Profiler } from 'react';
 import { render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { HYPERSPEED_DENSITY_POOL } from '@/lib/constants';
 import { FrameQualityGovernor } from '@/lib/deviceQuality';
 
 // jsdom에는 WebGL이 없다 — new THREE.WebGLRenderer(...)는 항상 던진다
@@ -283,8 +284,14 @@ describe('구멍 2 — profile의 여섯 노브를 정확히 적용한다', () =
 
     // 1) 광선 수 — mesh의 instanceCount로 직접 관측한다(GPU 없이도 순수
     // JS 객체라 검증 가능하다).
-    expect(app.leftCarLights.mesh?.geometry.instanceCount).toBe(expected.lightPairsPerRoadWay * 2);
-    expect(app.rightCarLights.mesh?.geometry.instanceCount).toBe(expected.lightPairsPerRoadWay * 2);
+    // 밀도 풀(HYPERSPEED_DENSITY_POOL)만큼 여유분을 미리 만든다. 기본
+    // 화면에 보이는 것은 그중 lightPairsPerRoadWay쌍이다(아래 밀도 describe).
+    expect(app.leftCarLights.mesh?.geometry.instanceCount).toBe(
+      expected.lightPairsPerRoadWay * 2 * HYPERSPEED_DENSITY_POOL
+    );
+    expect(app.rightCarLights.mesh?.geometry.instanceCount).toBe(
+      expected.lightPairsPerRoadWay * 2 * HYPERSPEED_DENSITY_POOL
+    );
     // 2) side light 수
     expect(app.leftSticks.mesh?.geometry.instanceCount).toBe(expected.totalSideLightSticks);
 
@@ -887,5 +894,99 @@ describe('체류 배율: App 생성보다 먼저 온 setIdleScale', () => {
     // 오버뷰 속도로 시작했다가 1초쯤 걸려 느려진다.
     expect(app.idleScaleTarget).toBe(0.1);
     expect(app.idleScale).toBe(0.1);
+  });
+});
+
+// 첫 진입 hero의 밀도. 기하를 다시 만들지 않고 uDensity 유니폼과 aRank
+// 순위로 몇 할을 그릴지 정한다. 광선 배치가 섞이지 않아야 하므로 풀은
+// 만들 때 한 번만 만들고 유니폼만 움직인다.
+describe('밀도: uDensity와 aRank', () => {
+  function readRank(app: InstanceType<typeof App>) {
+    return Array.from(
+      app.leftCarLights.mesh!.geometry.getAttribute('aRank').array as Float32Array
+    );
+  }
+
+  it('풀은 lightPairsPerRoadWay의 POOL배이고 aRank는 쌍마다 같으며 단조 증가한다', () => {
+    const app = new App(createContainer(), buildOptions());
+    app.init();
+    const pairs = app.options.lightPairsPerRoadWay;
+    const rank = readRank(app);
+
+    expect(rank.length).toBe(pairs * HYPERSPEED_DENSITY_POOL * 2);
+    for (let i = 0; i < rank.length; i += 2) {
+      expect(rank[i]).toBe(rank[i + 1]);
+      if (i >= 2) expect(rank[i]).toBeGreaterThan(rank[i - 2]);
+    }
+    // 앞 절반은 기본 밀도(1/POOL) 아래, 뒤는 위. 기본 화면에 보이는 것이
+    // 정확히 원래의 lightPairsPerRoadWay쌍이다. 뮤테이션: (i + 0.5)에서
+    // 0.5를 빼면 경계 쌍이 정확히 1/POOL에 놓여 아래 부등식이 깨진다.
+    const baseline = 1 / HYPERSPEED_DENSITY_POOL;
+    for (let i = 0; i < pairs * 2; i++) expect(rank[i]).toBeLessThan(baseline);
+    for (let i = pairs * 2; i < rank.length; i++) expect(rank[i]).toBeGreaterThan(baseline);
+  });
+
+  it('setDensity는 목표만 옮기고 update가 uDensity를 목표/POOL로 수렴시킨다', () => {
+    const app = new App(createContainer(), buildOptions());
+    app.init();
+    const left = app.leftCarLights.mesh!.material.uniforms.uDensity;
+    const right = app.rightCarLights.mesh!.material.uniforms.uDensity;
+    expect(app.density).toBe(1);
+    expect(left.value).toBe(1 / HYPERSPEED_DENSITY_POOL);
+
+    app.setDensity(HYPERSPEED_DENSITY_POOL);
+    expect(app.densityTarget).toBe(HYPERSPEED_DENSITY_POOL);
+    // 목표만 움직였다. 현재값이 즉시 튀면 광선이 한 프레임에 갑절이 된다.
+    expect(app.density).toBe(1);
+
+    for (let i = 0; i < 20; i++) app.update(1);
+    expect(app.density).toBeCloseTo(HYPERSPEED_DENSITY_POOL, 3);
+    expect(left.value).toBeCloseTo(1, 3);
+    expect(right.value).toBeCloseTo(1, 3);
+  });
+
+  it('setDensity는 [0, POOL]로 자른다', () => {
+    const app = new App(createContainer(), buildOptions());
+    app.init();
+    app.setDensity(HYPERSPEED_DENSITY_POOL + 5);
+    expect(app.densityTarget).toBe(HYPERSPEED_DENSITY_POOL);
+    app.setDensity(-1);
+    expect(app.densityTarget).toBe(0);
+  });
+
+  it('setQuality로 재생성한 뒤에도 새 재질의 uDensity가 현재 밀도다', () => {
+    const app = new App(createContainer(), buildOptions());
+    app.init();
+    app.setDensity(0.3);
+    for (let i = 0; i < 20; i++) app.update(1);
+    const before = app.leftCarLights.mesh!.material;
+
+    app.setQuality('low');
+    const after = app.leftCarLights.mesh!.material;
+    expect(after).not.toBe(before);
+    expect(after.uniforms.uDensity.value).toBeCloseTo(0.3 / HYPERSPEED_DENSITY_POOL, 3);
+  });
+});
+
+// HyperspeedBackground는 ref 콜백에서 setIdleScale과 함께 setDensity도
+// 부른다. 같은 시점 문제(App이 아직 없음)가 같은 방식으로 풀려야 한다.
+describe('밀도: App 생성보다 먼저 온 setDensity', () => {
+  it('목표와 현재값 둘 다에 끼워져 첫 프레임부터 그 밀도다', () => {
+    const loadAssets = vi
+      .spyOn(App.prototype, 'loadAssets')
+      .mockResolvedValue(undefined);
+
+    render(
+      <Hyperspeed
+        ref={(handle) => {
+          handle?.setDensity(0.3);
+        }}
+      />
+    );
+
+    const app = loadAssets.mock.contexts[0] as InstanceType<typeof App>;
+    expect(app).toBeDefined();
+    expect(app.densityTarget).toBe(0.3);
+    expect(app.density).toBe(0.3);
   });
 });

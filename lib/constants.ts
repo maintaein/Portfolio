@@ -134,3 +134,24 @@ export const PERSONAL_INFO = {
   // 제스처"로 읽힌다(부팅 안무 브리프 1절). 값을 두 파일에 따로 하드코딩하면
   // 나중에 한쪽만 바뀌어 어긋나기 쉬우므로 여기 하나로 둔다.
   export const BOOT_DURATION_SECONDS = 2;
+
+// 첫 진입 hero. overview에서 처음 섹션으로 넘어갈 때 배경이 소실점에서
+// 자라며 밀도와 속도가 치솟았다가 섹션 기본치로 가라앉고, 그때 셸과 섹션
+// 내용이 들어온다. HomeClient가 단계(HeroPhase)를 소유하고,
+// HyperspeedBackground가 반응하며, CSS 지연(--hero-delay)도 같은 숫자를
+// 쓴다. 셋이 각자 숫자를 들고 있으면 한쪽만 바뀌어 어긋나므로 여기 하나로
+// 둔다.
+//
+// HERO_SURGE_MS: 배경만 보이는 구간. 마스크가 자라는 시간이자 셸과 섹션의
+//   진입 전환이 기다리는 지연이다.
+// HERO_SETTLE_MS: 지연된 진입 전환(섹션 500ms, 워드마크 FLIP 500ms, 그 뒤
+//   내비 스트립 300ms)이 전부 끝날 때까지 --hero-delay를 유지하는 여유.
+//   도중에 변수가 빠지면 animation-delay가 0으로 바뀌어 아직 도는
+//   애니메이션이 끝 상태로 튄다.
+// HYPERSPEED_DENSITY_POOL: 엔진이 lightPairsPerRoadWay의 몇 배를 미리
+//   만들어 두는지. 기본은 그중 1/POOL만 보이고 surge에서 전부 보인다.
+//   기하를 다시 만들지 않고 밀도를 올리려면 여유분이 있어야 한다.
+export const HERO_SURGE_MS = 1800;
+export const HERO_SETTLE_MS = 1000;
+export const HYPERSPEED_DENSITY_POOL = 2;
+export type HeroPhase = 'pending' | 'surge' | 'settle' | 'done';

@@ -26,7 +26,7 @@ describe('HyperspeedBackground — 청크 로드 실패', () => {
         routeResolved={true}
         motionReady={true}
         reducedMotion={false}
-        heroRevealed={true}
+        hero="done"
       />
     );
 

@@ -20,6 +20,7 @@ const hyperspeedSpies = vi.hoisted(() => ({
   resume: vi.fn(),
   setQuality: vi.fn(),
   setIdleScale: vi.fn(),
+  setDensity: vi.fn(),
   isLost: vi.fn(() => false),
   mountCount: 0,
 }));
@@ -44,6 +45,7 @@ vi.mock('@/components/blocks/Hyperspeed', async () => {
         resume: hyperspeedSpies.resume,
         setQuality: hyperspeedSpies.setQuality,
         setIdleScale: hyperspeedSpies.setIdleScale,
+        setDensity: hyperspeedSpies.setDensity,
         isLost: hyperspeedSpies.isLost,
       }),
       []
@@ -56,10 +58,9 @@ vi.mock('@/components/blocks/Hyperspeed', async () => {
   return { default: Hyperspeed };
 });
 
-// heroRevealed: true — 이 파일 대부분의 describe는 부팅 이후 "정상 상태"의
-// boost/settle·pause/resume·detectQuality 등을 다룬다. HERO 재순서(t=0 검은
-// 화면 → 이름 완성 → 배경 등장) 자체의 게이팅은 별도 describe에서
-// heroRevealed를 명시적으로 false로 바꿔가며 검증한다.
+// hero: 'done'. 이 파일 대부분의 describe는 첫 진입 hero가 끝난 "정상
+// 상태"의 boost/settle, pause/resume, detectQuality 등을 다룬다. hero 단계
+// 자체는 별도 describe에서 pending/surge/settle을 명시적으로 주며 검증한다.
 const readyProps: HyperspeedBackgroundProps = {
   active: OVERVIEW,
   isTransitioning: false,
@@ -68,7 +69,7 @@ const readyProps: HyperspeedBackgroundProps = {
   routeResolved: true,
   motionReady: true,
   reducedMotion: false,
-  heroRevealed: true,
+  hero: 'done',
 };
 
 async function renderReady(overrides: Partial<HyperspeedBackgroundProps> = {}) {
@@ -378,76 +379,94 @@ describe('HyperspeedBackground — detectQuality 초기 적용', () => {
   });
 });
 
-// HERO 재순서 브리프 2절 — "아무것도 없는 배경 → 이름이 파티클로 뭉쳐
-// 완성 → 배경이 자연스럽게 등장". heroRevealed가 이 노출을 가른다.
-describe('HyperspeedBackground — heroRevealed 게이팅(t=0 검은 화면 → 이름 완성 → 배경 등장)', () => {
-  // 뮤테이션 (a) — heroPending 계산에서 heroRevealed를 무시하고 항상
-  // 보이게 하면 이 값이 '1'로 나와 FAIL해야 한다.
-  it('overview + 모션 허용 + heroRevealed=false면 opacity가 0이다', async () => {
-    await renderReady({ active: OVERVIEW, heroRevealed: false });
+// 첫 진입 hero. HomeClient가 소유한 단계를 받아 밝기, 마스크 속성, 배율,
+// 밀도로 반응한다. 최초 overview(pending)는 검은 화면이고 surge에서
+// 소실점부터 자라며 치솟았다가 settle에서 기본치로 내려간다.
+describe('HyperspeedBackground. 첫 진입 hero 단계', () => {
+  // 뮤테이션 (a). heroState 계산에서 pending을 무시하고 항상 보이게 하면
+  // opacity가 '1'로 나와 FAIL해야 한다.
+  it('pending + overview + 모션 허용이면 opacity 0, 마스크 속성 pending, 배율과 밀도가 낮다', async () => {
+    await renderReady({ active: OVERVIEW, hero: 'pending' });
     const root = screen.getByTestId('hyperspeed-background');
     expect(root.style.opacity).toBe('0');
+    expect(root).toHaveAttribute('data-hyperspeed-hero', 'pending');
+    expect(hyperspeedSpies.setIdleScale).toHaveBeenLastCalledWith(0.05);
+    expect(hyperspeedSpies.setDensity).toHaveBeenLastCalledWith(0.3);
   });
 
-  it('heroRevealed가 true로 바뀌면 overview 기준 최종 밝기(1)로 열린다', async () => {
-    const { rerender } = await renderReady({ active: OVERVIEW, heroRevealed: false });
+  it('surge면 마스크 속성 surge, 섹션 밝기, 배율 1.2, 밀도 2다', async () => {
+    const { rerender } = await renderReady({ active: OVERVIEW, hero: 'pending' });
+    rerender(
+      <HyperspeedBackground {...readyProps} active="about" isTransitioning hero="surge" />
+    );
     const root = screen.getByTestId('hyperspeed-background');
-    expect(root.style.opacity).toBe('0');
+    expect(root).toHaveAttribute('data-hyperspeed-hero', 'surge');
+    expect(root.style.opacity).toBe('0.35');
+    expect(hyperspeedSpies.setIdleScale).toHaveBeenLastCalledWith(1.2);
+    expect(hyperspeedSpies.setDensity).toHaveBeenLastCalledWith(2);
+  });
 
-    rerender(<HyperspeedBackground {...readyProps} active={OVERVIEW} heroRevealed />);
+  it('settle이면 마스크 속성은 남고 배율과 밀도는 섹션 기본치다', async () => {
+    const { rerender } = await renderReady({ active: 'about', hero: 'surge' });
+    rerender(<HyperspeedBackground {...readyProps} active="about" hero="settle" />);
+    const root = screen.getByTestId('hyperspeed-background');
+    expect(root).toHaveAttribute('data-hyperspeed-hero', 'settle');
+    expect(hyperspeedSpies.setIdleScale).toHaveBeenLastCalledWith(0.1);
+    expect(hyperspeedSpies.setDensity).toHaveBeenLastCalledWith(1);
+  });
+
+  it('done + overview면 마스크 속성이 없고 overview 밝기(1)다', async () => {
+    await renderReady({ active: OVERVIEW, hero: 'done' });
+    const root = screen.getByTestId('hyperspeed-background');
+    expect(root).not.toHaveAttribute('data-hyperspeed-hero');
     expect(root.style.opacity).toBe('1');
+    expect(hyperspeedSpies.setIdleScale).toHaveBeenLastCalledWith(0.3);
+    expect(hyperspeedSpies.setDensity).toHaveBeenLastCalledWith(1);
   });
 
-  // 씬 로드 자체는 heroRevealed와 무관하게 이미 진행 중이어야 한다
-  // ("준비는 일찍, 노출은 늦게") — 뮤테이션 (c) 대응: 로드를 이름 완성
-  // 뒤로 미루면(예: showScene 계산에 heroRevealed를 끼워 넣으면) 이
-  // 캔버스가 heroRevealed=false일 때 나타나지 않아 FAIL한다.
-  it('heroRevealed=false여도 씬(canvas)은 이미 mount돼 있다 — 준비는 일찍, 노출만 늦다', async () => {
-    await renderReady({ active: OVERVIEW, heroRevealed: false });
+  // 씬 로드는 단계와 무관하게 이미 진행 중이어야 한다. 뮤테이션 (c) 대응:
+  // showScene 계산에 hero를 끼워 넣으면 pending에서 canvas가 없어 FAIL한다.
+  it('pending이어도 씬(canvas)은 이미 mount돼 있다. 준비는 일찍, 노출만 늦다', async () => {
+    await renderReady({ active: OVERVIEW, hero: 'pending' });
     expect(screen.getByTestId('hyperspeed-canvas')).toBeInTheDocument();
   });
 
-  // active가 overview가 아닌 곳(딥링크)에서 시작하면 재생할 부팅 자체가
-  // 없다 — heroRevealed가 계속 false여도 배경이 영원히 숨어 있으면 안 된다.
-  it('active가 overview가 아니면 heroRevealed=false여도 곧바로 최종 밝기(0.35)다', async () => {
-    await renderReady({ active: 'about', heroRevealed: false });
+  // 딥링크. HomeClient가 done으로 보내기 전 한 커밋 동안 pending인데 이미
+  // 섹션이다. 그때도 마스크를 걸거나 숨기면 안 된다.
+  it('pending이라도 active가 overview가 아니면 마스크 속성 없이 곧바로 섹션 밝기(0.35)다', async () => {
+    await renderReady({ active: 'about', hero: 'pending' });
     const root = screen.getByTestId('hyperspeed-background');
+    expect(root).not.toHaveAttribute('data-hyperspeed-hero');
     expect(root.style.opacity).toBe('0.35');
   });
 
-  // reducedMotion에서는 배경도 이름도 첫 프레임부터 최종 상태다(기존 계약).
-  it('reducedMotion이면 heroRevealed=false여도 곧바로 최종 밝기다', async () => {
+  it('reducedMotion이면 어느 단계든 마스크 속성이 없고 곧바로 최종 밝기다', () => {
     // reducedMotion에서는 씬을 아예 마운트하지 않으므로(정적 폴백) canvas를
-    // 기다리는 renderReady를 쓰면 안 된다 — 관찰 대상은 래퍼의 밝기다.
-    render(
-      <HyperspeedBackground
-        {...readyProps}
-        active={OVERVIEW}
-        reducedMotion
-        heroRevealed={false}
-      />
-    );
-    const root = screen.getByTestId('hyperspeed-background');
-    expect(root.style.opacity).toBe('1');
+    // 기다리는 renderReady를 쓰면 안 된다. 관찰 대상은 래퍼다.
+    for (const hero of ['pending', 'surge', 'settle'] as const) {
+      const { unmount } = render(
+        <HyperspeedBackground {...readyProps} active={OVERVIEW} reducedMotion hero={hero} />
+      );
+      const root = screen.getByTestId('hyperspeed-background');
+      expect(root).not.toHaveAttribute('data-hyperspeed-hero');
+      expect(root.style.opacity).toBe('1');
+      unmount();
+    }
   });
 
-  // 2차 감사 지적 — 래퍼에 전환이 없어 씬이 풀리는 순간·heroRevealed가
-  // 뒤집히는 순간 캔버스가 튀어 들어왔다. 뮤테이션 (b) — transition을
-  // 지우면(즉시 표시) 이 값이 'none'이거나 opacity를 포함하지 않아 FAIL한다.
-  it('모션 허용이면 opacity 트랜지션이 걸려 있다 — 팝인이 아니라 페이드다', async () => {
-    await renderReady({ active: OVERVIEW, heroRevealed: false });
+  // 2차 감사 지적. 래퍼에 전환이 없으면 씬이 풀리는 순간 캔버스가 튀어
+  // 들어온다. 뮤테이션 (b). transition을 지우면 FAIL한다. mask-size 전환은
+  // 인라인에 있어야 CSS 규칙을 덮지 않는다.
+  it('모션 허용이면 opacity와 mask-size 트랜지션이 걸려 있고 mask-size는 surge 길이다', async () => {
+    await renderReady({ active: OVERVIEW, hero: 'pending' });
     const root = screen.getByTestId('hyperspeed-background');
     expect(root.style.transition).toMatch(/opacity/);
+    expect(root.style.transition).toMatch(/mask-size 1800ms/);
   });
 
-  it('reducedMotion이면 트랜지션 자체를 걸지 않는다(즉시 최종 상태)', async () => {
+  it('reducedMotion이면 트랜지션 자체를 걸지 않는다(즉시 최종 상태)', () => {
     render(
-      <HyperspeedBackground
-        {...readyProps}
-        active={OVERVIEW}
-        reducedMotion
-        heroRevealed={false}
-      />
+      <HyperspeedBackground {...readyProps} active={OVERVIEW} reducedMotion hero="pending" />
     );
     const root = screen.getByTestId('hyperspeed-background');
     expect(root.style.transition).toBe('none');

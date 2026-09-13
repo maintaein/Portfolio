@@ -437,3 +437,57 @@ describe('section visibility utilities', () => {
     }
   });
 });
+
+// 첫 진입 hero. HomeClient가 surge와 settle 동안 --hero-delay를 심고,
+// 들어오는 쪽 규칙만 그것을 읽는다. 나가는 쪽은 즉시 나간다.
+describe('첫 진입 hero', () => {
+  it('들어오는 쪽 규칙만 --hero-delay를 읽는다', () => {
+    expect(ruleBody('.section-visible')).toMatch(
+      /transition-delay:\s*var\(--hero-delay, 0ms\)/
+    );
+    expect(
+      ruleBody(".section-visible[data-section-direction='forward']")
+    ).toMatch(/animation-delay:\s*var\(--hero-delay, 0ms\)/);
+    expect(
+      ruleBody(".section-visible[data-section-direction='backward']")
+    ).toMatch(/animation-delay:\s*var\(--hero-delay, 0ms\)/);
+    expect(ruleBody('.site-footer-visible')).toMatch(
+      /transition-delay:\s*var\(--hero-delay, 0ms\)/
+    );
+    // 스트립은 워드마크 FLIP 뒤에 나오므로 두 지연을 더한다.
+    expect(ruleBody('.nav-strip-visible')).toMatch(
+      /calc\(var\(--hero-delay, 0ms\) \+ var\(--wordmark-flip-duration\)\)/
+    );
+
+    for (const selector of [
+      '.section-hidden',
+      '.nav-strip-hidden',
+      '.site-footer-hidden',
+      ".section-hidden[data-section-leaving][data-section-direction='forward']",
+      ".section-hidden[data-section-leaving][data-section-direction='backward']",
+    ]) {
+      const body = ruleBody(selector);
+      expect(body, `${selector} 규칙이 없다`).toBeDefined();
+      expect(body, `${selector}가 --hero-delay를 읽는다`).not.toMatch(/--hero-delay/);
+    }
+  });
+
+  it('배경 마스크는 소실점 토큰에서 자라고 pending은 크기 0이다', () => {
+    const mask = ruleBody('[data-hyperspeed-hero]');
+    expect(mask, '마스크 규칙이 없다').toBeDefined();
+    expect(mask).toMatch(/mask-image:\s*radial-gradient\(/);
+    expect(mask).toMatch(
+      /circle at var\(--tunnel-vanishing-x\) var\(--tunnel-vanishing-y\)/
+    );
+    expect(mask).toMatch(
+      /mask-position:\s*var\(--tunnel-vanishing-x\) var\(--tunnel-vanishing-y\)/
+    );
+    expect(mask).toMatch(/mask-repeat:\s*no-repeat/);
+    expect(mask).toMatch(/mask-size:\s*320vmax 320vmax/);
+    // 전환은 HyperspeedBackground의 인라인이 맡는다. 여기 두면 인라인에 덮인다.
+    expect(mask).not.toMatch(/transition/);
+    expect(ruleBody("[data-hyperspeed-hero='pending']")).toMatch(
+      /mask-size:\s*0px 0px/
+    );
+  });
+});

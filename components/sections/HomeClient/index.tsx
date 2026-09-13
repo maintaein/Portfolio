@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type ComponentType,
+  type CSSProperties,
   type TransitionEvent,
 } from 'react';
 import HyperspeedBackground from '@/components/blocks/HyperspeedBackground';
@@ -21,6 +22,7 @@ import {
   ProjectsSection,
   SkillsSection,
 } from '@/components/sections';
+import { useHeroPhase } from '@/hooks/useHeroPhase';
 import { useMotionPreference } from '@/hooks/useMotionPreference';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useProjectModalObscured } from '@/hooks/useProjectModalObscured';
@@ -32,6 +34,7 @@ import {
   type NavId,
 } from '@/hooks/useSectionNav';
 import {
+  HERO_SURGE_MS,
   HOME_SECTION_CONFIG,
   NAV_ITEMS,
   SECTION_IDS,
@@ -89,13 +92,15 @@ export default function HomeClient() {
   // 워드마크 버튼 자신이 아니다). BootSequence의 GSAP 타임라인이 이 노드에만
   // scale을 건다. 부팅 안무 브리프 1절의 FLIP 불변식.
   const wordmarkScaleRef = useRef<HTMLDivElement>(null);
-  // HERO 재순서 브리프. 파티클이 뭉쳐 이름이 완성되는 핸드오프 순간
-  // BootSequence가 이 값을 true로 뒤집는다. HyperspeedBackground는 이
-  // 값을 기다렸다가 배경을 페이드로 드러낸다(t=0 검은 화면 → 이름 완성 →
-  // 배경 등장, 브리프 2·3절). 씬 자체는 이 값과 무관하게 이미 일찍
-  // 로드·렌더되고 있다. "준비는 일찍, 노출은 늦게".
-  const [heroRevealed, setHeroRevealed] = useState(false);
-  const handleNameRevealed = useCallback(() => setHeroRevealed(true), []);
+  // 첫 진입 hero(hooks/useHeroPhase.ts). 최초 overview는 pending으로
+  // 배경이 숨어 있고, overview를 처음 떠나는 순간 surge가 되어 배경이
+  // 소실점에서 자라며 치솟는다. HERO_SURGE_MS 뒤 settle에서 배경이
+  // 기본치로 내려가는 동안 셸(내비 스트립, 워드마크 FLIP, 푸터)과 섹션의
+  // 지연된 진입이 들어오고, HERO_SETTLE_MS 뒤 done으로 굳는다. 딥링크로
+  // 다른 섹션에서 시작하면 재생할 overview가 없으므로 곧바로 done이고,
+  // reducedMotion도 마찬가지다. 씬 자체는 단계와 무관하게 일찍 로드된다.
+  // "준비는 일찍, 노출은 늦게".
+  const { heroPhase, heroPhaseRef, resolveHero } = useHeroPhase();
   // GSAP은 정적 import에서 뺐다(First Load JS 예산. gsap-lazy-brief.md).
   // 마운트 직후 미리 요청해 ref에 담아 두고, 아래 handleBeforeActiveChange는
   // 이 ref를 동기적으로만 읽는다. Flip.getState()는 DOM이 바뀌기 직전에
@@ -125,6 +130,14 @@ export default function HomeClient() {
 
   const handleBeforeActiveChange = useCallback(
     (from: NavId, to: NavId) => {
+      // 첫 진입 hero의 출발점. overview를 처음 떠나는 이 호출은
+      // useSectionNav가 setActiveState보다 먼저, 같은 배치 안에서 부르므로
+      // active가 바뀌는 커밋에 heroPhase도 함께 실린다. 아래 FLIP layout
+      // effect와 HyperspeedBackground가 같은 커밋에서 surge를 본다. 모션이
+      // 아직 준비되지 않았거나 줄임이면 재생하지 않고 done으로 굳힌다.
+      if (from === OVERVIEW) {
+        resolveHero(motionReadyRef.current && !reducedMotionRef.current);
+      }
       if (
         !routeResolvedRef.current ||
         !motionReadyRef.current ||
@@ -148,7 +161,7 @@ export default function HomeClient() {
       mod.registerGsap();
       pendingWordmarkStateRef.current = mod.Flip.getState(wordmarkRef.current);
     },
-    []
+    [resolveHero]
   );
 
   const {
@@ -174,6 +187,25 @@ export default function HomeClient() {
   reducedMotionRef.current = reducedMotion;
   routeResolvedRef.current = routeResolved;
   const isProjectModalOpen = useProjectModalObscured();
+
+  // 딥링크(/#about 같은 해시)로 시작하면 떠날 overview가 없다. 최초 라우트가
+  // 확정된 커밋에서 pending을 done으로 보낸다. overview를 떠나는 경로는 위
+  // handleBeforeActiveChange가 같은 배치에서 이미 surge로 바꿔 두므로 여기
+  // 조건에 걸리지 않는다.
+  useEffect(() => {
+    if (!routeResolved || active === OVERVIEW) return;
+    resolveHero(false);
+  }, [active, resolveHero, routeResolved]);
+
+  // surge와 settle 동안 셸과 섹션의 진입 전환을 붙잡는 지연.
+  // design-tokens.css의 .section-visible, 진입 키프레임, .site-footer-visible,
+  // .nav-strip-visible이 var(--hero-delay, 0ms)로 읽는다. settle 동안에도
+  // 유지하는 이유: 지연된 진입 애니메이션이 아직 도는 중에 animation-delay가
+  // 0으로 바뀌면 그 애니메이션이 끝 상태로 튄다.
+  const heroDelayStyle: CSSProperties | undefined =
+    heroPhase === 'surge' || heroPhase === 'settle'
+      ? ({ '--hero-delay': `${HERO_SURGE_MS}ms` } as CSSProperties)
+      : undefined;
 
   // 전환 끊김 완화. 비활성 섹션은 .section-hidden의 content-visibility:
   // auto로 렌더를 건너뛴다. active가 바뀌는 순간 .section-visible로
@@ -278,8 +310,14 @@ export default function HomeClient() {
       ease: mod.SITE_EASE,
       scale: true,
       absolute: true,
+      // 첫 진입 hero의 surge 동안은 이름이 화면 중앙에 남아 배경이 피어나는
+      // 동안의 닻이 된다. settle 시점에 compact 자리로 난다. surge가 아니면
+      // 인자 형태가 예전과 같다.
+      ...(heroPhaseRef.current === 'surge'
+        ? { delay: HERO_SURGE_MS / 1000 }
+        : {}),
     });
-  }, [active]);
+  }, [active, heroPhaseRef]);
 
   const activeLabel =
     active === OVERVIEW
@@ -405,7 +443,7 @@ export default function HomeClient() {
         routeResolved={routeResolved}
         motionReady={motionReady}
         reducedMotion={reducedMotion}
-        heroRevealed={heroRevealed}
+        hero={heroPhase}
       />
 
       {/* 모달이 열리면 셸(Navigation)을 inert로 격리한다 — NEXT/스와이프로
@@ -413,7 +451,11 @@ export default function HomeClient() {
           inert를 직접 받지 않으므로 이 wrapper가 대신 짊어진다(계획 5 T2
           Task 9 §7.4). data-obscured는 design-tokens.css의 규칙이 읽어
           nav를 흐리며 물러나게 한다(Task S) */}
-      <div inert={isProjectModalOpen} data-obscured={isProjectModalOpen ? '' : undefined}>
+      <div
+        inert={isProjectModalOpen}
+        data-obscured={isProjectModalOpen ? '' : undefined}
+        style={heroDelayStyle}
+      >
         <Navigation
           items={NAV_ITEMS}
           active={active}
@@ -439,7 +481,6 @@ export default function HomeClient() {
         reducedMotion={reducedMotion}
         wordmarkRef={wordmarkRef}
         onStart={() => setActive(SECTION_IDS.ABOUT)}
-        onNameRevealed={handleNameRevealed}
         transitionAttributes={transitionAttributes(OVERVIEW)}
       />
 
@@ -452,6 +493,7 @@ export default function HomeClient() {
         data-route-resolved={routeResolved}
         data-motion-ready={motionReady}
         data-reduced-motion={reducedMotion}
+        style={heroDelayStyle}
         // 계획 6 Task 5a. Playwright가 붙잡을 관측 속성. entryAnimationTarget은
         // useSectionNav의 captureFirstEntry가 최초 방문 id 또는(재방문) null로
         // 이미 소유하고 있다. WhenVisible.tsx의 shouldEnter와 같은 비교식이다.
@@ -548,7 +590,7 @@ export default function HomeClient() {
 
       {/* Footer도 셸의 일부다 — 모달이 열려 있는 동안 포커스 순서에서
           빠지도록 inert로 격리한다 */}
-      <div inert={isProjectModalOpen}>
+      <div inert={isProjectModalOpen} style={heroDelayStyle}>
         <Footer atOverview={active === OVERVIEW} />
       </div>
     </SectionActivityProvider>

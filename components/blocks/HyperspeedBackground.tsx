@@ -19,6 +19,11 @@ import {
 } from 'react';
 import type { HyperspeedHandle } from '@/components/blocks/Hyperspeed';
 import { OVERVIEW, type NavId } from '@/hooks/useSectionNav';
+import {
+  HERO_SURGE_MS,
+  HYPERSPEED_DENSITY_POOL,
+  type HeroPhase,
+} from '@/lib/constants';
 import { detectQuality } from '@/lib/deviceQuality';
 
 export interface HyperspeedBackgroundProps {
@@ -29,15 +34,14 @@ export interface HyperspeedBackgroundProps {
   routeResolved: boolean; // 최초 해시 해석 전에는 WebGL import·rAF를 시작하지 않음
   motionReady: boolean; // route + motion preference가 모두 확정됨
   reducedMotion: boolean;
-  // HERO 재순서 브리프 — "아무것도 없는 배경 → 이름이 파티클로 뭉쳐 완성 →
-  // 배경이 자연스럽게 등장". overview에서 모션이 허용된 동안에는 이 값이
-  // false인 한 배경이 보이지 않는다(opacity 0, 씬 자체는 이미 로드·렌더
-  // 중이어도 무관 — "준비는 일찍, 노출은 늦게"). BootSequence가 이름 핸드오프
-  // 순간(파티클 뭉침 완료 = DOM 이름 등장 = 배경 노출 시작, 단일 시각)에
-  // true로 뒤집는다. active !== overview(딥링크로 다른 섹션에서 시작)나
-  // reducedMotion에서는 애초에 이 게이트를 타지 않는다 — 아래 heroPending
-  // 계산 참고.
-  heroRevealed: boolean;
+  // 첫 진입 hero. HomeClient가 소유한 단계다. 최초 overview(pending)에서는
+  // 배경이 보이지 않고, 처음 섹션으로 넘어가는 surge에서 소실점(CSS
+  // 마스크, styles/design-tokens.css의 data-hyperspeed-hero 규칙)부터
+  // 자라며 밀도와 속도가 치솟는다. settle에서 섹션 기본치로 가라앉고 done
+  // 뒤로는 오늘의 overview/section 동작 그대로다. 딥링크로 다른 섹션에서
+  // 시작하거나 reducedMotion이면 HomeClient가 pending을 곧바로 done으로
+  // 보내고, 여기서도 heroState 계산이 그 둘을 none으로 접는다.
+  hero: HeroPhase;
 }
 
 type FallbackReason = 'pending' | 'reduced-motion' | 'load-error' | 'context-lost';
@@ -108,6 +112,15 @@ const BASE_OPACITY_SECTION = 0.35;
 // 3분의 1로 줄인다. 멈추지는 않는다. 배경이 죽으면 화면이 정지 이미지가 된다.
 const IDLE_SCALE_OVERVIEW = 0.3;
 const IDLE_SCALE_SECTION = 0.1;
+// 첫 진입 hero의 흐름 배율과 밀도. pending(숨김) 동안 낮은 값으로 수렴해
+// 있어야 surge가 "느린 데서 시작해 빨라지는" 곡선이 된다. surge 목표는
+// 엔진의 지수 수렴(1/초)을 거치므로 1.8초 안에 다 닿지 않고 그 근처까지
+// 올랐다가 settle에서 섹션 기본치로 내려간다. 밀도 단위는 엔진의
+// setDensity와 같다. 1이 기본, HYPERSPEED_DENSITY_POOL이 최대.
+const HERO_IDLE_PENDING = 0.05;
+const HERO_IDLE_SURGE = 1.2;
+const HERO_DENSITY_PENDING = 0.3;
+const HERO_DENSITY_SURGE = HYPERSPEED_DENSITY_POOL;
 // obscured(ProjectModal 열림) 동안 배경에서 초점을 빼는 블러 반경.
 // 감광(0.4배)에서 블러로 바꿨다 — 어둡게 하면 배경이 남색 덩어리로 죽는데,
 // 블러는 밝기를 유지한 채 시선만 모달로 보낸다. 대비는 모달 자신의 불투명
@@ -146,7 +159,7 @@ export default function HyperspeedBackground({
   routeResolved,
   motionReady,
   reducedMotion,
-  heroRevealed,
+  hero,
 }: HyperspeedBackgroundProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const handleRef = useRef<HyperspeedHandle | null>(null);
@@ -160,11 +173,38 @@ export default function HyperspeedBackground({
   const isTransitioningRef = useRef(isTransitioning);
   isTransitioningRef.current = isTransitioning;
 
-  const idleScale = active === OVERVIEW ? IDLE_SCALE_OVERVIEW : IDLE_SCALE_SECTION;
+  // 첫 진입 hero의 실효 상태. reducedMotion과 딥링크(pending인데 이미
+  // 섹션)와 done은 전부 none으로 접는다. none이면 마스크 속성이 붙지 않고
+  // 밝기, 배율, 밀도가 오늘 값 그대로다.
+  const heroState: 'pending' | 'surge' | 'settle' | 'none' = reducedMotion
+    ? 'none'
+    : hero === 'pending'
+      ? active === OVERVIEW
+        ? 'pending'
+        : 'none'
+      : hero === 'done'
+        ? 'none'
+        : hero;
+  const heroPending = heroState === 'pending';
+
+  const idleScale = heroPending
+    ? HERO_IDLE_PENDING
+    : heroState === 'surge'
+      ? HERO_IDLE_SURGE
+      : active === OVERVIEW
+        ? IDLE_SCALE_OVERVIEW
+        : IDLE_SCALE_SECTION;
+  const density = heroPending
+    ? HERO_DENSITY_PENDING
+    : heroState === 'surge'
+      ? HERO_DENSITY_SURGE
+      : 1;
   // 핸들은 next/dynamic 청크가 풀린 뒤에야 도착한다. 이 effect가 먼저 돌 수도
   // 있으므로 값을 ref에도 남겨 setHandle이 도착 시점에 다시 걸어준다.
   const idleScaleRef = useRef(idleScale);
   idleScaleRef.current = idleScale;
+  const densityRef = useRef(density);
+  densityRef.current = density;
   const [contextLost, setContextLost] = useState(false);
   const contextRetriesRef = useRef(0);
 
@@ -229,6 +269,11 @@ export default function HyperspeedBackground({
     handleRef.current?.setIdleScale(idleScale);
   }, [idleScale]);
 
+  // 밀도도 같은 방식이다. surge에서 풀 전부, settle 뒤 기본치로.
+  useEffect(() => {
+    handleRef.current?.setDensity(density);
+  }, [density]);
+
   // pageVisible의 실제 edge에서만 pause/resume한다. resume 직후에는 hidden
   // 중 쌓인 과거 완료 신호를 재생하지 않고, 그 순간의 현재 isTransitioning을
   // ref로 다시 읽어 boost/settle 중 하나로 상태를 재동기화한다. 의존성 배열에
@@ -261,6 +306,7 @@ export default function HyperspeedBackground({
   const setHandle = useCallback((handle: HyperspeedHandle | null) => {
     handleRef.current = handle;
     handle?.setIdleScale(idleScaleRef.current);
+    handle?.setDensity(densityRef.current);
     if (handle && !appliedInitialQualityRef.current) {
       appliedInitialQualityRef.current = true;
       void detectQuality().then((tier) => {
@@ -269,12 +315,10 @@ export default function HyperspeedBackground({
     }
   }, []);
 
-  // HERO 재순서 브리프 — overview에서 모션이 허용된 동안에만 heroRevealed가
-  // 노출을 가른다(t=0 검은 화면 → 이름 완성 → 배경 등장). active가
-  // overview가 아니거나(딥링크로 다른 섹션에서 시작) reducedMotion이면
-  // heroRevealed와 무관하게 곧바로 최종 밝기로 보인다 — 재생할 부팅 자체가
-  // 없는 경로에서 배경이 영원히 숨어 있으면 안 된다.
-  const heroPending = active === OVERVIEW && !reducedMotion && !heroRevealed;
+  // pending(최초 overview) 동안은 밝기도 0이다. 마스크가 0이라 보이지
+  // 않지만, opacity 0이면 브라우저가 합성 자체를 건너뛰어 숨어 있는 동안
+  // GPU 비용이 없다. surge로 넘어가면 이 밝기 페이드와 마스크 성장이 같이
+  // 시작한다.
   const baseOpacity = heroPending
     ? 0
     : active === OVERVIEW
@@ -290,9 +334,15 @@ export default function HyperspeedBackground({
   // 두 지속이 어긋나면 초점이 먼저 풀리고 밝기가 뒤따라 배경이 두 몸으로
   // 움직인다. 같은 값으로 맞춰 한 몸으로 물러나게 한다.
   // reducedMotion에서는 전환 자체를 걸지 않는다(즉시 최종 상태).
+  // mask-size 전환도 여기 있어야 한다. 인라인 transition이 CSS 규칙의
+  // transition을 덮으므로 design-tokens.css 쪽에 두면 무시된다. 지속은
+  // surge 길이와 같다. 마스크가 다 자라는 순간이 곧 셸과 섹션이 들어오는
+  // 순간이다. 곡선은 사이트 공통 ease-out이 아니라 대칭 곡선이다. 공통
+  // 곡선으로는 0.45초에 이미 화면을 거의 덮어 소실점에서 자라는 구간이
+  // 너무 짧았다(실측). 대칭 곡선이면 1.5초 즈음까지 서서히 열린다.
   const transition = reducedMotion
     ? 'none'
-    : 'opacity var(--animate-duration-slow) ease-out, filter var(--animate-duration-slow) ease-out';
+    : `opacity var(--animate-duration-slow) ease-out, filter var(--animate-duration-slow) ease-out, mask-size ${HERO_SURGE_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`;
 
   // 계획 6 Task 5a. Playwright가 픽셀이나 내부 state 대신 붙잡을 관측
   // 속성. 둘 다 기존 값의 순수 파생이고 새 state를 만들지 않는다. 폴백일
@@ -313,6 +363,9 @@ export default function HyperspeedBackground({
       data-testid="hyperspeed-background"
       data-hyperspeed-motion={motionState}
       data-hyperspeed-visibility={visibilityState}
+      // 첫 진입 hero. 값이 있으면 design-tokens.css가 소실점 마스크를 건다.
+      // none이면 속성 자체가 없다.
+      data-hyperspeed-hero={heroState === 'none' ? undefined : heroState}
       aria-hidden="true"
       className="fixed inset-0 -z-10 pointer-events-none"
       style={{ opacity, filter, transition }}
