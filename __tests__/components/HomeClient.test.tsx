@@ -21,9 +21,6 @@ import {
 import { firePointer } from '@/__tests__/helpers/pointerEvents';
 import HomeClient from '@/components/sections/HomeClient';
 import {
-  HERO_SETTLE_MS,
-  HERO_DIM_MS,
-  HERO_SURGE_MS,
   HOME_SECTION_CONFIG,
   type HomeSectionId,
 } from '@/lib/constants';
@@ -53,7 +50,6 @@ vi.mock('@/components/blocks/HyperspeedBackground', async () => {
       routeResolved: boolean;
       motionReady: boolean;
       reducedMotion: boolean;
-      hero: string;
     }) {
       useEffect(() => {
         hyperspeedBackgroundSpies.mountCount += 1;
@@ -68,7 +64,6 @@ vi.mock('@/components/blocks/HyperspeedBackground', async () => {
           data-route-resolved={props.routeResolved}
           data-motion-ready={props.motionReady}
           data-reduced-motion={props.reducedMotion}
-          data-hero={props.hero}
         />
       );
     },
@@ -716,7 +711,7 @@ describe('HomeClient motion 구독 통합', () => {
 // 이 블록의 ProjectModal 테스트는 gsap 동적 import와 ProjectModal 청크 로드가
 // 겹쳐 단독으로도 ~1.7초가 걸린다. 전체 스위트 부하에서는 기본 5초를 넘겼다.
 describe('HomeClient → HyperspeedBackground 배선', { timeout: 30_000 }, () => {
-  it('단일 useSectionNav·usePageVisibility·useMotionPreference의 값이 여덟 prop으로 그대로 전달된다', () => {
+  it('단일 useSectionNav·usePageVisibility·useMotionPreference의 값이 일곱 prop으로 그대로 전달된다', () => {
     render(<HomeClient />);
     const probe = screen.getByTestId('hyperspeed-background-probe');
 
@@ -727,12 +722,10 @@ describe('HomeClient → HyperspeedBackground 배선', { timeout: 30_000 }, () =
     expect(probe).toHaveAttribute('data-route-resolved', 'true');
     expect(probe).toHaveAttribute('data-motion-ready', 'true');
     expect(probe).toHaveAttribute('data-reduced-motion', 'false');
-    expect(probe).toHaveAttribute('data-hero', 'pending');
 
     navigateTo(/about/i);
     expect(probe).toHaveAttribute('data-active', 'about');
     expect(probe).toHaveAttribute('data-is-transitioning', 'true');
-    expect(probe).toHaveAttribute('data-hero', 'surge');
   });
 
   it('pageVisible과 routeResolved는 서로 다른 값으로 각각 정확한 prop에 꽂힌다', () => {
@@ -1403,131 +1396,5 @@ describe('HomeClient. data-entry-motion 관측 속성', () => {
     // about도 재방문하면 같은 이유로 steady다.
     navigateTo(/about/i);
     expect(stage).toHaveAttribute('data-entry-motion', 'steady');
-  });
-});
-
-// 첫 진입 hero 단계. HomeClient가 소유하고 HyperspeedBackground(prop)와
-// CSS(--hero-delay)가 읽는다.
-describe('HomeClient 첫 진입 hero 단계', () => {
-  function heroDelayed(container: HTMLElement) {
-    return Array.from(container.querySelectorAll<HTMLElement>('*')).filter(
-      (el) =>
-        el.style.getPropertyValue('--hero-delay') ===
-        `${HERO_SURGE_MS + HERO_DIM_MS}ms`
-    );
-  }
-
-  it('최초 overview는 pending이고 떠나는 순간 surge가 되어 셸과 무대 셋에 --hero-delay가 심긴다', () => {
-    const { container } = render(<HomeClient />);
-    const probe = screen.getByTestId('hyperspeed-background-probe');
-    expect(probe).toHaveAttribute('data-hero', 'pending');
-    expect(heroDelayed(container)).toHaveLength(0);
-
-    navigateTo(/about/i);
-    expect(probe).toHaveAttribute('data-hero', 'surge');
-
-    const delayed = heroDelayed(container);
-    expect(delayed).toHaveLength(3);
-    const main = container.querySelector('main.section-stage');
-    const nav = screen.getByRole('navigation', { name: '메인 네비게이션' });
-    const footer = screen.getByText('Contact footer');
-    expect(delayed).toContain(main);
-    expect(delayed.some((el) => el.contains(nav) && el !== main)).toBe(true);
-    expect(delayed.some((el) => el.contains(footer) && el !== main)).toBe(true);
-  });
-
-  it('surge는 HERO_SURGE_MS 뒤 settle, 다시 HERO_SETTLE_MS 뒤 done이 되고 그때 --hero-delay가 빠진다', () => {
-    vi.useFakeTimers();
-    try {
-      const { container } = render(<HomeClient />);
-      const probe = screen.getByTestId('hyperspeed-background-probe');
-      navigateTo(/about/i);
-      expect(probe).toHaveAttribute('data-hero', 'surge');
-
-      act(() => {
-        vi.advanceTimersByTime(HERO_SURGE_MS - 1);
-      });
-      expect(probe).toHaveAttribute('data-hero', 'surge');
-      act(() => {
-        vi.advanceTimersByTime(1);
-      });
-      expect(probe).toHaveAttribute('data-hero', 'settle');
-      // settle 동안에도 지연을 유지한다. 도중에 빠지면 아직 도는 진입
-      // 애니메이션이 끝 상태로 튄다.
-      expect(heroDelayed(container)).toHaveLength(3);
-
-      act(() => {
-        vi.advanceTimersByTime(HERO_SETTLE_MS);
-      });
-      expect(probe).toHaveAttribute('data-hero', 'done');
-      expect(heroDelayed(container)).toHaveLength(0);
-
-      // done 뒤 overview로 돌아가도 done이다. 배경이 보이는 것은
-      // HyperspeedBackground 테스트가 잠근다.
-      fireEvent.click(screen.getByTestId('wordmark'));
-      expect(probe).toHaveAttribute('data-active', 'overview');
-      expect(probe).toHaveAttribute('data-hero', 'done');
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  // 뮤테이션: 타이머 effect의 의존성에 active를 넣으면 surge 중 이동에서
-  // 타이머가 지워져 settle로 못 간다.
-  it('surge 도중 다른 섹션으로 옮겨도 타이머는 살아서 settle과 done에 닿는다', () => {
-    vi.useFakeTimers();
-    try {
-      render(<HomeClient />);
-      const probe = screen.getByTestId('hyperspeed-background-probe');
-      navigateTo(/about/i);
-      act(() => {
-        vi.advanceTimersByTime(HERO_SURGE_MS / 2);
-      });
-      navigateTo(/projects/i);
-      expect(probe).toHaveAttribute('data-hero', 'surge');
-      act(() => {
-        vi.advanceTimersByTime(HERO_SURGE_MS / 2);
-      });
-      expect(probe).toHaveAttribute('data-hero', 'settle');
-      act(() => {
-        vi.advanceTimersByTime(HERO_SETTLE_MS);
-      });
-      expect(probe).toHaveAttribute('data-hero', 'done');
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('딥링크로 섹션에서 시작하면 곧바로 done이고 overview를 거쳐 돌아와도 surge가 되지 않는다', () => {
-    window.history.replaceState(null, '', '/#about');
-    render(<HomeClient />);
-    const probe = screen.getByTestId('hyperspeed-background-probe');
-    expect(probe).toHaveAttribute('data-active', 'about');
-    expect(probe).toHaveAttribute('data-hero', 'done');
-
-    fireEvent.click(screen.getByTestId('wordmark'));
-    expect(probe).toHaveAttribute('data-active', 'overview');
-    expect(probe).toHaveAttribute('data-hero', 'done');
-
-    navigateTo(/about/i);
-    expect(probe).toHaveAttribute('data-hero', 'done');
-  });
-
-  it('reducedMotion이면 overview를 떠날 때 surge 없이 done으로 간다', () => {
-    installMatchMedia(true);
-    render(<HomeClient />);
-    const probe = screen.getByTestId('hyperspeed-background-probe');
-    expect(probe).toHaveAttribute('data-reduced-motion', 'true');
-    expect(probe).toHaveAttribute('data-hero', 'pending');
-
-    navigateTo(/about/i);
-    expect(probe).toHaveAttribute('data-hero', 'done');
-  });
-
-  // 배경을 여는 것은 더 이상 BootSequence의 이름 핸드오프가 아니다.
-  it('HomeClient는 BootSequence에 onNameRevealed를 넘기지 않는다', () => {
-    const source = readFileSync(homeClientPath, 'utf8');
-    expect(source).not.toContain('onNameRevealed');
-    expect(source).not.toContain('heroRevealed');
   });
 });

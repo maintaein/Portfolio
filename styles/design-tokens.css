@@ -473,8 +473,6 @@
     transition:
       opacity var(--animate-duration-slow) cubic-bezier(0.22, 1, 0.36, 1),
       transform var(--animate-duration-slow) cubic-bezier(0.22, 1, 0.36, 1);
-    /* 첫 진입 hero 동안만 붙잡힌다. 평소에는 0ms. */
-    transition-delay: var(--hero-delay, 0ms);
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -550,10 +548,6 @@
     content-visibility: visible;
     opacity: 1;
     transition: opacity var(--animate-duration-slow) cubic-bezier(0.22, 1, 0.36, 1);
-    /* 첫 진입 hero. HomeClient가 surge와 settle 동안 main에 --hero-delay를
-       심는다. 없으면 0ms라 평소 전환은 그대로다. 나가는 쪽(.section-hidden)
-       에는 지연을 주지 않는다. 나가는 것은 즉시 나간다. */
-    transition-delay: var(--hero-delay, 0ms);
   }
 
   /* 전환 끊김 완화. HomeClient가 "다음에 갈 섹션" 하나에만 .section-hidden과
@@ -667,15 +661,11 @@
   .section-visible[data-section-direction='forward'] {
     animation-name: section-enter-forward;
     animation-duration: var(--animate-duration-slow);
-    /* 첫 진입 hero 지연. fill-mode가 backwards라 기다리는 동안 from 값을
-       유지하고, opacity는 위 transition-delay가 같은 시간만큼 붙잡는다. */
-    animation-delay: var(--hero-delay, 0ms);
   }
 
   .section-visible[data-section-direction='backward'] {
     animation-name: section-enter-backward;
     animation-duration: var(--animate-duration-slow);
-    animation-delay: var(--hero-delay, 0ms);
   }
 
   .section-hidden[data-section-leaving][data-section-direction='forward'] {
@@ -781,9 +771,7 @@
        스트립이 나타난다(세 이음매 브리프 3절) — 숨기는 쪽(.nav-strip-hidden,
        위)은 지연이 없다. 워드마크가 hero로 돌아올 자리를 스트립이 먼저
        비켜줘야 하므로 비대칭이다. */
-    /* 첫 진입 hero 동안은 워드마크 FLIP 자체가 --hero-delay만큼 늦게 나므로
-       스트립도 그만큼 더 기다린다. 평소에는 0ms가 더해질 뿐이다. */
-    transition: opacity var(--animate-duration-base) cubic-bezier(0.22, 1, 0.36, 1) calc(var(--hero-delay, 0ms) + var(--wordmark-flip-duration));
+    transition: opacity var(--animate-duration-base) cubic-bezier(0.22, 1, 0.36, 1) var(--wordmark-flip-duration);
   }
 
   @media (prefers-reduced-motion: reduce) {

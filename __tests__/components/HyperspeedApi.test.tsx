@@ -39,7 +39,7 @@ describe('Hyperspeed ref API — WebGL 부재 시 안전성', () => {
     expect(() => render(<Hyperspeed ref={ref} />)).not.toThrow();
   });
 
-  it('ref로 8개 메서드를 노출한다. bootIn은 되살아나지 않았다', () => {
+  it('ref로 7개 메서드를 노출한다. bootIn은 되살아나지 않았다', () => {
     const ref = createRef<HyperspeedHandle>();
     render(<Hyperspeed ref={ref} />);
     for (const m of [
@@ -49,7 +49,6 @@ describe('Hyperspeed ref API — WebGL 부재 시 안전성', () => {
       'boost',
       'settle',
       'setIdleScale',
-      'setDensity',
       'isLost',
     ] as const) {
       expect(typeof ref.current?.[m], m).toBe('function');
@@ -70,7 +69,6 @@ describe('Hyperspeed ref API — WebGL 부재 시 안전성', () => {
       ref.current?.boost();
       ref.current?.settle();
       ref.current?.setQuality('low');
-      ref.current?.setDensity(1);
     }).not.toThrow();
   });
 

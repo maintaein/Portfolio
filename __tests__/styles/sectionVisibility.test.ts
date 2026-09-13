@@ -437,39 +437,3 @@ describe('section visibility utilities', () => {
     }
   });
 });
-
-// 첫 진입 hero. HomeClient가 surge와 settle 동안 --hero-delay를 심고,
-// 들어오는 쪽 규칙만 그것을 읽는다. 나가는 쪽은 즉시 나간다.
-describe('첫 진입 hero', () => {
-  it('들어오는 쪽 규칙만 --hero-delay를 읽는다', () => {
-    expect(ruleBody('.section-visible')).toMatch(
-      /transition-delay:\s*var\(--hero-delay, 0ms\)/
-    );
-    expect(
-      ruleBody(".section-visible[data-section-direction='forward']")
-    ).toMatch(/animation-delay:\s*var\(--hero-delay, 0ms\)/);
-    expect(
-      ruleBody(".section-visible[data-section-direction='backward']")
-    ).toMatch(/animation-delay:\s*var\(--hero-delay, 0ms\)/);
-    expect(ruleBody('.site-footer-visible')).toMatch(
-      /transition-delay:\s*var\(--hero-delay, 0ms\)/
-    );
-    // 스트립은 워드마크 FLIP 뒤에 나오므로 두 지연을 더한다.
-    expect(ruleBody('.nav-strip-visible')).toMatch(
-      /calc\(var\(--hero-delay, 0ms\) \+ var\(--wordmark-flip-duration\)\)/
-    );
-
-    for (const selector of [
-      '.section-hidden',
-      '.nav-strip-hidden',
-      '.site-footer-hidden',
-      ".section-hidden[data-section-leaving][data-section-direction='forward']",
-      ".section-hidden[data-section-leaving][data-section-direction='backward']",
-    ]) {
-      const body = ruleBody(selector);
-      expect(body, `${selector} 규칙이 없다`).toBeDefined();
-      expect(body, `${selector}가 --hero-delay를 읽는다`).not.toMatch(/--hero-delay/);
-    }
-  });
-
-});

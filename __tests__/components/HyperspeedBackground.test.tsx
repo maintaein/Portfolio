@@ -6,7 +6,6 @@ import HyperspeedBackground, {
   type HyperspeedBackgroundProps,
 } from '@/components/blocks/HyperspeedBackground';
 import { OVERVIEW } from '@/hooks/useSectionNav';
-import { HERO_DIM_MS, HYPERSPEED_BOOST_TIME_SCALE } from '@/lib/constants';
 import type { QualityTier } from '@/lib/deviceQuality';
 
 // 이 파일 전체에서 '@/components/blocks/Hyperspeed'는 항상 "성공적으로
@@ -21,7 +20,6 @@ const hyperspeedSpies = vi.hoisted(() => ({
   resume: vi.fn(),
   setQuality: vi.fn(),
   setIdleScale: vi.fn(),
-  setDensity: vi.fn(),
   isLost: vi.fn(() => false),
   mountCount: 0,
 }));
@@ -46,7 +44,6 @@ vi.mock('@/components/blocks/Hyperspeed', async () => {
         resume: hyperspeedSpies.resume,
         setQuality: hyperspeedSpies.setQuality,
         setIdleScale: hyperspeedSpies.setIdleScale,
-        setDensity: hyperspeedSpies.setDensity,
         isLost: hyperspeedSpies.isLost,
       }),
       []
@@ -59,9 +56,10 @@ vi.mock('@/components/blocks/Hyperspeed', async () => {
   return { default: Hyperspeed };
 });
 
-// hero: 'done'. 이 파일 대부분의 describe는 첫 진입 hero가 끝난 "정상
-// 상태"의 boost/settle, pause/resume, detectQuality 등을 다룬다. hero 단계
-// 자체는 별도 describe에서 pending/surge/settle을 명시적으로 주며 검증한다.
+// heroRevealed: true — 이 파일 대부분의 describe는 부팅 이후 "정상 상태"의
+// boost/settle·pause/resume·detectQuality 등을 다룬다. HERO 재순서(t=0 검은
+// 화면 → 이름 완성 → 배경 등장) 자체의 게이팅은 별도 describe에서
+// heroRevealed를 명시적으로 false로 바꿔가며 검증한다.
 const readyProps: HyperspeedBackgroundProps = {
   active: OVERVIEW,
   isTransitioning: false,
@@ -70,7 +68,7 @@ const readyProps: HyperspeedBackgroundProps = {
   routeResolved: true,
   motionReady: true,
   reducedMotion: false,
-  hero: 'done',
+  heroRevealed: true,
 };
 
 async function renderReady(overrides: Partial<HyperspeedBackgroundProps> = {}) {
@@ -380,161 +378,76 @@ describe('HyperspeedBackground — detectQuality 초기 적용', () => {
   });
 });
 
-// 첫 진입 hero. HomeClient가 소유한 단계를 받아 밝기, 초점, 배율, 밀도로
-// 반응한다. 최초 overview(pending)는 검은 화면이고 surge에서 흐림이 풀리며
-// 오버뷰 밝기로 떠올랐다가 settle에서 섹션 밝기로 내려간다.
-describe('HyperspeedBackground. 첫 진입 hero 단계', () => {
-  // 뮤테이션 (a). heroState 계산에서 pending을 무시하고 항상 보이게 하면
-  // opacity가 '1'로 나와 FAIL해야 한다.
-  it('pending + overview + 모션 허용이면 opacity 0, 블러, 배율과 밀도가 낮다', async () => {
-    await renderReady({ active: OVERVIEW, hero: 'pending' });
+// HERO 재순서 브리프 2절 — "아무것도 없는 배경 → 이름이 파티클로 뭉쳐
+// 완성 → 배경이 자연스럽게 등장". heroRevealed가 이 노출을 가른다.
+describe('HyperspeedBackground — heroRevealed 게이팅(t=0 검은 화면 → 이름 완성 → 배경 등장)', () => {
+  // 뮤테이션 (a) — heroPending 계산에서 heroRevealed를 무시하고 항상
+  // 보이게 하면 이 값이 '1'로 나와 FAIL해야 한다.
+  it('overview + 모션 허용 + heroRevealed=false면 opacity가 0이다', async () => {
+    await renderReady({ active: OVERVIEW, heroRevealed: false });
     const root = screen.getByTestId('hyperspeed-background');
     expect(root.style.opacity).toBe('0');
-    expect(root).toHaveAttribute('data-hyperspeed-hero', 'pending');
-    // 모달을 닫고 섹션으로 돌아올 때와 같은 블러다. surge에서 이게 풀리며
-    // 밝기가 차오르는 것이 첫 진입의 등장 그 자체다.
-    expect(root.style.filter).toBe('blur(8px)');
-    expect(hyperspeedSpies.setIdleScale).toHaveBeenLastCalledWith(0.05);
-    expect(hyperspeedSpies.setDensity).toHaveBeenLastCalledWith(0.3);
   });
 
-  // 뮤테이션: surge의 밝기를 섹션 값으로 두면 첫 진입에서 어두워지는
-  // 구간이 사라진다. 섹션(about)으로 가는 중인데도 오버뷰 밝기여야 한다.
-  it('surge면 블러가 풀리고 오버뷰 밝기로 떠오르며 배율은 전환 배속, 밀도는 2다', async () => {
-    const { rerender } = await renderReady({ active: OVERVIEW, hero: 'pending' });
-    rerender(
-      <HyperspeedBackground {...readyProps} active="about" isTransitioning hero="surge" />
-    );
+  it('heroRevealed가 true로 바뀌면 overview 기준 최종 밝기(1)로 열린다', async () => {
+    const { rerender } = await renderReady({ active: OVERVIEW, heroRevealed: false });
     const root = screen.getByTestId('hyperspeed-background');
-    expect(root).toHaveAttribute('data-hyperspeed-hero', 'surge');
+    expect(root.style.opacity).toBe('0');
+
+    rerender(<HyperspeedBackground {...readyProps} active={OVERVIEW} heroRevealed />);
     expect(root.style.opacity).toBe('1');
-    expect(root.style.filter).toBe('none');
-    expect(hyperspeedSpies.setIdleScale).toHaveBeenLastCalledWith(
-      HYPERSPEED_BOOST_TIME_SCALE
-    );
-    expect(hyperspeedSpies.setDensity).toHaveBeenLastCalledWith(2);
   });
 
-  // 어두워지는 전환의 지속은 HERO_DIM_MS다. 이 숫자가 --hero-delay의
-  // 뒷부분이라 셸과 섹션이 들어오는 시각과 한 몸이다.
-  it('settle이면 섹션 밝기로 HERO_DIM_MS 동안 내려가고 배율과 밀도는 섹션 기본치다', async () => {
-    const { rerender } = await renderReady({ active: 'about', hero: 'surge' });
-    rerender(<HyperspeedBackground {...readyProps} active="about" hero="settle" />);
-    const root = screen.getByTestId('hyperspeed-background');
-    expect(root).toHaveAttribute('data-hyperspeed-hero', 'settle');
-    expect(root.style.opacity).toBe('0.35');
-    expect(root.style.transition).toContain(`opacity ${HERO_DIM_MS}ms`);
-    expect(hyperspeedSpies.setIdleScale).toHaveBeenLastCalledWith(0.1);
-    expect(hyperspeedSpies.setDensity).toHaveBeenLastCalledWith(1);
-  });
-
-  it('done + overview면 hero 속성이 없고 overview 밝기(1)다', async () => {
-    await renderReady({ active: OVERVIEW, hero: 'done' });
-    const root = screen.getByTestId('hyperspeed-background');
-    expect(root).not.toHaveAttribute('data-hyperspeed-hero');
-    expect(root.style.opacity).toBe('1');
-    expect(hyperspeedSpies.setIdleScale).toHaveBeenLastCalledWith(0.3);
-    expect(hyperspeedSpies.setDensity).toHaveBeenLastCalledWith(1);
-  });
-
-  // hero 구간의 속도는 idleScale 하나가 몬다. boost가 얹히면 올라가는
-  // 구간이 상한(오버뷰 체류 속도 0.3)을 넘고, settle에서 내려가야 하는데
-  // boost는 아직 오르는 중이라 감속이 보이지 않는다. 뮤테이션: boost 호출에서
-  // hero 조건을 빼면 첫 줄에서 FAIL한다.
-  it('surge와 settle 동안에는 전환이 시작돼도 boost 대신 settle을 부른다', async () => {
-    const { rerender } = await renderReady({
-      active: OVERVIEW,
-      hero: 'pending',
-      isTransitioning: false,
-    });
-    hyperspeedSpies.boost.mockClear();
-    hyperspeedSpies.settle.mockClear();
-
-    rerender(
-      <HyperspeedBackground {...readyProps} active="about" isTransitioning hero="surge" />
-    );
-    expect(hyperspeedSpies.boost).not.toHaveBeenCalled();
-    expect(hyperspeedSpies.settle).toHaveBeenCalledTimes(1);
-    // 관측 속성도 엔진을 따라간다. 전환 중이지만 boost가 아니다.
-    expect(screen.getByTestId('hyperspeed-background')).toHaveAttribute(
-      'data-hyperspeed-motion',
-      'slow'
-    );
-
-    rerender(
-      <HyperspeedBackground
-        {...readyProps}
-        active="about"
-        isTransitioning={false}
-        hero="settle"
-      />
-    );
-    expect(hyperspeedSpies.boost).not.toHaveBeenCalled();
-  });
-
-  // hero가 끝난 뒤의 전환은 평소와 같아야 한다. 억제가 done까지 새면 이후
-  // 모든 섹션 전환에서 가속이 사라진다.
-  it('done 뒤의 전환에서는 다시 boost를 부른다', async () => {
-    const { rerender } = await renderReady({
-      active: 'about',
-      hero: 'done',
-      isTransitioning: false,
-    });
-    hyperspeedSpies.boost.mockClear();
-
-    rerender(
-      <HyperspeedBackground {...readyProps} active="skills" isTransitioning hero="done" />
-    );
-    expect(hyperspeedSpies.boost).toHaveBeenCalledTimes(1);
-  });
-
-  // 씬 로드는 단계와 무관하게 이미 진행 중이어야 한다. 뮤테이션 (c) 대응:
-  // showScene 계산에 hero를 끼워 넣으면 pending에서 canvas가 없어 FAIL한다.
-  it('pending이어도 씬(canvas)은 이미 mount돼 있다. 준비는 일찍, 노출만 늦다', async () => {
-    await renderReady({ active: OVERVIEW, hero: 'pending' });
+  // 씬 로드 자체는 heroRevealed와 무관하게 이미 진행 중이어야 한다
+  // ("준비는 일찍, 노출은 늦게") — 뮤테이션 (c) 대응: 로드를 이름 완성
+  // 뒤로 미루면(예: showScene 계산에 heroRevealed를 끼워 넣으면) 이
+  // 캔버스가 heroRevealed=false일 때 나타나지 않아 FAIL한다.
+  it('heroRevealed=false여도 씬(canvas)은 이미 mount돼 있다 — 준비는 일찍, 노출만 늦다', async () => {
+    await renderReady({ active: OVERVIEW, heroRevealed: false });
     expect(screen.getByTestId('hyperspeed-canvas')).toBeInTheDocument();
   });
 
-  // 딥링크. HomeClient가 done으로 보내기 전 한 커밋 동안 pending인데 이미
-  // 섹션이다. 그때도 마스크를 걸거나 숨기면 안 된다.
-  it('pending이라도 active가 overview가 아니면 마스크 속성 없이 곧바로 섹션 밝기(0.35)다', async () => {
-    await renderReady({ active: 'about', hero: 'pending' });
+  // active가 overview가 아닌 곳(딥링크)에서 시작하면 재생할 부팅 자체가
+  // 없다 — heroRevealed가 계속 false여도 배경이 영원히 숨어 있으면 안 된다.
+  it('active가 overview가 아니면 heroRevealed=false여도 곧바로 최종 밝기(0.35)다', async () => {
+    await renderReady({ active: 'about', heroRevealed: false });
     const root = screen.getByTestId('hyperspeed-background');
-    expect(root).not.toHaveAttribute('data-hyperspeed-hero');
     expect(root.style.opacity).toBe('0.35');
   });
 
-  it('reducedMotion이면 어느 단계든 마스크 속성이 없고 곧바로 최종 밝기다', () => {
+  // reducedMotion에서는 배경도 이름도 첫 프레임부터 최종 상태다(기존 계약).
+  it('reducedMotion이면 heroRevealed=false여도 곧바로 최종 밝기다', async () => {
     // reducedMotion에서는 씬을 아예 마운트하지 않으므로(정적 폴백) canvas를
-    // 기다리는 renderReady를 쓰면 안 된다. 관찰 대상은 래퍼다.
-    for (const hero of ['pending', 'surge', 'settle'] as const) {
-      const { unmount } = render(
-        <HyperspeedBackground {...readyProps} active={OVERVIEW} reducedMotion hero={hero} />
-      );
-      const root = screen.getByTestId('hyperspeed-background');
-      expect(root).not.toHaveAttribute('data-hyperspeed-hero');
-      expect(root.style.opacity).toBe('1');
-      unmount();
-    }
-  });
-
-  // 2차 감사 지적. 래퍼에 전환이 없으면 씬이 풀리는 순간 캔버스가 튀어
-  // 들어온다. 뮤테이션 (b). transition을 지우면 FAIL한다. 밝기와 초점은
-  // 같은 지속이어야 배경이 한 몸으로 움직인다.
-  it('모션 허용이면 밝기와 초점에 같은 지속의 트랜지션이 걸려 있다', async () => {
-    await renderReady({ active: OVERVIEW, hero: 'pending' });
-    const root = screen.getByTestId('hyperspeed-background');
-    expect(root.style.transition).toContain(
-      'opacity var(--animate-duration-slow) ease-out'
-    );
-    expect(root.style.transition).toContain(
-      'filter var(--animate-duration-slow) ease-out'
-    );
-  });
-
-  it('reducedMotion이면 트랜지션 자체를 걸지 않는다(즉시 최종 상태)', () => {
+    // 기다리는 renderReady를 쓰면 안 된다 — 관찰 대상은 래퍼의 밝기다.
     render(
-      <HyperspeedBackground {...readyProps} active={OVERVIEW} reducedMotion hero="pending" />
+      <HyperspeedBackground
+        {...readyProps}
+        active={OVERVIEW}
+        reducedMotion
+        heroRevealed={false}
+      />
+    );
+    const root = screen.getByTestId('hyperspeed-background');
+    expect(root.style.opacity).toBe('1');
+  });
+
+  // 2차 감사 지적 — 래퍼에 전환이 없어 씬이 풀리는 순간·heroRevealed가
+  // 뒤집히는 순간 캔버스가 튀어 들어왔다. 뮤테이션 (b) — transition을
+  // 지우면(즉시 표시) 이 값이 'none'이거나 opacity를 포함하지 않아 FAIL한다.
+  it('모션 허용이면 opacity 트랜지션이 걸려 있다 — 팝인이 아니라 페이드다', async () => {
+    await renderReady({ active: OVERVIEW, heroRevealed: false });
+    const root = screen.getByTestId('hyperspeed-background');
+    expect(root.style.transition).toMatch(/opacity/);
+  });
+
+  it('reducedMotion이면 트랜지션 자체를 걸지 않는다(즉시 최종 상태)', async () => {
+    render(
+      <HyperspeedBackground
+        {...readyProps}
+        active={OVERVIEW}
+        reducedMotion
+        heroRevealed={false}
+      />
     );
     const root = screen.getByTestId('hyperspeed-background');
     expect(root.style.transition).toBe('none');
