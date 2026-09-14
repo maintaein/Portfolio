@@ -198,13 +198,14 @@ function snapshotMedia(
   }
 
   canvas.dataset.part = 'media-bridge';
-  // object-fit은 캔버스에도 먹는다. 프리뷰의 object-cover와 같은 잘림이라
-  // 출발 프레임이 프리뷰와 겹친다
+  // object-fit은 캔버스에도 먹는다. 뜬 요소와 같은 값을 줘야 출발 프레임이
+  // 그 요소와 겹친다. 세로 영상이 걸린 무대는 contain이라 cover로 못박으면
+  // 비행이 시작되는 순간 다리만 잘려 튄다. jsdom은 빈 문자열을 주니 cover다
   canvas.style.position = 'absolute';
   canvas.style.inset = '0';
   canvas.style.width = '100%';
   canvas.style.height = '100%';
-  canvas.style.objectFit = 'cover';
+  canvas.style.objectFit = getComputedStyle(el).objectFit || 'cover';
   canvas.style.pointerEvents = 'none';
   return canvas;
 }
