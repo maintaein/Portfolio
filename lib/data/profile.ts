@@ -3,23 +3,23 @@ import { Award, Certificate, Contact, CoreValue } from "@/types";
 export const coreValues: CoreValue[] = [
     {
       id: '1',
-      title: '새로움을 즐기는 개발자',
+      title: '기본을 튼튼히 길러온 개발자',
       label: 'BASICS',
-      description: '처음 접하는 개념도 직접 만들며 이해합니다. 디자인 시스템을 밑바닥부터 구축해 번들러·접근성·타입 시스템을 익히고 Tree-shaking 91% 감소를 실측 검증했으며, 포트폴리오 프로젝트에서는 SSR/Hydration 원리를 파고들어 렌더링 에러를 0건으로 잡았습니다.',
+      description: '약 2년 반의 기간 동안 학습과 6개의 프로젝트를 거치며 react, typescript 등 프론트엔드 역량을 꾸준히 쌓아왔습니다. 이를 기반으로 쇼핑몰 구축 프로젝트에서 AI가 작성한 코드를 분석하여 관리자 페이지의 상태 오류를 조기에 잡아내었습니다.',
       imagePlaceholder: 'tech-stack'
     },
     {
       id: '2',
-      title: '사용자의 눈과 마음으로',
+      title: 'AI Workflow를 이해하고 활용하는 개발자',
       label: 'AI WORKFLOW',
-      description: '쓰는 사람의 입장에서 성능과 사용 방식을 다듬습니다. 디자인 시스템에서 단순한 컴포넌트는 Flat, 레이아웃 조합 컴포넌트는 Compound로 API를 나눠 단순한 경우는 props 하나로, 복잡한 경우는 자유롭게 조합하도록 설계했습니다.',
-      imagePlaceholder: 'ux-focus'
+      description: 'AI에 대한 이해를 바탕으로 프로젝트에 도입하여 효율성을 끌어올렸습니다. AI를 통해 자동 검증 장치 7가지를 이 포트폴리오 프로젝트에 세웠습니다. 손으로 작성했다면 18,230줄의 코드를 작성해야 했으며, 이는 소스 코드의 1.5배의 양입니다.',
+      imagePlaceholder: 'AI-Workflow'
     },
     {
       id: '3',
-      title: '원활한 소통과 협업 역량',
+      title: '원활한 소통과 협업 역량을 가진 개발자',
       label: 'TEAMWORK',
-      description: '팀이 효율적인 방식으로 일할 구조를 고민합니다. Alphamail 프로젝트에서 프론트엔드 리더를 맡아 git과 jira 컨벤션을 설정하여 팀의 협업 효율성을 끌어올리고, FSD·Atomic 기반 구조를 잡아 기능별 독립 개발 환경을 만든 경험이 있습니다.',
+      description: '팀이 효율적인 방식으로 일할 구조를 고민합니다. Alphamail 프로젝트에서 프론트엔드 리더를 맡아 git과 jira 컨벤션을 설정하여 팀의 협업 효율성을 끌어올린 경험이 있습니다.',
       imagePlaceholder: 'collaboration'
     }
   ];
