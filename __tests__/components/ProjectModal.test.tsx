@@ -89,9 +89,14 @@ describe('ProjectModal 판 1', () => {
   });
 
   it('영상이 없으면 무대가 project.image로 떨어진다', () => {
-    const noVideo = projects.find(
-      (p) => isProjectModalReady(p) && !p.implementations?.some((i) => i.video)
-    )!;
+    // 영상 없는 프로젝트를 실데이터에서 찾아 쓰면, 사용자가 모든 프로젝트에
+    // 영상을 붙이는 순간 골라올 것이 없어져 계약이 아니라 픽스처가 깨진다.
+    // 계약을 통과하는 프로젝트에서 video만 걷어내 여기서 만든다
+    const base = projects.find((p) => isProjectModalReady(p))!;
+    const noVideo = {
+      ...base,
+      implementations: base.implementations!.map(({ video: _video, ...rest }) => rest),
+    };
     render(<ProjectModal project={noVideo} isOpen onClose={() => {}} />);
     const stage = document.querySelector('[data-modal-part="stage"]')!;
     expect(stage.querySelector('video')).toBeNull();

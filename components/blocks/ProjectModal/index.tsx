@@ -687,7 +687,9 @@ export default function ProjectModal({
                 >
                   {active.category}
                 </p>
-                <p className={cn('mt-1 text-t6 leading-[1.55]', T2)}>{active.items[0]}</p>
+                <p className={cn('mt-1 text-t6 leading-[1.55]', T2)}>
+                  {active.intent ?? active.items[0]}
+                </p>
               </div>
               <p className={cn('pm-vidx flex-none text-t7 font-bold tabular-nums tracking-[0.08em]', T3)}>
                 {/* 목록에서 선택된 줄의 번호와 같은 시안이다. 같은 색 같은 숫자가
@@ -727,6 +729,24 @@ export default function ProjectModal({
               </p>
             )}
 
+            {/* 단계가 나뉜 프로젝트만. 메타 줄에 날짜 범위를 여러 개 이어 붙이면
+                그 줄이 머리에서 제일 길어져 부제와 시선을 두고 다툰다. 총 기간은
+                위에 두고 단계는 여기로 내린다. 기술 태그와 같은 알약이되 이름은
+                굵게, 기간은 흐리게 둬서 태그 무리로 읽히지 않게 한다 */}
+            {project.phases && project.phases.length > 0 && (
+              <ul data-modal-field="phases" className="mt-2.5 flex flex-wrap gap-1.5">
+                {project.phases.map((phase) => (
+                  <li
+                    key={phase.label}
+                    className="flex items-baseline gap-1.5 rounded-full bg-[rgb(255_255_255_/_0.06)] px-2.5 py-1 text-t8 leading-[1.4]"
+                  >
+                    <span className={cn('font-bold', T1)}>{phase.label}</span>
+                    <span className={cn('tabular-nums', T3)}>{phase.period}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
             <div className={cn('mt-5 border-t', LINE)} />
 
             <p
@@ -734,7 +754,7 @@ export default function ProjectModal({
               className={cn('mb-3.5 mt-5 flex items-center gap-2 text-t6 font-bold tracking-[-0.01em]', T1)}
             >
               <span aria-hidden className="h-1.5 w-1.5 flex-none rounded-full bg-[var(--color-cyan-core)]" />
-              프로젝트
+              프로젝트 동기
             </p>
             <h3
               data-modal-field="claim"
@@ -952,11 +972,34 @@ export default function ProjectModal({
                     <SubStep axis>결과</SubStep>
                     <div data-modal-field="metric" className="mt-4">
                       <p className={cn('text-t2 font-bold leading-[1.15] tabular-nums tracking-[-0.02em]', T1)}>
-                        {metric.after}
+                        {review.resultHeadline ?? metric.after}
                       </p>
-                      {metric.measuredBy && (
-                        <p className={cn('mt-1.5 text-t6 leading-[1.7]', T2)}>{metric.measuredBy}</p>
-                      )}
+                      {/* 지표는 항목이므로 상자가 아니라 선으로 가른다(판 2 문법).
+                          before가 없는 지표는 화살표 없이 결과값만 선다 */}
+                      <dl className={cn('mt-5 border-t', LINE)}>
+                        {review.result?.map((m, i) => (
+                          <div key={i} className={cn('border-b py-3', LINE)}>
+                            <dt className={cn('text-t7 font-bold tracking-[0.02em]', T2)}>{m.label}</dt>
+                            <dd className="mt-1.5">
+                              <p className={cn('text-t6 leading-[1.5] tabular-nums', T1)}>
+                                {m.before && (
+                                  <span className={T3}>
+                                    {m.before}
+                                    <span className="mx-1.5">→</span>
+                                  </span>
+                                )}
+                                <span className="font-bold">{m.after}</span>
+                                {m.delta && (
+                                  <span className={cn('ml-2 text-t7 font-bold', T2)}>{m.delta}</span>
+                                )}
+                              </p>
+                              {m.measuredBy && (
+                                <p className={cn('mt-1 text-t7 leading-[1.6]', T3)}>{m.measuredBy}</p>
+                              )}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
                     </div>
                   </>
                 )}
