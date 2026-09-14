@@ -37,3 +37,44 @@ export function navButton(page: Page, label: string) {
 
 export const historyLength = (page: Page) =>
   page.evaluate(() => history.length);
+
+// 상세가 열렸다는 판정. role="dialog" 노드는 높이 0인 껍데기다 -
+// ProjectModal이 자기 레이아웃을 직접 잡고 내용은 [&>div]:overflow-visible로
+// 껍데기 밖으로 흘러나온다. 그래서 dialog에 toBeVisible을 걸면 열려 있어도
+// 실패한다. 사용자가 실제로 보는 것은 제목과 무대 쪽이다.
+export async function expectModalOpen(page: Page) {
+  await expect(page.getByRole('dialog')).toBeAttached();
+  await expect(page.locator('#pm-title')).toBeVisible();
+}
+
+// 프로젝트 상세를 연다. 첫 클릭은 선택만 옮기고, 이미 고른 이름을 다시
+// 눌러야 열린다(components/sections/ProjectsSection/index.tsx의
+// handleNameClick). 목록의 첫 항목은 처음부터 골라져 있으므로 한 번이면
+// 열린다 - 무조건 두 번 누르면 이미 열린 모달이 두 번째 클릭을 가로챈다.
+export async function openProjectModal(page: Page, title: string) {
+  const tab = page.getByRole('tab', { name: title, exact: true });
+  if ((await tab.getAttribute('aria-selected')) !== 'true') {
+    await tab.click();
+    await expect(tab).toHaveAttribute('aria-selected', 'true');
+  }
+  await tab.click();
+  await expectModalOpen(page);
+}
+
+// 프레임 n개가 실제로 지나가기를 기다린다. waitForTimeout과 달리 벽시계가
+// 아니라 브라우저의 렌더 루프를 센다. "아무 일도 일어나지 않는다"를 재려면
+// 창이 필요한데, 그 창을 시간이 아니라 프레임으로 잡는다.
+export function waitFrames(page: Page, count: number) {
+  return page.evaluate(
+    (n) =>
+      new Promise<void>((resolve) => {
+        let seen = 0;
+        const tick = () => {
+          if (++seen >= n) resolve();
+          else requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+    count
+  );
+}
