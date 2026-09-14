@@ -10,9 +10,9 @@ export const coreValues: CoreValue[] = [
     },
     {
       id: '2',
-      title: 'AI Workflow를 이해하고 활용하는 개발자',
+      title: 'AI를 이해하고 활용하는 개발자',
       label: 'AI WORKFLOW',
-      description: 'AI에 대한 이해를 바탕으로 프로젝트에 도입하여 효율성을 끌어올렸습니다. AI를 통해 자동 검증 장치 7가지를 이 포트폴리오 프로젝트에 세웠습니다. 손으로 작성했다면 18,230줄의 코드를 작성해야 했으며, 이는 소스 코드의 1.5배의 양입니다.',
+      description: 'AI에 대한 이해를 바탕으로 프로젝트에 도입하여 효율성을 끌어올렸습니다. AI 각각의 subagent가 맡은 작업의 범위를 벗어나지 않으면서도, 해당 작업에서 기대한 결과를 내도록 skill.md를 작성하여 적용했습니다. AI의 코드를 직접 작성했다면 18,230줄의 코드를 작성해야 했으며, 이는 작성 코드의 약2배의 양입니다.',
       imagePlaceholder: 'AI-Workflow'
     },
     {

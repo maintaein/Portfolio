@@ -89,7 +89,7 @@ describe('AboutSection', () => {
   it('증거 문자열이 전부 DOM에 있다', () => {
     const { container } = renderAboutSection();
     const html = container.textContent ?? '';
-    for (const needle of ['91%', 'Tree-shaking', 'Prompt', 'Ship']) {
+    for (const needle of ['2년 6개월', '거쳐온 프로젝트', '18,230줄', '2배 이상']) {
       expect(html, `${needle}이 없다`).toContain(needle);
     }
   });

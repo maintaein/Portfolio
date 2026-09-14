@@ -55,26 +55,33 @@ const EVIDENCE = [
   <div key="basics" className="flex flex-col gap-5">
     <div>
       <div className="text-t8 uppercase tracking-[0.2em] text-[var(--color-text-secondary)]">
-        Tree-shaking
+        프론트엔드 경험
       </div>
-      <div className="text-d3 font-bold leading-none text-[var(--color-text-primary)]">91%</div>
+      <div className="text-d3 font-bold leading-none text-[var(--color-text-primary)]">
+        2년 6개월
+      </div>
     </div>
     <div>
       <div className="text-t8 uppercase tracking-[0.2em] text-[var(--color-text-secondary)]">
-        렌더링 에러
+        거쳐온 프로젝트
       </div>
-      <div className="text-d3 font-bold leading-none text-[var(--color-text-primary)]">0</div>
+      <div className="text-d3 font-bold leading-none text-[var(--color-text-primary)]">6</div>
     </div>
   </div>,
-  <div key="ai" className="flex flex-col gap-5 font-mono">
+  <div key="ai" className="flex flex-col gap-5">
     <div>
       <div className="text-t8 uppercase tracking-[0.2em] text-[var(--color-text-secondary)]">
-        검증한 뒤 반영
+        직접 썼다면
       </div>
-      <div className="text-t2 leading-tight text-[var(--color-text-primary)]">
-        Prompt <span className="text-[var(--color-cyan-core)]">&#8594;</span> Review{' '}
-        <span className="text-[var(--color-cyan-core)]">&#8594;</span> Ship
+      <div className="text-d3 font-bold leading-none text-[var(--color-text-primary)]">
+        18,230줄
       </div>
+    </div>
+    <div>
+      <div className="text-t8 uppercase tracking-[0.2em] text-[var(--color-text-secondary)]">
+        작성 코드의
+      </div>
+      <div className="text-d3 font-bold leading-none text-[var(--color-text-primary)]">2배 이상</div>
     </div>
   </div>,
   <div key="team" className="flex flex-col gap-4 font-mono">

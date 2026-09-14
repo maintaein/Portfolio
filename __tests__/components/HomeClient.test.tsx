@@ -153,7 +153,7 @@ vi.mock('@/components/sections', async () => {
   return {
     AboutSection: () => (
       <>
-        <SectionShell label="About" marker="91%" />
+        <SectionShell label="About" marker="2년 6개월" />
         <MotionProbe label="about-decoration-one" section="about" />
         <MotionProbe label="about-decoration-two" section="about" />
       </>

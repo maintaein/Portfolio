@@ -14,8 +14,8 @@ test.describe('SEO / 초기 렌더', () => {
     expect(response.status()).toBe(200);
 
     const html = await response.text();
-    // components/sections/AboutSection/index.tsx:38의 EVIDENCE[0] 고정 텍스트.
-    expect(html).toContain('91%');
+    // components/sections/AboutSection/index.tsx의 EVIDENCE[0] 고정 텍스트.
+    expect(html).toContain('2년 6개월');
     // lib/data/projects/AlphaMail.ts의 프로젝트 title.
     expect(html).toContain('AlphaMail');
   });
@@ -42,7 +42,7 @@ test.describe('SEO / 초기 렌더', () => {
 
     const about = page.locator('[data-section="about"]');
     const text = await about.textContent();
-    expect(text).toContain('91%');
+    expect(text).toContain('2년 6개월');
 
     // CSS 문자열 자체는 __tests__/styles/sectionVisibility.test.ts가 이미
     // 잠갔으므로 여기서는 실제 엔진이 그 문자열을 어떻게 계산하는지만 본다.
