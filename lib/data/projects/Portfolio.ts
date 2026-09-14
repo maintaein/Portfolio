@@ -4,7 +4,7 @@ export const portfolio: Project = {
   title: 'Portfolio',
   subtitle: 'Next.js 15 + TypeScript 기반 포트폴리오 웹사이트',
   image: '/projects/Portfolio.webp',
-  tags: ['Next.js 15', 'React 19', 'TypeScript', 'Tailwind CSS 4', 'Framer Motion', 'Atomic Design'],
+  tags: ['Next.js 15', 'React 19', 'TypeScript', 'Tailwind CSS 4', 'GSAP', 'Atomic Design'],
   duration: '2025.08 - 현재',
   phases: [
     { label: '1차 MVP', period: '2025.08 - 2025.12' },
