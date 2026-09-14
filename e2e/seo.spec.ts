@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
-// 계획 6 Task 5b-1. 발판이 실제로 도는지 증명하는 시나리오 2건뿐이다. 나머지
-// Chromium 19건, Firefox/WebKit smoke 6건은 뒤이은 두 작업의 몫이다.
+// 계획 6 Task 5b-1이 발판으로 2건을 놓았고, Task 6이 해시 정본 계약 1건을
+// 얹었다. 나머지 시나리오는 navigation·a11y·motion·modal·media가 나눠 가졌다.
 
 test.describe('SEO / 초기 렌더', () => {
   test('루트 응답 원문 HTML에 About 수치와 프로젝트 제목이 있다 @smoke', async ({
@@ -50,5 +50,13 @@ test.describe('SEO / 초기 렌더', () => {
       (el) => getComputedStyle(el).contentVisibility
     );
     expect(contentVisibility).toBe('auto');
+  });
+
+  test('섹션 경로 /projects는 없다. 해시가 정본이다 @smoke', async ({ request }) => {
+    // 섹션 주소는 `/#projects` 하나뿐이다. 경로를 하나 더 만들면 같은 화면에
+    // 주소가 둘이 되고, 크롤러도 공유 카드도 어느 쪽이 정본인지 모른다.
+    // DESIGN.md 살아 있는 계약의 "진입 경로"가 이 짝을 문서 쪽에서 지킨다.
+    const response = await request.get('/projects');
+    expect(response.status()).toBe(404);
   });
 });
