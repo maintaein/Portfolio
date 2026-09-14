@@ -8,7 +8,7 @@ export const tds: Project = {
   duration: '2025.12 - 2026.07',
   phases: [
     { label: '1차 MVP', period: '2025.12 - 2026.07' },
-    { label: '고도화', period: '2026.08 - 현재' },
+    { label: '고도화', period: '2026.08 - 현재' }
   ],
 
   role: '1인 설계 및 개발',
@@ -60,10 +60,10 @@ export const tds: Project = {
       title: 'Button 하나만 import해도 컴포넌트 전체가 번들에 포함된 현상',
       problem: 'UI 컴포넌트 라이브러리는 필요한 컴포넌트만 가져다 쓸 수 있어야 한다고 생각했습니다. 그런데 npm 패키지를 만들어 실제로 가져다 쓰는 상황을 재현해보니, Button 하나만 import해도 컴포넌트 전체가 그대로 번들에 실렸습니다.',
       analysis: [
-        '**진단: 번들러에게 "지워도 안전하다"는 근거가 없었다**: Button 하나만 쓰는 소비자 예제를 만들고 `npm pack`으로 실제 배포 패키지를 설치해 재보니, 30개 중 21개 컴포넌트가 들어간 45KB였습니다. 같은 패키지에서 컴포넌트 파일을 직접 경로로 import하면 4.3KB였습니다. 두 수치의 차이로 문제를 barrel 진입점으로 좁혔고, 원인은 두 가지가 겹쳐 있었습니다. 하나는 barrel에 남아 있던 `export const version = \'0.1.0\'`이 빌드 결과에 값 할당 코드로 남은 것이고, 다른 하나는 Vanilla Extract가 생성한 `.css.mjs` 모듈들이었습니다. Rollup의 `moduleSideEffects` 기본값은 `true`라서, 번들러는 이 모듈들을 **지우면 무슨 일이 생길지 알 수 없는 코드**로 보고 barrel이 끌어온 것을 전부 남겨두고 있었습니다. 라이브러리가 번들러에게 제거해도 안전하다는 근거를 주지 못한 셈입니다.',
-        '**선택지 1: 컴포넌트별 import 경로를 공개한다**: `@scope/core/Button`처럼 진입점을 쪼개 공개하면 번들러의 판단에 기대지 않고 import 경로만으로 필요한 것만 가져올 수 있습니다. MUI나 lodash가 쓰는 방식입니다. 다만 단일 진입점에서 named import로 가져오는 익숙한 사용법이 깨지고, 컴포넌트가 늘 때마다 `exports` 맵을 같이 관리해야 합니다. 무엇보다 이건 원인을 고치는 게 아니라 우회하는 쪽이라 기본 import 경로는 여전히 45KB로 남습니다. 나중에 보완으로 얹을 수는 있다고 보고 현재 대응에서는 제외했습니다.',
-        '**선택지 2: 패키지 전체를 side effect 없음으로 선언한다**: `sideEffects: false` 한 줄이면 번들러는 모든 모듈을 지워도 되는 것으로 보고 가장 공격적으로 tree-shaking합니다. 하지만 Vanilla Extract가 뽑아낸 `core.css`까지 지워도 되는 대상이 되어, 소비자가 CSS를 직접 import하지 않으면 스타일이 통째로 사라집니다. 빌드는 성공하고 화면만 깨지는 종류의 실패라 소비자가 원인을 찾기 어렵습니다. 몇 KB를 더 깎자고 이런 실패 모드를 만들 이유는 없다고 판단해 선택하지 않았습니다.',
-        '**선택지 3: 모듈 경계를 살리고 side effect 범위를 정확히 좁힌다 (선택)**: barrel에는 순수 re-export만 남기고, `preserveModules`로 컴포넌트별 파일 구조를 유지하고, side effect는 `core.css` 하나로만 한정해 선언합니다. 그러면 번들러가 "CSS는 남기고 안 쓰는 컴포넌트 JS는 지운다"를 파일 단위로 판단할 수 있습니다. 대신 dist 파일 수가 140개를 넘어 빌드 산출물을 눈으로 훑기 어려워집니다. 소비자에게 추가 설정도 낯선 import 경로도 요구하지 않으면서 원인 두 가지를 모두 없애는 방향이라 이쪽을 택했습니다.',
+        '**진단: 번들러에게 "지워도 안전하다"는 근거가 없었다**: Button 하나만 쓰는 예제를 `npm pack`으로 설치해 재보니 45KB, 30개 중 21개가 딸려 왔습니다. 컴포넌트 파일을 직접 경로로 가져오면 4.3KB였습니다. 범인은 barrel 진입점이었고, 원인은 둘이었습니다. barrel에 남은 `export const version = \'0.1.0\'`, 그리고 Vanilla Extract가 만든 `.css.mjs` 모듈들입니다. Rollup은 `moduleSideEffects` 기본값이 `true`라 이 둘을 **지우면 무슨 일이 생길지 알 수 없는 코드**로 보고, barrel이 끌어온 것을 전부 남겼습니다.',
+        '**선택지 1: 컴포넌트별 import 경로를 공개한다**: `@scope/core/Button`처럼 진입점을 쪼개는 MUI · lodash 방식입니다. 번들러의 판단에 기대지 않아도 되지만, 익숙한 named import가 깨지고 컴포넌트가 늘 때마다 `exports` 맵을 손봐야 합니다. 원인을 고치는 게 아니라 피해 가는 쪽이라 기본 경로는 여전히 45KB입니다.',
+        '**선택지 2: 패키지 전체를 side effect 없음으로 선언한다**: `sideEffects: false` 한 줄이면 번들러가 가장 공격적으로 깎습니다. 대신 Vanilla Extract가 뽑아낸 `core.css`까지 지울 대상이 되어, 소비자가 CSS를 직접 import하지 않으면 스타일이 통째로 사라집니다. 빌드는 성공하고 화면만 깨지니 원인을 찾기도 어렵습니다.',
+        '**선택지 3: 모듈 경계를 살리고 side effect 범위를 좁힌다 (선택)**: barrel은 순수 re-export만, 파일 구조는 `preserveModules`로 유지, side effect는 `core.css` 하나만 선언합니다. 그러면 번들러가 "CSS는 남기고 안 쓰는 컴포넌트 JS는 지운다"를 파일 단위로 판단합니다. dist 파일이 140개를 넘는 대신, 소비자는 새 설정도 낯선 경로도 배울 필요가 없습니다.',
       ],
       action: [
         'Button 하나만 import하는 소비자 예제를 만들고 `npm pack`으로 배포 패키지를 설치해 측정했습니다. 로컬 소스가 아니라 배포본 기준이어야 소비자가 겪는 상황과 같아집니다.',
@@ -83,4 +83,5 @@ export const tds: Project = {
     },
   ],
   githubUrl: 'https://github.com/maintaein/TDS_TaeinDesignSystem',
+  liveUrl: 'https://tds-taein-design-system.vercel.app/',
 };
