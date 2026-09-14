@@ -11,6 +11,14 @@ export default defineConfig({
   testDir: 'e2e',
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
+  // 이 사이트는 한 장면마다 Three.js 배경과 GSAP 타임라인을 돌린다. 워커를
+  // 둘 이상 띄우면 엔진 셋이 같은 머신의 소프트웨어 래스터라이저를 두고
+  // 다투다가 page.goto 하나가 30초를 넘긴다. 실제로 계획 6 Task 5b-2에서
+  // 그렇게 깨졌다. 한 번에 하나만 돌린다.
+  workers: 1,
+  // 기본 30초는 이 페이지의 최초 로드에 빠듯하다. 성공 조건이 아니라
+  // 실패 상한이다.
+  timeout: 60_000,
   reporter: process.env.CI ? [['list'], ['html']] : 'list',
   use: {
     baseURL: 'http://localhost:3100',
