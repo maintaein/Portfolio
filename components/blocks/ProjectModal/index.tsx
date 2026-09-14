@@ -281,6 +281,13 @@ function buildRevealTimeline(shell: HTMLElement, order: HTMLElement[]): gsap.cor
   return tl;
 }
 
+// jsdom에서 play()는 undefined를 돌려주므로 Promise 취급하면 깨진다.
+// 자동재생이 거부되면 조용히 둔다 - 정지 단추가 그대로 남아 있다.
+function playSafely(video: HTMLVideoElement) {
+  const result = video.play();
+  if (result && typeof result.catch === 'function') result.catch(() => {});
+}
+
 export default function ProjectModal({
   isOpen,
   onClose,
@@ -307,8 +314,7 @@ export default function ProjectModal({
     setPlaying(true);
   }, [project]);
 
-  // 무대에 올라간 영상만 재생/정지한다. jsdom에서 play()는 undefined를
-  // 돌려주므로 Promise 취급하면 깨진다. playing이 꺼져 있으면 무대를
+  // 무대에 올라간 영상만 재생/정지한다. playing이 꺼져 있으면 무대를
   // 넘겨도(feat 변경) 새 영상이 자동재생되지 않고 정지 상태를 유지한다.
   useEffect(() => {
     const video = videoRefs.current[feat];
@@ -317,10 +323,7 @@ export default function ProjectModal({
       video.pause();
       return;
     }
-    const playResult = video.play();
-    if (playResult && typeof playResult.catch === 'function') {
-      playResult.catch(() => {});
-    }
+    playSafely(video);
   }, [feat, project, playing]);
 
   // 셸은 Modal 아톰이 portal을 세운 다음 커밋에서야 DOM에 박힌다. reveal이
@@ -569,6 +572,11 @@ export default function ProjectModal({
                     <video
                       ref={(el) => {
                         videoRefs.current[i] = el;
+                        // Modal 아톰은 portal을 다음 커밋에 세운다. 위 재생
+                        // effect가 도는 커밋에는 이 노드가 아직 없어서 무대
+                        // 영상이 열자마자 멈춘 채로 남는다. 노드가 박히는
+                        // 이 자리에서 재생을 시작한다.
+                        if (el && i === feat && playing) playSafely(el);
                       }}
                       src={impl.video}
                       muted
