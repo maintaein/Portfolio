@@ -26,7 +26,7 @@ export const portfolio: Project = {
       category: 'Projects 섹션',
       items:['진행한 프로젝트 목록, 상세 페이지에서 자세한 구현 사항 확인 가능'],
       intent: '프로젝트 섹션은 이미지와 텍스트를 한 화면에 보여드림으로써 한눈에 봐도 프로젝트를 파악하실 수 있도록 구성했습니다.',
-      video: '/projects/Portfolio/about.mp4'
+      video: '/projects/Portfolio/projects.mp4'
     },
     {
       category: 'Exp + Skill + Awards 섹션',
