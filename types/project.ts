@@ -48,4 +48,6 @@ export interface Project {
   reviews?: ProjectReview[];
 
   githubUrl?: string;
+  // 실제로 돌아가는 배포본 주소. 있으면 머리띠에 GitHub 옆으로 단추가 하나 는다
+  liveUrl?: string;
 }
