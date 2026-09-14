@@ -943,6 +943,10 @@
      닫혔을 때 층이 보이게 한다. */
   .about-folder {
     position: relative;
+    /* 자리가 세로로 가운데인데 탭이 상자 위로 튀어나와 있어서 눈으로는
+       위로 치우쳐 보인다. 그만큼만 내린다. transform은 열고 닫는 데
+       쓰고 있으므로 여기서 건드리지 않는다. */
+    top: 24px;
     width: clamp(120px, 15vw, 180px);
     aspect-ratio: 5 / 4;
     border-radius: 0 10px 10px 10px;
@@ -983,9 +987,12 @@
     justify-content: center;
     gap: 8%;
     padding: 0 8%;
-    border: 1px solid rgb(3 179 195 / 0.45);
     border-radius: 10px;
-    background: var(--color-ink);
+    /* 종이는 흰 종이다. 시안 테두리를 두르면 폴더 앞판과 같은 계열이라
+       한 덩어리로 뭉쳐 보였다. 윤곽은 선이 아니라 그림자가 만든다.
+       흰색은 사이트에 하나뿐이라 글자색 토큰의 값을 그대로 쓴다. */
+    background: var(--color-text-primary);
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.55);
     transform: translate(-50%, 10%);
     transition: transform var(--animate-duration-slow) cubic-bezier(0.22, 1, 0.36, 1);
   }
@@ -1020,11 +1027,71 @@
   }
 
   /* 종이에 얹는 기술스택 아이콘. Skills의 .skill-icon 마스크를 그대로
-     쓰고 크기와 색만 이 자리에 맞춘다. 40px은 폴더 안에서 너무 크다. */
+     쓰고 크기와 색만 이 자리에 맞춘다. 40px은 폴더 안에서 너무 크다.
+     흰 종이 위라 밝은 시안은 읽히지 않는다. 본색을 쓴다. */
   .about-folder-icon {
     width: clamp(14px, 1.6vw, 20px);
     height: clamp(14px, 1.6vw, 20px);
-    background: var(--color-cyan-hi);
+    background: var(--color-cyan-core);
+  }
+
+  /* 아이콘 광휘. Skills 아이콘 호버와 같은 어법이고 토큰도 같은 것을
+     쓴다. 넓고 옅은 원반(::before)과 로고 모양을 따라가는 좁은 겹
+     (::after) 둘이며, 움직이는 것은 불투명도뿐이다. 흐림 반경을 전환하면
+     매 프레임 알파를 다시 흐리게 만든다(그쪽 주석 참고).
+
+     이 겹을 아이콘 자신에게 걸 수 없다. 마스크가 자손의 filter까지 도로
+     잘라내기 때문이고, 그래서 Skills도 버튼이 겹을 쥔다. 음수 z-index는
+     종이 배경 위, 아이콘 아래에 놓인다. 종이가 z-index를 가져 쌓임
+     맥락이라 배경 밑으로는 내려가지 않는다. */
+  .about-folder-icon-slot {
+    position: relative;
+    display: inline-block;
+    line-height: 0;
+  }
+
+  .about-folder-icon-slot::before,
+  .about-folder-icon-slot::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    pointer-events: none;
+    z-index: -1;
+    transition: opacity var(--animate-duration-base) ease-out;
+  }
+
+  /* 240%는 Skills에서 아이콘 40px에 원반 96px이던 비율 그대로다. */
+  .about-folder-icon-slot::before {
+    width: 240%;
+    height: 240%;
+    background: var(--skill-icon-ambient);
+  }
+
+  .about-folder-icon-slot::after {
+    width: 100%;
+    height: 100%;
+    background: var(--skill-icon-src) center / contain no-repeat;
+    filter:
+      drop-shadow(0 0 2px var(--color-cyan-hi))
+      drop-shadow(0 0 5px var(--color-cyan-hi));
+  }
+
+  /* 종이 세 장이 다 자리를 잡은 다음에 켜진다. 나오는 중에 빛나면 어디서
+     나왔는지가 안 보인다. 마지막 장이 느린 지속만큼 걸려 도착하므로 그
+     시작 지연에 지속 한 번을 더한 값이다. */
+  [data-about-folder][data-open='true'] .about-folder-icon-slot::after {
+    opacity: 1;
+    transition-delay: calc(var(--animate-duration-slow) * 2 + var(--animate-duration-fast) * 3);
+  }
+
+  /* 원반은 끝까지 올리지 않는다. Skills는 검은 바탕 위라 1이 맞지만
+     여기는 흰 종이 위라 같은 값이면 종이 전체에 안개가 낀다. */
+  [data-about-folder][data-open='true'] .about-folder-icon-slot::before {
+    opacity: 0.7;
+    transition-delay: calc(var(--animate-duration-slow) * 2 + var(--animate-duration-fast) * 3);
   }
 
   /* 앞판 두 장. 아래를 축으로 서로 반대로 기울어 벌어진다. */
@@ -1054,7 +1121,9 @@
   @media (prefers-reduced-motion: reduce) {
     .about-folder,
     .about-folder-paper,
-    .about-folder-front {
+    .about-folder-front,
+    .about-folder-icon-slot::before,
+    .about-folder-icon-slot::after {
       transition: none;
     }
 
@@ -1062,23 +1131,27 @@
        선택자가 더 강해서 위 블록의 단축 속성으로는 덮이지 않는다. */
     [data-about-folder][data-open='true'],
     [data-about-folder][data-open='true'] .about-folder-paper,
-    [data-about-folder][data-open='true'] .about-folder-front {
+    [data-about-folder][data-open='true'] .about-folder-front,
+    [data-about-folder][data-open='true'] .about-folder-icon-slot::before,
+    [data-about-folder][data-open='true'] .about-folder-icon-slot::after {
       transition-delay: 0s;
     }
   }
 
-  /* About TEAMWORK의 손뼉(components/blocks/AboutClap). 선화라 색이 획에만
-     있다. 손은 시안 본색, 터지는 빛은 밝은 시안이다. 획 굵기와 좌표는
-     viewBox 200 기준이라 상자가 커져도 비례가 유지된다. */
-  .about-clap {
-    width: clamp(150px, 19vw, 230px);
+  /* About TEAMWORK의 손뼉(components/blocks/AboutTeamwork). 획 굵기와
+     좌표는 viewBox 200 기준이라 상자가 커져도 비례가 유지된다. */
+  .about-teamwork {
+    position: relative;
+    width: clamp(190px, 24vw, 300px);
     aspect-ratio: 1 / 1;
   }
 
-  .about-clap-ink {
-    fill: none;
+  /* 손은 윤곽선이다. 안을 배경색으로 채우므로 겹친 손가락이 앞뒤로
+     읽히고 두 손이 가운데서 교차해도 뭉치지 않는다. */
+  .about-teamwork-ink {
+    fill: var(--color-ink);
     stroke: var(--color-cyan-core);
-    stroke-width: 4.5;
+    stroke-width: 3.2;
     stroke-linecap: round;
     stroke-linejoin: round;
   }
@@ -1086,26 +1159,59 @@
   /* 터지기 전의 모습. gsap이 돌기 시작하면 인라인 스타일이 이 값을
      덮는다. 0으로 두지 않는 이유는 아직 안 고른 문항에서 이 자리가 텅
      비어 보이지 않게 하려는 것이다. */
-  .about-clap-burst {
+  .about-teamwork-burst {
     opacity: 0.45;
   }
 
-  .about-clap-burst line {
+  .about-teamwork-burst line {
     fill: none;
     stroke: var(--color-cyan-hi);
     stroke-width: 5;
     stroke-linecap: round;
   }
 
-  .about-clap-burst path {
+  .about-teamwork-burst path {
     fill: var(--color-cyan-hi);
     stroke: none;
+  }
+
+  /* 손뼉이 끝난 뒤 남는 광휘. Skills 아이콘 호버와 같은 겹 둘이다.
+     넓고 옅은 원반은 상자가 쥐고, 모양을 따라가는 좁은 겹은 손 그림을
+     한 벌 더 얹어 만든다. 여기서도 움직이는 것은 불투명도뿐이다.
+     ::before가 절대 위치라 svg도 자리를 잡아야 뒤로 간다(컴포넌트의
+     relative). 원반 중심은 상자 한가운데가 아니라 손이 모이는 자리다. */
+  .about-teamwork::before {
+    content: "";
+    position: absolute;
+    top: 40%;
+    left: 50%;
+    width: 88%;
+    height: 88%;
+    transform: translate(-50%, -50%);
+    background: var(--skill-icon-ambient);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--animate-duration-slow) ease-out
+      var(--animate-duration-fast);
+  }
+
+  .about-teamwork-bloom {
+    opacity: 0;
+    filter:
+      drop-shadow(0 0 3px var(--color-cyan-hi))
+      drop-shadow(0 0 9px var(--color-cyan-hi));
+    transition: opacity var(--animate-duration-base) ease-out;
+  }
+
+  [data-about-teamwork][data-glow='true']::before,
+  [data-about-teamwork][data-glow='true'] .about-teamwork-bloom {
+    opacity: 1;
   }
 
   /* About AI WORKFLOW의 링(components/blocks/AboutRings). WebGL 캔버스가
      이 상자를 채운다. 정사각이라야 링이 타원으로 찌그러지지 않는다. */
   .about-rings {
-    width: clamp(220px, 26vw, 340px);
+    width: clamp(260px, 31vw, 400px);
     aspect-ratio: 1 / 1;
   }
 

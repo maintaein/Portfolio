@@ -471,30 +471,30 @@ describe('AboutSection', () => {
 
     // TEAMWORK의 손뼉. gsap 타임라인이라 DESIGN.md의 "rAF를 도는 것은
     // 스스로 멈춘다"가 그대로 적용된다. 활성 여부를 밖에서 받는다.
-    it('손뼉이 TEAMWORK 자리에 서고 그 문항일 때만 돈다', async () => {
+    it('손뼉이 TEAMWORK 자리에 서고 그 문항일 때만 켜진다', async () => {
       const user = userEvent.setup();
       const { container } = renderAboutSection();
-      const clap = () => container.querySelector('[data-about-visual-index="2"] [data-about-clap]');
-      expect(clap()).not.toBeNull();
-      expect(clap()).toHaveAttribute('data-running', 'false');
+      const hands = () =>
+        container.querySelector('[data-about-visual-index="2"] [data-about-teamwork]');
+      expect(hands()).not.toBeNull();
+      expect(hands()).toHaveAttribute('data-active', 'false');
       expect(
-        container.querySelector('[data-about-visual-index="0"] [data-about-clap]')
+        container.querySelector('[data-about-visual-index="0"] [data-about-teamwork]')
       ).toBeNull();
 
       await user.click(screen.getByRole('button', { name: /TEAMWORK/ }));
-      expect(clap()).toHaveAttribute('data-running', 'true');
+      expect(hands()).toHaveAttribute('data-active', 'true');
     });
 
     it('About이 비활성이면 손뼉이 멈춰 있다', () => {
       const { container } = renderAboutSection('overview' as NavId);
-      expect(container.querySelector('[data-about-clap]')).toHaveAttribute(
-        'data-running',
+      expect(container.querySelector('[data-about-teamwork]')).toHaveAttribute(
+        'data-active',
         'false'
       );
     });
 
-    // 무한히 도는 장식이라 모션을 끈 사용자에게는 아예 돌리지 않는다.
-    it('모션을 끄면 손뼉이 돌지 않는다', () => {
+    it('모션을 끄면 손뼉이 치지 않는다', () => {
       vi.stubGlobal(
         'matchMedia',
         vi.fn().mockReturnValue({
@@ -502,8 +502,8 @@ describe('AboutSection', () => {
         })
       );
       const { container } = renderAboutSection();
-      expect(container.querySelector('[data-about-clap]')).toHaveAttribute(
-        'data-running',
+      expect(container.querySelector('[data-about-teamwork]')).toHaveAttribute(
+        'data-active',
         'false'
       );
     });
@@ -512,11 +512,23 @@ describe('AboutSection', () => {
     // import라 그대로 얹힌다. BootSequence와 같은 처방을 쓴다.
     it('손뼉이 gsap을 정적으로 들여오지 않는다', () => {
       const source = readFileSync(
-        resolve(process.cwd(), 'components/blocks/AboutClap/index.tsx'),
+        resolve(process.cwd(), 'components/blocks/AboutTeamwork/index.tsx'),
         'utf8'
       );
       expect(source).not.toMatch(/^import .*from '@\/lib\/gsap'/m);
       expect(source).toMatch(/import\('@\/lib\/gsap'\)/);
+    });
+
+    // 무한 반복은 옆에서 글을 읽는 동안 계속 시야를 끈다. 문항에 들어올
+    // 때 한 번만 치고, 떠나면 되감아 다음 입장에서 다시 친다.
+    it('손뼉이 한 번만 치고 멈춘다', () => {
+      const source = readFileSync(
+        resolve(process.cwd(), 'components/blocks/AboutTeamwork/index.tsx'),
+        'utf8'
+      );
+      expect(source).not.toMatch(/repeat: -1/);
+      expect(source).toMatch(/tl\.restart\(\)/);
+      expect(source).toMatch(/tl\.pause\(0\)/);
     });
 
     // 콘텐츠는 7칸째부터다. 6칸째를 비워 두지 않으면 장식이 본문에 붙는다.
@@ -554,7 +566,11 @@ describe('AboutSection', () => {
       ]);
       for (const icon of icons) {
         expect(icon.className).toMatch(/\bskill-icon\b/);
-        expect(icon.getAttribute('style')).toMatch(/--skill-icon-src: url\(\/icons-mono\//);
+        // 마스크가 자손의 filter를 잘라내므로 광휘는 바깥 겹이 쥔다.
+        // --skill-icon-src도 거기에 있고 아이콘이 물려받는다.
+        const slot = icon.parentElement;
+        expect(slot?.className).toMatch(/\babout-folder-icon-slot\b/);
+        expect(slot?.getAttribute('style')).toMatch(/--skill-icon-src: url\(\/icons-mono\//);
       }
     });
 
@@ -627,14 +643,18 @@ describe('AboutSection', () => {
 
     // 시안은 transition: all이라 종이 높이도 함께 변했다. 높이는 레이아웃
     // 속성이라 이 저장소가 애니메이션하지 않기로 한 것이다(DESIGN.md).
-    it('열림 상태가 바꾸는 것은 transform뿐이다', () => {
+    // 아이콘 광휘가 붙으면서 불투명도가 하나 늘었다. 둘 다 이 저장소가
+    // 애니메이션해도 된다고 정해 둔 속성이다.
+    it('열림 상태가 바꾸는 것은 transform과 불투명도뿐이다', () => {
       const openRules = [
         ...motionCss.matchAll(/\[data-about-folder\]\[data-open='true'\][^{]*\{([^}]*)\}/g),
       ].map((m) => m[1]);
       expect(openRules.length).toBeGreaterThanOrEqual(6);
       for (const body of openRules) {
         const props = [...body.matchAll(/([a-z-]+)\s*:/g)].map((m) => m[1]);
-        expect(props.filter((prop) => prop !== 'transition-delay')).toEqual(['transform']);
+        for (const prop of props.filter((prop) => prop !== 'transition-delay')) {
+          expect(['transform', 'opacity']).toContain(prop);
+        }
       }
     });
 
@@ -674,6 +694,29 @@ describe('AboutSection', () => {
     // 링 상자가 정사각이 아니면 동심원이 타원으로 찌그러진다.
     it('링 상자가 정사각이다', () => {
       expect(css).toMatch(/\.about-rings \{[\s\S]*?aspect-ratio: 1 \/ 1;/);
+      expect(css).toMatch(/\.about-teamwork \{[\s\S]*?aspect-ratio: 1 \/ 1;/);
+    });
+
+    // 종이는 흰 종이다. 시안 테두리를 두르면 폴더 앞판과 한 덩어리로
+    // 뭉쳐 보였다. 윤곽은 선이 아니라 그림자가 만든다.
+    it('종이가 희고 시안 테두리를 두르지 않는다', () => {
+      const paper = css.match(/\.about-folder-paper \{([^}]*)\}/)?.[1];
+      expect(paper).toBeDefined();
+      expect(paper).toMatch(/background: var\(--color-text-primary\);/);
+      expect(paper).toMatch(/box-shadow:/);
+      expect(paper).not.toMatch(/border: /);
+    });
+
+    // 폴더 아이콘 광휘와 손뼉 광휘는 Skills 아이콘 호버와 같은 토큰을
+    // 쓴다. 값을 따로 적으면 셋이 서로 다른 빛이 된다.
+    it('두 광휘가 Skills 호버와 같은 토큰을 쓴다', () => {
+      const slot = css.match(/\.about-folder-icon-slot::before \{([^}]*)\}/)?.[1];
+      expect(slot).toMatch(/background: var\(--skill-icon-ambient\);/);
+      const teamwork = css.match(/\.about-teamwork::before \{([^}]*)\}/)?.[1];
+      expect(teamwork).toMatch(/background: var\(--skill-icon-ambient\);/);
+      const bloom = css.match(/\.about-teamwork-bloom \{([^}]*)\}/)?.[1];
+      expect(bloom).toMatch(/drop-shadow\(0 0 3px var\(--color-cyan-hi\)\)/);
+      expect(bloom).toMatch(/drop-shadow\(0 0 9px var\(--color-cyan-hi\)\)/);
     });
 
     // 링 색의 정본은 여기고 셰이더는 사본이다. 토큰을 지우면 사본만 남아

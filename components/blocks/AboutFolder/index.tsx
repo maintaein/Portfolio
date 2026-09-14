@@ -17,6 +17,11 @@
 // 글자로 적으면 같은 정보가 사이트 안에 두 벌이 되고, 폴더는 aria-hidden
 // 장식이라 그 글자를 읽는 사람도 없다. --skill-icon-src는 커스텀
 // 프로퍼티라 style 타입에 없어 캐스팅한다(SkillsSection과 같은 처방).
+//
+// 아이콘 하나가 겹 둘이다. 바깥 span이 광휘를 맡고 안쪽 span이 마스크로
+// 모양을 쥔다. 마스크는 자기 자손의 filter까지 잘라내므로 같은 요소에
+// 둘을 얹을 수 없다. Skills의 .skill-icon-button이 같은 이유로 같은 모양
+// 이고, --skill-icon-src도 거기처럼 바깥이 쥐고 안쪽이 물려받는다.
 import type { CSSProperties } from 'react';
 
 export interface AboutFolderProps {
@@ -43,10 +48,14 @@ export default function AboutFolder({ open, papers }: AboutFolderProps) {
           {names.map((icon) => (
             <span
               key={icon}
-              data-about-folder-icon={icon}
-              className="skill-icon about-folder-icon"
+              className="about-folder-icon-slot"
               style={{ '--skill-icon-src': `url(/icons-mono/${icon}.svg)` } as CSSProperties}
-            />
+            >
+              <span
+                data-about-folder-icon={icon}
+                className="skill-icon about-folder-icon"
+              />
+            </span>
           ))}
         </div>
       ))}

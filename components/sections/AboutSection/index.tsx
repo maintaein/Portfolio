@@ -7,7 +7,7 @@ import { coreValues } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
 import { useSectionActivity } from '@/components/common/SectionActivityContext';
 import AboutFolder from '@/components/blocks/AboutFolder';
-import AboutClap from '@/components/blocks/AboutClap';
+import AboutTeamwork from '@/components/blocks/AboutTeamwork';
 import AboutRail from './rail';
 import { ABOUT_SCRIMS, ABOUT_SCRIMS_MOBILE } from './scrim';
 
@@ -284,8 +284,8 @@ export default function AboutSection() {
                       </div>
                     ) : null}
                     {index === 2 ? (
-                      <AboutClap
-                        running={!reducedMotion && isActive && active === SECTION_IDS.ABOUT}
+                      <AboutTeamwork
+                        active={!reducedMotion && isActive && active === SECTION_IDS.ABOUT}
                       />
                     ) : null}
                   </div>
