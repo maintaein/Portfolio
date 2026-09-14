@@ -12,11 +12,18 @@
 //
 // 기하와 전환은 전부 styles/design-tokens.css의 .about-folder 블록에 있다.
 // 여기서 크기나 시간 값을 리터럴로 적지 않는다.
+//
+// 종이에 올리는 것은 Skills가 쓰는 것과 같은 마스크 아이콘이다. 이름을
+// 글자로 적으면 같은 정보가 사이트 안에 두 벌이 되고, 폴더는 aria-hidden
+// 장식이라 그 글자를 읽는 사람도 없다. --skill-icon-src는 커스텀
+// 프로퍼티라 style 타입에 없어 캐스팅한다(SkillsSection과 같은 처방).
+import type { CSSProperties } from 'react';
 
 export interface AboutFolderProps {
   open: boolean;
-  // 종이 한 장이 이름 여럿을 담는다. 장수는 CSS가 세 장을 전제로 좌표를
-  // 잡아 두었으므로 세 장까지만 그린다.
+  // 종이 한 장이 아이콘 여럿을 담는다. 값은 public/icons-mono의 파일
+  // 이름이다. 장수는 CSS가 세 장을 전제로 좌표를 잡아 두었으므로 세
+  // 장까지만 그린다.
   papers: readonly (readonly string[])[];
 }
 
@@ -33,13 +40,13 @@ export default function AboutFolder({ open, papers }: AboutFolderProps) {
       <span className="about-folder-tab" />
       {papers.slice(0, MAX_PAPERS).map((names, index) => (
         <div key={names.join('-')} className="about-folder-paper" data-paper={index}>
-          {names.map((name) => (
+          {names.map((icon) => (
             <span
-              key={name}
-              className="text-t8 uppercase tracking-[0.12em] text-[var(--color-cyan-hi)]"
-            >
-              {name}
-            </span>
+              key={icon}
+              data-about-folder-icon={icon}
+              className="skill-icon about-folder-icon"
+              style={{ '--skill-icon-src': `url(/icons-mono/${icon}.svg)` } as CSSProperties}
+            />
           ))}
         </div>
       ))}

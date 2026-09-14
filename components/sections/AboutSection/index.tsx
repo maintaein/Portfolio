@@ -7,6 +7,7 @@ import { coreValues } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
 import { useSectionActivity } from '@/components/common/SectionActivityContext';
 import AboutFolder from '@/components/blocks/AboutFolder';
+import AboutClap from '@/components/blocks/AboutClap';
 import AboutRail from './rail';
 import { ABOUT_SCRIMS, ABOUT_SCRIMS_MOBILE } from './scrim';
 
@@ -36,17 +37,17 @@ const DynamicAboutRings = dynamic(() => import('@/components/blocks/AboutRings')
   ssr: false,
 });
 
-// BASICS 폴더가 펼치는 기술스택. 이름은 lib/data/skills.tsx가 핵심 6개로
-// 못 박은 것을 그대로 쓴다. 종이 한 장에 둘씩 세 장이다.
+// BASICS 폴더가 펼치는 기술스택. Skills가 쓰는 public/icons-mono의 파일
+// 이름이고, 고른 여섯은 lib/data/skills.tsx가 핵심으로 못 박은 것과 같다.
+// 종이 한 장에 둘씩 세 장이다.
 const BASICS_STACK: readonly (readonly string[])[] = [
-  ['React', 'TypeScript'],
-  ['Next.js', 'Tailwind CSS'],
-  ['Zustand', 'React Query'],
+  ['react', 'typescript'],
+  ['nextjs', 'tailwind'],
+  ['zustand', 'react-query'],
 ];
 
-// 시각 증거가 붙는 문항. TEAMWORK(2)는 증거 블록 자체가 세 줄짜리
-// 레저라 이미 왼쪽이 찼다. 셋 다 채우면 장식이 서로 경쟁한다.
-const VISUAL_INDEXES = new Set([0, 1]);
+// 시각 증거가 붙는 문항. 셋 다 있고, 한 번에 하나만 보인다.
+const VISUAL_INDEXES = new Set([0, 1, 2]);
 
 // 증거 블록. 자리는 셋이 같고 내용만 다르다. 콘텐츠가 확정되면 이 배열만
 // 바꾼다. 라벨은 t8, 값은 크게 둬서 대충 봐도 값이 먼저 읽힌다.
@@ -281,6 +282,11 @@ export default function AboutSection() {
                       <div className="about-rings">
                         <DynamicAboutRings running={isActive && active === SECTION_IDS.ABOUT} />
                       </div>
+                    ) : null}
+                    {index === 2 ? (
+                      <AboutClap
+                        running={!reducedMotion && isActive && active === SECTION_IDS.ABOUT}
+                      />
                     ) : null}
                   </div>
                 </div>

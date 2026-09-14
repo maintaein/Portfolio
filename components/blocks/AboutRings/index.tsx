@@ -8,9 +8,11 @@
 // 알파 분기. 호출처가 하나이고 그 하나가 장식이라 조절 손잡이가 필요 없다.
 // 값은 전부 셰이더 안 const로 굳혔다.
 //
-// 색은 시안의 마젠타 대신 이 사이트의 시안 두 단계를 쓴다. 배경(Hyperspeed)
-// 과 같은 계열이라 묻힐 수 있어서, 색이 아니라 링 개수(8)와 낮은 감쇠가
-// 만드는 잔상으로 구별한다.
+// 색은 시안의 마젠타도, 이 사이트의 시안 두 단계도 아니다. 안쪽이 보라고
+// 바깥으로 갈수록 청록이다. 보라는 배경(Hyperspeed)에 없는 색이라 세기가
+// 아니라 색으로 구별된다. 두 값의 정본은 styles/design-tokens.css의
+// --color-ai-violet과 --color-ai-cyan이고, 셰이더는 CSS 변수를 못 읽으므로
+// 아래 COLOR_CORE·COLOR_HI가 그것을 실수로 옮겨 적은 사본이다.
 //
 // 이 캔버스는 Hyperspeed에 이은 두 번째 WebGL 컨텍스트다. 그래서 세 겹으로
 // 잠근다. (1) 호출처가 next/dynamic으로 갈라 AI WORKFLOW를 처음 고를
@@ -42,19 +44,32 @@ const float HP = 1.5707963;
 const float CYCLE = 3.45;
 
 const int RING_COUNT = 8;
-const float ATTENUATION = 9.0;
+const float ATTENUATION = 8.0;
 const float LINE_THICKNESS = 2.0;
 const float BASE_RADIUS = 0.09;
-const float RADIUS_STEP = 0.040;
+const float RADIUS_STEP = 0.034;
 const float SCALE_RATE = 0.12;
 const float RING_GAP = 1.2;
 const float FADE_IN = 0.7;
 const float FADE_OUT = 0.5;
-const float OPACITY = 0.75;
+const float OPACITY = 0.8;
 const float NOISE_AMOUNT = 0.06;
 
-const vec3 COLOR_CORE = vec3(0.012, 0.702, 0.765);
-const vec3 COLOR_HI = vec3(0.498, 0.890, 0.933);
+// 광휘. 선을 그리는 감쇠와 별개로, 훨씬 느리게 떨어지는 겹을 하나 더
+// 얹는다. 선 자체를 굵히면 링이 뭉개지지만 이 겹은 선 바깥으로만 번진다.
+const float GLOW_ATTENUATION = 3.4;
+const float GLOW_GAIN = 0.24;
+
+// 가장자리. 링과 광휘가 상자 끝에서 잘리면 그 자리가 직선으로 보이고,
+// 캔버스가 네모난 그림이 된다. 반지름으로 알파를 죽여서 상자에 닿기 전에
+// 사라지게 한다. 0.5가 짧은 변의 절반이다.
+const float EDGE_IN = 0.26;
+const float EDGE_OUT = 0.46;
+
+// styles/design-tokens.css의 --color-ai-violet(#8b5cf6)과
+// --color-ai-cyan(#22d3ee)이다.
+const vec3 COLOR_CORE = vec3(0.545, 0.361, 0.965);
+const vec3 COLOR_HI = vec3(0.133, 0.827, 0.933);
 
 float fade(float t) {
   return t < FADE_IN ? smoothstep(0.0, FADE_IN, t) : 1.0 - smoothstep(FADE_OUT, CYCLE - 0.2, t);
@@ -68,7 +83,9 @@ float ring(vec2 p, float ri, float cut, float t0, float px) {
   float th = max(1.0 - a, 0.5) * px * LINE_THICKNESS;
   float h = (1.0 - smoothstep(th, th * 1.5, d)) + 1.0;
   d += pow(cut * a, 3.0) * r;
-  return h * exp(-ATTENUATION * d) * fade(t);
+  float body = exp(-ATTENUATION * d);
+  float glow = GLOW_GAIN * exp(-GLOW_ATTENUATION * d);
+  return h * (body + glow) * fade(t);
 }
 
 void main() {
@@ -81,9 +98,12 @@ void main() {
     float fi = float(i);
     vec3 rc = mix(COLOR_CORE, COLOR_HI, fi / rcf);
     float amount = ring(p, BASE_RADIUS + fi * RADIUS_STEP, pow(RING_GAP, fi), 2.95 * fi, px);
-    c = mix(c, rc, vec3(amount));
+    c = mix(c, rc, vec3(clamp(amount, 0.0, 1.0)));
     coverage = max(coverage, amount);
   }
+  // 상자 가장자리로 갈수록 죽인다. 이것이 없으면 광휘가 네 변에서 잘려
+  // 사각형 테두리가 생긴다.
+  coverage *= 1.0 - smoothstep(EDGE_IN, EDGE_OUT, length(p));
   // 잡음은 선 위에만 얹는다. 사각형 전체에 더하면 알파가 바닥부터 떠서
   // 캔버스 네 변이 그대로 보인다(시안은 그 사각형을 안고 있었다).
   float n = fract(sin(dot(gl_FragCoord.xy + uTime * 100.0, vec2(12.9898, 78.233))) * 43758.5453);
@@ -146,6 +166,10 @@ export default function AboutRings({ running }: AboutRingsProps) {
       fragmentShader,
       uniforms,
       transparent: true,
+      // 빛은 더한다. 알파 합성이면 알파가 조금이라도 뜬 화소가 뒤를 덮어
+      // 상자 모양이 남는데, 더하기에서는 어두운 화소가 아무 일도 하지
+      // 않아 상자가 없는 것과 같다. 겹치는 링이 밝아지는 것도 덤이다.
+      blending: THREE.AdditiveBlending,
     });
     const quad = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material);
     scene.add(quad);

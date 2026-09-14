@@ -81,6 +81,16 @@
   --color-skill-icon-bright: #a5f3fc;
   --color-skill-icon-core: #22d3ee;
 
+  /* About AI WORKFLOW 링(components/blocks/AboutRings)만 쓰는 두 값.
+     시안 두 단계로만 그렸더니 배경 광선과 같은 계열이라 세기 차이로만
+     구분해야 했다. 보라는 이 사이트 어디에도 없는 색이라 다른 층에서
+     오는 신호로 읽힌다. 안쪽이 보라, 바깥으로 갈수록 청록이다.
+     장식 전용이고 글자를 올리지 않는다. 셰이더는 CSS 변수를 못 읽으므로
+     AboutRings가 이 두 값을 0..1 실수로 옮겨 적는다. 여기를 고치면
+     그쪽 COLOR_CORE·COLOR_HI도 같이 고친다. */
+  --color-ai-violet: #8b5cf6;
+  --color-ai-cyan: #22d3ee;
+
   /* 바깥 광휘. 아이콘 실루엣이 아니라 17개가 전부 공유하는 고정 원반이다.
      drop-shadow는 알파 면적에 비례해 빛나므로 원이 꽉 찬 Next.js와 획만
      가는 MySQL 워드마크가 같은 40px 상자에서 몇 배씩 차이 났다. 컨트롤러가
@@ -933,15 +943,21 @@
      닫혔을 때 층이 보이게 한다. */
   .about-folder {
     position: relative;
-    width: clamp(150px, 19vw, 230px);
+    width: clamp(120px, 15vw, 180px);
     aspect-ratio: 5 / 4;
     border-radius: 0 10px 10px 10px;
     background: rgb(14 94 165 / 0.45);
     transition: transform var(--animate-duration-slow) cubic-bezier(0.22, 1, 0.36, 1);
   }
 
+  /* 열림은 기다렸다가 시작한다. 레일에서 BASICS를 고르면 본문이 먼저
+     바뀌고, 그 글이 자리를 잡은 다음에 폴더가 펴져야 둘이 겹쳐 읽히지
+     않는다. 기다리는 시간은 새 숫자를 만들지 않고 느린 지속을 그대로
+     쓴다(0.5초). 닫힘에는 지연이 없다. 다른 문항으로 떠난 뒤에도 폴더가
+     남아서 펴지고 있으면 그게 더 이상하다. */
   [data-about-folder][data-open='true'] {
     transform: translateY(-8px);
+    transition-delay: var(--animate-duration-slow);
   }
 
   /* 폴더 탭. 뒤판과 같은 색이라 한 덩어리로 읽힌다. */
@@ -963,9 +979,9 @@
     z-index: 20;
     display: flex;
     height: 78%;
-    flex-direction: column;
+    align-items: center;
     justify-content: center;
-    gap: 4px;
+    gap: 8%;
     padding: 0 8%;
     border: 1px solid rgb(3 179 195 / 0.45);
     border-radius: 10px;
@@ -986,16 +1002,29 @@
     width: 80%;
   }
 
+  /* 세 장은 한꺼번에 나오지 않는다. 앞판이 벌어진 뒤 한 장씩 빠져나와야
+     어디서 나온 것인지 보인다. 간격도 토큰(빠른 지속)의 배수다. */
   [data-about-folder][data-open='true'] .about-folder-paper[data-paper='0'] {
     transform: translate(-112%, -48%) rotate(-15deg);
+    transition-delay: calc(var(--animate-duration-slow) + var(--animate-duration-fast));
   }
 
   [data-about-folder][data-open='true'] .about-folder-paper[data-paper='1'] {
     transform: translate(12%, -48%) rotate(15deg);
+    transition-delay: calc(var(--animate-duration-slow) + var(--animate-duration-fast) * 2);
   }
 
   [data-about-folder][data-open='true'] .about-folder-paper[data-paper='2'] {
     transform: translate(-50%, -128%) rotate(3deg);
+    transition-delay: calc(var(--animate-duration-slow) + var(--animate-duration-fast) * 3);
+  }
+
+  /* 종이에 얹는 기술스택 아이콘. Skills의 .skill-icon 마스크를 그대로
+     쓰고 크기와 색만 이 자리에 맞춘다. 40px은 폴더 안에서 너무 크다. */
+  .about-folder-icon {
+    width: clamp(14px, 1.6vw, 20px);
+    height: clamp(14px, 1.6vw, 20px);
+    background: var(--color-cyan-hi);
   }
 
   /* 앞판 두 장. 아래를 축으로 서로 반대로 기울어 벌어진다. */
@@ -1012,10 +1041,12 @@
 
   [data-about-folder][data-open='true'] .about-folder-front[data-side='left'] {
     transform: skew(15deg) scaleY(0.6);
+    transition-delay: var(--animate-duration-slow);
   }
 
   [data-about-folder][data-open='true'] .about-folder-front[data-side='right'] {
     transform: skew(-15deg) scaleY(0.6);
+    transition-delay: var(--animate-duration-slow);
   }
 
   /* 모션을 끈 사용자에게는 열린 모습이 즉시 나타난다. 이 저장소가
@@ -1026,6 +1057,49 @@
     .about-folder-front {
       transition: none;
     }
+
+    /* 지연도 함께 끈다. 지연만 남으면 움직임 없이 0.5초 뒤에 툭 바뀐다.
+       선택자가 더 강해서 위 블록의 단축 속성으로는 덮이지 않는다. */
+    [data-about-folder][data-open='true'],
+    [data-about-folder][data-open='true'] .about-folder-paper,
+    [data-about-folder][data-open='true'] .about-folder-front {
+      transition-delay: 0s;
+    }
+  }
+
+  /* About TEAMWORK의 손뼉(components/blocks/AboutClap). 선화라 색이 획에만
+     있다. 손은 시안 본색, 터지는 빛은 밝은 시안이다. 획 굵기와 좌표는
+     viewBox 200 기준이라 상자가 커져도 비례가 유지된다. */
+  .about-clap {
+    width: clamp(150px, 19vw, 230px);
+    aspect-ratio: 1 / 1;
+  }
+
+  .about-clap-ink {
+    fill: none;
+    stroke: var(--color-cyan-core);
+    stroke-width: 4.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  /* 터지기 전의 모습. gsap이 돌기 시작하면 인라인 스타일이 이 값을
+     덮는다. 0으로 두지 않는 이유는 아직 안 고른 문항에서 이 자리가 텅
+     비어 보이지 않게 하려는 것이다. */
+  .about-clap-burst {
+    opacity: 0.45;
+  }
+
+  .about-clap-burst line {
+    fill: none;
+    stroke: var(--color-cyan-hi);
+    stroke-width: 5;
+    stroke-linecap: round;
+  }
+
+  .about-clap-burst path {
+    fill: var(--color-cyan-hi);
+    stroke: none;
   }
 
   /* About AI WORKFLOW의 링(components/blocks/AboutRings). WebGL 캔버스가

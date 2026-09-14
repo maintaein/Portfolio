@@ -450,12 +450,12 @@ describe('AboutSection', () => {
   // 시각 증거(계획 외 사용자 요청, 2026-09-14). 레일과 콘텐츠 사이 빈 칸에
   // BASICS는 폴더, AI WORKFLOW는 링이 붙는다.
   describe('시각 증거', () => {
-    it('BASICS와 AI WORKFLOW에만 자리를 두고 TEAMWORK에는 두지 않는다', () => {
+    it('세 문항 모두에 자리를 둔다', () => {
       const { container } = renderAboutSection();
       const indexes = [...container.querySelectorAll('[data-about-visual]')].map((el) =>
         el.getAttribute('data-about-visual-index')
       );
-      expect(indexes).toEqual(['0', '1']);
+      expect(indexes).toEqual(['0', '1', '2']);
     });
 
     // lg 미만에서는 격자가 세로로 쌓인다. 거기서 장식이 제목보다 먼저 나오면
@@ -467,6 +467,56 @@ describe('AboutSection', () => {
         expect(layer?.className).toMatch(/\bhidden\b/);
         expect(layer?.className).toMatch(/\blg:grid\b/);
       }
+    });
+
+    // TEAMWORK의 손뼉. gsap 타임라인이라 DESIGN.md의 "rAF를 도는 것은
+    // 스스로 멈춘다"가 그대로 적용된다. 활성 여부를 밖에서 받는다.
+    it('손뼉이 TEAMWORK 자리에 서고 그 문항일 때만 돈다', async () => {
+      const user = userEvent.setup();
+      const { container } = renderAboutSection();
+      const clap = () => container.querySelector('[data-about-visual-index="2"] [data-about-clap]');
+      expect(clap()).not.toBeNull();
+      expect(clap()).toHaveAttribute('data-running', 'false');
+      expect(
+        container.querySelector('[data-about-visual-index="0"] [data-about-clap]')
+      ).toBeNull();
+
+      await user.click(screen.getByRole('button', { name: /TEAMWORK/ }));
+      expect(clap()).toHaveAttribute('data-running', 'true');
+    });
+
+    it('About이 비활성이면 손뼉이 멈춰 있다', () => {
+      const { container } = renderAboutSection('overview' as NavId);
+      expect(container.querySelector('[data-about-clap]')).toHaveAttribute(
+        'data-running',
+        'false'
+      );
+    });
+
+    // 무한히 도는 장식이라 모션을 끈 사용자에게는 아예 돌리지 않는다.
+    it('모션을 끄면 손뼉이 돌지 않는다', () => {
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn().mockReturnValue({
+          matches: true, media: '', addEventListener: () => {}, removeEventListener: () => {},
+        })
+      );
+      const { container } = renderAboutSection();
+      expect(container.querySelector('[data-about-clap]')).toHaveAttribute(
+        'data-running',
+        'false'
+      );
+    });
+
+    // gsap은 첫 화면 번들에 없다. 손뼉이 정적으로 들여오면 About이 정적
+    // import라 그대로 얹힌다. BootSequence와 같은 처방을 쓴다.
+    it('손뼉이 gsap을 정적으로 들여오지 않는다', () => {
+      const source = readFileSync(
+        resolve(process.cwd(), 'components/blocks/AboutClap/index.tsx'),
+        'utf8'
+      );
+      expect(source).not.toMatch(/^import .*from '@\/lib\/gsap'/m);
+      expect(source).toMatch(/import\('@\/lib\/gsap'\)/);
     });
 
     // 콘텐츠는 7칸째부터다. 6칸째를 비워 두지 않으면 장식이 본문에 붙는다.
@@ -489,10 +539,22 @@ describe('AboutSection', () => {
       }
     });
 
-    it('폴더가 기술스택 6개를 담는다', () => {
-      renderAboutSection();
-      for (const name of ['React', 'TypeScript', 'Next.js', 'Tailwind CSS', 'Zustand', 'React Query']) {
-        expect(screen.getByText(name)).toBeInTheDocument();
+    // 종이에 올라가는 것은 글자가 아니라 Skills가 쓰는 마스크 아이콘이다.
+    // 같은 이름을 글자로 또 적으면 사이트 안에 같은 정보가 두 벌이 된다.
+    it('폴더가 기술스택 아이콘 6개를 담는다', () => {
+      const { container } = renderAboutSection();
+      const icons = [...container.querySelectorAll('[data-about-folder-icon]')];
+      expect(icons.map((el) => el.getAttribute('data-about-folder-icon'))).toEqual([
+        'react',
+        'typescript',
+        'nextjs',
+        'tailwind',
+        'zustand',
+        'react-query',
+      ]);
+      for (const icon of icons) {
+        expect(icon.className).toMatch(/\bskill-icon\b/);
+        expect(icon.getAttribute('style')).toMatch(/--skill-icon-src: url\(\/icons-mono\//);
       }
     });
 
@@ -556,18 +618,39 @@ describe('AboutSection', () => {
   // 폴더의 기하와 전환은 전부 design-tokens.css에 있다. TSX에는 값이 없다.
   describe('폴더 CSS 계약', () => {
     const css = readFileSync(resolve(process.cwd(), 'styles/design-tokens.css'), 'utf8');
+    // 모션을 끈 사용자용 블록은 빼고 본다. 거기에도 같은 선택자가 있는데
+    // 그쪽은 움직임을 없애는 규칙이라 아래 두 검사의 대상이 아니다.
+    const motionCss = css.replace(
+      /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\n {2}\}/g,
+      ''
+    );
 
     // 시안은 transition: all이라 종이 높이도 함께 변했다. 높이는 레이아웃
     // 속성이라 이 저장소가 애니메이션하지 않기로 한 것이다(DESIGN.md).
     it('열림 상태가 바꾸는 것은 transform뿐이다', () => {
       const openRules = [
-        ...css.matchAll(/\[data-about-folder\]\[data-open='true'\][^{]*\{([^}]*)\}/g),
+        ...motionCss.matchAll(/\[data-about-folder\]\[data-open='true'\][^{]*\{([^}]*)\}/g),
       ].map((m) => m[1]);
       expect(openRules.length).toBeGreaterThanOrEqual(6);
       for (const body of openRules) {
         const props = [...body.matchAll(/([a-z-]+)\s*:/g)].map((m) => m[1]);
-        expect(props).toEqual(['transform']);
+        expect(props.filter((prop) => prop !== 'transition-delay')).toEqual(['transform']);
       }
+    });
+
+    // 문항을 고르면 본문이 먼저 바뀌고 폴더는 기다렸다가 펴진다. 기다리는
+    // 시간은 새 숫자가 아니라 토큰이고, 닫힐 때는 기다리지 않는다.
+    it('열림에만 토큰으로 만든 지연이 붙는다', () => {
+      const openRules = [
+        ...motionCss.matchAll(/\[data-about-folder\]\[data-open='true'\][^{]*\{([^}]*)\}/g),
+      ].map((m) => m[1]);
+      const delayed = openRules.filter((body) => body.includes('transition-delay'));
+      expect(delayed.length).toBe(openRules.length);
+      for (const body of delayed) {
+        expect(body).toMatch(/transition-delay:[^;]*var\(--animate-duration-slow\)/);
+      }
+      const closedRule = css.match(/\.about-folder \{([^}]*)\}/)?.[1];
+      expect(closedRule).not.toMatch(/transition-delay/);
     });
 
     it('전환에 토큰 지속과 사이트 이징을 쓴다', () => {
@@ -591,6 +674,33 @@ describe('AboutSection', () => {
     // 링 상자가 정사각이 아니면 동심원이 타원으로 찌그러진다.
     it('링 상자가 정사각이다', () => {
       expect(css).toMatch(/\.about-rings \{[\s\S]*?aspect-ratio: 1 \/ 1;/);
+    });
+
+    // 링 색의 정본은 여기고 셰이더는 사본이다. 토큰을 지우면 사본만 남아
+    // 아무도 색을 못 찾는다.
+    it('링이 쓰는 AI 색 토큰이 값 정본에 있다', () => {
+      expect(css).toMatch(/--color-ai-violet: #8b5cf6;/);
+      expect(css).toMatch(/--color-ai-cyan: #22d3ee;/);
+      const shader = readFileSync(
+        resolve(process.cwd(), 'components/blocks/AboutRings/index.tsx'),
+        'utf8'
+      );
+      expect(shader).toMatch(/--color-ai-violet/);
+      expect(shader).toMatch(/--color-ai-cyan/);
+      expect(shader).toMatch(/COLOR_CORE = vec3\(0.545, 0.361, 0.965\)/);
+      expect(shader).toMatch(/COLOR_HI = vec3\(0.133, 0.827, 0.933\)/);
+    });
+
+    // 사용자가 네모난 그림처럼 보인다고 한 결함. 광휘가 상자 끝에서 잘리면
+    // 그 자리가 직선이 된다. 반지름으로 죽이고, 어두운 화소가 뒤를 덮지
+    // 않도록 더하기로 합성한다.
+    it('링이 상자 가장자리를 남기지 않는다', () => {
+      const shader = readFileSync(
+        resolve(process.cwd(), 'components/blocks/AboutRings/index.tsx'),
+        'utf8'
+      );
+      expect(shader).toMatch(/coverage \*= 1.0 - smoothstep\(EDGE_IN, EDGE_OUT, length\(p\)\);/);
+      expect(shader).toMatch(/blending: THREE.AdditiveBlending/);
     });
   });
 
