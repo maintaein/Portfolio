@@ -331,6 +331,13 @@ export default function BootSequence({
     if (startPressedRef.current) return;
     startPressedRef.current = true;
 
+    // 포커스를 먼저 놓는다. 이 버튼은 곧 aria-hidden·inert가 되는
+    // 서브트리 안에 있어서, 포커스를 쥔 채로 감춰지면 크롬이
+    // "Blocked aria-hidden on an element because its descendant
+    // retained focus"로 막는다. 실제로 감춰진 뒤에도 포커스가 735ms
+    // 동안 여기 남아 있었다. 놓아 주면 전환이 끝날 때 HomeClient의
+    // 포커스 effect가 도착한 섹션의 region으로 가져간다.
+    startRef.current?.blur();
     setFlashKey((key) => key + 1);
     onStart();
   }

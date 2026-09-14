@@ -505,6 +505,25 @@ describe('BootSequence 안무 — 실제 GSAP timeline을 seek()로 전진시킨
     expect(onStart, '클릭과 동시에 불려야 한다').toHaveBeenCalledTimes(1);
   });
 
+  // 이 버튼은 곧 aria-hidden·inert가 되는 서브트리 안에 있다. 포커스를 쥔
+  // 채로 감춰지면 크롬이 "Blocked aria-hidden on an element because its
+  // descendant retained focus"로 막고, 실측에서는 감춰진 뒤에도 포커스가
+  // 735ms 동안 버튼에 남아 있었다. 누르는 순간 포커스를 놓아야 한다.
+  it('START 클릭은 포커스를 버튼에서 놓는다', () => {
+    render(<Harness />);
+    const start = screen.getByTestId('boot-start');
+
+    act(() => {
+      start.focus();
+    });
+    expect(document.activeElement, '누르기 전에는 버튼이 포커스를 쥔다').toBe(start);
+
+    act(() => {
+      start.click();
+    });
+    expect(document.activeElement, '버튼이 포커스를 쥔 채 감춰진다').not.toBe(start);
+  });
+
   // 터널 진입 브리프 3절, 7경로 표 — "부팅 도중 언마운트·이탈 → 최종
   // 상태로 정착". opacity 계약 변경 뒤 가장 위험한 경로 중 하나다 —
   // revealFinalState()가 wordmarkEl.style.opacity를 세팅하지 않으면 이름이
