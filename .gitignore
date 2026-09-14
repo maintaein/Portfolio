@@ -42,10 +42,14 @@ next-env.d.ts
 
 # project documentation (local only)
 /.claude
+/.codex
 AGENTS.md
 CLAUDE.md
 TODOS.md
+/.impeccable
 # superpowers SDD 스크래치 (커밋 대상 아님)
 .superpowers/
 .gstack/
 graphify-out/
+/test-results/
+/playwright-report/
