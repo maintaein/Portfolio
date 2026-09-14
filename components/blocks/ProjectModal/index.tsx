@@ -40,6 +40,14 @@ const T2 = 'text-[var(--color-text-secondary)]';
 const T3 = 'text-[rgb(255_255_255_/_0.62)]';
 const LINE = 'border-[rgb(255_255_255_/_0.08)]';
 const LINE_STRONG = 'border-[rgb(255_255_255_/_0.12)]';
+// 머리띠 오른쪽의 바깥 링크 단추. GitHub과 Live가 같은 생김새를 쓴다
+const HEAD_LINK = cn(
+  'grid h-11 place-items-center rounded-lg border px-3.5 text-t7 font-semibold',
+  'transition-colors hover:bg-[rgb(255_255_255_/_0.06)] hover:text-[var(--color-text-primary)]',
+  'hover:border-[var(--color-cyan-core)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-cyan-hi)]',
+  LINE_STRONG,
+  T2
+);
 
 // 동기부여 글의 첫 문장이 주장(h3), 나머지가 본문이다. 데이터에 문장 분리
 // 마커를 두지 않았으므로 마침표/물음표/느낌표로 가른다.
@@ -511,18 +519,22 @@ export default function ProjectModal({
               자동 좌측 여백이 제목 유무와 무관하게 항상 이 묶음을 오른쪽
               끝으로 민다 */}
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            {project.liveUrl && (
+              <a
+                href={project.liveUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={HEAD_LINK}
+              >
+                Live
+              </a>
+            )}
             {project.githubUrl && (
               <a
                 href={project.githubUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={cn(
-                  'grid h-11 place-items-center rounded-lg border px-3.5 text-t7 font-semibold',
-                  'transition-colors hover:bg-[rgb(255_255_255_/_0.06)] hover:text-[var(--color-text-primary)]',
-                  'hover:border-[var(--color-cyan-core)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-cyan-hi)]',
-                  LINE_STRONG,
-                  T2
-                )}
+                className={HEAD_LINK}
               >
                 GitHub
               </a>
@@ -568,6 +580,10 @@ export default function ProjectModal({
             {impls.length > 0 ? (
               impls.map((impl, i) => (
                 <figure key={i} data-feat={i} hidden={i !== feat} className="w-full">
+                  {/* 영상도 기능 그림과 같이 contain이다. ReBirth는 332x720
+                      세로 화면 녹화라 16:9 틀에 cover로 담으면 가운데 가로
+                      띠만 남는다. 나머지 영상은 전부 정확히 1920x1080이라
+                      contain과 cover가 같은 그림이다 - 분기가 필요 없다 */}
                   {impl.video ? (
                     <video
                       ref={(el) => {
@@ -582,16 +598,25 @@ export default function ProjectModal({
                       muted
                       loop
                       playsInline
-                      className="block aspect-video w-full rounded-media border border-[rgb(255_255_255_/_0.08)] bg-[rgb(0_0_0)] object-cover"
+                      className="block aspect-video w-full rounded-media border border-[rgb(255_255_255_/_0.08)] bg-[rgb(0_0_0)] object-contain"
                     />
                   ) : (
                     <div className="relative aspect-video w-full overflow-hidden rounded-media border border-[rgb(255_255_255_/_0.08)] bg-[rgb(0_0_0)]">
+                      {/* 영상이 없는 기능은 자기 그림(impl.image)을 쓴다.
+                          그것도 없을 때만 프로젝트 대표 그림으로 떨어진다.
+
+                          기능 그림은 contain으로 넣는다. 세로로 긴 모바일 웹앱
+                          화면(Ttabong은 750x1325)을 16:9 틀에 cover로 담으면
+                          가운데 가로 띠만 남고 화면 위아래가 잘려 나간다.
+                          작게 보이더라도 화면 전체가 보이는 쪽이 낫다. 대표
+                          그림으로 떨어질 때는 표지처럼 꽉 채우던 기존 동작을
+                          그대로 둔다 */}
                       <Image
-                        src={project.image}
-                        alt={project.title}
+                        src={impl.image ?? project.image}
+                        alt={impl.image ? `${project.title} ${impl.category}` : project.title}
                         fill
                         sizes="(max-width: 1100px) 100vw, 780px"
-                        className="object-cover"
+                        className={impl.image ? 'object-contain' : 'object-cover'}
                       />
                     </div>
                   )}
