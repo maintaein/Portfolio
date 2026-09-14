@@ -34,6 +34,17 @@ describe('parseAnalysisEntry', () => {
     expect(entry!.chosen).toBe(false);
   });
 
+  it('줄표가 없으면 첫 콜론으로 가른다', () => {
+    const entry = parseAnalysisEntry(
+      '**선택지 3: ref 대신 props로 받는다 (선택)**: 래퍼가 버리는 것은 ref뿐이다.'
+    );
+    expect(entry!.kind).toBe('option');
+    expect(entry!.label).toBe('선택지 3');
+    expect(entry!.name).toBe('ref 대신 props로 받는다');
+    expect(entry!.body).toBe('래퍼가 버리는 것은 ref뿐이다.');
+    expect(entry!.chosen).toBe(true);
+  });
+
   it('하이픈으로는 가르지 않는다', () => {
     // 파서는 하이픈이 아니라 줄표 문자로 갈라야 한다
     expect(parseAnalysisEntry('**진단 - 하이픈이다**: 본문')).toBeNull();
@@ -223,27 +234,13 @@ describe('validateProjectContract - 음성 (결함을 하나씩 주입한다)', 
 describe('현재 데이터 현황', () => {
   // 데이터는 사용자 소유이고 정제 예정이다. 대신 채우지 않는다.
   // 이 테스트는 지금 상태를 고정할 뿐 사용자에게 작업을 요구하지 않는다.
-  // 2026-09-09에 실제 데이터를 돌려 잰 값이다.
-  it('여섯 중 셋이 모달을 연다', () => {
-    expect(projects.filter(isProjectModalReady).map((p) => p.title).sort()).toEqual(
-      ['AlphaMail', 'Portfolio', 'TDS (Taein Design System)'].sort()
-    );
-  });
-
-  it('판 1은 여섯 다 통과한다. 막는 것은 전부 판 2다', () => {
-    for (const p of projects) {
-      const panel1 = validateProjectContract(p).filter(
-        (v) => !v.field.startsWith('reviews[0]')
-      );
-      expect(panel1, `${p.title}: ${JSON.stringify(panel1)}`).toEqual([]);
-    }
-  });
-
-  it('미달 셋은 전부 result[0]이 없어서 막힌다', () => {
-    for (const title of ['ReBirth', 'Ttabong', 'PoseTive']) {
-      const project = findProject(title);
-      const fields = validateProjectContract(project).map((v) => v.field);
-      expect(fields, title).toContain('reviews[0].result');
-    }
+  // 2026-09-14에 실제 데이터를 돌려 잰 값이다.
+  it('일곱 다 모달을 연다', () => {
+    // 실패하면 어느 프로젝트의 어느 칸이 빈 것인지 바로 보여야 한다.
+    // 목록만 비교하면 "여섯이다"까지만 알려주고 원인을 안 알려준다
+    const blocked = projects
+      .filter((p) => !isProjectModalReady(p))
+      .map((p) => `${p.title}: ${JSON.stringify(validateProjectContract(p))}`);
+    expect(blocked).toEqual([]);
   });
 });

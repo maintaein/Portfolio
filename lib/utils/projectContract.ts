@@ -25,8 +25,11 @@ export interface ContractViolation {
   reason: string;
 }
 
-// 형태: **<라벨> — <이름>**: <본문>
-// 라벨과 이름은 줄표(U+2014)로 가른다. 하이픈이 아니다.
+// 형태: **<라벨> — <이름>**: <본문> 또는 **<라벨>: <이름>**: <본문>
+// 라벨과 이름은 줄표(U+2014)로 가르는 것이 정본이고, 줄표가 없으면 첫 콜론으로
+// 가른다. 하이픈은 받지 않는다. 콜론을 받는 이유는 데이터를 쓰는 사람이 줄표
+// 대신 콜론을 치기 때문이다. 파서가 줄표만 고집하면 항목이 통째로 버려지고
+// 계약이 조용히 깨져서 상세 모달이 열리지 않는다.
 export function parseAnalysisEntry(raw: string): AnalysisEntry | null {
   const match = raw.match(/^\*\*(.+?)\*\*:\s*([\s\S]+)$/);
   if (!match) return null;
@@ -34,10 +37,11 @@ export function parseAnalysisEntry(raw: string): AnalysisEntry | null {
   const head = match[1];
   const body = match[2].trim();
   const dash = head.indexOf(EM_DASH);
-  if (dash === -1) return null;
+  const cut = dash === -1 ? head.indexOf(':') : dash;
+  if (cut === -1) return null;
 
-  const label = head.slice(0, dash).trim();
-  const rawName = head.slice(dash + 1).trim();
+  const label = head.slice(0, cut).trim();
+  const rawName = head.slice(cut + 1).trim();
   const chosen = rawName.includes('(선택)');
   const name = rawName.replace('(선택)', '').trim();
   if (!label || !name || !body) return null;
