@@ -90,18 +90,18 @@ function digitPath({ bx, by, deg, len, w }: Digit) {
 // 손가락 넷. 가운데 둘이 길고 새끼가 가장 짧다. 안쪽(+x)일수록 상대 손
 // 쪽으로 눕는다.
 const FINGERS: readonly Digit[] = [
-  { bx: -13, by: -20, deg: -20, len: 46, w: 9.5 },
-  { bx: -5, by: -24, deg: -7, len: 56, w: 10.5 },
-  { bx: 4, by: -25, deg: 4, len: 60, w: 10.5 },
-  { bx: 13, by: -21, deg: 14, len: 52, w: 10 },
+  { bx: -13, by: -21, deg: -14, len: 43, w: 10 },
+  { bx: -4, by: -25, deg: -4, len: 49, w: 10.5 },
+  { bx: 5, by: -24, deg: 7, len: 46, w: 10.5 },
+  { bx: 13, by: -20, deg: 20, len: 38, w: 9.5 },
 ];
 
-// 엄지. 손바닥 안쪽 면을 따라 짧게 뻗는다. 더 눕히면 상대 손 쪽으로
-// 넘어가 둘이 가운데서 X로 겹친다.
-const THUMB: Digit = { bx: 11, by: -6, deg: 26, len: 25, w: 10 };
+// 엄지. 원본처럼 바깥쪽으로 뻗는다. 두 손 모두 엄지가 바깥, 새끼손가락이
+// 안쪽이다. 안쪽으로 뻗으면 둘이 가운데서 X로 겹친다.
+const THUMB: Digit = { bx: -11, by: -6, deg: -26, len: 22, w: 10 };
 
 // 손바닥. 손목(y 0)에서 손가락 밑동(y -36)까지다.
-const PALM = 'M-17 6 C-20 -10 -20 -25 -14 -33 C-6 -41 8 -41 15 -32 C20 -25 20 -10 17 6 Z';
+const PALM = 'M17 6 C20 -10 20 -25 14 -33 C6 -41 -8 -41 -15 -32 C-20 -25 -20 -10 -17 6 Z';
 
 // 소매와 팔뚝. 손목에서 바깥 아래로 흘러 나가고 끝이 물결이다. 원본도
 // 팔을 화면 밖까지 끌지 않고 이렇게 끊는다.
@@ -109,8 +109,8 @@ const SLEEVE = 'M-19 3 C-8 -1 8 -1 19 3 L19 20 C8 24 -8 24 -19 20 Z';
 const FOREARM =
   'M-19 14 C-27 36 -41 53 -58 62 C-52 68 -49 74 -50 82 C-26 71 -2 44 19 14 Z';
 
-// 손 한 짝. 원점이 손목이고 손가락은 위로 간다. 왼손이 기준이고 오른손은
-// 이것을 좌우로 뒤집어 쓴다. 그리는 차례가 앞뒤를 정한다. 채움이 있으므로
+// 손 한 짝. 원점이 손목이고 손가락은 위로 간다. 엄지가 -x 쪽, 그러니까
+// 팔뚝과 같은 바깥쪽에 있다. 그리는 차례가 앞뒤를 정한다. 채움이 있으므로
 // 나중에 그린 것이 앞에 온다.
 function Hand() {
   return (
@@ -275,12 +275,12 @@ export default function AboutTeamwork({ active }: AboutTeamworkProps) {
             바깥 g가 자리를, 안쪽 g가 움직임을 맡는다. 오른손 틀은 좌우가
             뒤집혀 있어 두 손 다 국소 좌표로는 같은 쪽(-x)에서 들어온다. */}
         <g id={HANDS_ID}>
-          <g transform="translate(70 104) rotate(18) scale(0.9)">
+          <g transform="translate(77 104) rotate(18) scale(0.9)">
             <g data-teamwork-hand="left">
               <Hand />
             </g>
           </g>
-          <g transform="translate(130 104) scale(-0.9 0.9) rotate(18)">
+          <g transform="translate(123 104) scale(-0.9 0.9) rotate(18)">
             <g data-teamwork-hand="right">
               <Hand />
             </g>

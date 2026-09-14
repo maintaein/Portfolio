@@ -1149,7 +1149,9 @@
   /* 손은 윤곽선이다. 안을 배경색으로 채우므로 겹친 손가락이 앞뒤로
      읽히고 두 손이 가운데서 교차해도 뭉치지 않는다. */
   .about-teamwork-ink {
-    fill: var(--color-ink);
+    /* 원본 선화처럼 안은 희고 윤곽만 색이 있다. 검은 배경 위에서 손이
+       배경으로부터 떨어져 나온다. */
+    fill: var(--color-text-primary);
     stroke: var(--color-cyan-core);
     stroke-width: 3.2;
     stroke-linecap: round;
