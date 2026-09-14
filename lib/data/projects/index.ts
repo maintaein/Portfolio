@@ -9,11 +9,11 @@ import { portfolio } from './Portfolio';
 import { Project } from '@/types';
 
 export const projects: Project[] = [
-  dragonBar,
   tds,
   portfolio,
   alphaMail,
   reBirth,
   ttabong,
+  dragonBar,
   poseTive,
 ];
