@@ -2,7 +2,7 @@ import { Project } from '@/types';
 
 export const dragonBar: Project = {
   title: 'Dragon Bar',
-  subtitle: 'Next.js 16 + TypeScript 기반 무니코틴 액상 브랜드 독립몰',
+  subtitle: 'Dragonvape(용트림)자사 무니코틴 액상 브랜드 독립몰',
   image: '/projects/DragonBar.webp',
   tags: ['Next.js 16', 'React 19', 'TypeScript', 'Tailwind CSS 4', 'Zod', 'Prisma', 'PostgreSQL', 'Playwright', 'Vitest'],
   duration: '2026.08 - 현재',
@@ -13,7 +13,7 @@ export const dragonBar: Project = {
   role: '기획·설계·구현 전체 (프론트엔드 중심 풀스택)',
   teamSize: '1명 (외주 프로젝트)',
 
-  motivation: '본래 cafe24기반 쇼핑몰을 가지고 있는 고객이지만, 신규 브랜드를 독립몰로 만들어 cafe24 의존에서 벗어나고 싶다는 니즈였습니다. 풀스택으로 진행해야 하는게 부담이 되기도 했지만, 실제 제품의 개발은 물론 운영까지 경험해볼 수 있는 흔치않은 기회라고 판단하여 작업을 시작했습니다. 현재 1차 MVP를 구현중입니다.',
+  motivation: '독립몰 개발 풀스택 프로젝트. 본래 cafe24기반 쇼핑몰을 가지고 있는 고객이지만, 신규 브랜드를 독립몰로 만들어 cafe24 의존에서 벗어나고 싶다는 니즈였습니다. 풀스택으로 진행해야 하는게 부담이 되기도 했지만, 실제 제품의 개발은 물론 운영까지 경험해볼 수 있는 흔치않은 기회라고 판단하여 작업을 시작했습니다. 현재 1차 MVP를 구현중입니다.',
 
   implementations: [
     {
