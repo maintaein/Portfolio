@@ -2,7 +2,7 @@ import { tds } from './TDS';
 import { alphaMail } from './AlphaMail';
 import { reBirth } from './ReBirth';
 import { ttabong } from './Ttabong';
-import { dragonBar } from './Dragonvape';
+//import { dragonBar } from './Dragonvape';
 import { poseTive } from './PoseTive';
 import { portfolio } from './Portfolio';
 
@@ -14,6 +14,6 @@ export const projects: Project[] = [
   alphaMail,
   reBirth,
   ttabong,
-  dragonBar,
+  //dragonBar,
   poseTive,
 ];
