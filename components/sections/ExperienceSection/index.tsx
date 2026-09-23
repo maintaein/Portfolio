@@ -159,9 +159,10 @@ export default function ExperienceSection() {
         </ol>
       </div>
 
-      <p className="pointer-events-none absolute bottom-6 right-8 z-10 flex items-center gap-4 text-t8 uppercase tracking-widest text-[var(--color-text-secondary)]">
-        휠 또는 드래그로 이동
-        <span aria-hidden className="block h-px w-10 bg-[var(--color-hairline)]" />
+      <p className="pointer-events-none absolute bottom-6 right-4 z-10 flex items-center gap-3 text-t7 tracking-wider text-[var(--color-text-secondary)] sm:right-8 sm:gap-4 sm:text-t8 sm:uppercase sm:tracking-widest">
+        <span className="sm:hidden">← 좌우로 밀어 경력 보기 →</span>
+        <span className="hidden sm:inline">휠 또는 드래그로 이동</span>
+        <span aria-hidden className="block h-px w-6 bg-[var(--color-hairline)] sm:w-10" />
       </p>
     </section>
   );

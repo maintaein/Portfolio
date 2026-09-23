@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { awards, certificates } from '@/lib/data';
+import { awards, certificates, contact } from '@/lib/data';
 import { orgLogoStyle } from '@/lib/logos';
 import { SECTION_IDS } from '@/lib/constants';
 
@@ -266,6 +266,17 @@ export default function AwardsAndCertificatesSection() {
               </li>
             ))}
           </ul>
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 pt-5">
+            <p className="text-t6 text-[var(--color-text-primary)]">
+              프로젝트나 채용 제안이 있다면 이메일로 연락해 주세요.
+            </p>
+            <a
+              href={`mailto:${contact.email}`}
+              className="text-t6 font-semibold text-[var(--color-text-primary)] underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)]"
+            >
+              이메일 보내기 ↗
+            </a>
+          </div>
         </div>
       </div>
     </section>
