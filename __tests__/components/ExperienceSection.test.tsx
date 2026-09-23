@@ -272,6 +272,12 @@ describe('ExperienceSection', () => {
     expect(css).toMatch(/@keyframes experience-axis-charge/);
     expect(css).toMatch(/animation: experience-axis-charge/);
 
+    const pausedRules = [...css.matchAll(/([^{}]+)\{[^{}]*animation-play-state:\s*paused;[^{}]*\}/g)]
+      .map(([, selector]) => selector.trim());
+    expect(pausedRules).toEqual([
+      ".section-scroll[aria-hidden='true'] .experience-axis,\n.section-scroll[aria-hidden='true'] .experience-node::before,\n.section-scroll[aria-hidden='true'] .experience-node::after",
+    ]);
+
     const block = css.slice(css.indexOf('.experience-node::before'));
     const reduced = block.slice(block.indexOf('@media (prefers-reduced-motion: reduce)'));
     expect(reduced).toContain('.experience-node::before');

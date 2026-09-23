@@ -6,6 +6,7 @@ import HyperspeedBackground, {
   type HyperspeedBackgroundProps,
 } from '@/components/blocks/HyperspeedBackground';
 import { OVERVIEW } from '@/hooks/useSectionNav';
+import { SECTION_IDS } from '@/lib/constants';
 import type { QualityTier } from '@/lib/deviceQuality';
 
 // 이 파일 전체에서 '@/components/blocks/Hyperspeed'는 항상 "성공적으로
@@ -635,5 +636,21 @@ describe('HyperspeedBackground. data-hyperspeed-motion·data-hyperspeed-visibili
       'data-hyperspeed-visibility',
       'obscured'
     );
+  });
+});
+
+describe('HyperspeedBackground section motion policy', () => {
+  it.each([
+    [OVERVIEW, 1, 0.3],
+    [SECTION_IDS.ABOUT, 0.2, 0.1],
+    [SECTION_IDS.EXPERIENCE, 0.2, 0.1],
+    [SECTION_IDS.PROJECTS, 0.12, 0.06],
+    [SECTION_IDS.SKILLS, 0.08, 0.02],
+    [SECTION_IDS.AWARDS_CERTIFICATES, 0.08, 0.02],
+  ])('%s sets opacity %s and idle scale %s', async (active, opacity, idleScale) => {
+    await renderReady({ active });
+
+    expect(screen.getByTestId('hyperspeed-background')).toHaveStyle({ opacity: String(opacity) });
+    expect(hyperspeedSpies.setIdleScale).toHaveBeenLastCalledWith(idleScale);
   });
 });

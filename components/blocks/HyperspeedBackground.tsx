@@ -19,6 +19,7 @@ import {
 } from 'react';
 import type { HyperspeedHandle } from '@/components/blocks/Hyperspeed';
 import { OVERVIEW, type NavId } from '@/hooks/useSectionNav';
+import { SECTION_IDS } from '@/lib/constants';
 import { detectQuality } from '@/lib/deviceQuality';
 
 export interface HyperspeedBackgroundProps {
@@ -99,13 +100,14 @@ const DynamicHyperspeed = dynamic(
 
 const BASE_OPACITY_OVERVIEW = 1;
 // 읽기 구간에서는 배경 광선보다 본문에 시선이 머물도록 낮춘다.
-const BASE_OPACITY_SECTION = 0.2;
-
-// 체류 중 배경 흐름 배율. 오버뷰 값은 엔진 기본값(IDLE_TIME_SCALE)과 같다.
-// 섹션에서는 본문을 읽는 동안 시야 가장자리가 계속 움직이면 눈이 끌려가므로
-// 3분의 1로 줄인다. 멈추지는 않는다. 배경이 죽으면 화면이 정지 이미지가 된다.
-const IDLE_SCALE_OVERVIEW = 0.3;
-const IDLE_SCALE_SECTION = 0.1;
+const SECTION_MOTION = {
+  [OVERVIEW]: { opacity: BASE_OPACITY_OVERVIEW, idleScale: 0.3 },
+  [SECTION_IDS.ABOUT]: { opacity: 0.2, idleScale: 0.1 },
+  [SECTION_IDS.EXPERIENCE]: { opacity: 0.2, idleScale: 0.1 },
+  [SECTION_IDS.PROJECTS]: { opacity: 0.12, idleScale: 0.06 },
+  [SECTION_IDS.SKILLS]: { opacity: 0.08, idleScale: 0.02 },
+  [SECTION_IDS.AWARDS_CERTIFICATES]: { opacity: 0.08, idleScale: 0.02 },
+} satisfies Record<NavId, { opacity: number; idleScale: number }>;
 // obscured(ProjectModal 열림) 동안 배경에서 초점을 빼는 블러 반경.
 // 감광(0.4배)에서 블러로 바꿨다 — 어둡게 하면 배경이 남색 덩어리로 죽는데,
 // 블러는 밝기를 유지한 채 시선만 모달로 보낸다. 대비는 모달 자신의 불투명
@@ -158,7 +160,7 @@ export default function HyperspeedBackground({
   const isTransitioningRef = useRef(isTransitioning);
   isTransitioningRef.current = isTransitioning;
 
-  const idleScale = active === OVERVIEW ? IDLE_SCALE_OVERVIEW : IDLE_SCALE_SECTION;
+  const { opacity: sectionOpacity, idleScale } = SECTION_MOTION[active];
   // 핸들은 next/dynamic 청크가 풀린 뒤에야 도착한다. 이 effect가 먼저 돌 수도
   // 있으므로 값을 ref에도 남겨 setHandle이 도착 시점에 다시 걸어준다.
   const idleScaleRef = useRef(idleScale);
@@ -275,9 +277,7 @@ export default function HyperspeedBackground({
   const heroPending = active === OVERVIEW && !reducedMotion && !heroRevealed;
   const baseOpacity = heroPending
     ? 0
-    : active === OVERVIEW
-      ? BASE_OPACITY_OVERVIEW
-      : BASE_OPACITY_SECTION;
+    : sectionOpacity;
   // obscured는 초점과 밝기를 같이 건드린다. boost()·settle()은 그대로다 -
   // 씬은 계속 돈다. rAF를 멈추면 재개 비용이 눈에 띄게 튄다.
   const opacity = obscured ? baseOpacity * OBSCURED_OPACITY_SCALE : baseOpacity;

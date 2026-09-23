@@ -1727,3 +1727,9 @@
     padding: 16px 16px 18px;
   }
 }
+
+.section-scroll[aria-hidden='true'] .experience-axis,
+.section-scroll[aria-hidden='true'] .experience-node::before,
+.section-scroll[aria-hidden='true'] .experience-node::after {
+  animation-play-state: paused;
+}
