@@ -156,7 +156,7 @@ export default function AwardsAndCertificatesSection() {
                           aria-expanded={open}
                           aria-controls={panelId}
                           onClick={() => setOpenId(open ? null : id)}
-                          className="grid w-full cursor-pointer grid-cols-[1.75rem_1fr_auto] items-baseline gap-x-5 py-5 pl-3 text-left transition-colors duration-200 hover:bg-[rgb(255_255_255_/_0.04)] focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)] active:bg-[rgb(255_255_255_/_0.08)] sm:pl-4"
+                          className="grid w-full cursor-pointer grid-cols-[1.25rem_minmax(0,1fr)_auto_0.75rem] items-baseline gap-x-3 py-5 pl-3 text-left transition-colors duration-200 hover:bg-[rgb(255_255_255_/_0.04)] focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)] active:bg-[rgb(255_255_255_/_0.08)] sm:grid-cols-[1.75rem_minmax(0,1fr)_auto_0.75rem] sm:gap-x-5 sm:pl-4"
                         >
                           <span
                             data-ledger-field="index"
@@ -186,6 +186,13 @@ export default function AwardsAndCertificatesSection() {
                           <span data-ledger-field="grade" className={GRADE_TAG}>
                             {award.rank}
                           </span>
+                          <span
+                            aria-hidden="true"
+                            data-ledger-disclosure
+                            className={`h-2 w-2 rotate-45 border-b border-r border-[var(--color-text-secondary)] transition-transform duration-200 motion-reduce:transition-none ${
+                              open ? '-rotate-[135deg]' : ''
+                            }`}
+                          />
                         </button>
                       </h3>
 

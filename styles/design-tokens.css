@@ -1594,7 +1594,7 @@
      까는 자리는 섹션이 아니라 여기다. 섹션에 깔면 상자 경계가 푸터와
      맞닿는 자리에서 색 단차로 드러난다. 시안 물빛은 위층 그라디언트로만
      얹어 왼쪽 위 모서리를 살린다. 모서리는 각지게 둔다. */
-  .experience-node {
+.experience-node {
     position: relative;
     padding: 18px 22px 20px;
     border-left: 2px solid var(--color-cyan-core);
@@ -1714,5 +1714,16 @@
     background: var(--color-text-primary);
     -webkit-mask: var(--org-logo-src) center / contain no-repeat;
     mask: var(--org-logo-src) center / contain no-repeat;
+  }
+}
+
+@media (max-width: 640px) {
+  .experience-hud {
+    --exp-card: 82vw;
+    --exp-gap: 16px;
+  }
+
+  .experience-node {
+    padding: 16px 16px 18px;
   }
 }

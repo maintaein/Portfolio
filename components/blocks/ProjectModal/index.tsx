@@ -130,6 +130,15 @@ const NARROW_PANEL_CSS = `
     background: rgb(6 8 10);
     padding-left: calc(max(0px, (100% - 700px) / 2) + 20px);
     padding-right: calc(max(0px, (100% - 700px) / 2) + 12px);
+    gap: 8px;
+    min-height: 64px;
+    padding-block: 8px;
+  }
+  #pm-shell [data-modal-part="head"] h2 {
+    flex: 1;
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   #pm-shell [data-modal-panel="1"] { display: contents; }
@@ -143,8 +152,18 @@ const NARROW_PANEL_CSS = `
     margin-inline: auto;
     width: 100%;
   }
-  #pm-shell [data-modal-panel="1"] > [data-modal-field="sub"] { padding: 20px 20px 0; }
-  #pm-shell [data-modal-panel="1"] > [data-modal-field="meta"] { padding: 0 20px 18px; }
+  #pm-shell [data-modal-panel="1"] > [data-modal-field="sub"] { padding: 12px 20px 0; }
+  #pm-shell [data-modal-panel="1"] > [data-modal-field="meta"] { padding: 0 20px 14px; }
+  #pm-shell [data-modal-panel="1"] > dl {
+    display: grid;
+    order: 2;
+    flex: none;
+    max-width: 700px;
+    margin-inline: auto;
+    width: 100%;
+    gap: 8px;
+    padding: 12px 20px;
+  }
 
   #pm-shell [data-modal-part="evidence"] {
     order: 3;
@@ -508,7 +527,7 @@ export default function ProjectModal({
             id="pm-title"
             data-flip-id={`title-${project.title}`}
             className={cn(
-              'truncate text-t3 lg:text-t2 font-bold leading-[1.1] lg:leading-[1.1] tracking-[-0.02em]',
+              'min-w-0 text-t3 lg:text-t2 lg:truncate font-bold leading-[1.1] lg:leading-[1.1] tracking-[-0.02em]',
               T1
             )}
           >

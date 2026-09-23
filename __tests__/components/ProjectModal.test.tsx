@@ -79,6 +79,30 @@ describe('ProjectModal 두 판 구조', () => {
 });
 
 describe('ProjectModal 판 1', () => {
+  it('좁은 화면에서 제목은 줄바꿈하고 상단 요약 정보는 유지한다', () => {
+    renderModal();
+
+    const heading = screen.getByRole('heading', { name: project.title });
+    expect(heading.className).toContain('lg:truncate');
+    expect(SOURCE).toMatch(/\[data-modal-part="head"\] h2\s*\{[^}]*white-space:\s*normal/);
+    expect(SOURCE).toMatch(/\[data-modal-part="head"\] h2\s*\{[^}]*overflow-wrap:\s*anywhere/);
+
+    const narrowCss = SOURCE.match(/const NARROW_PANEL_CSS = `([\s\S]*?)`;/)?.[1];
+    expect(narrowCss).toBeDefined();
+    expect(narrowCss).toMatch(/#pm-shell \[data-modal-panel="1"\] > \* \{\s*display: none;\s*\}/);
+    expect(narrowCss).toMatch(/#pm-shell \[data-modal-panel="1"\] > dl \{[\s\S]*?display: grid;[\s\S]*?order: 2;[\s\S]*?\}/);
+    expect(narrowCss).toMatch(
+      /#pm-shell \[data-modal-panel="1"\] > \[data-modal-field="sub"\],\s*#pm-shell \[data-modal-panel="1"\] > \[data-modal-field="meta"\] \{\s*display: block;\s*order: 2;/
+    );
+
+    const panel = document.querySelector('[data-modal-panel="1"]')!;
+    expect(panel.querySelector('[data-modal-field="meta"]')!.textContent).toContain(project.role);
+    const summary = panel.querySelector('dl')!;
+    expect(summary.textContent).toContain(selectFeaturedReview(project)!.title);
+    expect(summary.textContent).toContain(selectFeaturedReview(project)!.resultHeadline!);
+    expect(SOURCE).toMatch(/\[data-modal-field="sub"\]\s*\{\s*padding:\s*12px 20px 0/);
+  });
+
   it('문제와 결과 요약은 메타데이터와 같은 단계에 놓이고 메타데이터 없이도 보인다', () => {
     const review = selectFeaturedReview(project)!;
     renderModal();

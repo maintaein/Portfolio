@@ -167,6 +167,26 @@ describe('AwardsAndCertificatesSection', () => {
     expect(rows().filter((row) => row.dataset.ledgerOpen === 'true')).toHaveLength(0);
   });
 
+  it('모든 상 단추에 펼침 상태를 따라가는 장식 표시가 있다', async () => {
+    const user = userEvent.setup();
+    render(<AwardsAndCertificatesSection />);
+
+    for (const award of awards) {
+      const button = toggle(award.title);
+      const indicator = button.querySelector('[data-ledger-disclosure]')!;
+      expect(indicator).toHaveAttribute('aria-hidden', 'true');
+      expect(indicator).toHaveTextContent('');
+      expect(button).toHaveAccessibleName(expect.stringContaining(award.rank));
+      expect(indicator.className).toContain('rotate-45');
+    }
+
+    const button = toggle(awards[0].title);
+    await user.click(button);
+    const indicator = button.querySelector('[data-ledger-disclosure]')!;
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    expect(indicator.className).toContain('-rotate-[135deg]');
+  });
+
   it('줄을 누르면 설명이 펼쳐진다', async () => {
     const user = userEvent.setup();
     render(<AwardsAndCertificatesSection />);

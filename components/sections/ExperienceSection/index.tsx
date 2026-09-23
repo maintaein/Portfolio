@@ -98,7 +98,7 @@ export default function ExperienceSection() {
               >
                 <p
                   data-experience-field="period"
-                  className="flex items-center justify-between gap-4 border-b border-[var(--color-hairline)] pb-2.5 text-t8 uppercase tracking-widest text-[var(--color-text-secondary)]"
+                  className="flex items-center justify-between gap-2 border-b border-[var(--color-hairline)] pb-2.5 text-t7 uppercase tracking-widest text-[var(--color-text-secondary)] sm:gap-4 sm:text-t8"
                 >
                   <span className="flex items-center gap-2">
                     {experience.period}
@@ -108,7 +108,7 @@ export default function ExperienceSection() {
                         시안이던 동안에는 강조가 아니라 그냥 카드 글자색이었다. */}
                     {current && <span className="text-[var(--color-cyan-hi)]">CURRENT</span>}
                   </span>
-                  <span>NODE_{String(index + 1).padStart(2, '0')}</span>
+                  <span className="hidden sm:inline">NODE_{String(index + 1).padStart(2, '0')}</span>
                 </p>
 
                 <div data-experience-field="company" className="mt-4 flex items-center gap-3">
@@ -122,14 +122,16 @@ export default function ExperienceSection() {
                       LOGO_MAX_WIDTH
                     )}
                   />
-                  <h3 className="text-t3 font-semibold text-[var(--color-text-primary)]">
+                  <h3
+                    className={`${experience.logo === experience.company ? 'sr-only' : ''} text-t3 font-semibold text-[var(--color-text-primary)]`}
+                  >
                     {experience.company}
                   </h3>
                 </div>
 
                 <p
                   data-experience-field="position"
-                  className="mt-1.5 text-t7 font-medium uppercase tracking-widest text-[var(--color-text-primary)]"
+                  className="mt-1.5 text-t6 font-medium uppercase tracking-wider text-[var(--color-text-primary)] sm:text-t7 sm:tracking-widest"
                 >
                   {experience.position}
                 </p>
@@ -147,7 +149,7 @@ export default function ExperienceSection() {
                   {(experience.skills ?? []).map((skill) => (
                     <li
                       key={skill}
-                      className="border border-[var(--color-hairline)] px-2.5 py-1 text-t8 uppercase tracking-wider text-[var(--color-text-secondary)]"
+                      className="border border-[var(--color-hairline)] px-2 py-1 text-t7 uppercase tracking-wider text-[var(--color-text-secondary)] sm:px-2.5 sm:text-t8"
                     >
                       {skill}
                     </li>

@@ -173,6 +173,33 @@ describe('ExperienceSection', () => {
     expect(screen.getByText('CURRENT')).toBeInTheDocument();
   });
 
+  it('워드마크와 회사명이 겹치면 제목은 접근성 트리에만 남긴다', () => {
+    render(<ExperienceSection />);
+
+    const fasoo = document.querySelector('[data-experience-node="FASOO"]')!;
+    const company = fasoo.querySelector('[data-experience-field="company"] h3')!;
+    expect(company).toHaveAccessibleName('FASOO');
+    expect(company.className).toContain('sr-only');
+
+    const academy = document.querySelector('[data-experience-node="삼성청년SW아카데미"]')!;
+    expect(academy.querySelector('[data-experience-field="company"] h3')!.className)
+      .not.toContain('sr-only');
+  });
+
+  it('모바일에서 period, CURRENT, role, skills는 읽기 크기로 두고 NODE 표기는 숨긴다', () => {
+    render(<ExperienceSection />);
+
+    const current = document.querySelector('[data-experience-current="true"]')!;
+    expect(current.querySelector('[data-experience-field="period"]')!.className)
+      .toContain('text-t7');
+    expect(current.querySelector('[data-experience-field="position"]')!.className)
+      .toContain('text-t6');
+    expect(current.querySelector('[data-experience-field="skills"] li')!.className)
+      .toContain('text-t7');
+    expect(current.querySelector('[data-experience-field="period"] > span:last-child')!.className)
+      .toContain('hidden');
+  });
+
   it('로고 마스크가 실제로 있는 파일을 가리킨다', () => {
     render(<ExperienceSection />);
 
