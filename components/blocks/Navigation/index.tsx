@@ -128,6 +128,11 @@ export default function Navigation({
             aria-hidden="true"
             className="pointer-events-none absolute inset-y-0 right-0 z-10 w-5 bg-gradient-to-l from-[var(--color-ink)] to-transparent lg:hidden"
           />
+          {active !== 'overview' && active !== items[items.length - 1]?.id && (
+            <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 z-20 flex w-6 items-center justify-end bg-[var(--color-ink)] pr-1 text-t6 text-[var(--color-cyan-core)] lg:hidden">
+              →
+            </span>
+          )}
           <div
             data-testid="nav-strip"
             // overview는 포스터다 — 부팅 중에는 길찾기 스트립을 숨긴다(사용자

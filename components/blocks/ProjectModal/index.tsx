@@ -450,6 +450,7 @@ export default function ProjectModal({
   const options = analysisEntries.filter((entry) => entry.kind === 'option');
   const metric = review?.result?.[0] ?? null;
   const motivation = splitFirstSentence(project.motivation ?? '');
+  const quickResult = review?.resultHeadline ?? (metric ? `${metric.label} ${metric.after}` : null);
   const metaLine = [project.duration, project.role, project.teamSize].filter(Boolean);
 
   // 좁은 판에서 구현 기능 목록이 내려간 자리를 화살표와 스와이프가 대신한다.
@@ -752,6 +753,20 @@ export default function ProjectModal({
                 )}
                 {project.teamSize && <> · {project.teamSize}</>}
               </p>
+            )}
+            {review && (
+              <dl className={cn('relative z-10 mt-5 grid gap-3 border-y bg-[var(--color-ink)] py-4 text-t7 leading-[1.5] sm:grid-cols-2', LINE)}>
+                <div>
+                  <dt className={cn('mb-1 text-t8', T3)}>대표 문제</dt>
+                  <dd className={T1}>{review.title}</dd>
+                </div>
+                {quickResult && (
+                  <div>
+                    <dt className={cn('mb-1 text-t8', T3)}>결과</dt>
+                    <dd className={T1}>{quickResult}</dd>
+                  </div>
+                )}
+              </dl>
             )}
 
             {/* 단계가 나뉜 프로젝트만. 메타 줄에 날짜 범위를 여러 개 이어 붙이면

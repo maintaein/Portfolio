@@ -17,6 +17,22 @@ declare global {
 }
 
 test.describe('접근성', () => {
+  test('첫 화면에 페이지 제목이 하나 있다', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+  });
+
+  test('긴 프로젝트 제목이 모바일 화면 안에 보인다', async ({ page }) => {
+    for (const width of [320, 375, 390]) {
+      await page.setViewportSize({ width, height: 812 });
+      await enter(page, 'projects');
+      const title = page.locator('[data-flip-id^="title-TDS"]');
+      const bounds = await title.boundingBox();
+      expect(bounds).not.toBeNull();
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+    }
+  });
+
   test('Tab이 비활성 섹션 안으로 들어가지 않는다 @smoke', async ({ page }) => {
     await enter(page, 'about');
 

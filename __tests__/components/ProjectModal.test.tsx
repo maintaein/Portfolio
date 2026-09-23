@@ -79,6 +79,23 @@ describe('ProjectModal 두 판 구조', () => {
 });
 
 describe('ProjectModal 판 1', () => {
+  it('문제와 결과 요약은 메타데이터와 같은 단계에 놓이고 메타데이터 없이도 보인다', () => {
+    const review = selectFeaturedReview(project)!;
+    renderModal();
+    const panel = document.querySelector('[data-modal-panel="1"]')!;
+    const meta = panel.querySelector('[data-modal-field="meta"]')!;
+    const summary = panel.querySelector('dl')!;
+    expect(summary.parentElement).toBe(panel);
+    expect(meta.nextElementSibling).toBe(summary);
+    expect(within(summary as HTMLElement).getByText(review.title)).toBeTruthy();
+    expect(within(summary as HTMLElement).getByText(review.resultHeadline!)).toBeTruthy();
+
+    render(<ProjectModal project={{ ...project, duration: '', role: '', teamSize: '' }} isOpen onClose={() => {}} />);
+    const panels = document.querySelectorAll('[data-modal-panel="1"]');
+    expect(panels[1].querySelector('[data-modal-field="meta"]')).toBeNull();
+    expect(panels[1].querySelector('dl')).not.toBeNull();
+  });
+
   it('구현 기능을 전부 줄로 세우고 첫 줄만 활성이다', () => {
     renderModal();
     const feats = document.querySelectorAll('[data-modal-panel="1"] [data-feat]');

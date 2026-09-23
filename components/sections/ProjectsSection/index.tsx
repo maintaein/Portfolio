@@ -1317,6 +1317,11 @@ export default function ProjectsSection() {
                         {activeProject.subtitle}
                       </p>
                     ) : null}
+                    {isProjectModalReady(activeProject) && (
+                      <span className="mt-2 inline-block text-t7 font-semibold text-[var(--color-cyan-core)]">
+                        자세히 보기 ↗
+                      </span>
+                    )}
                   </div>
                 </div>
               )}
@@ -1329,7 +1334,7 @@ export default function ProjectsSection() {
               type="button"
               data-part="preview-open"
               onClick={handlePreviewClick}
-              aria-label={activeProject.title}
+              aria-label={`${activeProject.title} 자세히 보기`}
               disabled={!isProjectModalReady(activeProject)}
               className="absolute inset-0 block h-full w-full border-0 bg-transparent p-0 text-left [font:inherit] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)]"
             />
@@ -1371,7 +1376,7 @@ export default function ProjectsSection() {
                   // 통째로 실려 올라가 남의 줄 위를 덮고, 이름을 겨냥하지 않은
                   // 자리에서 엉뚱한 프로젝트가 잡힌다. 과녁을 글자 너비로
                   // 줄이면 보이는 것과 잡히는 것이 같아진다
-                  className={`block w-fit origin-left whitespace-nowrap text-left text-t1 lg:text-d3 font-bold tracking-[-0.02em] py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)] ${
+                  className={`block w-fit origin-left whitespace-nowrap text-left text-t1 max-sm:text-[clamp(1.25rem,6.5vw,1.625rem)] lg:text-d3 font-bold tracking-[-0.02em] py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)] ${
                     isActive ? 'text-[var(--color-text-primary)]' : ''
                   }`}
                   // 휠이 도는 동안 색도 같이 간다. --pj-wheel-p는 활성에서

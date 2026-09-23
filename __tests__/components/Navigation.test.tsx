@@ -268,7 +268,7 @@ describe('Navigation', () => {
     // nav-strip을 감싸는 wrapper로 좁힌다 — 워드마크 버튼 안의 시안 스윕
     // 오버레이(wordmark-sweep)도 aria-hidden="true"라 좁히지 않으면 섞인다.
     const stripWrapper = screen.getByTestId('nav-strip').parentElement!;
-    const fades = stripWrapper.querySelectorAll('[aria-hidden="true"]');
+    const fades = stripWrapper.querySelectorAll('div[aria-hidden="true"]');
     expect(fades).toHaveLength(2);
     for (const fade of fades) {
       expect(fade.className).toContain('pointer-events-none');
