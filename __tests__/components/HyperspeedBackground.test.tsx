@@ -191,16 +191,15 @@ describe('HyperspeedBackground — isTransitioning edge → boost/settle', () =>
   });
 });
 
-describe('HyperspeedBackground 밝기(overview 100%, 섹션 35%)와 obscured', () => {
-  // 0.3에서는 광선이 안 보여 0.55까지 올렸다가, 이번엔 배경이 본문을 이겨서
-  // 0.35로 내렸다. 전 섹션 공통이다.
-  it('overview는 배경 100%, 콘텐츠 섹션은 35%다', async () => {
+describe('HyperspeedBackground 밝기(overview 100%, 섹션 20%)와 obscured', () => {
+  // 읽기 구간에서 광선보다 본문에 시선이 머물도록 낮춘 값이다.
+  it('overview는 배경 100%, 콘텐츠 섹션은 20%다', async () => {
     const { rerender } = await renderReady({ active: OVERVIEW });
     const root = screen.getByTestId('hyperspeed-background');
     expect(root.style.opacity).toBe('1');
 
     rerender(<HyperspeedBackground {...readyProps} active="about" />);
-    expect(root.style.opacity).toBe('0.35');
+    expect(root.style.opacity).toBe('0.2');
   });
 
   // obscured는 초점과 밝기를 같이 뺀다. 블러만 걸면 배경이 사라지는 속도가
@@ -409,10 +408,10 @@ describe('HyperspeedBackground — heroRevealed 게이팅(t=0 검은 화면 → 
 
   // active가 overview가 아닌 곳(딥링크)에서 시작하면 재생할 부팅 자체가
   // 없다 — heroRevealed가 계속 false여도 배경이 영원히 숨어 있으면 안 된다.
-  it('active가 overview가 아니면 heroRevealed=false여도 곧바로 최종 밝기(0.35)다', async () => {
+  it('active가 overview가 아니면 heroRevealed=false여도 곧바로 최종 밝기(0.2)다', async () => {
     await renderReady({ active: 'about', heroRevealed: false });
     const root = screen.getByTestId('hyperspeed-background');
-    expect(root.style.opacity).toBe('0.35');
+    expect(root.style.opacity).toBe('0.2');
   });
 
   // reducedMotion에서는 배경도 이름도 첫 프레임부터 최종 상태다(기존 계약).

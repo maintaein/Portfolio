@@ -98,10 +98,8 @@ const DynamicHyperspeed = dynamic(
 );
 
 const BASE_OPACITY_OVERVIEW = 1;
-// 0.3에서는 광선이 사실상 보이지 않아 0.55까지 올렸는데, 이번엔 반대로
-// 배경이 본문을 이겼다. 0.35는 광선의 흐름은 남기면서 본문 뒤를 다시
-// 검정에 가깝게 되돌리는 자리다. 전 섹션 공통값이다.
-const BASE_OPACITY_SECTION = 0.35;
+// 읽기 구간에서는 배경 광선보다 본문에 시선이 머물도록 낮춘다.
+const BASE_OPACITY_SECTION = 0.2;
 
 // 체류 중 배경 흐름 배율. 오버뷰 값은 엔진 기본값(IDLE_TIME_SCALE)과 같다.
 // 섹션에서는 본문을 읽는 동안 시야 가장자리가 계속 움직이면 눈이 끌려가므로
