@@ -29,8 +29,43 @@ test.describe('접근성', () => {
       const title = page.locator('[data-flip-id^="title-TDS"]');
       const bounds = await title.boundingBox();
       expect(bounds).not.toBeNull();
+      expect(bounds!.x).toBeGreaterThanOrEqual(0);
       expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
     }
+  });
+
+  test('모바일 Projects 진행 안내가 키보드 선택과 함께 갱신된다', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 812 });
+    await enter(page, 'projects');
+    const status = page.locator('#projects [data-part="mobile-status"]');
+    const tabs = page.locator('#projects [role="tab"]');
+    const count = await tabs.count();
+    const firstTitle = (await tabs.nth(0).innerText()).trim();
+    const secondTitle = (await tabs.nth(1).innerText()).trim();
+    await page.locator('#projects [role="tab"][aria-selected="true"]').focus();
+    await page.keyboard.press('End');
+    await expect(status).toContainText(
+      `${String(count).padStart(2, '0')} / ${String(count).padStart(2, '0')}`
+    );
+    await expect(status).toContainText(`다음 프로젝트: ${firstTitle}`);
+    await page.keyboard.press('ArrowDown');
+    await expect(status).toContainText(
+      `${String(1).padStart(2, '0')} / ${String(count).padStart(2, '0')}`
+    );
+    await expect(status).toContainText(`다음 프로젝트: ${secondTitle}`);
+  });
+
+  test('모바일 Skills에서 선택 기술 설명과 적용 근거가 첫 화면에 보인다', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 812 });
+    await enter(page, 'skills');
+    const slot = page.locator('[data-skill-description-slot]:visible');
+    await expect(slot).toBeInViewport();
+    await expect(slot).toContainText('React');
+    await expect(slot).toContainText('AlphaMail · TDS · Ttabong');
+    await page.getByRole('button', { name: 'Python' }).click();
+    await expect(slot).toHaveAttribute('data-active-skill', 'Python');
+    await expect(slot).toContainText('Python');
+    await expect(slot).toBeInViewport();
   });
 
   test('Tab이 비활성 섹션 안으로 들어가지 않는다 @smoke', async ({ page }) => {

@@ -23,6 +23,38 @@ function iconMaskStyle(icon: string): CSSProperties {
   return { '--skill-icon-src': `url(/icons-mono/${icon}.svg)` } as CSSProperties;
 }
 
+function SkillDetail({ skill, className }: { skill: Skill; className: string }) {
+  return (
+    <div className={className}>
+      <div
+        data-skill-description-scrim
+        aria-hidden="true"
+        className="pointer-events-none absolute -inset-x-4 -inset-y-3 -z-[1]"
+        style={{ background: SKILL_DESCRIPTION_SCRIM }}
+      />
+      <div
+        data-skill-description-slot
+        data-active-skill={skill.name}
+        className="flex h-36 flex-col justify-center gap-2 lg:h-28"
+      >
+        <div className="flex items-baseline justify-between gap-4">
+          <span className="text-t5 font-semibold text-[var(--color-text-primary)]">
+            {skill.name}
+          </span>
+          {skill.projects ? (
+            <span className="text-t7 text-[var(--color-text-secondary)]">
+              {skill.projects}
+            </span>
+          ) : null}
+        </div>
+        <p className="text-t6 leading-relaxed text-[var(--color-text-primary)]">
+          {skill.description}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function SkillsSection() {
   const [activeSkill, setActiveSkill] = useState<Skill>(DEFAULT_SKILL);
   const [pinnedCategory, setPinnedCategory] = useState<string | null>(null);
@@ -41,7 +73,7 @@ export default function SkillsSection() {
       aria-labelledby="skills-heading"
       className="flex min-h-full py-6 lg:py-8"
     >
-      <div className="section-plate m-auto w-full max-w-4xl px-4 py-6 sm:px-6">
+      <div className="section-plate m-auto flex w-full max-w-4xl flex-col px-4 py-6 sm:px-6">
         {/* 화면에서는 뺀 제목. 섹션 이름을 쥔 유일한 요소라 접근성 트리에는
             남긴다. AboutSection도 같은 방식이다. */}
         <h2 id="skills-heading" className="sr-only">
@@ -72,12 +104,22 @@ export default function SkillsSection() {
           ))}
         </div>
 
+        {/* 설명 슬롯. 아이콘 호버·포커스·탭이 이 안의 내용만 바꾼다. 높이를
+            고정해 짧은 문구와 긴 문구를 오가도 레이아웃이 흔들리지 않는다
+            (브리프 "레이아웃이 흔들리면 안 된다" 절). relative·isolate로
+            이 블록만의 쌓임 맥락을 만들어 스크림의 음수 z-index가
+            Hyperspeed 배경이나 다른 형제와 뒤섞이지 않게 한다. */}
+        <SkillDetail
+          skill={activeSkill}
+          className="relative isolate mt-3 border-t border-[var(--color-hairline)] pt-3 lg:hidden"
+        />
+
         {/* Hyperspeed 광선이 아이콘 사이를 지나가면 둘 다 빛나는 시안이라
             서로 섞여 시인성이 무너진다. 레인 뒤를 어둡게 끊는 것이 답이다.
             타원 스크림 하나로 덮던 것을 레인마다의 판으로 바꿨다. 레인이
             블록 폭을 꽉 채우므로 길이가 4·7·2·4로 제각각이어도 가장자리는
             가지런하고, Awards의 판과 같은 검정이라 섹션끼리도 맞는다. */}
-        <div className="flex flex-col gap-4 lg:gap-3">
+        <div className="flex flex-col gap-2 lg:gap-3">
           {skillCategories.map((category) => {
             const dimmed = pinnedCategory !== null && pinnedCategory !== category.label;
 
@@ -90,7 +132,7 @@ export default function SkillsSection() {
                 key={category.label}
                 data-skill-category={category.label}
                 data-skill-category-dimmed={dimmed}
-                className={`section-plate isolate flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:gap-5 ${
+              className={`section-plate isolate flex flex-col gap-2 px-4 py-2 lg:py-3 sm:flex-row sm:items-start sm:gap-5 ${
                   dimmed ? 'opacity-25' : 'opacity-100'
                 }`}
               >
@@ -107,7 +149,7 @@ export default function SkillsSection() {
                   {category.label}
                 </button>
 
-                <div className="flex flex-wrap gap-x-4 gap-y-3">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 lg:gap-y-3">
                   {category.skills.map((skill) => {
                     const isActive = activeSkill.name === skill.name;
 
@@ -137,39 +179,11 @@ export default function SkillsSection() {
             );
           })}
         </div>
+        <SkillDetail
+          skill={activeSkill}
+          className="relative isolate mt-7 hidden border-t border-[var(--color-hairline)] pt-5 lg:block"
+        />
 
-        {/* 설명 슬롯. 아이콘 호버·포커스·탭이 이 안의 내용만 바꾼다. 높이를
-            고정해 짧은 문구와 긴 문구를 오가도 레이아웃이 흔들리지 않는다
-            (브리프 "레이아웃이 흔들리면 안 된다" 절). relative·isolate로
-            이 블록만의 쌓임 맥락을 만들어 스크림의 음수 z-index가
-            Hyperspeed 배경이나 다른 형제와 뒤섞이지 않게 한다. */}
-        <div className="relative isolate mt-6 border-t border-[var(--color-hairline)] pt-4 lg:mt-7 lg:pt-5">
-          <div
-            data-skill-description-scrim
-            aria-hidden="true"
-            className="pointer-events-none absolute -inset-x-4 -inset-y-3 -z-[1]"
-            style={{ background: SKILL_DESCRIPTION_SCRIM }}
-          />
-          <div
-            data-skill-description-slot
-            data-active-skill={activeSkill.name}
-            className="flex h-36 flex-col justify-center gap-2 lg:h-28"
-          >
-            <div className="flex items-baseline justify-between gap-4">
-              <span className="text-t5 font-semibold text-[var(--color-text-primary)]">
-                {activeSkill.name}
-              </span>
-              {activeSkill.projects ? (
-                <span className="text-t7 text-[var(--color-text-secondary)]">
-                  {activeSkill.projects}
-                </span>
-              ) : null}
-            </div>
-            <p className="text-t6 leading-relaxed text-[var(--color-text-primary)]">
-              {activeSkill.description}
-            </p>
-          </div>
-        </div>
       </div>
     </section>
   );

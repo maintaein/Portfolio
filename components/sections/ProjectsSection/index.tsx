@@ -1030,6 +1030,7 @@ export default function ProjectsSection() {
     // 모달이 열리며 벌어지는 정도(0→1). handleStageMount·closeModal의
     // tween이 이 값을 매 프레임 바꾸고 applyWheel을 다시 부른다
     const spread = wheelSpreadRef.current.v;
+    const blurScale = window.innerWidth < 1024 ? 0.45 : 1;
     for (let i = 0; i < N; i += 1) {
       const el = els[i];
       if (!el) continue;
@@ -1047,13 +1048,13 @@ export default function ProjectsSection() {
       let opacity = Math.max(WHEEL_MIN_OPACITY, 1 - dist * WHEEL_FADE);
       // 활성 항목에는 blur를 아예 안 건다. blur(0px)도 none이 아닌 이상
       // 겹을 하나 만들고, 이 단추 안에 비행 출발 손잡이가 들어 있다
-      let blurPx = dist > 0 ? dist * WHEEL_BLUR_PX : 0;
+      let blurPx = dist > 0 ? dist * WHEEL_BLUR_PX * blurScale : 0;
       // spread는 활성이 아닌 항목만 받는다. 활성(dist 0)의 span은 S-5가
       // 따로 감춘다. 여기서 더 손대면 그 감춤과 겹친다
       if (dist > 0) {
         y += spread * d * WHEEL_SPLIT_PX;
         opacity *= 1 - spread;
-        blurPx += spread * WHEEL_SPLIT_BLUR_PX;
+        blurPx += spread * WHEEL_SPLIT_BLUR_PX * blurScale;
       }
       el.style.transform = `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) rotate(${rot.toFixed(3)}deg)`;
       el.style.opacity = String(opacity);
@@ -1342,6 +1343,17 @@ export default function ProjectsSection() {
           </div>
         </div>
 
+        <p
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          data-part="mobile-status"
+          className="mt-3 text-t7 text-[var(--color-text-secondary)] lg:hidden"
+        >
+          {String(activeIndex + 1).padStart(2, '0')} / {String(N).padStart(2, '0')} · 다음 프로젝트:{' '}
+          {projects[(activeIndex + 1) % N].title}
+        </p>
+
         <div className="lg:pl-10">
           <div
             data-part="index"
@@ -1376,7 +1388,7 @@ export default function ProjectsSection() {
                   // 통째로 실려 올라가 남의 줄 위를 덮고, 이름을 겨냥하지 않은
                   // 자리에서 엉뚱한 프로젝트가 잡힌다. 과녁을 글자 너비로
                   // 줄이면 보이는 것과 잡히는 것이 같아진다
-                  className={`block w-fit origin-left whitespace-nowrap text-left text-t1 max-sm:text-[clamp(1.25rem,6.5vw,1.625rem)] lg:text-d3 font-bold tracking-[-0.02em] py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)] ${
+                  className={`block w-fit max-lg:max-w-full origin-left whitespace-nowrap max-lg:whitespace-normal max-lg:[overflow-wrap:anywhere] text-left text-t1 max-sm:text-[clamp(1.25rem,6.5vw,1.625rem)] lg:text-d3 font-bold tracking-[-0.02em] py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)] ${
                     isActive ? 'text-[var(--color-text-primary)]' : ''
                   }`}
                   // 휠이 도는 동안 색도 같이 간다. --pj-wheel-p는 활성에서

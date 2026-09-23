@@ -269,6 +269,38 @@ describe('ProjectsSection 이름 목록', () => {
     ).toBe(String(N - 1));
   });
 
+  it('현재 위치와 다음 프로젝트 안내가 선택에 맞춰 바뀐다', () => {
+    renderSection();
+    const tabs = screen.getAllByRole('tab');
+    const count = tabs.length;
+    const row = document.querySelector('[role="tablist"]')!;
+    const initialIndex = Number(
+      document.querySelector('[aria-selected="true"]')!.getAttribute('data-name')
+    );
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent(
+      `${String(initialIndex + 1).padStart(2, '0')} / ${String(count).padStart(2, '0')}`
+    );
+    expect(status).toHaveTextContent(projects[(initialIndex + 1) % count].title);
+
+    fireEvent.keyDown(row, { key: 'End' });
+    expect(status).toHaveTextContent(
+      `${String(count).padStart(2, '0')} / ${String(count).padStart(2, '0')}`
+    );
+    expect(status).toHaveTextContent(projects[0].title);
+
+    fireEvent.keyDown(row, { key: 'ArrowDown' });
+
+    expect(status).toHaveTextContent(
+      `${String(1).padStart(2, '0')} / ${String(count).padStart(2, '0')}`
+    );
+    expect(status).toHaveTextContent(projects[1].title);
+    expect(document.querySelector('[aria-selected="true"]')).toHaveAttribute(
+      'data-name',
+      '0'
+    );
+  });
+
   it('Home은 0으로, End는 N-1로 간다', () => {
     renderSection();
     const row = document.querySelector('[role="tablist"]')!;
@@ -1750,6 +1782,26 @@ describe('ProjectsSection 이름 휠', () => {
 // 활성 자리에서 갈라져 안쪽(제목이 날아가는 쪽)이 비어 보인다. applyWheel은
 // wheelSpreadRef.current.v(0→1)를 추가항으로만 쓰므로, spread=0이면 이
 // 파일의 다른 휠 테스트가 이미 잠근 값과 바이트 단위로 같아야 한다
+describe('ProjectsSection mobile wheel blur', () => {
+  it('narrow viewports reduce blur while keeping the wheel curve', () => {
+    const rig = installWheelRig();
+    try {
+      renderWheel();
+      rig.settle();
+      const desktopRotation = wheelStyle(1).rot;
+
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+      fireEvent(window, new Event('resize'));
+      rig.settle();
+
+      expect(wheelStyle(1).blur).toBeCloseTo(WHEEL_BLUR_PX * 0.45, 3);
+      expect(wheelStyle(1).rot).toBeCloseTo(desktopRotation!, 3);
+    } finally {
+      rig.uninstall();
+    }
+  });
+});
+
 describe('ProjectsSection 휠 벌어짐(spread)', { timeout: 30_000 }, () => {
   it('모달이 열리는 비행에서 spread가 1이면 활성 아닌 항목만 갈라지고, 0이면 기존 값 그대로다', async () => {
     // 이 파일의 top beforeEach는 matchMedia.matches를 늘 false로 고정해

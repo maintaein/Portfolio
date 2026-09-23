@@ -100,7 +100,7 @@ function designTokensCss(): string {
 // 크기와 배경은 겹마다 다르다. 바깥 겹은 고정 원반, 안쪽 겹은 로고 실루엣.
 function bloomLayerCss(): string {
   const body = designTokensCss().match(
-    /^ {2}\.skill-icon-button::before,\n {2}\.skill-icon-button::after\s*\{([\s\S]*?)^ {2}\}/m
+    /^ {2}\.skill-icon-button::before,\r?\n {2}\.skill-icon-button::after\s*\{([\s\S]*?)^ {2}\}/m
   )?.[1];
   if (!body) throw new Error('광휘 겹의 공통 규칙이 없다');
   return body;
@@ -199,6 +199,21 @@ describe('SkillsSection 카테고리 아이콘 그리드', () => {
     expect(slot?.textContent).toContain(
       '컴포넌트 구독 범위를 Profiler로 진단하고 불필요한 연쇄 렌더를 제거'
     );
+    expect(slot?.textContent).toContain('AlphaMail · TDS · Ttabong');
+  });
+
+  it('활성 기술 설명이 아이콘 컨트롤보다 앞선 DOM 순서로 읽힌다', () => {
+    render(<SkillsSection />);
+    const slots = document.querySelectorAll('[data-skill-description-slot]');
+    const category = document.querySelector('[data-skill-category]')!;
+
+    expect(slots).toHaveLength(2);
+    expect(
+      slots[0].compareDocumentPosition(category) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      category.compareDocumentPosition(slots[1]) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
   });
 
   it('아이콘 호버가 설명 슬롯을 바꾸고, 다른 아이콘으로 옮기면 다시 바뀐다', async () => {
