@@ -277,7 +277,10 @@ describe('ProjectsSection 이름 목록', () => {
     const initialIndex = Number(
       document.querySelector('[aria-selected="true"]')!.getAttribute('data-name')
     );
-    const status = screen.getByRole('status');
+    const status = document.querySelector('[data-part="mobile-status"]')!;
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveAttribute('aria-atomic', 'true');
+    expect(status).not.toHaveAttribute('role', 'status');
     expect(status).toHaveTextContent(
       `${String(initialIndex + 1).padStart(2, '0')} / ${String(count).padStart(2, '0')}`
     );

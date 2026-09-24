@@ -1344,7 +1344,6 @@ export default function ProjectsSection() {
         </div>
 
         <p
-          role="status"
           aria-live="polite"
           aria-atomic="true"
           data-part="mobile-status"
