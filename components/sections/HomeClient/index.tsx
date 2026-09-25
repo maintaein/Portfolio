@@ -54,7 +54,7 @@ const SECTION_COMPONENTS = {
   [SECTION_IDS.PROJECTS]: ProjectsSection,
   [SECTION_IDS.AWARDS_CERTIFICATES]: AwardAndCertificateSection,
   [SECTION_IDS.EXPERIENCE]: ExperienceSection,
-} satisfies Record<HomeSectionId, ComponentType>;
+} satisfies Record<HomeSectionId, ComponentType<{ active?: boolean }>>;
 
 function parseTransitionTime(value: string | undefined) {
   if (!value) return 0;
@@ -531,7 +531,7 @@ export default function HomeClient() {
                 handleSectionTransitionDone(id, event)
               }
             >
-              <Section />
+              <Section active={isActive} />
             </div>
           );
         })}
