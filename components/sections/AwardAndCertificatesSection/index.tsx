@@ -92,7 +92,7 @@ export default function AwardsAndCertificatesSection({ active = false }: { activ
                 <span className="awards-node-number">{String(index + 1).padStart(2, '0')} / {award.date}</span>
                 <span className="awards-node-project">{award.project}</span>
                 <span className="awards-node-rank">{award.rank}</span>
-                <span className="sr-only"> · {award.title}</span>
+                <span className="sr-only">{award.title} {award.organization} {award.description}</span>
               </button>
             </div>
           ))}

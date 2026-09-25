@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AwardsSection from '@/components/sections/AwardAndCertificatesSection';
 import { awards } from '@/lib/data';
@@ -50,16 +51,20 @@ afterEach(() => {
 
 describe('Awards orbit', () => {
   it('renders all award facts before interaction', () => {
-    const { container } = render(<AwardsSection active />);
-    expect(container.querySelector('section')?.id).toBe(SECTION_IDS.AWARDS_CERTIFICATES);
+    const rendered = new DOMParser().parseFromString(renderToString(<AwardsSection active />), 'text/html');
+    expect(rendered.querySelector('section')?.id).toBe(SECTION_IDS.AWARDS_CERTIFICATES);
     for (const award of awards) {
-      const card = container.querySelector(`[data-award-card="${award.id}"]`);
+      const card = rendered.querySelector(`[data-award-card="${award.id}"]`);
+      const button = rendered.querySelector(`[data-award-select="${award.id}"]`);
       expect(card?.textContent).toContain(award.title);
       expect(card?.textContent).toContain(award.project);
       expect(card?.textContent).toContain(award.description);
+      expect(button?.textContent).toContain(award.title);
+      expect(button?.textContent).toContain(award.organization);
+      expect(button?.textContent).toContain(award.description);
     }
-    expect(container.querySelector('.awards-credentials')).not.toBeInTheDocument();
-    expect(container.querySelectorAll('[data-orbit-node]')).toHaveLength(awards.length);
+    expect(rendered.querySelector('.awards-credentials')).not.toBeInTheDocument();
+    expect(rendered.querySelectorAll('[data-orbit-node]')).toHaveLength(awards.length);
   });
 
   it('updates the center on hover, focus, and click without stopping orbit motion', () => {
