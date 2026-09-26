@@ -130,12 +130,14 @@ export default function SkillsSection() {
                   type="button"
                   aria-pressed={active}
                   style={iconStyle(skill.icon)}
-                  className="skill-icon-button signal-skill"
+                  className="signal-skill"
                   onMouseEnter={() => setSelected(skill)}
                   onFocus={() => setSelected(skill)}
                   onClick={() => setSelected(skill)}
                 >
-                  <span aria-hidden="true" className={`skill-icon ${active ? 'skill-icon-active' : ''}`} />
+                  <span aria-hidden="true" className="skill-icon-button signal-icon-slot">
+                    <span className={`skill-icon ${active ? 'skill-icon-active' : ''}`} />
+                  </span>
                   <span>{skill.name}</span>
                 </button>
               );

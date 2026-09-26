@@ -1980,6 +1980,22 @@
   height: 32px;
 }
 
+.skills-signal .signal-icon-slot {
+  display: block;
+  width: 32px;
+  height: 32px;
+}
+
+.skills-signal .signal-icon-slot::before,
+.skills-signal .signal-icon-slot::after {
+  top: 50%;
+}
+
+.skills-signal .signal-icon-slot::after {
+  width: 32px;
+  height: 32px;
+}
+
 .skills-signal .signal-canvas {
   min-width: 0;
   padding: clamp(24px, 3.2vw, 48px);
