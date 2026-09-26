@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, type CSSProperties } from 'react';
+import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import gsap from 'gsap';
 import { SECTION_IDS } from '@/lib/constants';
 import { projects, skillCategories } from '@/lib/data';
 
@@ -29,7 +30,77 @@ function iconStyle(icon: string): CSSProperties {
 
 export default function SkillsSection() {
   const [selected, setSelected] = useState(skills[0]);
+  const mapRef = useRef<HTMLDivElement>(null);
   const count = selected.projects.length;
+
+  useLayoutEffect(() => {
+    const map = mapRef.current!;
+    const svg = map.querySelector('svg')!;
+    const hub = map.querySelector<HTMLElement>('.signal-hub')!;
+    const links = [...map.querySelectorAll<HTMLAnchorElement>('.signal-project')];
+    const paths = [...svg.querySelectorAll('path')];
+    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let context: gsap.Context | undefined;
+    let drawn = false;
+    let geometry = '';
+
+    const draw = (force = false) => {
+      if (!map.clientWidth || !map.clientHeight) return;
+      const bounds = map.getBoundingClientRect();
+      const originX = bounds.left + map.clientLeft;
+      const originY = bounds.top + map.clientTop;
+      const hubBounds = hub.getBoundingClientRect();
+      const hx = hubBounds.left + hubBounds.width / 2 - originX;
+      const hy = hubBounds.top + hubBounds.height / 2 - originY;
+      const boxes = links.map((link) => link.getBoundingClientRect());
+      const nextGeometry = [map.clientWidth, map.clientHeight, hx, hy, hubBounds.width,
+        ...boxes.flatMap((box) => [box.left - originX, box.top - originY, box.width, box.height])].join(',');
+      if (!force && nextGeometry === geometry) return;
+      geometry = nextGeometry;
+      context?.revert();
+      svg.setAttribute('viewBox', `0 0 ${map.clientWidth} ${map.clientHeight}`);
+      context = gsap.context(() => {
+        links.forEach((link, index) => {
+          const box = boxes[index];
+          const left = box.left - originX;
+          const top = box.top - originY;
+          const right = left + box.width;
+          const bottom = top + box.height;
+          const y = top + box.height / 2;
+          const distance = Math.hypot(left - hx, y - hy);
+          const radius = hubBounds.width / 2;
+          const x0 = hx + (left - hx) * radius / distance;
+          const y0 = hy + (y - hy) * radius / distance;
+          const connector = Math.hypot(left - x0, y - y0);
+          const perimeter = 2 * (box.width + box.height);
+          const path = paths[index];
+          path.setAttribute('d', `M ${x0} ${y0} L ${left} ${y} L ${left} ${top} L ${right} ${top} L ${right} ${bottom} L ${left} ${bottom} L ${left} ${y}`);
+          if (motion.matches || drawn) return;
+          const surface = link.querySelector('.signal-surface');
+          const text = link.querySelectorAll('.signal-project > span:not(.signal-surface)');
+          gsap.set(path, { strokeDasharray: connector + perimeter, strokeDashoffset: connector + perimeter });
+          gsap.set([surface, ...text], { opacity: 0 });
+          gsap.timeline({ delay: index * .16 })
+            .to(path, { strokeDashoffset: perimeter, duration: connector / 700, ease: 'none' })
+            .to(path, { strokeDashoffset: 0, duration: Math.min(perimeter / 700, .36), ease: 'none' })
+            .to([surface, ...text], { opacity: 1, duration: .18, ease: 'power2.out' });
+        });
+      }, map);
+      drawn = true;
+    };
+
+    draw();
+    const observer = new ResizeObserver(() => draw());
+    observer.observe(map);
+    links.forEach((link) => observer.observe(link));
+    const syncMotion = () => draw(true);
+    motion.addEventListener('change', syncMotion);
+    return () => {
+      observer.disconnect();
+      motion.removeEventListener('change', syncMotion);
+      context?.revert();
+    };
+  }, [selected]);
   const ys = count === 1 ? [50] : count === 2 ? [34, 66] :
     count === 3 ? [22, 50, 78] : count === 4 ? [17, 39, 61, 83] : [13, 31, 50, 69, 87];
   const points = selected.projects.map((_, index) => ({
@@ -80,20 +151,15 @@ export default function SkillsSection() {
             </div>
             <div className="signal-stage">
               <div
+                ref={mapRef}
                 data-skill-map
                 data-active-skill={selected.name}
                 className="signal-map"
                 aria-label="선택한 기술의 프로젝트 연결 지도"
-                style={{ '--count': count } as CSSProperties}
               >
-                <svg key={selected.name} viewBox="0 0 660 490" preserveAspectRatio="none" aria-hidden="true">
-                  {points.map((point, index) => (
-                    <path
-                      key={selected.projects[index].title}
-                      className="signal-path"
-                      style={{ '--order': index } as CSSProperties}
-                      d={`M 170 245 Q 300 245 ${Math.round(point.x * 6.6)} ${Math.round(point.y * 4.9)}`}
-                    />
+                <svg key={selected.name} aria-hidden="true">
+                  {selected.projects.map((project) => (
+                    <path key={project.title} className="signal-path" />
                   ))}
                 </svg>
                 <div className="signal-hub" aria-hidden="true" style={iconStyle(selected.icon)}>
@@ -106,9 +172,10 @@ export default function SkillsSection() {
                     href={project.githubUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ '--x': `${points[index].x}%`, '--y': `${points[index].y}%`, '--order': index } as CSSProperties}
+                    style={{ '--x': `${points[index].x}%`, '--y': `${points[index].y}%` } as CSSProperties}
                     aria-label={`${project.title} GitHub`}
                   >
+                    <span className="signal-surface" aria-hidden="true" />
                     <span className="signal-index">{String(index + 1).padStart(2, '0')}</span>
                     <span>{project.title}</span>
                   </a>

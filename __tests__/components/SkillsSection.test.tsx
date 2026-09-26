@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { renderToString } from 'react-dom/server';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import gsap from 'gsap';
 import SkillsSection from '@/components/sections/SkillsSection';
 import { SECTION_IDS } from '@/lib/constants';
 import { projects, skillCategories } from '@/lib/data';
@@ -14,6 +15,19 @@ const visibleSkills = [
 const css = readFileSync(resolve(process.cwd(), 'styles/design-tokens.css'), 'utf8');
 
 describe('SkillsSection signal map', () => {
+  beforeEach(() => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({
+      matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    })));
+    vi.stubGlobal('ResizeObserver', class {
+      observe() {}
+      disconnect() {}
+    });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
   it('shows only the eight approved project-backed skills with existing icons', () => {
     render(<SkillsSection />);
     const buttons = screen.getAllByRole('button', { name: /^(TypeScript|Python|React|Next\.js|Tailwind CSS|React Query|Zustand|Figma)$/ });
@@ -60,15 +74,58 @@ describe('SkillsSection signal map', () => {
     }
   });
 
-  it('has bare selected icons, line-first reveal, and a reduced-motion fallback', () => {
-    render(<SkillsSection />);
+  it('keeps bare icons and focusable project surfaces without CSS sequence delays', () => {
+    const { container } = render(<SkillsSection />);
     const button = screen.getByRole('button', { name: 'TypeScript' });
     expect(button.className).not.toMatch(/\bbg-|\bborder-/);
     expect(button.querySelector('.skill-icon-active')).toBeInTheDocument();
-    expect(css).toMatch(/\.skills-signal \.signal-path[\s\S]*?animation: signal-draw/);
-    expect(css).toMatch(/\.skills-signal \.signal-project[\s\S]*?animation: signal-reveal/);
-    expect(css).toMatch(/\.skills-signal \.signal-project[\s\S]*?animation-delay: calc\(730ms \+ var\(--count\) \* 80ms/);
-    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.skills-signal \.signal-path[\s\S]*?animation: none/);
+    expect(container.querySelectorAll('.signal-surface')).toHaveLength(screen.getAllByRole('link').length);
+    expect(css).not.toMatch(/signal-draw|signal-reveal|730ms/);
+    expect(css).toMatch(/\.signal-project:focus-visible > span[\s\S]*?opacity: 1 !important/);
+  });
+
+  it('draws measured straight connectors into each border and surface on independent GSAP timelines', () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(600);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(490);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const index = [...(this.parentElement?.querySelectorAll('.signal-project') ?? [])].indexOf(this);
+      const hub = this.classList.contains('signal-hub');
+      const left = hub ? 94 : index >= 0 ? 350 : 0;
+      const top = hub ? 185 : index >= 0 ? 40 + index * 100 : 0;
+      const width = hub ? 120 : index >= 0 ? 150 : 600;
+      const height = hub ? 120 : index >= 0 ? 54 : 490;
+      return { left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON() {} };
+    });
+    const timelines = vi.spyOn(gsap, 'timeline');
+    const { container } = render(<SkillsSection />);
+    const paths = [...container.querySelectorAll('.signal-path')];
+    expect(timelines).toHaveBeenCalledTimes(paths.length);
+    const completions = timelines.mock.results.map(({ value }, index) => {
+      value.pause(0);
+      expect(value.delay()).toBeCloseTo(index * .16);
+      const [line, border, surface] = value.getChildren(false, true, false);
+      expect(paths[index].getAttribute('d')).toMatch(/^M [\d.]+ [\d.]+ L 350 /);
+      expect(paths[index].getAttribute('d')).not.toMatch(/[QC]/);
+      expect(line.vars.strokeDashoffset).toBe(408);
+      expect(border.vars.strokeDashoffset).toBe(0);
+      expect(border.startTime()).toBeCloseTo(line.duration());
+      expect(surface.startTime()).toBeCloseTo(line.duration() + border.duration());
+      expect(surface.vars.opacity).toBe(1);
+      return line.duration();
+    });
+    expect(new Set(completions).size).toBeGreaterThan(1);
+  });
+
+  it('leaves reduced-motion project surfaces immediately readable without timelines', () => {
+    vi.mocked(window.matchMedia).mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() } as unknown as MediaQueryList);
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(600);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(490);
+    const timelines = vi.spyOn(gsap, 'timeline');
+    const { container } = render(<SkillsSection />);
+    expect(timelines).not.toHaveBeenCalled();
+    for (const span of container.querySelectorAll<HTMLElement>('.signal-project > span')) {
+      expect(span.style.opacity).toBe('');
+    }
   });
 
   it('keeps all eight skill descriptions and project names in server HTML', () => {
