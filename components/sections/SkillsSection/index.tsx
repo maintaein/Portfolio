@@ -111,17 +111,9 @@ export default function SkillsSection() {
   return (
     <section id={SECTION_IDS.SKILLS} aria-labelledby="skills-heading" className="skills-signal flex min-h-full">
       <div className="signal-shell m-auto w-full">
-        <div className="signal-top">
-          <span>KIM TAE IN / CAPABILITY MAP</span>
-          <span>PROJECT BACKED SKILLS</span>
-        </div>
-        <header className="signal-intro">
-          <p className="signal-micro">SKILLS / SIGNAL HUB</p>
-          <h2 id="skills-heading">기술에서 프로젝트로,<br />프로젝트에서 내가 한 일로.</h2>
-        </header>
         <div className="signal-workspace">
           <nav className="signal-nav" aria-label="기술 선택">
-            <p className="signal-micro">01 / SKILLS</p>
+            <h2 id="skills-heading" className="signal-micro">SKILLS</h2>
             {skills.map((skill) => {
               const active = selected.name === skill.name;
               return (
@@ -146,8 +138,7 @@ export default function SkillsSection() {
           <div className="signal-canvas">
             <div className="signal-canvas-head">
               <div>
-                <p className="signal-micro">PROJECT SIGNAL MAP</p>
-                <h3>One skill. Real work.</h3>
+                <h3>기술에서 프로젝트로</h3>
               </div>
               <p>왼쪽 기술에 마우스를 올리거나 선택하면 연결된 프로젝트와 기록이 바뀝니다.</p>
             </div>
@@ -185,11 +176,10 @@ export default function SkillsSection() {
               </div>
               <div className="signal-result" data-testid="skill-result" aria-live="polite">
                 <div>
-                  <p className="signal-micro">{selected.category} / {String(count).padStart(2, '0')} PROJECT{count === 1 ? '' : 'S'}</p>
+                  <p className="signal-micro">{selected.category}</p>
                   <h3>{selected.name}</h3>
                   <p className="signal-detail">{selected.description}</p>
                 </div>
-                <p className="signal-footnote">SOURCE / PORTFOLIO SKILL DESCRIPTION</p>
               </div>
             </div>
           </div>

@@ -1891,7 +1891,6 @@
   padding: 32px clamp(20px, 4vw, 64px) 48px;
 }
 
-.skills-signal .signal-top,
 .skills-signal .signal-footer {
   display: flex;
   justify-content: space-between;
@@ -1900,12 +1899,6 @@
   letter-spacing: .13em;
 }
 
-.skills-signal .signal-top {
-  padding-bottom: 20px;
-  border-bottom: 1px solid rgb(3 179 195 / .35);
-}
-
-.skills-signal .signal-top span:last-child,
 .skills-signal .signal-footer {
   color: #b0bac5;
 }
@@ -1915,17 +1908,6 @@
   color: #7fe3ee;
   font: 600 11px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
   letter-spacing: .18em;
-}
-
-.skills-signal .signal-intro {
-  margin: 42px 0 34px;
-}
-
-.skills-signal .signal-intro h2 {
-  margin: 9px 0 0;
-  font-size: clamp(38px, 5.1vw, 70px);
-  line-height: 1.04;
-  letter-spacing: -.065em;
 }
 
 .skills-signal .signal-workspace {
@@ -1946,6 +1928,10 @@
 
 .skills-signal .signal-nav .signal-micro {
   margin-bottom: 14px;
+}
+
+.skills-signal .signal-nav h2 {
+  text-align: center;
 }
 
 .skills-signal .signal-skill {
@@ -2039,16 +2025,6 @@
   background: linear-gradient(rgb(3 179 195 / .07) 1px, transparent 1px),
     linear-gradient(90deg, rgb(3 179 195 / .07) 1px, transparent 1px), #020b0e;
   background-size: 28px 28px;
-}
-
-.skills-signal .signal-map::after {
-  content: 'PROJECT SIGNAL MAP';
-  position: absolute;
-  bottom: 16px;
-  left: 18px;
-  color: #b0bac5;
-  font: 10px ui-monospace, SFMono-Regular, Consolas, monospace;
-  letter-spacing: .14em;
 }
 
 .skills-signal .signal-map svg {
@@ -2152,15 +2128,6 @@
   line-height: 1.7;
 }
 
-.skills-signal .signal-footnote {
-  margin: 40px 0 0;
-  padding-top: 28px;
-  border-top: 1px solid rgb(3 179 195 / .35);
-  color: #b0bac5;
-  font: 11px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace;
-  letter-spacing: .07em;
-}
-
 .skills-signal .signal-footer {
   margin-top: 22px;
   padding-top: 18px;
@@ -2171,14 +2138,11 @@
   .skills-signal .signal-stage { grid-template-columns: 1fr; }
   .skills-signal .signal-map { min-height: 430px; }
   .skills-signal .signal-result { min-height: 220px; }
-  .skills-signal .signal-footnote { margin-top: 28px; }
 }
 
 @media (max-width: 680px) {
   .skills-signal .signal-shell { padding: 18px 14px 32px; }
-  .skills-signal .signal-top span:last-child,
   .skills-signal .signal-footer span:last-child { display: none; }
-  .skills-signal .signal-intro { margin: 28px 0 24px; }
   .skills-signal .signal-workspace { grid-template-columns: 1fr; }
   .skills-signal .signal-nav {
     display: grid;
@@ -2201,7 +2165,7 @@
   .skills-signal .signal-project { min-height: 44px; padding: 6px; font-size: 11px; }
   .skills-signal .signal-result { min-height: 200px; padding: 22px; }
   .skills-signal .signal-result h3 { margin: 14px 0 20px; }
-  .skills-signal .signal-footnote { margin-top: 24px; padding-top: 18px; }
+
 }
 
 @media (max-width: 410px) {
