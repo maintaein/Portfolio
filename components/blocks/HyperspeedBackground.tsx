@@ -19,7 +19,6 @@ import {
 } from 'react';
 import type { HyperspeedHandle } from '@/components/blocks/Hyperspeed';
 import { OVERVIEW, type NavId } from '@/hooks/useSectionNav';
-import { SECTION_IDS } from '@/lib/constants';
 import { detectQuality } from '@/lib/deviceQuality';
 
 export interface HyperspeedBackgroundProps {
@@ -98,16 +97,9 @@ const DynamicHyperspeed = dynamic(
   }
 );
 
-const BASE_OPACITY_OVERVIEW = 1;
+const BACKGROUND_OPACITY = 0.12;
+const IDLE_SCALE = 0.06;
 // 읽기 구간에서는 배경 광선보다 본문에 시선이 머물도록 낮춘다.
-const SECTION_MOTION = {
-  [OVERVIEW]: { opacity: BASE_OPACITY_OVERVIEW, idleScale: 0.3 },
-  [SECTION_IDS.ABOUT]: { opacity: 0.2, idleScale: 0.1 },
-  [SECTION_IDS.EXPERIENCE]: { opacity: 0.2, idleScale: 0.1 },
-  [SECTION_IDS.PROJECTS]: { opacity: 0.12, idleScale: 0.06 },
-  [SECTION_IDS.SKILLS]: { opacity: 0.08, idleScale: 0.02 },
-  [SECTION_IDS.AWARDS_CERTIFICATES]: { opacity: 0.08, idleScale: 0.02 },
-} satisfies Record<NavId, { opacity: number; idleScale: number }>;
 // obscured(ProjectModal 열림) 동안 배경에서 초점을 빼는 블러 반경.
 // 감광(0.4배)에서 블러로 바꿨다 — 어둡게 하면 배경이 남색 덩어리로 죽는데,
 // 블러는 밝기를 유지한 채 시선만 모달로 보낸다. 대비는 모달 자신의 불투명
@@ -160,7 +152,8 @@ export default function HyperspeedBackground({
   const isTransitioningRef = useRef(isTransitioning);
   isTransitioningRef.current = isTransitioning;
 
-  const { opacity: sectionOpacity, idleScale } = SECTION_MOTION[active];
+  const sectionOpacity = BACKGROUND_OPACITY;
+  const idleScale = IDLE_SCALE;
   // 핸들은 next/dynamic 청크가 풀린 뒤에야 도착한다. 이 effect가 먼저 돌 수도
   // 있으므로 값을 ref에도 남겨 setHandle이 도착 시점에 다시 걸어준다.
   const idleScaleRef = useRef(idleScale);
