@@ -4,6 +4,7 @@ import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import gsap from 'gsap';
 import { SECTION_IDS } from '@/lib/constants';
 import { projects, skillCategories } from '@/lib/data';
+import ScrollArea from '@/components/common/ScrollArea';
 
 const names = [
   'TypeScript', 'Python', 'React', 'Next.js',
@@ -112,7 +113,7 @@ export default function SkillsSection() {
     <section id={SECTION_IDS.SKILLS} aria-labelledby="skills-heading" className="skills-signal flex min-h-full">
       <div className="signal-shell m-auto w-full">
         <div className="signal-workspace">
-          <nav className="signal-nav" aria-label="기술 선택">
+          <ScrollArea as="nav" className="signal-nav" aria-label="기술 선택">
             <h2 id="skills-heading" className="signal-micro">SKILLS</h2>
             {skills.map((skill) => {
               const active = selected.name === skill.name;
@@ -134,7 +135,7 @@ export default function SkillsSection() {
                 </button>
               );
             })}
-          </nav>
+          </ScrollArea>
           <div className="signal-canvas">
             <div className="signal-canvas-head">
               <div>

@@ -40,6 +40,8 @@ describe('ExperienceSection', () => {
       expect(choices[index]).toHaveTextContent(record.period);
     });
     expect(cards()).toHaveLength(3);
+    for (const card of cards()) expect(card).toHaveClass('scroll-area', 'experience-depth-card');
+    expect(cards().map((card) => card.tabIndex)).toEqual([0, -1, -1]);
     experiences.forEach((record, index) => {
       expect(cards()[index]).toHaveTextContent(record.description);
       for (const item of record.responsibilities) expect(cards()[index]).toHaveTextContent(item);

@@ -1536,8 +1536,29 @@
   align-items: start;
 }
 
+.scroll-area {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #03b3c3 #020b0e;
+  scrollbar-gutter: stable;
+}
+
+.scroll-area::-webkit-scrollbar { width: 8px; height: 8px; }
+.scroll-area::-webkit-scrollbar-track { background: #020b0e; }
+.scroll-area::-webkit-scrollbar-thumb {
+  background: #03b3c3;
+  border: 2px solid #020b0e;
+  border-radius: 4px;
+}
+.scroll-area::-webkit-scrollbar-thumb:hover { background: #7fe3ee; }
+.scroll-area::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+
+@supports selector(::-webkit-scrollbar) {
+  .scroll-area { scrollbar-width: auto; scrollbar-color: auto; }
+}
+
 .experience-depth-timeline {
-  margin: 0;
+  margin: 0 0 0 20px;
   padding: 0 0 0 25px;
   border-left: 1px solid rgb(3 179 195 / 0.35);
   list-style: none;
@@ -1872,12 +1893,9 @@
   padding: 26px 18px;
   overflow-y: auto;
   scroll-padding-block: 8px;
-  scrollbar-width: none;
   border-right: 2px solid transparent;
   box-shadow: 8px 0 18px -14px rgb(3 179 195 / .45);
 }
-
-.skills-signal .signal-nav::-webkit-scrollbar { display: none; }
 
 .skills-signal .signal-nav .signal-micro {
   margin-bottom: 14px;

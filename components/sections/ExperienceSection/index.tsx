@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent } from 'react';
 import { experiences } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
+import ScrollArea from '@/components/common/ScrollArea';
 
 export default function ExperienceSection() {
   const [selected, setSelected] = useState(0);
@@ -62,10 +63,12 @@ export default function ExperienceSection() {
             {experiences.map((experience, index) => {
               const depth = (index - selected + experiences.length) % experiences.length;
               return (
-                <article
+                <ScrollArea
+                  as="article"
                   key={experience.id}
                   className="experience-depth-card"
                   data-depth={depth}
+                  tabIndex={depth === 0 ? 0 : -1}
                   aria-labelledby={`experience-card-${experience.id}`}
                 >
                   <div className="experience-depth-card-meta">
@@ -83,7 +86,7 @@ export default function ExperienceSection() {
                   <ul className="experience-depth-skills" aria-label="기술">
                     {(experience.skills ?? []).map((skill) => <li key={skill}>{skill}</li>)}
                   </ul>
-                </article>
+                </ScrollArea>
               );
             })}
           </div>
