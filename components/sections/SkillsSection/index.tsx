@@ -140,7 +140,6 @@ export default function SkillsSection() {
               <div>
                 <h3>기술에서 프로젝트로</h3>
               </div>
-              <p>왼쪽 기술에 마우스를 올리거나 선택하면 연결된 프로젝트와 기록이 바뀝니다.</p>
             </div>
             <div className="signal-stage">
               <div
@@ -183,10 +182,6 @@ export default function SkillsSection() {
               </div>
             </div>
           </div>
-        </div>
-        <div className="signal-footer">
-          <span>ONLY SKILLS WITH PROJECT EVIDENCE ARE SHOWN.</span>
-          <span>HOVER OR SELECT AN ICON · FOLLOW THE CONNECTIONS</span>
         </div>
         <div className="sr-only">
           {skills.map((skill) => (
