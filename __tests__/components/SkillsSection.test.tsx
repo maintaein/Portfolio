@@ -1,10 +1,12 @@
 import { readFileSync } from 'node:fs';
+import { StrictMode } from 'react';
 import { resolve } from 'node:path';
 import { renderToString } from 'react-dom/server';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import gsap from 'gsap';
 import SkillsSection from '@/components/sections/SkillsSection';
+import { SectionActivityProvider, type SectionActivityProviderProps } from '@/components/common/SectionActivityContext';
 import { SECTION_IDS } from '@/lib/constants';
 import { projects, skillCategories } from '@/lib/data';
 
@@ -13,6 +15,15 @@ const visibleSkills = [
   'Tailwind CSS', 'React Query', 'Zustand', 'Figma',
 ];
 const css = readFileSync(resolve(process.cwd(), 'styles/design-tokens.css'), 'utf8');
+
+function skillsWithActivity(state: Partial<Omit<SectionActivityProviderProps, 'children'>> = {}) {
+  return (
+    <SectionActivityProvider active={SECTION_IDS.SKILLS} entryAnimationTarget={null}
+      routeResolved motionReady pageVisible reducedMotion={false} {...state}>
+      <SkillsSection />
+    </SectionActivityProvider>
+  );
+}
 
 describe('SkillsSection signal map', () => {
   beforeEach(() => {
@@ -29,7 +40,7 @@ describe('SkillsSection signal map', () => {
     vi.unstubAllGlobals();
   });
   it('shows only the eight approved project-backed skills with existing icons', () => {
-    render(<SkillsSection />);
+    render(skillsWithActivity());
     const buttons = screen.getAllByRole('button', { name: /^(TypeScript|Python|React|Next\.js|Tailwind CSS|React Query|Zustand|Figma)$/ });
     expect(buttons.map((button) => button.textContent?.trim())).toEqual(visibleSkills);
     for (const name of visibleSkills) {
@@ -42,7 +53,7 @@ describe('SkillsSection signal map', () => {
   });
 
   it('selects on hover, focus, and click, replacing the prior project map immediately', () => {
-    const { container } = render(<SkillsSection />);
+    const { container } = render(skillsWithActivity());
     const map = () => container.querySelector('[data-skill-map]')!;
     fireEvent.mouseEnter(screen.getByRole('button', { name: 'Python' }));
     expect(map()).toHaveAttribute('data-active-skill', 'Python');
@@ -61,7 +72,7 @@ describe('SkillsSection signal map', () => {
   });
 
   it('links every active satellite to a real project and keeps the existing description', () => {
-    render(<SkillsSection />);
+    render(skillsWithActivity());
     for (const name of visibleSkills) {
       fireEvent.click(screen.getByRole('button', { name }));
       const links = screen.getAllByRole('link');
@@ -75,7 +86,7 @@ describe('SkillsSection signal map', () => {
   });
 
   it('keeps bare icons and focusable project surfaces without CSS sequence delays', () => {
-    const { container } = render(<SkillsSection />);
+    const { container } = render(skillsWithActivity());
     const button = screen.getByRole('button', { name: 'TypeScript' });
     expect(button.className).not.toMatch(/\bbg-|\bborder-/);
     expect(button.querySelector('.skill-icon-active')).toBeInTheDocument();
@@ -97,7 +108,7 @@ describe('SkillsSection signal map', () => {
       return { left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON() {} };
     });
     const timelines = vi.spyOn(gsap, 'timeline');
-    const { container } = render(<SkillsSection />);
+    const { container } = render(skillsWithActivity());
     const paths = [...container.querySelectorAll('.signal-path')];
     expect(timelines).toHaveBeenCalledTimes(paths.length);
     const completions = timelines.mock.results.map(({ value }, index) => {
@@ -117,19 +128,77 @@ describe('SkillsSection signal map', () => {
   });
 
   it('leaves reduced-motion project surfaces immediately readable without timelines', () => {
-    vi.mocked(window.matchMedia).mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() } as unknown as MediaQueryList);
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(600);
     vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(490);
     const timelines = vi.spyOn(gsap, 'timeline');
-    const { container } = render(<SkillsSection />);
+    const { container } = render(skillsWithActivity({ reducedMotion: true }));
     expect(timelines).not.toHaveBeenCalled();
     for (const span of container.querySelectorAll<HTMLElement>('.signal-project > span')) {
       expect(span.style.opacity).toBe('');
     }
   });
 
+  it('waits for actual visible Skills entry, animates once, and preserves selection animations', () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(600);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(490);
+    const timelines = vi.spyOn(gsap, 'timeline');
+    const { container, rerender } = render(skillsWithActivity({ active: SECTION_IDS.ABOUT }));
+    expect(timelines).not.toHaveBeenCalled();
+    for (const state of [{ routeResolved: false }, { motionReady: false }, { pageVisible: false }]) {
+      rerender(skillsWithActivity(state));
+      expect(timelines).not.toHaveBeenCalled();
+    }
+    rerender(skillsWithActivity());
+    const initialCount = container.querySelectorAll('.signal-path').length;
+    expect(timelines).toHaveBeenCalledTimes(initialCount);
+    timelines.mock.results.forEach(({ value }) => value.progress(1));
+    rerender(skillsWithActivity({ active: SECTION_IDS.ABOUT }));
+    for (const span of container.querySelectorAll<HTMLElement>('.signal-project > span')) {
+      expect(span.style.opacity).toBe('');
+    }
+    rerender(skillsWithActivity());
+    expect(timelines).toHaveBeenCalledTimes(initialCount);
+    fireEvent.focus(screen.getByRole('button', { name: 'Python' }));
+    expect(timelines).toHaveBeenCalledTimes(initialCount + container.querySelectorAll('.signal-path').length);
+  });
+
+  it('cleans up a running graph when reduced motion is enabled without replaying it', () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(600);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(490);
+    const timelines = vi.spyOn(gsap, 'timeline');
+    const { container, rerender } = render(skillsWithActivity());
+    const initialCount = container.querySelectorAll('.signal-path').length;
+    expect(timelines).toHaveBeenCalledTimes(initialCount);
+    rerender(skillsWithActivity({ reducedMotion: true }));
+    for (const span of container.querySelectorAll<HTMLElement>('.signal-project > span')) {
+      expect(span.style.opacity).toBe('');
+    }
+    rerender(skillsWithActivity());
+    expect(timelines).toHaveBeenCalledTimes(initialCount);
+  });
+
+  it('keeps direct-entry animation after StrictMode effect replay', () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(600);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(490);
+    const timelines = vi.spyOn(gsap, 'timeline');
+    const { container } = render(<StrictMode>{skillsWithActivity()}</StrictMode>);
+    const paths = container.querySelectorAll('.signal-path');
+    expect(timelines).toHaveBeenCalledTimes(paths.length * 2);
+    for (const span of container.querySelectorAll<HTMLElement>('.signal-project > span')) {
+      expect(span.style.opacity).toBe('0');
+    }
+  });
+
+  it('keeps the labeled icon navigation as a native ScrollArea with buttons that do not shrink', () => {
+    render(skillsWithActivity());
+    expect(screen.getByRole('navigation', { name: '기술 선택' })).toHaveClass('scroll-area', 'signal-nav');
+    expect(css).toMatch(/\.signal-skill\s*\{[^}]*flex-shrink: 0/);
+    expect(css).not.toMatch(/\.signal-nav[^}]*scrollbar-width: none/);
+    expect(css).toMatch(/\.scroll-area::-webkit-scrollbar-button\s*\{[^}]*display: none/);
+  });
+
   it('keeps all eight skill descriptions and project names in server HTML', () => {
-    const html = renderToString(<SkillsSection />);
+    const html = renderToString(skillsWithActivity());
     expect(html).toContain(`id="${SECTION_IDS.SKILLS}"`);
     for (const name of visibleSkills) {
       const skill = skillCategories.flatMap((category) => category.skills).find((item) => item.name === name)!;

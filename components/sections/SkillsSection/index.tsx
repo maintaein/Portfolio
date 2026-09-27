@@ -5,6 +5,7 @@ import gsap from 'gsap';
 import { SECTION_IDS } from '@/lib/constants';
 import { projects, skillCategories } from '@/lib/data';
 import ScrollArea from '@/components/common/ScrollArea';
+import { useSectionActivity } from '@/components/common/SectionActivityContext';
 
 const names = [
   'TypeScript', 'Python', 'React', 'Next.js',
@@ -32,20 +33,23 @@ function iconStyle(icon: string): CSSProperties {
 export default function SkillsSection() {
   const [selected, setSelected] = useState(skills[0]);
   const mapRef = useRef<HTMLDivElement>(null);
+  const lastDrawnSkill = useRef<string | null>(null);
+  const { active, routeResolved, motionReady, pageVisible, reducedMotion } = useSectionActivity();
+  const entered = active === SECTION_IDS.SKILLS && routeResolved && motionReady && pageVisible;
   const count = selected.projects.length;
 
   useLayoutEffect(() => {
+    if (!entered) return;
     const map = mapRef.current!;
     const svg = map.querySelector('svg')!;
     const hub = map.querySelector<HTMLElement>('.signal-hub')!;
     const links = [...map.querySelectorAll<HTMLAnchorElement>('.signal-project')];
     const paths = [...svg.querySelectorAll('path')];
-    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
     let context: gsap.Context | undefined;
-    let drawn = false;
+    let drawn = lastDrawnSkill.current === selected.name;
     let geometry = '';
 
-    const draw = (force = false) => {
+    const draw = () => {
       if (!map.clientWidth || !map.clientHeight) return;
       const bounds = map.getBoundingClientRect();
       const originX = bounds.left + map.clientLeft;
@@ -56,7 +60,7 @@ export default function SkillsSection() {
       const boxes = links.map((link) => link.getBoundingClientRect());
       const nextGeometry = [map.clientWidth, map.clientHeight, hx, hy, hubBounds.width,
         ...boxes.flatMap((box) => [box.left - originX, box.top - originY, box.width, box.height])].join(',');
-      if (!force && nextGeometry === geometry) return;
+      if (nextGeometry === geometry) return;
       geometry = nextGeometry;
       context?.revert();
       svg.setAttribute('viewBox', `0 0 ${map.clientWidth} ${map.clientHeight}`);
@@ -76,17 +80,21 @@ export default function SkillsSection() {
           const perimeter = 2 * (box.width + box.height);
           const path = paths[index];
           path.setAttribute('d', `M ${x0} ${y0} L ${left} ${y} L ${left} ${top} L ${right} ${top} L ${right} ${bottom} L ${left} ${bottom} L ${left} ${y}`);
-          if (motion.matches || drawn) return;
+          if (reducedMotion || drawn) return;
           const surface = link.querySelector('.signal-surface');
           const text = link.querySelectorAll('.signal-project > span:not(.signal-surface)');
           gsap.set(path, { strokeDasharray: connector + perimeter, strokeDashoffset: connector + perimeter });
           gsap.set([surface, ...text], { opacity: 0 });
-          gsap.timeline({ delay: index * .16 })
+          gsap.timeline({
+            delay: index * .16,
+            onComplete: index === links.length - 1 ? () => { lastDrawnSkill.current = selected.name; } : undefined,
+          })
             .to(path, { strokeDashoffset: perimeter, duration: connector / 700, ease: 'none' })
             .to(path, { strokeDashoffset: 0, duration: Math.min(perimeter / 700, .36), ease: 'none' })
             .to([surface, ...text], { opacity: 1, duration: .18, ease: 'power2.out' });
         });
       }, map);
+      if (reducedMotion || drawn) lastDrawnSkill.current = selected.name;
       drawn = true;
     };
 
@@ -94,14 +102,11 @@ export default function SkillsSection() {
     const observer = new ResizeObserver(() => draw());
     observer.observe(map);
     links.forEach((link) => observer.observe(link));
-    const syncMotion = () => draw(true);
-    motion.addEventListener('change', syncMotion);
     return () => {
       observer.disconnect();
-      motion.removeEventListener('change', syncMotion);
       context?.revert();
     };
-  }, [selected]);
+  }, [selected, entered, reducedMotion]);
   const ys = count === 1 ? [50] : count === 2 ? [34, 66] :
     count === 3 ? [22, 50, 78] : count === 4 ? [17, 39, 61, 83] : [13, 31, 50, 69, 87];
   const points = selected.projects.map((_, index) => ({
