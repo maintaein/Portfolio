@@ -2282,6 +2282,7 @@
   color: #eef4f5;
   text-align: left;
   cursor: pointer;
+  transform: rotate(14deg);
   box-shadow: 0 16px 44px rgb(0 0 0 / .7);
   transition: background .45s ease, border-color .45s ease, box-shadow .55s cubic-bezier(.2,.8,.2,1), color .45s ease;
 }
