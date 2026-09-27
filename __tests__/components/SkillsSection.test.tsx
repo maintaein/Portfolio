@@ -26,11 +26,15 @@ function skillsWithActivity(state: Partial<Omit<SectionActivityProviderProps, 'c
 }
 
 describe('SkillsSection signal map', () => {
+  let resize: () => void;
   beforeEach(() => {
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(600);
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(490);
     vi.stubGlobal('matchMedia', vi.fn(() => ({
       matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn(),
     })));
     vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: () => void) { resize = callback; }
       observe() {}
       disconnect() {}
     });
@@ -125,6 +129,34 @@ describe('SkillsSection signal map', () => {
       return line.duration();
     });
     expect(new Set(completions).size).toBeGreaterThan(1);
+  });
+
+  it.each([.62, 1.45])('keeps paths aligned while the entering section is scaled by %s', (scale) => {
+    let measuredScale = scale;
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(600);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(490);
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(604);
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(494);
+    vi.spyOn(HTMLElement.prototype, 'clientLeft', 'get').mockReturnValue(2);
+    vi.spyOn(HTMLElement.prototype, 'clientTop', 'get').mockReturnValue(2);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const hub = this.classList.contains('signal-hub');
+      const project = this.classList.contains('signal-project');
+      const left = 120 + (hub ? 96 : project ? 352 : 0) * measuredScale;
+      const top = 80 + (hub ? 187 : project ? 42 : 0) * measuredScale;
+      const width = (hub ? 120 : project ? 150 : 604) * measuredScale;
+      const height = (hub ? 120 : project ? 54 : 494) * measuredScale;
+      return { left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON() {} };
+    });
+    const { container } = render(skillsWithActivity());
+    const points = container.querySelector('.signal-path')!.getAttribute('d')!.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+    [350, 67, 350, 40, 500, 40, 500, 94, 350, 94, 350, 67].forEach((coordinate, index) => {
+      expect(points[index + 2]).toBeCloseTo(coordinate);
+    });
+    expect(Math.hypot(points[0] - 154, points[1] - 245)).toBeCloseTo(60);
+    measuredScale = 1;
+    resize();
+    expect(container.querySelector<HTMLElement>('.signal-surface')!.style.opacity).toBe('0');
   });
 
   it('leaves reduced-motion project surfaces immediately readable without timelines', () => {

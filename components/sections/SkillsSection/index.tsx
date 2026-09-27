@@ -52,14 +52,24 @@ export default function SkillsSection() {
     const draw = () => {
       if (!map.clientWidth || !map.clientHeight) return;
       const bounds = map.getBoundingClientRect();
-      const originX = bounds.left + map.clientLeft;
-      const originY = bounds.top + map.clientTop;
+      const scaleX = bounds.width / map.offsetWidth;
+      const scaleY = bounds.height / map.offsetHeight;
       const hubBounds = hub.getBoundingClientRect();
-      const hx = hubBounds.left + hubBounds.width / 2 - originX;
-      const hy = hubBounds.top + hubBounds.height / 2 - originY;
-      const boxes = links.map((link) => link.getBoundingClientRect());
-      const nextGeometry = [map.clientWidth, map.clientHeight, hx, hy, hubBounds.width,
-        ...boxes.flatMap((box) => [box.left - originX, box.top - originY, box.width, box.height])].join(',');
+      const hx = (hubBounds.left + hubBounds.width / 2 - bounds.left) / scaleX - map.clientLeft;
+      const hy = (hubBounds.top + hubBounds.height / 2 - bounds.top) / scaleY - map.clientTop;
+      const radius = hubBounds.width / scaleX / 2;
+      const boxes = links.map((link) => {
+        const box = link.getBoundingClientRect();
+        return {
+          left: (box.left - bounds.left) / scaleX - map.clientLeft,
+          top: (box.top - bounds.top) / scaleY - map.clientTop,
+          width: box.width / scaleX,
+          height: box.height / scaleY,
+        };
+      });
+      const nextGeometry = [map.clientWidth, map.clientHeight, hx, hy, radius,
+        ...boxes.flatMap((box) => [box.left, box.top, box.width, box.height])]
+        .map((value) => value.toFixed(3)).join(',');
       if (nextGeometry === geometry) return;
       geometry = nextGeometry;
       context?.revert();
@@ -67,13 +77,12 @@ export default function SkillsSection() {
       context = gsap.context(() => {
         links.forEach((link, index) => {
           const box = boxes[index];
-          const left = box.left - originX;
-          const top = box.top - originY;
+          const left = box.left;
+          const top = box.top;
           const right = left + box.width;
           const bottom = top + box.height;
           const y = top + box.height / 2;
           const distance = Math.hypot(left - hx, y - hy);
-          const radius = hubBounds.width / 2;
           const x0 = hx + (left - hx) * radius / distance;
           const y0 = hy + (y - hy) * radius / distance;
           const connector = Math.hypot(left - x0, y - y0);
