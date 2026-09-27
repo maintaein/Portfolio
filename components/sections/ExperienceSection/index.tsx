@@ -31,12 +31,7 @@ export default function ExperienceSection() {
   }
 
   return (
-    <section id={SECTION_IDS.EXPERIENCE} aria-labelledby="experience-heading" className="experience-depth">
-      <header className="experience-depth-heading">
-        <p>EXPERIENCE / 2024 TO NOW</p>
-        <h2 id="experience-heading">Experience</h2>
-        <p>왼쪽 타임라인에서 시점을 고르면 오른쪽 기록이 앞으로 이동합니다.</p>
-      </header>
+    <section id={SECTION_IDS.EXPERIENCE} aria-label="경력" className="experience-depth">
 
       <div className="experience-depth-layout">
         <ol className="experience-depth-timeline" aria-label="경력 시점">
@@ -94,10 +89,6 @@ export default function ExperienceSection() {
           </div>
           <div className="experience-depth-foot">
             <span aria-live="polite">{String(selected + 1).padStart(2, '0')} / {String(experiences.length).padStart(2, '0')} · {experiences[selected].company}</span>
-            <div>
-              <button type="button" aria-label="이전 경력" onClick={() => select(selected - 1)}>←</button>
-              <button type="button" aria-label="다음 경력" onClick={() => select(selected + 1)}>→</button>
-            </div>
           </div>
         </div>
       </div>

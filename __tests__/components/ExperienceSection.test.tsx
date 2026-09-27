@@ -17,6 +17,7 @@ describe('ExperienceSection', () => {
   it('renders the FASOO record and complete details on the first server render', () => {
     const html = renderToString(<ExperienceSection />);
     expect(html).toContain(`id="${SECTION_IDS.EXPERIENCE}"`);
+    expect(html).toContain('aria-label="경력"');
     expect(html).toContain('FASOO');
     expect(html).toContain(experiences[0].description);
     for (const item of experiences[0].responsibilities) expect(html).toContain(item);
@@ -58,13 +59,13 @@ describe('ExperienceSection', () => {
     expect(cards()).toHaveLength(experiences.length);
   });
 
-  it('cycles with arrow buttons and keyboard arrows', () => {
+  it('cycles with keyboard arrows', () => {
     render(<ExperienceSection />);
-    fireEvent.click(screen.getByRole('button', { name: '이전 경력' }));
-    expect(activeCard()).toHaveTextContent(experiences[2].company);
-    fireEvent.click(screen.getByRole('button', { name: '다음 경력' }));
-    expect(activeCard()).toHaveTextContent('FASOO');
     const deck = screen.getByRole('group', { name: '경력 깊이 캐러셀' });
+    fireEvent.keyDown(deck, { key: 'ArrowLeft' });
+    expect(activeCard()).toHaveTextContent(experiences[2].company);
+    fireEvent.keyDown(deck, { key: 'ArrowRight' });
+    expect(activeCard()).toHaveTextContent('FASOO');
     fireEvent.keyDown(deck, { key: 'ArrowRight' });
     expect(activeCard()).toHaveTextContent(experiences[1].company);
     fireEvent.keyDown(deck, { key: 'ArrowLeft' });
