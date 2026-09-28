@@ -11,6 +11,9 @@ export interface CoreValue {
   label: string;
   description: string;
   imagePlaceholder: string;
+  evidence: readonly { label: string; value: string }[];
+  evidenceStyle: 'metric' | 'detail';
+  stackPages?: readonly (readonly string[])[];
 }
 
 export interface Award {

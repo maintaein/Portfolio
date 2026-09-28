@@ -5,22 +5,43 @@ export const coreValues: CoreValue[] = [
       id: '1',
       title: '기본을 튼튼히 길러온 개발자',
       label: 'BASICS',
-      description: '약 2년 반의 기간 동안 학습과 6개의 프로젝트를 거치며 react, typescript 등 프론트엔드 역량을 꾸준히 쌓아왔습니다. 이를 기반으로 쇼핑몰 구축 프로젝트에서 AI가 작성한 코드를 분석하여 관리자 페이지의 상태 오류를 조기에 잡아내었습니다.',
-      imagePlaceholder: 'tech-stack'
+      description: '약 2년 반 동안 React·TypeScript 기반을 쌓고 6개 프로젝트에 적용했습니다. 포트폴리오에서는 WebGL 배경을 지연 로딩해 First Load JS를 369.7KB에서 166.3KB로 55% 줄였습니다.',
+      imagePlaceholder: 'tech-stack',
+      evidenceStyle: 'metric',
+      evidence: [
+        { label: '프론트엔드 경험', value: '2년 6개월' },
+        { label: '거쳐온 프로젝트', value: '6' },
+      ],
+      stackPages: [
+        ['react', 'typescript'],
+        ['nextjs', 'tailwind'],
+        ['zustand', 'react-query'],
+      ],
     },
     {
       id: '2',
-      title: 'AI를 이해하고 활용하는 개발자',
-      label: 'AI WORKFLOW',
-      description: 'AI에 대한 이해를 바탕으로 프로젝트에 도입하여 효율성을 끌어올렸습니다. 현재 웹사이트인 포트폴리오 프로젝트에서는 AI 각각의 subagent가 맡은 작업의 범위를 벗어나지 않으면서도, 해당 작업에서 기대한 결과를 내도록 skill.md를 작성하여 적용했습니다. AI의 코드를 직접 작성했다면 18,230줄의 코드를 작성해야 했으며, 이는 작성 코드의 약2배의 양입니다.',
-      imagePlaceholder: 'AI-Workflow'
+      title: '완성 이후를 고민하는 개발자',
+      label: 'QUALITY',
+      description: '기능 구현을 프로젝트의 끝이라고 생각하지 않습니다. ',
+      imagePlaceholder: '',
+      evidenceStyle: 'metric',
+      evidence: [
+        { label: '직접 썼다면', value: '18,230줄' },
+        { label: '작성 코드의', value: '2배 이상' },
+      ],
     },
     {
       id: '3',
       title: '원활한 소통과 협업 역량을 가진 개발자',
       label: 'TEAMWORK',
       description: '팀이 효율적인 방식으로 일할 구조를 고민합니다. Alphamail 프로젝트에서 프론트엔드 리더를 맡아 git과 jira 컨벤션을 설정하여 팀의 협업 효율성을 끌어올린 경험이 있습니다.',
-      imagePlaceholder: 'collaboration'
+      imagePlaceholder: 'collaboration',
+      evidenceStyle: 'detail',
+      evidence: [
+        { label: 'ROLE', value: '프론트엔드 리더' },
+        { label: 'CONVENTION', value: 'git · jira' },
+        { label: 'ARCHITECTURE', value: 'FSD · Atomic' },
+      ],
     }
   ];
   

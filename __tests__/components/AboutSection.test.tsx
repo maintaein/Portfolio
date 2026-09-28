@@ -86,14 +86,15 @@ describe('AboutSection', () => {
     expect(container.querySelectorAll('[data-detail]')).toHaveLength(3);
   });
 
-  // Task 4가 상세 내부를 12칸 격자로 다시 짜면서 증거 콘텐츠도 함께
-  // 바뀌었다(EVIDENCE 배열, components/sections/AboutSection/index.tsx).
-  // AlphaMail 수상 인용과 Flat/Compound 대비는 더 이상 나오지 않는다.
+  // 증거 문구는 profile.ts에만 두고 상세는 데이터를 그대로 렌더한다.
   it('증거 문자열이 전부 DOM에 있다', () => {
     const { container } = renderAboutSection();
     const html = container.textContent ?? '';
-    for (const needle of ['2년 6개월', '거쳐온 프로젝트', '18,230줄', '2배 이상']) {
-      expect(html, `${needle}이 없다`).toContain(needle);
+    for (const value of coreValues) {
+      for (const evidence of value.evidence) {
+        expect(html, `${evidence.label}이 없다`).toContain(evidence.label);
+        expect(html, `${evidence.value}이 없다`).toContain(evidence.value);
+      }
     }
   });
 
@@ -373,7 +374,7 @@ describe('AboutSection', () => {
     const { container } = renderAboutSection();
     const grid = () => container.querySelector('[data-about-grid]') as HTMLElement;
 
-    await userEvent.click(screen.getByRole('button', { name: /AI WORKFLOW/ }));
+    await userEvent.click(screen.getByRole('button', { name: coreValues[1].label }));
     const forward = grid().dataset.aboutDirection;
 
     await userEvent.click(screen.getByRole('button', { name: /BASICS/ }));
@@ -401,7 +402,7 @@ describe('AboutSection', () => {
   it('같은 방향으로 두 번 연속 이동해도 격자 노드가 매번 교체된다 (전환 재생 보장)', async () => {
     const { container } = renderAboutSection();
 
-    await userEvent.click(screen.getByRole('button', { name: /AI WORKFLOW/ })); // 0 -> 1, forward
+    await userEvent.click(screen.getByRole('button', { name: coreValues[1].label })); // 0 -> 1, forward
     const gridAfterFirstMove = container.querySelector('[data-detail="2"] [data-about-grid]');
 
     await userEvent.click(screen.getByRole('button', { name: /TEAMWORK/ })); // 1 -> 2, forward 그대로
@@ -587,7 +588,7 @@ describe('AboutSection', () => {
       const folder = () => container.querySelector('[data-about-folder]');
       expect(folder()).toHaveAttribute('data-open', 'true');
 
-      await user.click(screen.getByRole('button', { name: /AI WORKFLOW/ }));
+      await user.click(screen.getByRole('button', { name: coreValues[1].label }));
       expect(folder()).toHaveAttribute('data-open', 'false');
 
       await user.click(screen.getByRole('button', { name: /BASICS/ }));
@@ -606,14 +607,14 @@ describe('AboutSection', () => {
       const { container } = renderAboutSection();
       expect(container.querySelector('.about-electric')).toBeNull();
 
-      await user.click(screen.getByRole('button', { name: /AI WORKFLOW/ }));
+      await user.click(screen.getByRole('button', { name: coreValues[1].label }));
       expect(container.querySelector('.about-electric')).not.toBeNull();
     });
 
     it('다른 문항으로 옮기면 전기 로고를 정리한다', async () => {
       const user = userEvent.setup();
       const { container } = renderAboutSection();
-      await user.click(screen.getByRole('button', { name: /AI WORKFLOW/ }));
+      await user.click(screen.getByRole('button', { name: coreValues[1].label }));
       await user.click(screen.getByRole('button', { name: /BASICS/ }));
       expect(container.querySelector('.about-electric')).toBeNull();
     });
@@ -628,7 +629,7 @@ describe('AboutSection', () => {
       );
       const user = userEvent.setup();
       const { container } = renderAboutSection();
-      await user.click(screen.getByRole('button', { name: /AI WORKFLOW/ }));
+      await user.click(screen.getByRole('button', { name: coreValues[1].label }));
       expect(container.querySelector('.about-electric-static')).not.toBeNull();
     });
   });

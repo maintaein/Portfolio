@@ -91,11 +91,8 @@ describe('AboutRail', () => {
   });
 
   it('라벨이 순번이 아니라 뜻을 담는다', () => {
-    expect(coreValues.map((v) => v.label)).toEqual([
-      'BASICS',
-      'AI WORKFLOW',
-      'TEAMWORK',
-    ]);
+    expect(coreValues.every((value) => value.label.trim().length > 0)).toBe(true);
+    expect(new Set(coreValues.map((value) => value.label)).size).toBe(coreValues.length);
   });
 
   it('활성 항목에 aria-current를 준다', () => {

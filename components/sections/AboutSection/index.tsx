@@ -35,66 +35,8 @@ const DynamicElectricLogo = dynamic(() => import('@/components/blocks/ElectricLo
   ssr: false,
 });
 
-// BASICS 폴더가 펼치는 기술스택. Skills가 쓰는 public/icons-mono의 파일
-// 이름이고, 고른 여섯은 lib/data/skills.tsx가 핵심으로 못 박은 것과 같다.
-// 종이 한 장에 둘씩 세 장이다.
-const BASICS_STACK: readonly (readonly string[])[] = [
-  ['react', 'typescript'],
-  ['nextjs', 'tailwind'],
-  ['zustand', 'react-query'],
-];
-
 // 시각 증거가 붙는 문항. 셋 다 있고, 한 번에 하나만 보인다.
 const VISUAL_INDEXES = new Set([0, 1, 2]);
-
-// 증거 블록. 자리는 셋이 같고 내용만 다르다. 콘텐츠가 확정되면 이 배열만
-// 바꾼다. 라벨은 t8, 값은 크게 둬서 대충 봐도 값이 먼저 읽힌다.
-const EVIDENCE = [
-  <div key="basics" className="flex flex-col gap-5">
-    <div>
-      <div className="text-t8 uppercase tracking-[0.2em] text-[var(--color-text-secondary)]">
-        프론트엔드 경험
-      </div>
-      <div className="text-d3 font-bold leading-none text-[var(--color-text-primary)]">
-        2년 6개월
-      </div>
-    </div>
-    <div>
-      <div className="text-t8 uppercase tracking-[0.2em] text-[var(--color-text-secondary)]">
-        거쳐온 프로젝트
-      </div>
-      <div className="text-d3 font-bold leading-none text-[var(--color-text-primary)]">6</div>
-    </div>
-  </div>,
-  <div key="ai" className="flex flex-col gap-5">
-    <div>
-      <div className="text-t8 uppercase tracking-[0.2em] text-[var(--color-text-secondary)]">
-        직접 썼다면
-      </div>
-      <div className="text-d3 font-bold leading-none text-[var(--color-text-primary)]">
-        18,230줄
-      </div>
-    </div>
-    <div>
-      <div className="text-t8 uppercase tracking-[0.2em] text-[var(--color-text-secondary)]">
-        작성 코드의
-      </div>
-      <div className="text-d3 font-bold leading-none text-[var(--color-text-primary)]">2배 이상</div>
-    </div>
-  </div>,
-  <div key="team" className="flex flex-col gap-4 font-mono">
-    {[
-      ['ROLE', '프론트엔드 리더'],
-      ['CONVENTION', 'git · jira'],
-      ['ARCHITECTURE', 'FSD · Atomic'],
-    ].map(([label, value]) => (
-      <div key={label}>
-        <div className="text-t8 tracking-[0.2em] text-[var(--color-text-secondary)]">{label}</div>
-        <div className="mt-1 text-t3 leading-tight text-[var(--color-text-primary)]">{value}</div>
-      </div>
-    ))}
-  </div>,
-];
 
 // Cubes와 Orbit은 폐기했다. 배경이 이미 있는데 별도 도형을 얹으면 경쟁한다.
 // 순번 인덱스는 라벨 레일(AboutRail)로 바뀌었다. 상세 내부는 lg부터 12칸
@@ -274,7 +216,7 @@ export default function AboutSection() {
                     {index === 0 ? (
                       <AboutFolder
                         open={isActive && active === SECTION_IDS.ABOUT}
-                        papers={BASICS_STACK}
+                        papers={value.stackPages ?? []}
                       />
                     ) : null}
                     {index === 1 && isActive && active === SECTION_IDS.ABOUT ? (
@@ -319,7 +261,20 @@ export default function AboutSection() {
                   data-about-evidence
                   className="col-span-4 col-start-1 lg:col-span-4 lg:col-start-7 lg:row-span-2 lg:row-start-3 lg:self-center"
                 >
-                  {EVIDENCE[index]}
+                  <div className={`flex flex-col ${value.evidenceStyle === 'detail' ? 'gap-4 font-mono' : 'gap-5'}`}>
+                    {value.evidence.map(({ label, value: evidenceValue }) => (
+                      <div key={label}>
+                        <div className={`text-t8 tracking-[0.2em] text-[var(--color-text-secondary)] ${value.evidenceStyle === 'metric' ? 'uppercase' : ''}`}>
+                          {label}
+                        </div>
+                        <div className={value.evidenceStyle === 'detail'
+                          ? 'mt-1 text-t3 leading-tight text-[var(--color-text-primary)]'
+                          : 'text-d3 font-bold leading-none text-[var(--color-text-primary)]'}>
+                          {evidenceValue}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <p
                   data-about-description
