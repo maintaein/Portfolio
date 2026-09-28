@@ -1916,7 +1916,6 @@
 }
 
 .skills-signal .signal-nav {
-  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1926,26 +1925,6 @@
   scroll-padding-block: 8px;
   border-right: 2px solid transparent;
   box-shadow: 8px 0 18px -14px rgb(3 179 195 / .45);
-}
-.skills-signal .signal-progress-line,
-.skills-signal .signal-progress-marker {
-  position: absolute;
-  left: 8px;
-  width: 4px;
-  border-radius: 999px;
-  pointer-events: none;
-}
-.skills-signal .signal-progress-line {
-  background: linear-gradient(#12626d, #03b3c3 50%, #12626d);
-  box-shadow: 0 0 8px rgb(3 179 195 / .45), inset 0 0 2px rgb(127 227 238 / .5);
-}
-.skills-signal .signal-progress-marker {
-  z-index: 1;
-  left: 7px;
-  width: 6px;
-  transform: translateY(-50%);
-  background: #7fe3ee;
-  box-shadow: 0 0 10px #03b3c3, 0 0 22px rgb(3 179 195 / .6);
 }
 
 .skills-signal .signal-nav .signal-micro {
@@ -2177,8 +2156,6 @@
 @media (max-width: 680px) {
   .skills-signal .signal-shell { padding: 18px 14px 32px; }
   .skills-signal .signal-workspace { grid-template-columns: 1fr; }
-  .skills-signal .signal-progress-line,
-  .skills-signal .signal-progress-marker { display: none; }
   .skills-signal .signal-nav {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
