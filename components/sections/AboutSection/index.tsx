@@ -151,7 +151,12 @@ export default function AboutSection() {
       <h2 id="about-heading" className="sr-only">
         About
       </h2>
-      <AboutRail activeIndex={activeIndex} onSelect={handleSelect} />
+      <AboutRail
+        activeIndex={activeIndex}
+        onSelect={handleSelect}
+        active={active === SECTION_IDS.ABOUT}
+        reducedMotion={reducedMotion}
+      />
 
       {/* 상세 3개: 전부 DOM에 상주한다. 활성 하나만 보이고 나머지는 inert.
           .section-hidden과 같은 방식(opacity + pointer-events)으로 감춘다.

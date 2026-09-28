@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { gsap } from 'gsap';
 import AboutRail from '@/components/sections/AboutSection/rail';
 import { coreValues } from '@/lib/data';
 
@@ -11,7 +12,71 @@ const DESIGN_TOKENS_CSS = readFileSync(
   'utf8'
 );
 
+afterEach(() => vi.restoreAllMocks());
+
 describe('AboutRail', () => {
+  it('keeps one marker centered on the measured active button and moves it through a stretching trail', () => {
+    vi.spyOn(HTMLElement.prototype, 'offsetTop', 'get').mockImplementation(function (this: HTMLElement) {
+      const index = Array.from(this.parentElement?.querySelectorAll('button') ?? []).indexOf(this as HTMLButtonElement);
+      return index < 0 ? 0 : [10, 67, 151][index];
+    });
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.tagName === 'BUTTON' ? 44 : 0;
+    });
+    const timeline = vi.spyOn(gsap, 'timeline');
+    const { container, rerender } = render(<AboutRail activeIndex={0} onSelect={vi.fn()} />);
+    const marker = container.querySelector<HTMLElement>('[data-about-rail-marker]');
+    expect(marker).not.toBeNull();
+    expect(container.querySelectorAll('[data-about-rail-marker]')).toHaveLength(1);
+    expect(marker?.style.top).toBe('32px');
+
+    rerender(<AboutRail activeIndex={2} onSelect={vi.fn()} />);
+    const motion = timeline.mock.results.at(-1)?.value as gsap.core.Timeline;
+    expect(motion).toBeDefined();
+    motion.progress(0.45);
+    expect(parseFloat(marker!.style.height)).toBeGreaterThan(24);
+    motion.progress(1);
+    expect(marker?.style.top).toBe('173px');
+    expect(marker?.style.height).toBe('24px');
+  });
+
+  it('snaps the marker to the measured center with reduced motion', () => {
+    vi.spyOn(HTMLElement.prototype, 'offsetTop', 'get').mockImplementation(function (this: HTMLElement) {
+      const index = Array.from(this.parentElement?.querySelectorAll('button') ?? []).indexOf(this as HTMLButtonElement);
+      return index < 0 ? 0 : [10, 67, 151][index];
+    });
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.tagName === 'BUTTON' ? 44 : 0;
+    });
+    const timeline = vi.spyOn(gsap, 'timeline');
+    const { container, rerender } = render(
+      <AboutRail activeIndex={0} onSelect={vi.fn()} reducedMotion />
+    );
+    rerender(<AboutRail activeIndex={1} onSelect={vi.fn()} reducedMotion />);
+    const marker = container.querySelector<HTMLElement>('[data-about-rail-marker]');
+    expect(marker?.style.top).toBe('89px');
+    expect(marker?.style.height).toBe('24px');
+    expect(timeline).not.toHaveBeenCalled();
+  });
+
+  it('measures the marker when About becomes active', () => {
+    let buttonTop = -200;
+    vi.spyOn(HTMLElement.prototype, 'offsetTop', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.tagName === 'BUTTON' ? buttonTop : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.tagName === 'BUTTON' ? 44 : 0;
+    });
+    const timeline = vi.spyOn(gsap, 'timeline');
+    const { container, rerender } = render(
+      <AboutRail activeIndex={0} onSelect={vi.fn()} active={false} />
+    );
+    buttonTop = 168;
+    rerender(<AboutRail activeIndex={0} onSelect={vi.fn()} active />);
+    const marker = container.querySelector<HTMLElement>('[data-about-rail-marker]');
+    expect(marker?.style.top).toBe('190px');
+    expect(timeline).not.toHaveBeenCalled();
+  });
   // 첫 시안은 순번을 11px 회색으로 뒀는데 02와 03이 있다는 것조차 보이지
   // 않았다. 채용 담당자가 못 보면 콘텐츠 3분의 2가 없는 것과 같다.
   it('세 라벨이 전부 텍스트로 존재한다', () => {

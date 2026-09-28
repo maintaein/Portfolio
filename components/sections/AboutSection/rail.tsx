@@ -1,10 +1,15 @@
 'use client';
 
+import { useLayoutEffect, useRef } from 'react';
+import { gsap } from 'gsap';
+
 import { coreValues } from '@/lib/data';
 
 export interface AboutRailProps {
   activeIndex: number;
   onSelect: (index: number) => void;
+  active?: boolean;
+  reducedMotion?: boolean;
 }
 
 // 세로 위치가 곧 깊이다. 위가 멀고 아래가 가깝다. 굵은 눈금이 내려가면
@@ -16,15 +21,80 @@ const TOP_PERCENT = [20, 46, 72];
 // 생기는 빈 칸이 시각 증거(폴더·링)의 자리다. lg 미만은 그대로 둔다.
 // 거기서는 버튼이 흐름 안에 세로로 쌓여서 왼쪽 여백을 더 주면 라벨만
 // 좁아진다.
-export default function AboutRail({ activeIndex, onSelect }: AboutRailProps) {
+export default function AboutRail({
+  activeIndex,
+  onSelect,
+  active = true,
+  reducedMotion = false,
+}: AboutRailProps) {
+  const markerRef = useRef<HTMLSpanElement>(null);
+  const buttonsRef = useRef<(HTMLButtonElement | null)[]>([]);
+  const previousIndex = useRef<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (!active) {
+      previousIndex.current = null;
+      return;
+    }
+    const marker = markerRef.current;
+    const button = buttonsRef.current[activeIndex];
+    if (!marker || !button) return;
+
+    const center = () => button.offsetTop + button.offsetHeight / 2;
+    const target = center();
+    gsap.killTweensOf(marker);
+    const start = parseFloat(marker.style.top);
+    if (
+      previousIndex.current === null ||
+      reducedMotion ||
+      !Number.isFinite(start) ||
+      start === target
+    ) {
+      gsap.set(marker, { top: target, height: 24 });
+    } else {
+      gsap
+        .timeline()
+        .to(marker, {
+          top: (start + target) / 2,
+          height: Math.abs(target - start) + 24,
+          duration: 0.28,
+          ease: 'power2.out',
+        })
+        .to(marker, { top: target, height: 24, duration: 0.36, ease: 'power3.inOut' });
+    }
+    previousIndex.current = activeIndex;
+
+    const onResize = () => {
+      gsap.killTweensOf(marker);
+      gsap.set(marker, { top: center(), height: 24 });
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      gsap.killTweensOf(marker);
+    };
+  }, [active, activeIndex, reducedMotion]);
+
   return (
     <nav aria-label="About 문항" className="relative ml-6 w-44 shrink-0 lg:ml-24">
-      <div aria-hidden="true" className="about-rail-line absolute bottom-8 left-1 top-8" />
+      <div
+        aria-hidden="true"
+        className="about-rail-line absolute bottom-[22px] left-1 top-[22px] lg:bottom-8 lg:top-8"
+      />
+      <span
+        ref={markerRef}
+        data-about-rail-marker
+        aria-hidden="true"
+        className="about-rail-tick-active about-rail-marker"
+      />
       {coreValues.map((value, index) => {
         const isActive = index === activeIndex;
         return (
           <button
             key={value.id}
+            ref={(button) => {
+              buttonsRef.current[index] = button;
+            }}
             type="button"
             onClick={() => onSelect(index)}
             aria-current={isActive ? 'true' : undefined}
@@ -37,7 +107,7 @@ export default function AboutRail({ activeIndex, onSelect }: AboutRailProps) {
           >
             <span
               aria-hidden="true"
-              className={`lg:absolute lg:left-0 ${isActive ? 'about-rail-tick-active' : 'about-rail-tick'}`}
+              className="about-rail-tick relative left-[4px] lg:absolute lg:left-[4px]"
             />
             {/* 리뷰 발견 1: 순번을 11px 회색으로 두면 라벨이 안 보였다는
                 브리프 테스트 주석과 실제 코드(text-t8)가 모순됐다. 가독성이
@@ -45,7 +115,7 @@ export default function AboutRail({ activeIndex, onSelect }: AboutRailProps) {
                 올리고, 커진 글자가 옆 상세 패널을 침범하지 않도록 레일
                 폭도 w-32에서 w-44로 늘렸다. */}
             <span
-              className={`whitespace-nowrap uppercase tracking-[0.14em] lg:absolute lg:left-4 ${
+              className={`about-rail-label whitespace-nowrap uppercase tracking-[0.14em] lg:absolute lg:left-4 ${
                 isActive
                   ? 'text-t6 font-bold text-[var(--color-text-primary)]'
                   : 'text-t7 text-[var(--color-text-secondary)]'

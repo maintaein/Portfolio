@@ -930,6 +930,29 @@
       0 0 5px var(--color-cyan-core);
   }
 
+  .about-rail-marker {
+    position: absolute;
+    z-index: 1;
+    left: 3px;
+    top: 0;
+    transform: translateY(-50%);
+    pointer-events: none;
+  }
+
+  .about-rail-label {
+    transform-origin: left center;
+    transition: color 220ms ease, transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  button:not([aria-current="true"]):is(:hover, :focus-visible) .about-rail-label {
+    color: var(--color-text-primary);
+    transform: scale(1.12);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .about-rail-label { transition: none; }
+  }
+
   /* About BASICS의 폴더(components/blocks/AboutFolder). 문항이 활성이면
      열린다. 호버는 관여하지 않는다.
 
