@@ -1233,11 +1233,18 @@
     opacity: 1;
   }
 
-  /* About AI WORKFLOW의 링(components/blocks/AboutRings). WebGL 캔버스가
-     이 상자를 채운다. 정사각이라야 링이 타원으로 찌그러지지 않는다. */
-  .about-rings {
+  /* AI WORKFLOW의 번개 로고. WebGL과 모션 감소용 SVG가 같은 자리를 쓴다. */
+  .about-electric {
     width: clamp(260px, 31vw, 400px);
     aspect-ratio: 1 / 1;
+  }
+
+  .about-electric-static {
+    width: 60%;
+    height: 60%;
+    margin: 20%;
+    fill: var(--color-cyan-hi);
+    filter: drop-shadow(0 0 18px var(--color-cyan-core));
   }
 
   /* Skills 아이콘(계획 5 T3). mask-image로 SVG를 색칠한다. <img>로 쓰면

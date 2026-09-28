@@ -10,6 +10,9 @@ import { ABOUT_SCRIMS } from '@/components/sections/AboutSection/scrim';
 import { SECTION_IDS } from '@/lib/constants';
 import type { NavId } from '@/hooks/useSectionNav';
 
+vi.mock('@/components/blocks/ElectricLogo', () => ({ default: () => null }));
+vi.mock('@/components/blocks/AboutRings', () => ({ default: () => null }));
+
 beforeEach(() => {
   vi.stubGlobal(
     'matchMedia',
@@ -56,9 +59,9 @@ describe('AboutSection', () => {
   // "섹션을 코드 스플리팅하지 않는다"는 폐기 처방(DESIGN.md)인데, 섹션이
   // 제 안의 WebGL 블록을 가르는 것은 그 처방이 아니라 오히려 번들 예산이
   // 요구하는 바다(ProjectsSection이 PreviewMorph를 같은 방식으로 가른다).
-  // 그래서 금지를 "WebGL 블록 하나만 갈린다"로 좁힌다. 섹션 자체가
+  // 그래서 WebGL 블록의 지연 로딩만 허용한다. 섹션 자체가
   // 갈리는 회귀는 HomeClient 쪽 잠금이 잡는다.
-  it('동적으로 가르는 것은 링 블록 하나뿐이다', () => {
+  it('전기 로고를 동적으로 불러온다', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'components/sections/AboutSection/index.tsx'),
       'utf8'
@@ -66,7 +69,7 @@ describe('AboutSection', () => {
     const dynamicImports = [...source.matchAll(/dynamic\(\s*\(\)\s*=>\s*import\('([^']+)'\)/g)].map(
       (m) => m[1]
     );
-    expect(dynamicImports).toEqual(['@/components/blocks/AboutRings']);
+      expect(dynamicImports).toContain('@/components/blocks/ElectricLogo');
   });
 
   it('인덱스 항목 3개를 렌더한다', () => {
@@ -597,23 +600,22 @@ describe('AboutSection', () => {
       expect(container.querySelector('[data-about-folder]')).toHaveAttribute('data-open', 'false');
     });
 
-    // three를 끌고 오는 청크다. AI WORKFLOW를 고르기 전에는 내려받지 않는다.
-    it('링은 AI WORKFLOW를 고르기 전에는 DOM에 없다', async () => {
+    // 전기 로고는 AI WORKFLOW를 고를 때만 마운트한다.
+    it('전기 로고는 AI WORKFLOW를 고를 때만 나타난다', async () => {
       const user = userEvent.setup();
       const { container } = renderAboutSection();
-      expect(container.querySelector('.about-rings')).toBeNull();
+      expect(container.querySelector('.about-electric')).toBeNull();
 
       await user.click(screen.getByRole('button', { name: /AI WORKFLOW/ }));
-      expect(container.querySelector('.about-rings')).not.toBeNull();
+      expect(container.querySelector('.about-electric')).not.toBeNull();
     });
 
-    // 한 번 받은 청크를 문항을 옮겼다고 버릴 이유가 없다. 다시 받게 된다.
-    it('한 번 켜진 링은 다른 문항으로 가도 DOM에 남는다', async () => {
+    it('다른 문항으로 옮기면 전기 로고를 정리한다', async () => {
       const user = userEvent.setup();
       const { container } = renderAboutSection();
       await user.click(screen.getByRole('button', { name: /AI WORKFLOW/ }));
-      await user.click(screen.getByRole('button', { name: /TEAMWORK/ }));
-      expect(container.querySelector('.about-rings')).not.toBeNull();
+      await user.click(screen.getByRole('button', { name: /BASICS/ }));
+      expect(container.querySelector('.about-electric')).toBeNull();
     });
 
     // 무한히 도는 장식이라 정지 화면으로 대신할 것이 없다. 아예 안 켠다.
@@ -627,7 +629,7 @@ describe('AboutSection', () => {
       const user = userEvent.setup();
       const { container } = renderAboutSection();
       await user.click(screen.getByRole('button', { name: /AI WORKFLOW/ }));
-      expect(container.querySelector('.about-rings')).toBeNull();
+      expect(container.querySelector('.about-electric-static')).not.toBeNull();
     });
   });
 
@@ -691,9 +693,9 @@ describe('AboutSection', () => {
       expect(folderGuard).toMatch(/transition: none/);
     });
 
-    // 링 상자가 정사각이 아니면 동심원이 타원으로 찌그러진다.
-    it('링 상자가 정사각이다', () => {
-      expect(css).toMatch(/\.about-rings \{[\s\S]*?aspect-ratio: 1 \/ 1;/);
+    // 번개 로고의 WebGL 캔버스가 찌그러지지 않도록 정사각형을 유지한다.
+    it('번개 로고 상자가 정사각이다', () => {
+      expect(css).toMatch(/\.about-electric \{[\s\S]*?aspect-ratio: 1 \/ 1;/);
       expect(css).toMatch(/\.about-teamwork \{[\s\S]*?aspect-ratio: 1 \/ 1;/);
     });
 

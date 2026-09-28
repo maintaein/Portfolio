@@ -30,10 +30,8 @@ type AboutTransition = {
   distance: number;
 };
 
-// 링은 three를 끌고 온다. 정적으로 들여오면 About이 정적 import라
-// 공유 번들에 three가 얹힌다. Hyperspeed와 같은 방식으로 갈라 두고, AI
-// WORKFLOW를 처음 고를 때 내려받는다.
-const DynamicAboutRings = dynamic(() => import('@/components/blocks/AboutRings'), {
+// WebGL 장식은 선택할 때만 내려받아 공유 번들에서 분리한다.
+const DynamicElectricLogo = dynamic(() => import('@/components/blocks/ElectricLogo'), {
   ssr: false,
 });
 
@@ -117,17 +115,6 @@ export default function AboutSection() {
   // 포털 JSX 바로 위 주석 참고, C1 재수정).
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-
-  // 링 모듈을 언제 내려받을지. AI WORKFLOW를 한 번이라도 고른 뒤에만
-  // 켜지고, 그 뒤로는 도로 끄지 않는다(청크를 다시 받게 만들 이유가 없다).
-  // 모션을 끈 사용자에게는 영영 켜지지 않는다. 무한히 도는 장식이라
-  // 정지 화면을 대신 보여 줄 것이 없다.
-  const ringsWanted =
-    !reducedMotion && active === SECTION_IDS.ABOUT && activeIndex === 1;
-  const [ringsArmed, setRingsArmed] = useState(false);
-  useEffect(() => {
-    if (ringsWanted) setRingsArmed(true);
-  }, [ringsWanted]);
 
   function handleSelect(next: number) {
     const delta = next - activeIndex;
@@ -290,9 +277,21 @@ export default function AboutSection() {
                         papers={BASICS_STACK}
                       />
                     ) : null}
-                    {index === 1 && ringsArmed ? (
-                      <div className="about-rings">
-                        <DynamicAboutRings running={isActive && active === SECTION_IDS.ABOUT} />
+                    {index === 1 && isActive && active === SECTION_IDS.ABOUT ? (
+                      <div className="about-electric">
+                        {reducedMotion ? (
+                          <svg viewBox="0 0 64 64" aria-hidden="true" className="about-electric-static">
+                            <path d="M39 3 12 37h17l-4 24 27-34H35z" />
+                          </svg>
+                        ) : (
+                          <DynamicElectricLogo
+                            color="#7fe3ee"
+                            glowColor="#03b3c3"
+                            speed={1.1}
+                            flicker={0.25}
+                            interactive={false}
+                          />
+                        )}
                       </div>
                     ) : null}
                     {index === 2 ? (
