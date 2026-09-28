@@ -63,30 +63,30 @@ export default function ExperienceSection() {
             {experiences.map((experience, index) => {
               const depth = (index - selected + experiences.length) % experiences.length;
               return (
-                <ScrollArea
-                  as="article"
+                <article
                   key={experience.id}
                   className="experience-depth-card"
                   data-depth={depth}
-                  tabIndex={depth === 0 ? 0 : -1}
                   aria-labelledby={`experience-card-${experience.id}`}
                 >
-                  <div className="experience-depth-card-meta">
-                    <span>{String(index + 1).padStart(2, '0')} / {String(experiences.length).padStart(2, '0')}</span>
-                    <span>{experience.period}</span>
-                  </div>
-                  <p className="experience-depth-kind">{experience.type === 'student' ? 'EDUCATION' : 'WORK'}</p>
-                  <h3 id={`experience-card-${experience.id}`}>{experience.company}</h3>
-                  <p className="experience-depth-position">{experience.position}</p>
-                  <p className="experience-depth-description">{experience.description}</p>
-                  <h4>주요 경험</h4>
-                  <ul className="experience-depth-responsibilities">
-                    {experience.responsibilities.map((item) => <li key={item}>{item}</li>)}
-                  </ul>
-                  <ul className="experience-depth-skills" aria-label="기술">
-                    {(experience.skills ?? []).map((skill) => <li key={skill}>{skill}</li>)}
-                  </ul>
-                </ScrollArea>
+                  <ScrollArea className="experience-depth-card-scroll" tabIndex={depth === 0 ? 0 : -1}>
+                    <div className="experience-depth-card-meta">
+                      <span>{String(index + 1).padStart(2, '0')} / {String(experiences.length).padStart(2, '0')}</span>
+                      <span>{experience.period}</span>
+                    </div>
+                    <p className="experience-depth-kind">{experience.type === 'student' ? 'EDUCATION' : 'WORK'}</p>
+                    <h3 id={`experience-card-${experience.id}`}>{experience.company}</h3>
+                    <p className="experience-depth-position">{experience.position}</p>
+                    <p className="experience-depth-description">{experience.description}</p>
+                    <h4>주요 경험</h4>
+                    <ul className="experience-depth-responsibilities">
+                      {experience.responsibilities.map((item) => <li key={item}>{item}</li>)}
+                    </ul>
+                    <ul className="experience-depth-skills" aria-label="기술">
+                      {(experience.skills ?? []).map((skill) => <li key={skill}>{skill}</li>)}
+                    </ul>
+                  </ScrollArea>
+                </article>
               );
             })}
           </div>
