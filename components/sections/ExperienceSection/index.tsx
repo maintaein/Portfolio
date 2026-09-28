@@ -1,15 +1,81 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent } from 'react';
+import gsap from 'gsap';
 import { experiences } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
 import ScrollArea from '@/components/common/ScrollArea';
+import { useSectionActivity } from '@/components/common/SectionActivityContext';
 
 export default function ExperienceSection() {
   const [selected, setSelected] = useState(0);
   const dragStart = useRef<number | null>(null);
+  const lineRef = useRef<HTMLSpanElement>(null);
+  const markerRef = useRef<HTMLSpanElement>(null);
+  const itemsRef = useRef<(HTMLLIElement | null)[]>([]);
+  const motionRef = useRef<gsap.core.Timeline | null>(null);
+  const flowRef = useRef({ head: 0, tail: 0 });
+  const previousIndex = useRef<number | null>(null);
+  const { active, reducedMotion } = useSectionActivity();
   const select = (index: number) => setSelected((index + experiences.length) % experiences.length);
+
+  useLayoutEffect(() => {
+    if (active !== SECTION_IDS.EXPERIENCE) {
+      previousIndex.current = null;
+      return;
+    }
+    const line = lineRef.current;
+    const marker = markerRef.current;
+    const items = itemsRef.current;
+    if (!line || !marker || !items[0] || !items[experiences.length - 1]) return;
+    let mobile = window.innerWidth <= 760;
+    const position = (item: HTMLLIElement) => mobile
+      ? item.offsetLeft + item.offsetWidth / 2
+      : item.offsetTop + item.offsetHeight / 2;
+    const flow = flowRef.current;
+    const draw = () => gsap.set(marker, mobile
+      ? { left: (flow.head + flow.tail) / 2, width: Math.abs(flow.head - flow.tail) + 14 }
+      : { top: (flow.head + flow.tail) / 2, height: Math.abs(flow.head - flow.tail) + 14 });
+    const measure = () => {
+      const first = position(items[0]!);
+      const last = position(items[experiences.length - 1]!);
+      if (mobile) {
+        const top = items[0]!.offsetTop;
+        gsap.set(line, { left: first, top: top - 2, width: last - first, height: 4 });
+        gsap.set(marker, { top, height: 10 });
+      } else {
+        gsap.set(line, { left: 18, top: first, width: 4, height: last - first });
+        gsap.set(marker, { left: 15, width: 10 });
+      }
+      return position(items[selected]!);
+    };
+    const target = measure();
+    motionRef.current?.kill();
+    if (previousIndex.current === null || reducedMotion ||
+      (flow.head === target && flow.tail === target)) {
+      flow.head = target;
+      flow.tail = target;
+      draw();
+    } else {
+      motionRef.current = gsap.timeline()
+        .to(flow, { head: target, duration: 0.55, ease: 'power2.inOut', onUpdate: draw }, 0)
+        .to(flow, { tail: target, duration: 0.55, ease: 'power2.inOut', onUpdate: draw }, 0.12);
+    }
+    previousIndex.current = selected;
+    const onResize = () => {
+      motionRef.current?.kill();
+      mobile = window.innerWidth <= 760;
+      flow.head = measure();
+      flow.tail = flow.head;
+      draw();
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      motionRef.current?.kill();
+    };
+  }, [active, reducedMotion, selected]);
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
@@ -35,17 +101,21 @@ export default function ExperienceSection() {
     <section id={SECTION_IDS.EXPERIENCE} aria-label="경력" className="experience-depth">
 
       <div className="experience-depth-layout">
-        <ol className="experience-depth-timeline" aria-label="경력 시점">
-          {experiences.map((experience, index) => (
-            <li key={experience.id} data-active={index === selected}>
-              <button type="button" aria-current={index === selected ? 'true' : undefined} onClick={() => select(index)}>
-                <small>{experience.type === 'student' ? 'EDUCATION' : 'WORK'}</small>
-                <strong>{experience.company}</strong>
-                <span>{experience.period}</span>
-              </button>
-            </li>
-          ))}
-        </ol>
+        <div className="experience-depth-rail">
+          <span ref={lineRef} className="experience-depth-line" aria-hidden="true" />
+          <span ref={markerRef} className="experience-depth-marker" aria-hidden="true" />
+          <ol className="experience-depth-timeline" aria-label="경력 시점">
+            {experiences.map((experience, index) => (
+              <li key={experience.id} ref={(item) => { itemsRef.current[index] = item; }} data-active={index === selected}>
+                <button type="button" aria-current={index === selected ? 'true' : undefined} onClick={() => select(index)}>
+                  <small>{experience.type === 'student' ? 'EDUCATION' : 'WORK'}</small>
+                  <strong>{experience.company}</strong>
+                  <span>{experience.period}</span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </div>
 
         <div className="experience-depth-deck-wrap">
           <div
