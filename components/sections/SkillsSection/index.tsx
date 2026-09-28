@@ -33,10 +33,62 @@ function iconStyle(icon: string): CSSProperties {
 export default function SkillsSection() {
   const [selected, setSelected] = useState(skills[0]);
   const mapRef = useRef<HTMLDivElement>(null);
+  const progressLineRef = useRef<HTMLSpanElement>(null);
+  const progressMarkerRef = useRef<HTMLSpanElement>(null);
+  const skillButtonsRef = useRef<(HTMLButtonElement | null)[]>([]);
+  const progressMotionRef = useRef<gsap.core.Timeline | null>(null);
+  const progressFlowRef = useRef({ head: 0, tail: 0 });
+  const previousSkillRef = useRef<string | null>(null);
   const lastDrawnSkill = useRef<string | null>(null);
   const { active, routeResolved, motionReady, pageVisible, reducedMotion } = useSectionActivity();
   const entered = active === SECTION_IDS.SKILLS && routeResolved && motionReady && pageVisible;
   const count = selected.projects.length;
+
+  useLayoutEffect(() => {
+    if (!entered) {
+      previousSkillRef.current = null;
+      return;
+    }
+    const buttons = skillButtonsRef.current;
+    const line = progressLineRef.current;
+    const marker = progressMarkerRef.current;
+    if (!buttons[0] || !buttons[skills.length - 1] || !line || !marker) return;
+    const center = (button: HTMLButtonElement) => button.offsetTop + button.offsetHeight / 2;
+    const flow = progressFlowRef.current;
+    const draw = () => gsap.set(marker, {
+      top: (flow.head + flow.tail) / 2,
+      height: Math.abs(flow.head - flow.tail) + 20,
+    });
+    const measure = () => {
+      const first = center(buttons[0]!);
+      gsap.set(line, { top: first, height: center(buttons[skills.length - 1]!) - first });
+      return center(buttons[skills.indexOf(selected)]!);
+    };
+    const target = measure();
+    progressMotionRef.current?.kill();
+    if (previousSkillRef.current === null || reducedMotion ||
+      (flow.head === target && flow.tail === target)) {
+      flow.head = target;
+      flow.tail = target;
+      draw();
+    } else {
+      progressMotionRef.current = gsap.timeline()
+        .to(flow, { head: target, duration: 0.55, ease: 'power2.inOut', onUpdate: draw }, 0)
+        .to(flow, { tail: target, duration: 0.55, ease: 'power2.inOut', onUpdate: draw }, 0.12);
+    }
+    previousSkillRef.current = selected.name;
+    const onResize = () => {
+      progressMotionRef.current?.kill();
+      flow.head = measure();
+      flow.tail = flow.head;
+      draw();
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      progressMotionRef.current?.kill();
+    };
+  }, [entered, reducedMotion, selected]);
 
   useLayoutEffect(() => {
     if (!entered) return;
@@ -128,12 +180,15 @@ export default function SkillsSection() {
       <div className="signal-shell m-auto w-full">
         <div className="signal-workspace">
           <ScrollArea as="nav" className="signal-nav" aria-label="기술 선택">
+            <span ref={progressLineRef} className="signal-progress-line" aria-hidden="true" />
+            <span ref={progressMarkerRef} className="signal-progress-marker" aria-hidden="true" />
             <h2 id="skills-heading" className="signal-micro">SKILLS</h2>
-            {skills.map((skill) => {
+            {skills.map((skill, index) => {
               const active = selected.name === skill.name;
               return (
                 <button
                   key={skill.name}
+                  ref={(button) => { skillButtonsRef.current[index] = button; }}
                   type="button"
                   aria-pressed={active}
                   style={iconStyle(skill.icon)}

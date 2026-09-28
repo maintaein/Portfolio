@@ -159,6 +159,35 @@ describe('SkillsSection signal map', () => {
     expect(container.querySelector<HTMLElement>('.signal-surface')!.style.opacity).toBe('0');
   });
 
+  it('moves the selected-skill marker along its rail with a following tail', () => {
+    vi.spyOn(HTMLElement.prototype, 'offsetTop', 'get').mockImplementation(function (this: HTMLElement) {
+      const index = [...(this.parentElement?.querySelectorAll('.signal-skill') ?? [])].indexOf(this);
+      return index < 0 ? 0 : 60 + index * 70;
+    });
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.tagName === 'BUTTON' ? 44 : 490;
+    });
+    const { container } = render(skillsWithActivity());
+    const line = container.querySelector<HTMLElement>('.signal-progress-line')!;
+    const marker = container.querySelector<HTMLElement>('.signal-progress-marker')!;
+    expect(line.style.top).toBe('82px');
+    expect(line.style.height).toBe('490px');
+    expect(marker.style.top).toBe('82px');
+
+    const timelines = vi.spyOn(gsap, 'timeline');
+    fireEvent.click(screen.getByRole('button', { name: 'Figma' }));
+    const motion = timelines.mock.results.at(-1)?.value as gsap.core.Timeline;
+    motion.time(0.3);
+    const stretchedHeight = parseFloat(marker.style.height);
+    expect(stretchedHeight).toBeGreaterThan(20);
+    motion.time(0.45);
+    expect(parseFloat(marker.style.height)).toBeLessThan(stretchedHeight);
+    expect(parseFloat(marker.style.top)).toBeLessThan(572);
+    motion.progress(1);
+    expect(marker.style.top).toBe('572px');
+    expect(marker.style.height).toBe('20px');
+  });
+
   it('leaves reduced-motion project surfaces immediately readable without timelines', () => {
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(600);
     vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(490);
