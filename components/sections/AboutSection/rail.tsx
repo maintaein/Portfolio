@@ -30,6 +30,8 @@ export default function AboutRail({
   const markerRef = useRef<HTMLSpanElement>(null);
   const buttonsRef = useRef<(HTMLButtonElement | null)[]>([]);
   const previousIndex = useRef<number | null>(null);
+  const motionRef = useRef<gsap.core.Timeline | null>(null);
+  const flowRef = useRef({ head: 0, tail: 0 });
 
   useLayoutEffect(() => {
     if (!active) {
@@ -42,36 +44,40 @@ export default function AboutRail({
 
     const center = () => button.offsetTop + button.offsetHeight / 2;
     const target = center();
-    gsap.killTweensOf(marker);
-    const start = parseFloat(marker.style.top);
+    motionRef.current?.kill();
+    const flow = flowRef.current;
+    const draw = () => {
+      gsap.set(marker, {
+        top: (flow.head + flow.tail) / 2,
+        height: Math.abs(flow.head - flow.tail) + 24,
+      });
+    };
     if (
       previousIndex.current === null ||
       reducedMotion ||
-      !Number.isFinite(start) ||
-      start === target
+      (flow.head === target && flow.tail === target)
     ) {
-      gsap.set(marker, { top: target, height: 24 });
+      flow.head = target;
+      flow.tail = target;
+      draw();
     } else {
-      gsap
+      motionRef.current = gsap
         .timeline()
-        .to(marker, {
-          top: (start + target) / 2,
-          height: Math.abs(target - start) + 24,
-          duration: 0.28,
-          ease: 'power2.out',
-        })
-        .to(marker, { top: target, height: 24, duration: 0.36, ease: 'power3.inOut' });
+        .to(flow, { head: target, duration: 0.55, ease: 'power2.inOut', onUpdate: draw }, 0)
+        .to(flow, { tail: target, duration: 0.55, ease: 'power2.inOut', onUpdate: draw }, 0.12);
     }
     previousIndex.current = activeIndex;
 
     const onResize = () => {
-      gsap.killTweensOf(marker);
-      gsap.set(marker, { top: center(), height: 24 });
+      motionRef.current?.kill();
+      flow.head = center();
+      flow.tail = flow.head;
+      draw();
     };
     window.addEventListener('resize', onResize);
     return () => {
       window.removeEventListener('resize', onResize);
-      gsap.killTweensOf(marker);
+      motionRef.current?.kill();
     };
   }, [active, activeIndex, reducedMotion]);
 

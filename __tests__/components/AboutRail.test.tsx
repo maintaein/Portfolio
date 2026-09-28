@@ -33,8 +33,12 @@ describe('AboutRail', () => {
     rerender(<AboutRail activeIndex={2} onSelect={vi.fn()} />);
     const motion = timeline.mock.results.at(-1)?.value as gsap.core.Timeline;
     expect(motion).toBeDefined();
-    motion.progress(0.45);
-    expect(parseFloat(marker!.style.height)).toBeGreaterThan(24);
+    motion.time(0.3);
+    const stretchedHeight = parseFloat(marker!.style.height);
+    expect(stretchedHeight).toBeGreaterThan(24);
+    motion.time(0.45);
+    expect(parseFloat(marker!.style.height)).toBeLessThan(stretchedHeight);
+    expect(parseFloat(marker!.style.top)).toBeLessThan(173);
     motion.progress(1);
     expect(marker?.style.top).toBe('173px');
     expect(marker?.style.height).toBe('24px');
