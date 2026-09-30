@@ -211,7 +211,7 @@ function snapshotMedia(
 }
 
 export default function ProjectsSection() {
-  const { routeResolved, motionReady, reducedMotion } =
+  const { routeResolved, motionReady, reducedMotion, heroRevealed } =
     useSectionActivity();
   const [activeIndex, setActiveIndex] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
@@ -1279,7 +1279,7 @@ export default function ProjectsSection() {
                   읽힌다. 평소에는 opacity 0이고 rAF도 안 돈다. reduce에서는
                   아예 만들지 않는다(셰이더에 분기를 넣는 것보다 캔버스를
                   안 만드는 쪽이 싸다) */}
-              {motionReady && !reducedMotion ? (
+              {motionReady && heroRevealed && !reducedMotion ? (
                 <DynamicPreviewMorph
                   className="pointer-events-none absolute inset-0 h-full w-full"
                   preload={PROJECT_IMAGE_PATHS}

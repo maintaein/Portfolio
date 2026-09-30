@@ -10,9 +10,11 @@ interface SectionActivityState {
   routeResolved: boolean;
   motionReady: boolean;
   reducedMotion: boolean;
+  heroRevealed: boolean;
 }
 
-export interface SectionActivityProviderProps extends SectionActivityState {
+export interface SectionActivityProviderProps extends Omit<SectionActivityState, 'heroRevealed'> {
+  heroRevealed?: boolean;
   children: ReactNode;
 }
 
@@ -27,6 +29,7 @@ export function SectionActivityProvider({
   routeResolved,
   motionReady,
   reducedMotion,
+  heroRevealed = true,
   children,
 }: SectionActivityProviderProps) {
   const value = useMemo(
@@ -37,6 +40,7 @@ export function SectionActivityProvider({
       routeResolved,
       motionReady,
       reducedMotion,
+      heroRevealed,
     }),
     [
       active,
@@ -45,6 +49,7 @@ export function SectionActivityProvider({
       routeResolved,
       motionReady,
       reducedMotion,
+      heroRevealed,
     ]
   );
 

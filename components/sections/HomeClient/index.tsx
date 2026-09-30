@@ -396,6 +396,7 @@ export default function HomeClient() {
       routeResolved={routeResolved}
       motionReady={motionReady}
       reducedMotion={reducedMotion}
+      heroRevealed={heroRevealed}
     >
       <HyperspeedBackground
         active={active}

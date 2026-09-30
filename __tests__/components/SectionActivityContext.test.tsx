@@ -20,6 +20,7 @@ function ActivityProbe() {
       data-route-resolved={activity.routeResolved}
       data-motion-ready={activity.motionReady}
       data-reduced-motion={activity.reducedMotion}
+      data-hero-revealed={activity.heroRevealed}
     >
       {Object.keys(activity).sort().join(',')}
     </output>
@@ -39,7 +40,7 @@ afterEach(() => {
 });
 
 describe('SectionActivityContext', () => {
-  it('부모가 준 여섯 값을 읽기 전용 형태로 그대로 배포하고 재렌더도 따라간다', () => {
+  it('부모가 준 일곱 값을 읽기 전용 형태로 그대로 배포하고 재렌더도 따라간다', () => {
     const first: ActivityProps = {
       active: 'projects',
       entryAnimationTarget: 'about',
@@ -47,6 +48,7 @@ describe('SectionActivityContext', () => {
       routeResolved: true,
       motionReady: false,
       reducedMotion: true,
+      heroRevealed: false,
     };
     const second: ActivityProps = {
       active: 'about',
@@ -55,6 +57,7 @@ describe('SectionActivityContext', () => {
       routeResolved: false,
       motionReady: true,
       reducedMotion: false,
+      heroRevealed: true,
     };
     const { rerender } = render(<Harness {...first} />);
     const probe = screen.getByTestId('activity');
@@ -65,8 +68,9 @@ describe('SectionActivityContext', () => {
     expect(probe).toHaveAttribute('data-route-resolved', 'true');
     expect(probe).toHaveAttribute('data-motion-ready', 'false');
     expect(probe).toHaveAttribute('data-reduced-motion', 'true');
+    expect(probe).toHaveAttribute('data-hero-revealed', 'false');
     expect(probe.textContent).toBe(
-      'active,entryAnimationTarget,motionReady,pageVisible,reducedMotion,routeResolved'
+      'active,entryAnimationTarget,heroRevealed,motionReady,pageVisible,reducedMotion,routeResolved'
     );
 
     rerender(<Harness {...second} />);
@@ -77,6 +81,7 @@ describe('SectionActivityContext', () => {
     expect(probe).toHaveAttribute('data-route-resolved', 'false');
     expect(probe).toHaveAttribute('data-motion-ready', 'true');
     expect(probe).toHaveAttribute('data-reduced-motion', 'false');
+    expect(probe).toHaveAttribute('data-hero-revealed', 'true');
   });
 
   it('Provider 밖에서 사용하면 명시적인 오류를 던진다', () => {

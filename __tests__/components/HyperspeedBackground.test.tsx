@@ -192,15 +192,15 @@ describe('HyperspeedBackground — isTransitioning edge → boost/settle', () =>
   });
 });
 
-describe('HyperspeedBackground 밝기(전체 구간 12%)와 obscured', () => {
+describe('HyperspeedBackground 밝기(전체 구간 14%)와 obscured', () => {
   // 읽기 구간에서 광선보다 본문에 시선이 머물도록 낮춘 값이다.
-  it('overview와 콘텐츠 섹션은 배경 밝기 12%다', async () => {
+  it('overview와 콘텐츠 섹션은 배경 밝기 14%다', async () => {
     const { rerender } = await renderReady({ active: OVERVIEW });
     const root = screen.getByTestId('hyperspeed-background');
-    expect(root.style.opacity).toBe('0.12');
+    expect(root.style.opacity).toBe('0.14');
 
     rerender(<HyperspeedBackground {...readyProps} active="about" />);
-    expect(root.style.opacity).toBe('0.12');
+    expect(root.style.opacity).toBe('0.14');
   });
 
   // obscured는 초점과 밝기를 같이 뺀다. 블러만 걸면 배경이 사라지는 속도가
@@ -384,35 +384,33 @@ describe('HyperspeedBackground — heroRevealed 게이팅(t=0 검은 화면 → 
   // 뮤테이션 (a) — heroPending 계산에서 heroRevealed를 무시하고 항상
   // 보이게 하면 이 값이 '1'로 나와 FAIL해야 한다.
   it('overview + 모션 허용 + heroRevealed=false면 opacity가 0이다', async () => {
-    await renderReady({ active: OVERVIEW, heroRevealed: false });
+    render(<HyperspeedBackground {...readyProps} active={OVERVIEW} heroRevealed={false} />);
     const root = screen.getByTestId('hyperspeed-background');
     expect(root.style.opacity).toBe('0');
   });
 
   it('heroRevealed가 true로 바뀌면 overview 기준 최종 밝기(1)로 열린다', async () => {
-    const { rerender } = await renderReady({ active: OVERVIEW, heroRevealed: false });
+    const { rerender } = render(<HyperspeedBackground {...readyProps} active={OVERVIEW} heroRevealed={false} />);
     const root = screen.getByTestId('hyperspeed-background');
     expect(root.style.opacity).toBe('0');
 
     rerender(<HyperspeedBackground {...readyProps} active={OVERVIEW} heroRevealed />);
-    expect(root.style.opacity).toBe('0.12');
+    expect(root.style.opacity).toBe('0.14');
   });
 
-  // 씬 로드 자체는 heroRevealed와 무관하게 이미 진행 중이어야 한다
-  // ("준비는 일찍, 노출은 늦게") — 뮤테이션 (c) 대응: 로드를 이름 완성
-  // 뒤로 미루면(예: showScene 계산에 heroRevealed를 끼워 넣으면) 이
-  // 캔버스가 heroRevealed=false일 때 나타나지 않아 FAIL한다.
-  it('heroRevealed=false여도 씬(canvas)은 이미 mount돼 있다 — 준비는 일찍, 노출만 늦다', async () => {
-    await renderReady({ active: OVERVIEW, heroRevealed: false });
-    expect(screen.getByTestId('hyperspeed-canvas')).toBeInTheDocument();
+  it('이름 파티클이 끝나기 전에는 WebGL 씬을 시작하지 않는다', async () => {
+    const { rerender } = render(<HyperspeedBackground {...readyProps} active={OVERVIEW} heroRevealed={false} />);
+    expect(screen.queryByTestId('hyperspeed-canvas')).toBeNull();
+    rerender(<HyperspeedBackground {...readyProps} active={OVERVIEW} heroRevealed />);
+    expect(await screen.findByTestId('hyperspeed-canvas')).toBeInTheDocument();
   });
 
   // active가 overview가 아닌 곳(딥링크)에서 시작하면 재생할 부팅 자체가
   // 없다 — heroRevealed가 계속 false여도 배경이 영원히 숨어 있으면 안 된다.
-  it('active가 overview가 아니면 heroRevealed=false여도 곧바로 최종 밝기(0.12)다', async () => {
+  it('active가 overview가 아니면 heroRevealed=false여도 곧바로 최종 밝기(0.14)다', async () => {
     await renderReady({ active: 'about', heroRevealed: false });
     const root = screen.getByTestId('hyperspeed-background');
-    expect(root.style.opacity).toBe('0.12');
+    expect(root.style.opacity).toBe('0.14');
   });
 
   // reducedMotion에서는 배경도 이름도 첫 프레임부터 최종 상태다(기존 계약).
@@ -428,14 +426,14 @@ describe('HyperspeedBackground — heroRevealed 게이팅(t=0 검은 화면 → 
       />
     );
     const root = screen.getByTestId('hyperspeed-background');
-    expect(root.style.opacity).toBe('0.12');
+    expect(root.style.opacity).toBe('0.14');
   });
 
   // 2차 감사 지적 — 래퍼에 전환이 없어 씬이 풀리는 순간·heroRevealed가
   // 뒤집히는 순간 캔버스가 튀어 들어왔다. 뮤테이션 (b) — transition을
   // 지우면(즉시 표시) 이 값이 'none'이거나 opacity를 포함하지 않아 FAIL한다.
   it('모션 허용이면 opacity 트랜지션이 걸려 있다 — 팝인이 아니라 페이드다', async () => {
-    await renderReady({ active: OVERVIEW, heroRevealed: false });
+    render(<HyperspeedBackground {...readyProps} active={OVERVIEW} heroRevealed={false} />);
     const root = screen.getByTestId('hyperspeed-background');
     expect(root.style.transition).toMatch(/opacity/);
   });
@@ -641,12 +639,12 @@ describe('HyperspeedBackground. data-hyperspeed-motion·data-hyperspeed-visibili
 
 describe('HyperspeedBackground section motion policy', () => {
   it.each([
-    [OVERVIEW, 0.12, 0.06],
-    [SECTION_IDS.ABOUT, 0.12, 0.06],
-    [SECTION_IDS.EXPERIENCE, 0.12, 0.06],
-    [SECTION_IDS.PROJECTS, 0.12, 0.06],
-    [SECTION_IDS.SKILLS, 0.12, 0.06],
-    [SECTION_IDS.AWARDS_CERTIFICATES, 0.12, 0.06],
+    [OVERVIEW, 0.14, 0.06],
+    [SECTION_IDS.ABOUT, 0.14, 0.06],
+    [SECTION_IDS.EXPERIENCE, 0.14, 0.06],
+    [SECTION_IDS.PROJECTS, 0.14, 0.06],
+    [SECTION_IDS.SKILLS, 0.14, 0.06],
+    [SECTION_IDS.AWARDS_CERTIFICATES, 0.14, 0.06],
   ])('%s sets opacity %s and idle scale %s', async (active, opacity, idleScale) => {
     await renderReady({ active });
 

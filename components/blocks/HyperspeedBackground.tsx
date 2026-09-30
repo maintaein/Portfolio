@@ -5,7 +5,7 @@
 // 않고 HomeClient가 이미 소유한 단일 값들을 props로만 받는다.
 //
 // 폴백은 세 가지 이유로 뜬다 — 서로 다른 data-fallback-reason으로 구별한다:
-//   pending         — 아직 준비 전(routeResolved·motionReady 미확정 또는 청크 로딩 중)
+//   pending         — 아직 준비 전(routeResolved·motionReady 미확정, 이름 형성 중 또는 청크 로딩 중)
 //   reduced-motion  — 사용자가 모션을 줄임(WebGL 동적 import 자체를 시도하지 않는다)
 //   load-error      — 청크 로드 실패(next/dynamic loading의 error)
 //   context-lost    — webglcontextlost 이후(한 번 잃으면 폴백 고정, 복구하지 않는다)
@@ -31,8 +31,7 @@ export interface HyperspeedBackgroundProps {
   reducedMotion: boolean;
   // HERO 재순서 브리프 — "아무것도 없는 배경 → 이름이 파티클로 뭉쳐 완성 →
   // 배경이 자연스럽게 등장". overview에서 모션이 허용된 동안에는 이 값이
-  // false인 한 배경이 보이지 않는다(opacity 0, 씬 자체는 이미 로드·렌더
-  // 중이어도 무관 — "준비는 일찍, 노출은 늦게"). BootSequence가 이름 핸드오프
+  // false인 한 배경이 보이지 않고 씬도 시작하지 않는다. BootSequence가 이름 핸드오프
   // 순간(파티클 뭉침 완료 = DOM 이름 등장 = 배경 노출 시작, 단일 시각)에
   // true로 뒤집는다. active !== overview(딥링크로 다른 섹션에서 시작)나
   // reducedMotion에서는 애초에 이 게이트를 타지 않는다 — 아래 heroPending
@@ -97,7 +96,7 @@ const DynamicHyperspeed = dynamic(
   }
 );
 
-const BACKGROUND_OPACITY = 0.12;
+const BACKGROUND_OPACITY = 0.14;
 const IDLE_SCALE = 0.06;
 // 읽기 구간에서는 배경 광선보다 본문에 시선이 머물도록 낮춘다.
 // obscured(ProjectModal 열림) 동안 배경에서 초점을 빼는 블러 반경.
@@ -162,8 +161,9 @@ export default function HyperspeedBackground({
   const contextRetriesRef = useRef(0);
 
   const ready = routeResolved && motionReady;
-  const showScene = ready && !reducedMotion && !contextLost;
-  const outerFallbackReason: FallbackReason = !ready
+  const heroPending = active === OVERVIEW && !reducedMotion && !heroRevealed;
+  const showScene = ready && !reducedMotion && !contextLost && !heroPending;
+  const outerFallbackReason: FallbackReason = !ready || heroPending
     ? 'pending'
     : reducedMotion
       ? 'reduced-motion'
@@ -267,7 +267,6 @@ export default function HyperspeedBackground({
   // overview가 아니거나(딥링크로 다른 섹션에서 시작) reducedMotion이면
   // heroRevealed와 무관하게 곧바로 최종 밝기로 보인다 — 재생할 부팅 자체가
   // 없는 경로에서 배경이 영원히 숨어 있으면 안 된다.
-  const heroPending = active === OVERVIEW && !reducedMotion && !heroRevealed;
   const baseOpacity = heroPending
     ? 0
     : sectionOpacity;

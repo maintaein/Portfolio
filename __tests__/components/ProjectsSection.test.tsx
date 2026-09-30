@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import ProjectsSection from '@/components/sections/ProjectsSection';
 import { SectionActivityProvider } from '@/components/common/SectionActivityContext';
 import { projects } from '@/lib/data';
@@ -88,6 +88,18 @@ function renderSection(active: NavId = SECTION_IDS.PROJECTS) {
     </SectionActivityProvider>
   );
 }
+
+it('이름 파티클 형성 중에는 프로젝트 WebGL 모프를 초기화하지 않는다', async () => {
+  const view = (heroRevealed: boolean) => (
+    <SectionActivityProvider active={'overview' as NavId} entryAnimationTarget={null} pageVisible routeResolved motionReady reducedMotion={false} heroRevealed={heroRevealed}>
+      <ProjectsSection />
+    </SectionActivityProvider>
+  );
+  const { rerender } = render(view(false));
+  expect(document.querySelector('[data-part="preview-morph"]')).toBeNull();
+  rerender(view(true));
+  await waitFor(() => expect(document.querySelector('[data-part="preview-morph"]')).toBeInTheDocument());
+});
 
 const N = projects.length;
 
