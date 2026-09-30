@@ -1,7 +1,7 @@
 import { ImageResponse } from 'next/og';
 
 export const runtime = 'edge';
-export const alt = '김태인 프론트엔드 포트폴리오';
+export const alt = '김태인 포트폴리오';
 export const size = {
   width: 1200,
   height: 630,
@@ -44,7 +44,7 @@ export default async function Image() {
             marginBottom: '40px',
           }}
         >
-          Frontend Developer
+          SOFTWARE DEVELOPER
         </div>
         <div
           style={{

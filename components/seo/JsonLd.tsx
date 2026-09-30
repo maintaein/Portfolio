@@ -6,7 +6,7 @@ export default function JsonLd() {
     '@context': 'https://schema.org',
     '@type': 'Person',
     name: '김태인',
-    jobTitle: 'Frontend Developer',
+    jobTitle: 'Software Developer',
     url: siteConfig.url,
     sameAs: [
       'https://github.com/maintaein',
@@ -22,7 +22,7 @@ export default function JsonLd() {
       'Kotlin',
       'Jetpack Compose',
       'Android Development',
-      'Frontend Development',
+      'Software Development',
       'Web Development',
       'UI/UX',
     ],
@@ -40,9 +40,9 @@ export default function JsonLd() {
   const websiteSchema = {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
-    name: '김태인의 프론트엔드 포트폴리오',
+    name: '김태인의 개발자 포트폴리오',
     url: siteConfig.url,
-    description: '사용자 경험을 최우선으로 생각하는 프론트엔드 개발자 김태인의 포트폴리오',
+    description: '사용자 경험을 최우선으로 생각하는 개발자 김태인의 포트폴리오',
     author: {
       '@type': 'Person',
       name: '김태인',

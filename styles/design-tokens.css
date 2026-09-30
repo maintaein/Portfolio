@@ -689,7 +689,7 @@
   }
 
   /* overview의 data-section wrapper(.section-scroll)는 빈 div다(HomeClient
-     참고). 실제로 보이는 overview 화면(FRONTEND DEVELOPER 캡션, START)은
+     참고). 실제로 보이는 overview 화면(SOFTWARE DEVELOPER 캡션, START)은
      그 wrapper가 아니라 main.section-stage 밖 셸 레벨의 BootSequence가
      그리므로, 위 section-enter/leave 키프레임을 그 빈 wrapper에 걸어도
      그릴 픽셀이 없다. HomeClient가 같은 표식(data-section-direction·

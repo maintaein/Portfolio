@@ -2,8 +2,8 @@
 export const PERSONAL_INFO = {
     NAME: '김태인',
     NAME_EN: 'KIM TAEIN',
-    ROLE: '프론트엔드 개발자',
-    DESCRIPTION: '항상 사용자의 눈과 마음을 고려하는 프론트엔드 개발자',
+    ROLE: '개발자',
+    DESCRIPTION: '항상 사용자의 눈과 마음을 고려하는 개발자',
     EMAIL: 'vostmfvostmf@naver.com',
     GITHUB: 'https://github.com/maintaein',
     LOCATION: '대한민국',
@@ -66,15 +66,15 @@ export const PERSONAL_INFO = {
   } as const;
   
   export const SITE_CONFIG = {
-    TITLE: '김태인 | 프론트엔드 개발자',
+    TITLE: '김태인 | 개발자',
     TITLE_TEMPLATE: '%s | 김태인',
     DESCRIPTION:
-      '항상 사용자의 눈과 마음을 고려하는 프론트엔드 개발자 김태인의 포트폴리오입니다. Next.js, React, TypeScript를 사용합니다.',
+      '항상 사용자의 눈과 마음을 고려하는 개발자 김태인의 포트폴리오입니다. Next.js, React, TypeScript를 사용합니다.',
     KEYWORDS: [
       '김태인',
       'Taein Kim',
-      '프론트엔드 개발자',
-      'Frontend Developer',
+      '개발자',
+      'Software Developer',
       'React',
       'Next.js',
       'TypeScript',
@@ -87,7 +87,7 @@ export const PERSONAL_INFO = {
   } as const;
   
   export const SKILL_CATEGORIES = {
-    FRONTEND: 'Frontend',
+    Software: 'Software',
     BACKEND: 'Backend',
     TOOLS: 'Tools',
     LANGUAGE: 'Language',

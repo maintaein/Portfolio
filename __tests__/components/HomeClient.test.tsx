@@ -162,7 +162,7 @@ vi.mock('@/components/sections', async () => {
       <SectionShell label="Awards" marker="Grand Prize" />
     ),
     ExperienceSection: () => (
-      <SectionShell label="Experience" marker="Frontend Experience" />
+      <SectionShell label="Experience" marker="Software Experience" />
     ),
     Footer: ({ atOverview }: { atOverview: boolean }) => (
       <a href="mailto:test@example.com" data-at-overview={String(atOverview)}>
@@ -1313,7 +1313,7 @@ describe('HomeClient 전환 방향 표식', () => {
     );
   });
 
-  // 최종 리뷰 I1: overview의 실제 화면(FRONTEND DEVELOPER 캡션, START)은
+  // 최종 리뷰 I1: overview의 실제 화면(Software DEVELOPER 캡션, START)은
   // .section-scroll 빈 wrapper가 아니라 BootSequence가 그린다. overview가
   // 관련된 전환에서는 BootSequence 루트도 같은 표식을 받아야 그 화면에도
   // 깊이 애니메이션이 그려진다.

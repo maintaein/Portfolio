@@ -401,7 +401,7 @@ export default function BootSequence({
 
   return (
     <>
-      <h1 className="sr-only">김태인 — 프론트엔드 개발자</h1>
+      <h1 className="sr-only">김태인: 개발자</h1>
       {/* 이름 파티클 형성 — 순수 장식(aria-hidden·pointer-events-none)이고
           워드마크 DOM과 별개의 독립된 오버레이다. low tier·reducedMotion·
           기기 등급 미확정(tier===null)에서는 아예 렌더하지 않는다 — 그동안
@@ -433,7 +433,7 @@ export default function BootSequence({
           data-testid="boot-role"
           className="boot-role block text-t7 sm:text-t6 md:text-t5 uppercase tracking-[0.1em] text-[var(--color-text-secondary)]"
         >
-          <span className="block">FRONTEND DEVELOPER</span>
+          <span className="block">SOFTWARE DEVELOPER</span>
         </span>
         {/* START — 행동 유도. 역할 라벨의 1.36배뿐이던 위계를 깨고 모바일
             t5/태블릿 t3/데스크톱 t2로 역할 라벨(t8 고정)과 항상 2배 이상
