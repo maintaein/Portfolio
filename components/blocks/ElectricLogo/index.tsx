@@ -7,17 +7,24 @@ import { Renderer, Program, Mesh, Triangle, Texture } from 'ogl';
 const BOLT = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><path d="M39 3 12 37h17l-4 24 27-34H35z" fill="#fff"/></svg>'
 )}`;
-const RASTER = 560;
+const RASTER = 384;
 const CELL = 4;
 const FAR = 1e20;
 const ARCS = 5;
 const PULSES = 3;
 const PIXEL_BUDGET = 4e6;
+const MAX_DPR = 1.25;
+const MORPH_DURATION = 1;
+const EMPTY_PRELOAD_SRCS: string[] = [];
 
 type Rgb = [number, number, number];
 
 export interface ElectricLogoProps {
   src?: string;
+  active?: boolean;
+  prewarm?: boolean;
+  preloadSrcs?: string[];
+  onReady?: (src: string) => void;
   color?: string;
   glowColor?: string;
   scale?: number;
@@ -39,9 +46,10 @@ export interface ElectricLogoProps {
   style?: CSSProperties;
 }
 
-type Settings = Required<Omit<ElectricLogoProps, 'src' | 'className' | 'style'>>;
+type Settings = Required<Omit<ElectricLogoProps, 'src' | 'active' | 'prewarm' | 'preloadSrcs' | 'onReady' | 'className' | 'style'>>;
 
 interface Shape {
+  src?: string;
   field: Float32Array;
   edges: number[];
   width: number;
@@ -53,6 +61,69 @@ interface Shape {
   glowWidth: number;
   glowHeight: number;
   glowOffset: number;
+}
+
+const shapeCache = new Map<string, Shape>();
+
+class ParallelProgram extends Program {
+  ready!: boolean;
+  private parallel!: KHR_parallel_shader_compile | null;
+
+  setShaders({ vertex, fragment }: { vertex: string; fragment: string }) {
+    const gl = this.gl;
+    this.parallel = gl.getExtension('KHR_parallel_shader_compile');
+    if (!this.parallel) {
+      super.setShaders({ vertex, fragment });
+      this.ready = true;
+      return;
+    }
+
+    gl.shaderSource(this.vertexShader, vertex);
+    gl.compileShader(this.vertexShader);
+    gl.shaderSource(this.fragmentShader, fragment);
+    gl.compileShader(this.fragmentShader);
+    gl.linkProgram(this.program);
+    this.ready = false;
+    this.uniformLocations = new Map();
+    this.attributeLocations = new Map();
+    this.attributeOrder = '';
+  }
+
+  finish() {
+    if (this.ready) return true;
+    const gl = this.gl;
+    if (!gl.getProgramParameter(this.program, this.parallel!.COMPLETION_STATUS_KHR)) return false;
+    if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
+      console.warn(gl.getProgramInfoLog(this.program));
+      return false;
+    }
+
+    this.uniformLocations = new Map();
+    for (let i = 0, count = gl.getProgramParameter(this.program, gl.ACTIVE_UNIFORMS); i < count; i++) {
+      const uniform = gl.getActiveUniform(this.program, i) as Parameters<typeof this.uniformLocations.set>[0] | null;
+      if (!uniform) continue;
+      const location = gl.getUniformLocation(this.program, uniform.name);
+      if (!location) continue;
+      const [name, ...parts] = uniform.name.match(/(\w+)/g) ?? [];
+      if (!name) continue;
+      this.uniformLocations.set(uniform, location);
+      uniform.uniformName = name;
+      uniform.nameComponents = parts;
+    }
+    this.attributeLocations = new Map();
+    const locations: string[] = [];
+    for (let i = 0, count = gl.getProgramParameter(this.program, gl.ACTIVE_ATTRIBUTES); i < count; i++) {
+      const attribute = gl.getActiveAttrib(this.program, i);
+      if (!attribute) continue;
+      const location = gl.getAttribLocation(this.program, attribute.name);
+      if (location < 0) continue;
+      locations[location] = attribute.name;
+      this.attributeLocations.set(attribute, location);
+    }
+    this.attributeOrder = locations.join('');
+    this.ready = true;
+    return true;
+  }
 }
 
 interface Slot {
@@ -653,6 +724,10 @@ void main() {
 
 const ElectricLogo = ({
   src = BOLT,
+  active = true,
+  prewarm = false,
+  preloadSrcs = EMPTY_PRELOAD_SRCS,
+  onReady,
   color = '#ecc7ff',
   glowColor = '#ad6dff',
   scale = 0.7,
@@ -676,6 +751,17 @@ const ElectricLogo = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const settingsRef = useRef<Settings | null>(null);
   const shapeRef = useRef<Shape | null>(null);
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
+  const activeRef = useRef(active);
+  const prewarmRef = useRef(prewarm);
+  const onActivationRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    activeRef.current = active;
+    prewarmRef.current = prewarm;
+    onActivationRef.current?.();
+  }, [active, prewarm]);
 
   useEffect(() => {
     settingsRef.current = {
@@ -700,6 +786,11 @@ const ElectricLogo = ({
   });
 
   useEffect(() => {
+    const cached = shapeCache.get(src);
+    if (cached) {
+      shapeRef.current = cached;
+      return;
+    }
     let alive = true;
     const image = new Image();
     image.crossOrigin = 'anonymous';
@@ -712,7 +803,11 @@ const ElectricLogo = ({
       } catch {
         traced = null;
       }
-      if (traced) shapeRef.current = traced;
+      if (traced) {
+        traced.src = src;
+        shapeCache.set(src, traced);
+        shapeRef.current = traced;
+      }
     };
     image.src = src || BOLT;
     return () => {
@@ -722,11 +817,36 @@ const ElectricLogo = ({
   }, [src]);
 
   useEffect(() => {
+    let alive = true;
+    const images = preloadSrcs.filter((next) => next !== src && !shapeCache.has(next)).map((next) => {
+      const image = new Image();
+      image.crossOrigin = 'anonymous';
+      image.decoding = 'async';
+      image.onload = () => {
+        const prepare = () => {
+          if (!alive || shapeCache.has(next)) return;
+          let shape: Shape | null = null;
+          try { shape = traceShape(image); } catch { /* Image tracing is optional. */ }
+          if (shape) {
+            shape.src = next;
+            shapeCache.set(next, shape);
+          }
+        };
+        if (window.requestIdleCallback) window.requestIdleCallback(prepare);
+        else window.setTimeout(prepare, 0);
+      };
+      image.src = next;
+      return image;
+    });
+    return () => { alive = false; images.forEach((image) => { image.onload = null; }); };
+  }, [preloadSrcs, src]);
+
+  useEffect(() => {
     const container = containerRef.current;
     if (!container) return undefined;
 
     const renderer = new Renderer({
-      dpr: Math.min(window.devicePixelRatio || 1, 2),
+      dpr: Math.min(window.devicePixelRatio || 1, MAX_DPR),
       alpha: true,
       premultipliedAlpha: true,
       antialias: false
@@ -734,7 +854,6 @@ const ElectricLogo = ({
     const gl = renderer.gl;
     const gl2 = gl as WebGL2RenderingContext;
     if (!renderer.isWebgl2) {
-      gl.getExtension('WEBGL_lose_context')?.loseContext();
       return undefined;
     }
     gl.clearColor(0, 0, 0, 0);
@@ -813,7 +932,7 @@ const ElectricLogo = ({
     };
     const mesh = new Mesh(gl, {
       geometry: new Triangle(gl),
-      program: new Program(gl, { vertex, fragment, uniforms, depthTest: false, depthWrite: false })
+      program: new ParallelProgram(gl, { vertex, fragment, uniforms, depthTest: false, depthWrite: false })
     });
 
     const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
@@ -825,7 +944,8 @@ const ElectricLogo = ({
     let pending: Shape | null = null;
     let morph = 1;
     let burst: Point | null = null;
-    let progress = 0;
+    let prewarmPainted = false;
+    let lastReadySrc: string | undefined;
     let ink = 0;
     const hues = [
       [1, 1, 1],
@@ -838,6 +958,7 @@ const ElectricLogo = ({
     let raf = 0;
     let last = performance.now();
     let visible = true;
+    const shouldRun = () => visible && (activeRef.current || (prewarmRef.current && !prewarmPainted));
 
     const load = (slot: Slot, next: Shape) => {
       slot.shape = next;
@@ -864,15 +985,20 @@ const ElectricLogo = ({
     const resize = () => {
       width = Math.max(1, container.clientWidth);
       height = Math.max(1, container.clientHeight);
-      renderer.dpr = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(PIXEL_BUDGET / (width * height)));
+      renderer.dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR, Math.sqrt(PIXEL_BUDGET / (width * height)));
       renderer.setSize(width, height);
       uniforms.uResolution.value = [width, height];
     };
 
     const frame = (now: number) => {
       raf = 0;
+      if (!(mesh.program as ParallelProgram).finish()) {
+        if (shouldRun()) raf = requestAnimationFrame(frame);
+        return;
+      }
       const s = settingsRef.current;
-      const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
+      const elapsed = Math.max(0, (now - last) / 1000);
+      const dt = Math.min(0.05, elapsed);
       last = now;
 
       const incoming = shapeRef.current;
@@ -886,12 +1012,11 @@ const ElectricLogo = ({
         load(slots[target], pending);
         pending = null;
       }
-      if (morph < 1) morph = Math.min(1, morph + dt / (pending ? 0.3 : 1.6));
+      if (morph < 1) morph = Math.min(1, morph + elapsed / MORPH_DURATION);
 
       const to = slots[target].shape;
       const from = morph < 1 ? slots[1 - target].shape : null;
-      if (to) progress = Math.min(1, progress + dt / 1.4);
-      const presence = progress * progress * (3 - 2 * progress);
+      const presence = 1;
 
       if (to && s) {
         const near = place(to, s);
@@ -1017,15 +1142,27 @@ const ElectricLogo = ({
         uniforms.uFill.value = s.fill;
         uniforms.uInk.value = ink;
         renderer.render({ scene: mesh });
+        prewarmPainted = true;
+        if (to.src && to.src !== lastReadySrc) {
+          lastReadySrc = to.src;
+          onReadyRef.current?.(to.src);
+        }
       }
 
-      if (visible) raf = requestAnimationFrame(frame);
+      if (shouldRun()) raf = requestAnimationFrame(frame);
     };
 
     const start = () => {
-      if (raf || !visible) return;
+      if (raf || !shouldRun()) return;
       last = performance.now();
       raf = requestAnimationFrame(frame);
+    };
+    onActivationRef.current = () => {
+      if (shouldRun()) start();
+      else {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
     };
 
     const onMove = (e: PointerEvent) => {
@@ -1062,6 +1199,7 @@ const ElectricLogo = ({
 
     return () => {
       visible = false;
+      onActivationRef.current = null;
       cancelAnimationFrame(raf);
       resizeObserver.disconnect();
       intersectionObserver.disconnect();
@@ -1069,7 +1207,6 @@ const ElectricLogo = ({
       container.removeEventListener('pointerdown', onDown);
       container.removeEventListener('pointerleave', onLeave);
       container.removeEventListener('pointercancel', onLeave);
-      gl.getExtension('WEBGL_lose_context')?.loseContext();
       if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
     };
   }, []);

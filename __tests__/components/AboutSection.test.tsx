@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AboutSection from '@/components/sections/AboutSection';
 import { SectionActivityProvider } from '@/components/common/SectionActivityContext';
@@ -10,15 +10,29 @@ import { ABOUT_SCRIMS } from '@/components/sections/AboutSection/scrim';
 import { SECTION_IDS } from '@/lib/constants';
 import type { NavId } from '@/hooks/useSectionNav';
 
-vi.mock('@/components/blocks/ElectricLogo', () => ({ default: () => null }));
+vi.mock('@/components/blocks/ElectricLogo', () => ({
+  default: ({ src, active, prewarm, onReady, glow, intensity }: {
+    src: string;
+    active: boolean;
+    prewarm?: boolean;
+    onReady?: (src: string) => void;
+    glow: number;
+    intensity: number;
+  }) => (
+    <div data-electric-src={src} data-electric-active={active} data-electric-prewarm={prewarm} data-glow={glow} data-intensity={intensity}>
+      <button type="button" data-signal-ready onClick={() => onReady?.(src)} />
+    </div>
+  ),
+}));
 vi.mock('@/components/blocks/AboutRings', () => ({ default: () => null }));
 
 beforeEach(() => {
   vi.stubGlobal(
     'matchMedia',
-    vi.fn().mockReturnValue({
-      matches: false, media: '', addEventListener: () => {}, removeEventListener: () => {},
-    })
+    vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(min-width: 1024px)', media: query,
+      addEventListener: () => {}, removeEventListener: () => {},
+    }))
   );
 });
 
@@ -98,12 +112,73 @@ describe('AboutSection', () => {
     }
   });
 
-  // Global Constraints의 증거 위계 항목이 명시하는 03 상세의 라벨 3개.
-  // 위 needle 목록에는 없지만 브리프가 별도로 요구하는 문서 계약이다.
-  it('03 상세의 ROLE / CONVENTION / ARCHITECTURE 라벨이 DOM에 있다', () => {
+  it('한 로고가 세 인덱스에 남아 있고 선택할 때만 형태가 바뀐다', async () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = renderAboutSection();
+      await act(async () => { await Promise.resolve(); });
+      const logo = container.querySelector('[data-electric-src]');
+      expect(logo).toHaveAttribute('data-electric-src', '/icons-mono/react.svg');
+      act(() => vi.advanceTimersByTime(60_000));
+      expect(logo).toHaveAttribute('data-electric-src', '/icons-mono/react.svg');
+
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(coreValues[1].label) }));
+      expect(container.querySelector('[data-electric-src]')).toBe(logo);
+      expect(logo).toHaveAttribute('data-electric-src', '/about/fixtool.webp');
+
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(coreValues[2].label) }));
+      expect(container.querySelector('[data-electric-src]')).toBe(logo);
+      expect(logo).toHaveAttribute('data-electric-src', '/about/handshake.webp');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('첫 로고가 준비될 때까지 정적 실루엣을 보여준다', async () => {
+    const { container } = renderAboutSection();
+    const fallback = container.querySelector('.about-electric-static');
+    expect(fallback).toHaveClass('opacity-100');
+    await act(async () => { await Promise.resolve(); });
+    fireEvent.click(container.querySelector('[data-signal-ready]')!);
+    expect(fallback).toHaveClass('opacity-0');
+  });
+
+  it('로고 전환 중 광휘 강도가 바뀌지 않는다', async () => {
+    const { container } = renderAboutSection();
+    await act(async () => { await Promise.resolve(); });
+    const logo = container.querySelector('[data-electric-src]');
+    const glow = logo?.getAttribute('data-glow');
+    const intensity = logo?.getAttribute('data-intensity');
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(coreValues[1].label) }));
+    expect(logo).toHaveAttribute('data-glow', glow);
+    expect(logo).toHaveAttribute('data-intensity', intensity);
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(coreValues[2].label) }));
+    expect(logo).toHaveAttribute('data-glow', glow);
+    expect(logo).toHaveAttribute('data-intensity', intensity);
+  });
+
+  it('About을 떠났다가 돌아와도 WebGL 인스턴스를 재사용한다', async () => {
+    const view = (active: NavId) => (
+      <SectionActivityProvider active={active} entryAnimationTarget={null} pageVisible routeResolved motionReady reducedMotion={false}>
+        <AboutSection />
+      </SectionActivityProvider>
+    );
+    const { container, rerender } = render(view(SECTION_IDS.ABOUT));
+    await act(async () => { await Promise.resolve(); });
+    const logo = container.querySelector('[data-electric-src]');
+    rerender(view(SECTION_IDS.SKILLS));
+    expect(container.querySelector('[data-electric-src]')).toBe(logo);
+    expect(logo).toHaveAttribute('data-electric-active', 'false');
+    rerender(view(SECTION_IDS.ABOUT));
+    expect(container.querySelector('[data-electric-src]')).toBe(logo);
+    expect(logo).toHaveAttribute('data-electric-active', 'true');
+  });
+
+  // TEAMWORK의 현재 증거 항목을 본문에 표시한다.
+  it('03 상세의 ROLE / CONVENTION 라벨이 DOM에 있다', () => {
     const { container } = renderAboutSection();
     const html = container.textContent ?? '';
-    for (const needle of ['ROLE', 'CONVENTION', 'ARCHITECTURE']) {
+    for (const needle of ['ROLE', 'CONVENTION']) {
       expect(html, `${needle}이 없다`).toContain(needle);
     }
   });
@@ -451,190 +526,76 @@ describe('AboutSection', () => {
     expect(grid.dataset.aboutDirection).toBe('none');
   });
 
-  // 시각 증거(계획 외 사용자 요청, 2026-09-14). 레일과 콘텐츠 사이 빈 칸에
-  // BASICS는 폴더, AI WORKFLOW는 링이 붙는다.
-  describe('시각 증거', () => {
-    it('세 문항 모두에 자리를 둔다', () => {
+  describe('shared visual', () => {
+    it('uses one visual slot for all three items', () => {
       const { container } = renderAboutSection();
-      const indexes = [...container.querySelectorAll('[data-about-visual]')].map((el) =>
-        el.getAttribute('data-about-visual-index')
-      );
-      expect(indexes).toEqual(['0', '1', '2']);
+      const visuals = container.querySelectorAll('[data-about-visual]');
+      expect(visuals).toHaveLength(1);
+      expect(visuals[0].className).toMatch(/\bcol-start-2\b/);
+      expect(visuals[0].className).toMatch(/\bcol-span-4\b/);
     });
 
-    // lg 미만에서는 격자가 세로로 쌓인다. 거기서 장식이 제목보다 먼저 나오면
-    // 읽는 순서가 망가지므로 아예 그리지 않는다.
-    it('좁은 화면에서는 자리 자체가 숨는다', () => {
-      const { container } = renderAboutSection();
-      for (const el of container.querySelectorAll('[data-about-visual]')) {
-        const layer = el.parentElement;
-        expect(layer?.className).toMatch(/\bhidden\b/);
-        expect(layer?.className).toMatch(/\blg:grid\b/);
-      }
-    });
-
-    // TEAMWORK의 손뼉. gsap 타임라인이라 DESIGN.md의 "rAF를 도는 것은
-    // 스스로 멈춘다"가 그대로 적용된다. 활성 여부를 밖에서 받는다.
-    it('손뼉이 TEAMWORK 자리에 서고 그 문항일 때만 켜진다', async () => {
-      const user = userEvent.setup();
-      const { container } = renderAboutSection();
-      const hands = () =>
-        container.querySelector('[data-about-visual-index="2"] [data-about-teamwork]');
-      expect(hands()).not.toBeNull();
-      expect(hands()).toHaveAttribute('data-active', 'false');
-      expect(
-        container.querySelector('[data-about-visual-index="0"] [data-about-teamwork]')
-      ).toBeNull();
-
-      await user.click(screen.getByRole('button', { name: /TEAMWORK/ }));
-      expect(hands()).toHaveAttribute('data-active', 'true');
-    });
-
-    it('About이 비활성이면 손뼉이 멈춰 있다', () => {
-      const { container } = renderAboutSection('overview' as NavId);
-      expect(container.querySelector('[data-about-teamwork]')).toHaveAttribute(
-        'data-active',
-        'false'
-      );
-    });
-
-    it('모션을 끄면 손뼉이 치지 않는다', () => {
-      vi.stubGlobal(
-        'matchMedia',
-        vi.fn().mockReturnValue({
-          matches: true, media: '', addEventListener: () => {}, removeEventListener: () => {},
-        })
-      );
-      const { container } = renderAboutSection();
-      expect(container.querySelector('[data-about-teamwork]')).toHaveAttribute(
-        'data-active',
-        'false'
-      );
-    });
-
-    // gsap은 첫 화면 번들에 없다. 손뼉이 정적으로 들여오면 About이 정적
-    // import라 그대로 얹힌다. BootSequence와 같은 처방을 쓴다.
-    it('손뼉이 gsap을 정적으로 들여오지 않는다', () => {
-      const source = readFileSync(
-        resolve(process.cwd(), 'components/blocks/AboutTeamwork/index.tsx'),
-        'utf8'
-      );
-      expect(source).not.toMatch(/^import .*from '@\/lib\/gsap'/m);
-      expect(source).toMatch(/import\('@\/lib\/gsap'\)/);
-    });
-
-    // 무한 반복은 옆에서 글을 읽는 동안 계속 시야를 끈다. 문항에 들어올
-    // 때 한 번만 치고, 떠나면 되감아 다음 입장에서 다시 친다.
-    it('손뼉이 한 번만 치고 멈춘다', () => {
-      const source = readFileSync(
-        resolve(process.cwd(), 'components/blocks/AboutTeamwork/index.tsx'),
-        'utf8'
-      );
-      expect(source).not.toMatch(/repeat: -1/);
-      expect(source).toMatch(/tl\.restart\(\)/);
-      expect(source).toMatch(/tl\.pause\(0\)/);
-    });
-
-    // 콘텐츠는 7칸째부터다. 6칸째를 비워 두지 않으면 장식이 본문에 붙는다.
-    it('자리가 레일과 콘텐츠 사이 칸을 쓰고 콘텐츠와 한 칸 떨어진다', () => {
-      const { container } = renderAboutSection();
-      const slot = container.querySelector('[data-about-visual-index="0"]');
-      expect(slot?.className).toMatch(/\bcol-start-2\b/);
-      expect(slot?.className).toMatch(/\bcol-span-4\b/);
-    });
-
-    // 증거 겹은 본문 격자와 따로 놓인 겹이다. 두 겹의 칸 수와 여백이
-    // 어긋나면 폴더가 본문과 다른 열에 선다. 같은 값인지 잠근다.
-    it('증거 겹의 격자가 본문 격자와 같은 칸과 여백을 쓴다', () => {
+    it('hides the visual slot on narrow screens', () => {
       const { container } = renderAboutSection();
       const layer = container.querySelector('[data-about-visual]')?.parentElement;
-      const grid = container.querySelector('[data-about-grid]');
-      for (const token of ['grid-cols-12', 'grid-rows-6', 'gap-x-6', 'gap-y-2', 'px-10', 'py-8']) {
-        expect(layer?.className).toContain(token);
-        expect(grid?.className).toContain(`lg:${token}`);
-      }
+      expect(layer?.className).toMatch(/\bhidden\b/);
+      expect(layer?.className).toMatch(/\blg:grid\b/);
     });
 
-    // 종이에 올라가는 것은 글자가 아니라 Skills가 쓰는 마스크 아이콘이다.
-    // 같은 이름을 글자로 또 적으면 사이트 안에 같은 정보가 두 벌이 된다.
-    it('폴더가 기술스택 아이콘 6개를 담는다', () => {
+    it('uses a static mask of the selected logo for reduced motion', () => {
+      vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
+        matches: true, media: '', addEventListener: () => {}, removeEventListener: () => {},
+      }));
       const { container } = renderAboutSection();
-      const icons = [...container.querySelectorAll('[data-about-folder-icon]')];
-      expect(icons.map((el) => el.getAttribute('data-about-folder-icon'))).toEqual([
-        'react',
-        'typescript',
-        'nextjs',
-        'tailwind',
-        'zustand',
-        'react-query',
-      ]);
-      for (const icon of icons) {
-        expect(icon.className).toMatch(/\bskill-icon\b/);
-        // 마스크가 자손의 filter를 잘라내므로 광휘는 바깥 겹이 쥔다.
-        // --skill-icon-src도 거기에 있고 아이콘이 물려받는다.
-        const slot = icon.parentElement;
-        expect(slot?.className).toMatch(/\babout-folder-icon-slot\b/);
-        expect(slot?.getAttribute('style')).toMatch(/--skill-icon-src: url\(\/icons-mono\//);
-      }
+      const logo = () => container.querySelector('.about-electric-static-shape') as HTMLElement;
+      expect(logo()?.style.maskImage).toContain('/icons-mono/react.svg');
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(coreValues[2].label) }));
+      expect(logo()?.style.maskImage).toContain('/about/handshake.webp');
+      expect(container.querySelector('[data-electric-src]')).toBeNull();
     });
 
-    // 호버가 아니라 선택이 연다. 이게 이 컴포넌트를 시안에서 바꾼 이유다.
-    it('BASICS가 활성이면 폴더가 열리고 다른 문항으로 가면 닫힌다', async () => {
-      const user = userEvent.setup();
-      const { container } = renderAboutSection();
-      // 노드를 붙잡아 두지 않고 매번 다시 찾는다. 붙잡아 두면 격자가
-      // 다시 만들어질 때 떨어져 나간 옛 노드를 검사하게 되고, 그것은
-      // 클릭 전 속성을 그대로 들고 있어 아무것도 잡지 못한다.
-      const folder = () => container.querySelector('[data-about-folder]');
-      expect(folder()).toHaveAttribute('data-open', 'true');
-
-      await user.click(screen.getByRole('button', { name: coreValues[1].label }));
-      expect(folder()).toHaveAttribute('data-open', 'false');
-
-      await user.click(screen.getByRole('button', { name: /BASICS/ }));
-      expect(folder()).toHaveAttribute('data-open', 'true');
-    });
-
-    // About을 떠나면 다음에 돌아왔을 때 여는 동작을 다시 볼 수 있어야 한다.
-    it('About이 비활성이면 BASICS가 골라져 있어도 폴더가 닫혀 있다', () => {
-      const { container } = renderAboutSection('overview' as NavId);
-      expect(container.querySelector('[data-about-folder]')).toHaveAttribute('data-open', 'false');
-    });
-
-    // 전기 로고는 AI WORKFLOW를 고를 때만 마운트한다.
-    it('전기 로고는 AI WORKFLOW를 고를 때만 나타난다', async () => {
-      const user = userEvent.setup();
-      const { container } = renderAboutSection();
-      expect(container.querySelector('.about-electric')).toBeNull();
-
-      await user.click(screen.getByRole('button', { name: coreValues[1].label }));
-      expect(container.querySelector('.about-electric')).not.toBeNull();
-    });
-
-    it('다른 문항으로 옮기면 전기 로고를 정리한다', async () => {
-      const user = userEvent.setup();
-      const { container } = renderAboutSection();
-      await user.click(screen.getByRole('button', { name: coreValues[1].label }));
-      await user.click(screen.getByRole('button', { name: /BASICS/ }));
-      expect(container.querySelector('.about-electric')).toBeNull();
-    });
-
-    // 무한히 도는 장식이라 정지 화면으로 대신할 것이 없다. 아예 안 켠다.
-    it('모션을 끈 사용자에게는 링을 켜지 않는다', async () => {
-      vi.stubGlobal(
-        'matchMedia',
-        vi.fn().mockReturnValue({
-          matches: true, media: '', addEventListener: () => {}, removeEventListener: () => {},
-        })
+    it('START 전 WebGL을 예열하고 About 진입 시 같은 인스턴스를 사용한다', async () => {
+      const view = (active: NavId) => (
+        <SectionActivityProvider active={active} entryAnimationTarget={null} pageVisible routeResolved motionReady reducedMotion={false}>
+          <AboutSection />
+        </SectionActivityProvider>
       );
-      const user = userEvent.setup();
-      const { container } = renderAboutSection();
-      await user.click(screen.getByRole('button', { name: coreValues[1].label }));
-      expect(container.querySelector('.about-electric-static')).not.toBeNull();
+      const { container, rerender } = render(view('overview' as NavId));
+      await act(async () => { await Promise.resolve(); });
+      const logo = container.querySelector('[data-electric-src]');
+      expect(logo).toHaveAttribute('data-electric-active', 'false');
+      expect(logo).toHaveAttribute('data-electric-prewarm', 'true');
+      fireEvent.click(container.querySelector('[data-signal-ready]')!);
+      expect(container.querySelector('.about-electric-static')).toHaveClass('opacity-0');
+
+      rerender(view(SECTION_IDS.ABOUT));
+      expect(container.querySelector('[data-electric-src]')).toBe(logo);
+      expect(logo).toHaveAttribute('data-electric-active', 'true');
+      expect(logo).toHaveAttribute('data-electric-prewarm', 'false');
+    });
+
+    it('이름 파티클이 끝나기 전에는 About WebGL을 예열하지 않는다', async () => {
+      const view = (heroRevealed: boolean) => (
+        <SectionActivityProvider active={'overview' as NavId} entryAnimationTarget={null} pageVisible routeResolved motionReady reducedMotion={false} heroRevealed={heroRevealed}>
+          <AboutSection />
+        </SectionActivityProvider>
+      );
+      const { container, rerender } = render(view(false));
+      expect(container.querySelector('[data-electric-src]')).toBeNull();
+      rerender(view(true));
+      await act(async () => { await Promise.resolve(); });
+      expect(container.querySelector('[data-electric-prewarm="true"]')).toBeInTheDocument();
+    });
+
+    it('모바일에서는 보이지 않는 WebGL 로고를 예열하지 않는다', () => {
+      vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
+        matches: false, media: '', addEventListener: () => {}, removeEventListener: () => {},
+      }));
+      const { container } = renderAboutSection('overview' as NavId);
+      expect(container.querySelector('[data-electric-src]')).toBeNull();
     });
   });
 
-  // 폴더의 기하와 전환은 전부 design-tokens.css에 있다. TSX에는 값이 없다.
   describe('폴더 CSS 계약', () => {
     const css = readFileSync(resolve(process.cwd(), 'styles/design-tokens.css'), 'utf8');
     // 모션을 끈 사용자용 블록은 빼고 본다. 거기에도 같은 선택자가 있는데

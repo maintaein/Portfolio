@@ -10,10 +10,9 @@ export interface CoreValue {
   // 레일에 쓰는 짧은 라벨. 순번(01, 02, 03)보다 뜻이 먼저 읽힌다.
   label: string;
   description: string;
-  imagePlaceholder: string;
+  logoSrc: string;
   evidence: readonly { label: string; value: string }[];
   evidenceStyle: 'metric' | 'detail';
-  stackPages?: readonly (readonly string[])[];
 }
 
 export interface Award {

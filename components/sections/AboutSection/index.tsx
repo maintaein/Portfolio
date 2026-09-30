@@ -6,8 +6,7 @@ import { createPortal } from 'react-dom';
 import { coreValues } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
 import { useSectionActivity } from '@/components/common/SectionActivityContext';
-import AboutFolder from '@/components/blocks/AboutFolder';
-import AboutTeamwork from '@/components/blocks/AboutTeamwork';
+import { OVERVIEW } from '@/hooks/useSectionNav';
 import AboutRail from './rail';
 import { ABOUT_SCRIMS, ABOUT_SCRIMS_MOBILE } from './scrim';
 
@@ -34,21 +33,69 @@ type AboutTransition = {
 const DynamicElectricLogo = dynamic(() => import('@/components/blocks/ElectricLogo'), {
   ssr: false,
 });
+const ABOUT_LOGOS = coreValues.map((value) => value.logoSrc);
 
-// 시각 증거가 붙는 문항. 셋 다 있고, 한 번에 하나만 보인다.
-const VISUAL_INDEXES = new Set([0, 1, 2]);
+function AboutElectricVisual({ logoSrc, active, prewarm, reducedMotion }: {
+  logoSrc: string;
+  active: boolean;
+  prewarm: boolean;
+  reducedMotion: boolean;
+}) {
+  const [ready, setReady] = useState(false);
+  const charging = !ready && !reducedMotion;
+
+  return (
+    <div className="about-electric">
+      <div
+        className={`about-electric-static ${ready && !reducedMotion ? 'opacity-0' : 'opacity-100'} ${charging ? 'about-electric-static-charging' : ''}`}
+      >
+        <div
+          className="about-electric-static-shape"
+          style={{ maskImage: `url(${logoSrc})`, WebkitMaskImage: `url(${logoSrc})` }}
+        />
+      </div>
+      {!reducedMotion ? (
+        <DynamicElectricLogo
+          src={logoSrc}
+          active={active}
+          prewarm={prewarm}
+          preloadSrcs={ABOUT_LOGOS}
+          onReady={(renderedSrc) => { if (renderedSrc === logoSrc) setReady(true); }}
+          color="#7fe3ee"
+          glowColor="#03b3c3"
+          intensity={0.65}
+          glow={0.3}
+          speed={1.1}
+          flicker={0.25}
+          interactive={false}
+        />
+      ) : null}
+    </div>
+  );
+}
 
 // Cubes와 Orbit은 폐기했다. 배경이 이미 있는데 별도 도형을 얹으면 경쟁한다.
 // 순번 인덱스는 라벨 레일(AboutRail)로 바뀌었다. 상세 내부는 lg부터 12칸
 // 6줄 격자를 쓰고, 그 미만에서는 4칸으로 줄여 세로로 쌓는다(Task 7).
 export default function AboutSection() {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [hasVisited, setHasVisited] = useState(false);
+  const [wideScreen, setWideScreen] = useState(false);
   const [transition, setTransition] = useState<AboutTransition>({
     direction: 'none',
     distance: 0,
   });
   const [transitionSeq, setTransitionSeq] = useState(0);
-  const { reducedMotion, active } = useSectionActivity();
+  const { reducedMotion, motionReady, heroRevealed, active } = useSectionActivity();
+  const prewarmLogo = wideScreen && active === OVERVIEW && motionReady && heroRevealed && !reducedMotion;
+
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 1024px)');
+    const update = () => setWideScreen(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
 
   // 스크림을 body로 포털하기 전 게이트. 서버 렌더에는 document가 없다.
   // 마운트된 뒤에만 포털한다(스크림은 aria-hidden 장식이라 클라이언트
@@ -57,6 +104,9 @@ export default function AboutSection() {
   // 포털 JSX 바로 위 주석 참고, C1 재수정).
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    if (active === SECTION_IDS.ABOUT) setHasVisited(true);
+  }, [active]);
 
   function handleSelect(next: number) {
     const delta = next - activeIndex;
@@ -172,6 +222,21 @@ export default function AboutSection() {
               document.body
             )
           : null}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-10 hidden grid-cols-12 grid-rows-6 gap-x-6 gap-y-2 px-10 py-8 lg:grid"
+        >
+          <div data-about-visual className="col-span-4 col-start-2 row-span-4 row-start-2 flex items-center justify-center">
+            {wideScreen && (hasVisited || active === SECTION_IDS.ABOUT || prewarmLogo) ? (
+              <AboutElectricVisual
+                logoSrc={coreValues[activeIndex].logoSrc}
+                active={active === SECTION_IDS.ABOUT}
+                prewarm={prewarmLogo}
+                reducedMotion={reducedMotion}
+              />
+            ) : null}
+          </div>
+        </div>
         {coreValues.map((value, index) => {
           const isActive = index === activeIndex;
 
@@ -187,63 +252,7 @@ export default function AboutSection() {
                   : 'absolute inset-0 opacity-0 pointer-events-none'
               }`}
             >
-              {/* 시각 증거. 레일과 콘텐츠(7칸째) 사이 빈 칸을 쓴다. 6칸째는
-                  비워 콘텐츠와 붙지 않게 한다.
 
-                  아래 격자 안이 아니라 형제로 두는 이유가 있다. 격자는
-                  transitionSeq를 key로 받아 문항을 고를 때마다 통째로 다시
-                  만들어지는데(전환 애니메이션 재생 보장), 그 안에 폴더를
-                  두면 BASICS로 돌아올 때 폴더가 이미 열린 노드로 새로
-                  태어난다. 여는 동작 자체가 사라지는 것이다. 그래서 열고
-                  닫힘을 보여야 하는 것은 key 바깥에 둔다.
-
-                  칸 수와 여백은 아래 격자와 같은 값을 쓴다. 두 겹이 같은
-                  자리에 포개져야 열이 맞는다(테스트가 이 일치를 잠근다).
-
-                  lg 미만에서는 격자가 4칸으로 줄고 전부 세로로 쌓이는데,
-                  거기서 장식이 제목보다 먼저 나오면 읽는 순서가 망가진다.
-                  그래서 lg 미만에서는 아예 그리지 않는다. */}
-              {VISUAL_INDEXES.has(index) ? (
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-0 hidden grid-cols-12 grid-rows-6 gap-x-6 gap-y-2 px-10 py-8 lg:grid"
-                >
-                  <div
-                    data-about-visual
-                    data-about-visual-index={index}
-                    className="col-span-4 col-start-2 row-span-4 row-start-2 flex items-center justify-center"
-                  >
-                    {index === 0 ? (
-                      <AboutFolder
-                        open={isActive && active === SECTION_IDS.ABOUT}
-                        papers={value.stackPages ?? []}
-                      />
-                    ) : null}
-                    {index === 1 && isActive && active === SECTION_IDS.ABOUT ? (
-                      <div className="about-electric">
-                        {reducedMotion ? (
-                          <svg viewBox="0 0 64 64" aria-hidden="true" className="about-electric-static">
-                            <path d="M39 3 12 37h17l-4 24 27-34H35z" />
-                          </svg>
-                        ) : (
-                          <DynamicElectricLogo
-                            color="#7fe3ee"
-                            glowColor="#03b3c3"
-                            speed={1.1}
-                            flicker={0.25}
-                            interactive={false}
-                          />
-                        )}
-                      </div>
-                    ) : null}
-                    {index === 2 ? (
-                      <AboutTeamwork
-                        active={!reducedMotion && isActive && active === SECTION_IDS.ABOUT}
-                      />
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
               <div
                 key={transitionSeq}
                 data-about-grid
