@@ -26,7 +26,7 @@ const bootSequencePath = path.resolve(
 const DESIGN_TOKENS_CSS = readFileSync(
   path.resolve(process.cwd(), 'styles/design-tokens.css'),
   'utf8'
-);
+).replace(/\r\n/g, '\n');
 
 // styles/sectionVisibility.test.ts와 같은 패턴 — jsdom은 미디어쿼리를 계산하지
 // 못하므로 CSS 원문을 정규식으로 읽어 "미디어쿼리 밖 = 최종 상태,
@@ -1116,7 +1116,7 @@ describe('BootSequence — 캡션 컨테인먼트 점프 회피(active 기반 �
   });
 });
 
-// 최종 리뷰 I1: overview의 실제 화면(FRONTEND DEVELOPER 캡션, START)은
+// 최종 리뷰 I1: overview의 실제 화면(SOFTWARE DEVELOPER 캡션, START)은
 // data-section='overview' wrapper가 아니라 이 컴포넌트가 그린다. 그
 // wrapper는 빈 div라 전환 표식을 걸어도 그릴 픽셀이 없으므로, HomeClient가
 // 같은 표식을 이 컴포넌트에도 내려 자기 루트에 편다.

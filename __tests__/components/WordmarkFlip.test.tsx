@@ -477,7 +477,7 @@ describe('WordmarkFlip — 네비 스트립은 워드마크가 착지한 뒤에 
   const designTokensCss = readFileSync(
     path.resolve(process.cwd(), 'styles/design-tokens.css'),
     'utf8'
-  );
+  ).replace(/\r\n/g, '\n');
 
   function ruleBody(selector: string): string | undefined {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const css = readFileSync(path.resolve(process.cwd(), 'styles/design-tokens.css'), 'utf8');
+const css = readFileSync(path.resolve(process.cwd(), 'styles/design-tokens.css'), 'utf8').replace(/\r\n/g, '\n');
 
 function ruleBody(selector: string): string | undefined {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
