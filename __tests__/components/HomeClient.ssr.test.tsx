@@ -19,7 +19,7 @@ const reactSkill = skillCategories
   .flatMap((category) => category.skills)
   .find((skill) => skill.name === 'React')!;
 const semanticMarkerBySection = {
-  [SECTION_IDS.ABOUT]: coreValues[0].description,
+  [SECTION_IDS.ABOUT]: coreValues[0].description.split('\n\n')[0],
   [SECTION_IDS.PROJECTS]: alphaMail.title,
   [SECTION_IDS.EXPERIENCE]: experiences[0].position,
   [SECTION_IDS.SKILLS]: reactSkill.description,

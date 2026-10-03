@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { coreValues } from '@/lib/data';
+import { RichText, parseRichText } from '@/lib/utils/richText';
 import { SECTION_IDS } from '@/lib/constants';
 import { useSectionActivity } from '@/components/common/SectionActivityContext';
 import { OVERVIEW } from '@/hooks/useSectionNav';
@@ -264,33 +265,31 @@ export default function AboutSection() {
                   data-about-title
                   className="col-span-4 col-start-1 text-t3 font-bold leading-tight text-[var(--color-text-primary)] sm:text-t2 lg:col-span-5 lg:col-start-7 lg:row-start-2 lg:self-center lg:text-t1"
                 >
-                  {value.title}
+                  {parseRichText(value.title)}
                 </h3>
                 <div
                   data-about-evidence
                   className="col-span-4 col-start-1 lg:col-span-4 lg:col-start-7 lg:row-span-2 lg:row-start-3 lg:self-center"
                 >
-                  <div className={`flex flex-col ${value.evidenceStyle === 'detail' ? 'gap-4 font-mono' : 'gap-5'}`}>
+                  <div className={`flex flex-col ${value.evidenceStyle === 'detail' ? 'gap-4' : 'gap-5'}`}>
                     {value.evidence.map(({ label, value: evidenceValue }) => (
                       <div key={label}>
                         <div className={`text-t8 tracking-[0.2em] text-[var(--color-text-secondary)] ${value.evidenceStyle === 'metric' ? 'uppercase' : ''}`}>
-                          {label}
+                          {parseRichText(label)}
                         </div>
-                        <div className={value.evidenceStyle === 'detail'
-                          ? 'mt-1 text-t3 leading-tight text-[var(--color-text-primary)]'
-                          : 'text-d3 font-bold leading-none text-[var(--color-text-primary)]'}>
-                          {evidenceValue}
+                        <div className="text-d3 font-bold leading-none text-[var(--color-text-primary)]">
+                          {parseRichText(evidenceValue)}
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
-                <p
+                <div
                   data-about-description
                   className="col-span-4 col-start-1 text-t7 leading-relaxed text-[var(--color-text-secondary)] sm:text-t6 lg:col-span-5 lg:col-start-7 lg:row-start-5 lg:self-center"
                 >
-                  {value.description}
-                </p>
+                  <RichText text={value.description} />
+                </div>
               </div>
             </div>
           );

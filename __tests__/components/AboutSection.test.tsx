@@ -112,6 +112,50 @@ describe('AboutSection', () => {
     }
   });
 
+  it('세 인덱스의 증거 값에 같은 글꼴과 크기를 적용한다', () => {
+    const { container } = renderAboutSection();
+
+    for (const evidence of container.querySelectorAll('[data-about-evidence]')) {
+      expect(evidence.firstElementChild).not.toHaveClass('font-mono');
+      const values = evidence.querySelectorAll(':scope > div > div > div:last-child');
+      expect(values).toHaveLength(2);
+      for (const value of values) {
+        expect(value).toHaveClass('text-d3', 'font-bold');
+      }
+    }
+  });
+
+  it('제목·설명·증거 문구의 강조 표기와 설명 문단을 렌더한다', () => {
+    const value = coreValues[0];
+    const original = {
+      title: value.title,
+      description: value.description,
+      label: value.evidence[0].label,
+      evidenceValue: value.evidence[0].value,
+    };
+
+    try {
+      value.title = '**기술** 역량';
+      value.description = '첫 번째 **문단**\n\n두 번째 __문단__';
+      value.evidence[0].label = '**경험**';
+      value.evidence[0].value = '`React`';
+
+      const { container } = renderAboutSection();
+      const detail = container.querySelector('[data-detail="0"]');
+      expect(detail?.querySelector('[data-about-title] strong')).toHaveTextContent('기술');
+      expect(detail?.querySelectorAll('[data-about-description] p')).toHaveLength(2);
+      expect(detail?.querySelector('[data-about-description] strong')).toHaveTextContent('문단');
+      expect(detail?.querySelector('[data-about-description] mark')).toHaveTextContent('문단');
+      expect(detail?.querySelector('[data-about-evidence] strong')).toHaveTextContent('경험');
+      expect(detail?.querySelector('[data-about-evidence] code')).toHaveTextContent('React');
+    } finally {
+      value.title = original.title;
+      value.description = original.description;
+      value.evidence[0].label = original.label;
+      value.evidence[0].value = original.evidenceValue;
+    }
+  });
+
   it('한 로고가 세 인덱스에 남아 있고 선택할 때만 형태가 바뀐다', async () => {
     vi.useFakeTimers();
     try {
