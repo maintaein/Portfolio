@@ -11,8 +11,8 @@ import { SECTION_IDS } from '@/lib/constants';
 import { projects, skillCategories } from '@/lib/data';
 
 const visibleSkills = [
-  'TypeScript', 'Python', 'React', 'Next.js',
-  'Tailwind CSS', 'React Query', 'Zustand', 'Figma',
+  'React', 'TypeScript', 'Next.js', 'Tailwind CSS',
+  'Python', 'React Query', 'Zustand', 'Figma',
 ];
 const css = readFileSync(resolve(process.cwd(), 'styles/design-tokens.css'), 'utf8');
 
@@ -53,7 +53,7 @@ describe('SkillsSection signal map', () => {
         .toBe(`url(/icons-mono/${skill.icon}.svg)`);
     }
     expect(screen.queryByRole('button', { name: 'JavaScript' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'TypeScript' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'React' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('selects on hover, focus, and click, replacing the prior project map immediately', () => {
@@ -91,7 +91,7 @@ describe('SkillsSection signal map', () => {
 
   it('keeps bare icons and focusable project surfaces without CSS sequence delays', () => {
     const { container } = render(skillsWithActivity());
-    const button = screen.getByRole('button', { name: 'TypeScript' });
+    const button = screen.getByRole('button', { name: 'React' });
     expect(button.className).not.toMatch(/\bbg-|\bborder-/);
     expect(button.querySelector('.skill-icon-active')).toBeInTheDocument();
     expect(container.querySelectorAll('.signal-surface')).toHaveLength(screen.getAllByRole('link').length);
@@ -236,7 +236,7 @@ describe('SkillsSection signal map', () => {
       const skill = skillCategories.flatMap((category) => category.skills).find((item) => item.name === name)!;
       expect(html).toContain(skill.description);
     }
-    expect(html).toContain('TDS (Taein Design System)');
+    expect(html).toContain('TUI (Taein UI)');
     expect(html).toContain('AlphaMail');
   });
 });

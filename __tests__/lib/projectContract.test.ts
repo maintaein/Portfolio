@@ -87,8 +87,8 @@ describe('selectFeaturedReview', () => {
 });
 
 describe('validateProjectContract - 양성', () => {
-  it('AlphaMail·Portfolio·TDS가 판 2 계약을 통과한다', () => {
-    for (const title of ['AlphaMail', 'Portfolio', 'TDS']) {
+  it('AlphaMail·Portfolio·TUI가 판 2 계약을 통과한다', () => {
+    for (const title of ['AlphaMail', 'Portfolio', 'TUI']) {
       const violations = validateProjectContract(findProject(title));
       const panel2 = violations.filter((v) => v.field.startsWith('reviews[0]'));
       expect(panel2, `${title} 판 2: ${JSON.stringify(panel2)}`).toEqual([]);

@@ -8,8 +8,8 @@ import ScrollArea from '@/components/common/ScrollArea';
 import { useSectionActivity } from '@/components/common/SectionActivityContext';
 
 const names = [
-  'TypeScript', 'Python', 'React', 'Next.js',
-  'Tailwind CSS', 'React Query', 'Zustand', 'Figma',
+  'React', 'TypeScript', 'Next.js', 'Tailwind CSS',
+  'Python', 'React Query', 'Zustand', 'Figma',
 ];
 const skills = names.map((name) => {
   const category = skillCategories.find((group) => group.skills.some((skill) => skill.name === name))!;

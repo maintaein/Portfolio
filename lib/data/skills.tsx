@@ -25,7 +25,7 @@ export const skillCategories: SkillCategory[] = [
         icon: 'typescript',
         description:
           'strict/no-any와 타입 기반 디자인 토큰으로 잘못된 참조를 컴파일 단계에서 차단',
-        projects: 'TDS · AlphaMail · Portfolio · Ttabong',
+      projects: 'TUI · AlphaMail · Portfolio · Ttabong',
       },
       {
         name: 'Python',
@@ -53,7 +53,7 @@ export const skillCategories: SkillCategory[] = [
         name: 'React',
         icon: 'react',
         description: '컴포넌트 구독 범위를 Profiler로 진단하고 불필요한 연쇄 렌더를 제거',
-        projects: 'AlphaMail · TDS · Ttabong',
+      projects: 'AlphaMail · TUI · Ttabong',
       },
       {
         name: 'Next.js',

@@ -1,57 +1,57 @@
 import { Project } from '@/types';
 
-export const tds: Project = {
-  title: 'TDS (Taein Design System)',
-  subtitle: '프론트엔드 개발자 \n 김태인의 디자인 시스템',
-  image: '/projects/TDS.webp',
+export const tui: Project = {
+  title: 'TUI (Taein UI)',
+  subtitle: '개발자 \n 김태인의 UI컴포넌트 라이브러리',
+  image: '/projects/TUI.webp',
   tags: ['React 19', 'TypeScript', 'Vanilla Extract', 'Vite', 'Vitest', 'pnpm Monorepo', 'TDD'],
   duration: '2025.12 - 2026.07',
   phases: [
-    { label: '1차 MVP', period: '2025.12 - 2026.07' },
-    { label: '고도화', period: '2026.08 - 현재' }
+    { label: '1차 MVP', period: '2025.12 - 2026.06' },
+    { label: '고도화', period: '2026.09 - 현재' }
   ],
 
   role: '1인 설계 및 개발',
   teamSize: '1명 (개인 프로젝트)',
 
-  motivation: '라이브러리 설계자의 입장과 개발자의 입장을 모두 경험했던 기회. shadcn이나 MUI와 같은 라이브러리를 사용하다 보니 컴포넌트들이 어떤 코드로 작동하는지 모른 채 쓰고 있다는 불안감이 있었습니다. 사실 디자인 시스템이 뭘 의미하는지도 잘 모른 채로 프로젝트를 진행해왔었습니다.\n\n 저는 이럴 때 직접 만들어보면서 학습하는게 부족한 점들을 채우는 좋은 방법이었습니다. 동시에, 이후 개인 프로젝트에서도 TDS를 활용해보면 라이브러리 설계자와 개발자 두 경험을 함께 얻을 수 있을 것 같아 이 프로젝트를 시작했습니다.',
+  motivation: '재미있고 인터랙티브한 효과를 추구한 React UI 컴포넌트 라이브러리. \n\n 웹사이트를 방문하면 항상 특별한 애니메이션이 있는지, 인터랙션 효과는 어떻게 만들었는지에 관심이 많았습니다. 이에 제 느낌을 담은 UI컴포넌트를 하나하나 설계하여 라이브러리로 만들었습니다. 사용자가 별다른 레퍼런스나 고민 없이도 제 라이브러리 하나면 독특한 모션과 인터랙션이 담긴 웹사이트를 만들 수 있도록 하고자 했습니다.',
 
   implementations: [
     {
-      category: '데모 문서 앱 (packages/demo)',
-      items: [
-        '라이브 코드 에디터, Props 테이블, 접근성 가이드로 컴포넌트 사용법 확인',
-        '문서 앱 자체에 TDS 컴포넌트를 적용해 실제 사용 환경에서 검증',
-      ],
-      intent: '컴포넌트의 사용법과 접근성, props를 사람이 확인하기 편하도록 만들었습니다. 또한 저같은 주니어 개발자들에게는 디자인 시스템이란 이런 거구나 하고 함께 배워가는 기회가 되길 의도했습니다.',
-      video:'/projects/TDS/demoApp.mp4'
-    },
-    {
       category: 'UI컴포넌트',
       items: [
-        '버튼, 입력, 표시, 피드백, 오버레이, 레이아웃 등 제품 개발에 필요한 UI 컴포넌트 제공',
-        'FormField를 통해 label/id/ARIA를 자동으로 연결하고, Modal·Popover 등에 포커스 트랩과 닫기 동작 적용',
+        '제품 개발에 필요한 UI 컴포넌트 제공, 주된 모션들은 GSAP으로 구현됨.',
+        '단, 오버엔지니어링을 방지하기 위해 CSS로 되는 건 CSS로 두고, CSS가 못 하는 것에만 GSAP을 사용',
       ],
-      intent: 'UI컴포넌트를 일관된 인터페이스와 접근성 기준으로 사용할 수 있도록 구성했습니다.',
-      video:'/projects/TDS/Components.mp4'
+      intent: '평소 UI에 대해 탐구하며 좋다고 느낀 모션과 인터랙션을 컴포넌트로 구현했습니다. ',
+      video:'/projects/TUI/Components.mp4'
+    },
+    {
+      category: '문서 웹사이트',
+      items: [
+        'TUI 컴포넌트의 사용법과 접근성을 확인할 수 있는 문서 웹사이트',
+        'AI활용한 개발이 수월하도록 llms.txt 문서 제공',
+      ],
+      intent: '컴포넌트의 사용법과 접근성, props를 사람과 AI가 동시에 확인하기 편하도록 만들고자 했습니다.',
+      video:'/projects/TUI/demoApp.mp4'
     },
     {
       category: '디자인 토큰 시스템',
       items: [
-        'Theme Contract 기반 색상·타이포그래피·간격·그림자·애니메이션 토큰과 8pt Grid System 제공',
+        'Theme Contract 기반 디자인 토큰 제공',
         'TypeScript 자동완성으로 토큰 사용을 돕고, 존재하지 않는 토큰 참조를 컴파일 타임에 차단',
       ],
       intent: '디자인 기준을 토큰으로 관리해 컴포넌트 간 시각적 일관성을 유지하고 확장도 안전하게 할 수 있도록 설계했습니다.',
-      video:'/projects/TDS/designTokens.mp4'
+      video:'/projects/TUI/designTokens.mp4'
     },
     {
       category: '빌드·배포 인프라',
       items: [
         '컴포넌트별 모듈 빌드로 필요한 컴포넌트만 소비자 번들에 포함되도록 구성',
-        '모노레포에서 라이브러리와 데모 앱을 함께 개발하고, Vercel 자동 배포와 llms.txt 문서 제공',
+        '모노레포에서 라이브러리와 문서 웹을 함께 관리하고, Vite로 빌드·테스트·배포',
       ],
-      intent: '필요한 컴포넌트만 가볍게 사용할 수 있고, 라이브러리와 문서 앱을 안정적으로 개발·배포할 수 있도록 구성했습니다.',
-      video:'/projects/TDS/treeShaking.mp4'
+      intent: '필요한 컴포넌트만 가볍게 사용할 수 있고, 라이브러리와 문서 웹을 안정적으로 개발·배포할 수 있도록 구성했습니다.',
+      video:'/projects/TUI/treeShaking.mp4'
     },
   ],
 
@@ -78,10 +78,10 @@ export const tds: Project = {
       ],
       tradeOffs: [
         'side effect 판단을 `package.json`의 `sideEffects` 필드에 맡겼기 때문에, 이 필드를 읽는 번들러에서만 효과가 있습니다. Vite와 webpack은 참조하지만 이 필드를 보지 않는 설정에서는 문제가 해결되지 않았을 것입니다. Vite·webpack이 주요 환경이긴 하나, 추후에 어떻게 해야 모든 번들러에서 유효한 설정을 만들 수 있을지에 대한 추가 설계가 필요합니다.',
-        '학습을 위해 만들었다고는 하나, 직접 사용해보니 기존 오픈소스 라이브러리들에 비해 사용 가치가 크지 않다고 느꼈습니다. 이에 현재 GSAP, three.js를 도입하여 각 컴포넌트마다 독창적인 애니메이션 효과를 추가하는 고도화 진행 중에 있습니다. 이번 트러블 슈팅과 관련된 트레이드 오프는 아니지만, 투자한 시간에 비해 가치가 크지 않은 제품을 만드는 것은 비용이 있었다고 생각하여 작성했습니다.'
+        '`preserveModules`로 모듈 경계를 살리면서 dist 파일이 140개를 넘는 대신, 소비자는 새 설정도 낯선 경로도 배울 필요가 없습니다. 다만 dist 파일이 많아지면 배포 패키지 용량이 커지고, npm install 시 파일 수가 많아져 설치 속도가 느려질 수 있습니다.',
       ],
     },
   ],
-  githubUrl: 'https://github.com/maintaein/TDS_TaeinDesignSystem',
-  liveUrl: 'https://tds-taein-design-system.vercel.app/',
+  githubUrl: 'https://github.com/maintaein/TUI_TaeinUI',
+  liveUrl: 'https://tui-taein-ui.vercel.app/',
 };

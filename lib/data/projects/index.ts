@@ -1,4 +1,4 @@
-import { tds } from './TDS';
+import { tui } from './TUI';
 import { alphaMail } from './AlphaMail';
 import { reBirth } from './ReBirth';
 import { ttabong } from './Ttabong';
@@ -9,7 +9,7 @@ import { portfolio } from './Portfolio';
 import { Project } from '@/types';
 
 export const projects: Project[] = [
-  tds,
+  tui,
   portfolio,
   alphaMail,
   reBirth,
