@@ -17,11 +17,14 @@ const eslintConfig = [
       ".next/**",
       "out/**",
       "build/**",
+      "test-results/**",
+      "playwright-report/**",
       "next-env.d.ts",
       // 설계 문서와 벤더 참조 코드. gitignore 대상이고 빌드에도 안 들어간다.
       // 포크해서 components/ 아래로 가져오면 그때부터 정상 검사된다.
       ".claude/**",
       ".superpowers/**",
+      ".worktrees/**",
     ],
   },
 ];

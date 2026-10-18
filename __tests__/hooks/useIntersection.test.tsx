@@ -7,8 +7,11 @@ import { describe, expect, it } from 'vitest';
 // 컴포넌트가 생기면 여기 다시 담아 count까지 잠글 수 있도록 타입은 남겨
 // 둔다(빈 객체 리터럴만 두면 keyof가 never가 되어 아래 인덱싱이 깨진다).
 const WHILE_IN_VIEW_DEBT: Record<string, { plan: number; count: number }> = {};
-// ElectricLogo는 섹션 진입 판정이 아니라 화면 밖 WebGL 렌더링 정지에 사용한다.
-const VISIBILITY_ONLY_IO = 'components/blocks/ElectricLogo/index.tsx';
+// 섹션 진입 연출이 아닌 화면 밖 Canvas 렌더링 정지용. 정지·재개는 e2e/motion.spec.ts에서 검증한다.
+const VISIBILITY_ONLY_IO = new Set([
+  'components/blocks/ElectricLogo/index.tsx',
+  'components/blocks/LuminousFlowBackground/index.tsx',
+]);
 
 function collectComponentFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -46,7 +49,7 @@ describe('섹션 진입 애니메이션 트리거', { timeout: 30_000 }, () => {
     const debtPaths = Object.keys(WHILE_IN_VIEW_DEBT);
 
     const offenders = ioOffenders.filter(
-      (relativePath) => !debtPaths.includes(relativePath) && relativePath !== VISIBILITY_ONLY_IO
+      (relativePath) => !debtPaths.includes(relativePath) && !VISIBILITY_ONLY_IO.has(relativePath)
     );
 
     expect(

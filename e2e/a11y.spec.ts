@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { enter } from './helpers';
+import { projects } from '@/lib/data/projects';
 
 // 계획 6 Task 5b-2. 접근성 계약 3건. 포커스 순서, 리플로, 레이아웃 이동은
 // 실제 레이아웃 엔진이 있어야 잴 수 있다.
@@ -26,7 +27,13 @@ test.describe('접근성', () => {
     for (const width of [320, 375, 390]) {
       await page.setViewportSize({ width, height: 812 });
       await enter(page, 'projects');
-      const title = page.locator('[data-flip-id^="title-TDS"]');
+      const longestTitle = projects.reduce((longest, project) =>
+        project.title.length > longest.length ? project.title : longest, ''
+      );
+      const tab = page.getByRole('tab', { name: longestTitle, exact: true });
+      if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
+      const title = page.locator('#projects [data-flip-id^="title-"]');
+      await expect(title).toHaveText(longestTitle);
       const bounds = await title.boundingBox();
       expect(bounds).not.toBeNull();
       expect(bounds!.x).toBeGreaterThanOrEqual(0);
@@ -58,12 +65,20 @@ test.describe('접근성', () => {
   test('모바일 Skills에서 선택 기술 설명과 적용 근거가 첫 화면에 보인다', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 812 });
     await enter(page, 'skills');
-    const slot = page.locator('[data-skill-description-slot]:visible');
+    const slot = page.getByTestId('skill-result');
+    const map = page.locator('[data-skill-map]');
     await expect(slot).toBeInViewport();
     await expect(slot).toContainText('React');
-    await expect(slot).toContainText('AlphaMail · TDS · Ttabong');
+    await expect(map).toHaveAttribute('data-active-skill', 'React');
+    await expect(map).toBeInViewport();
+    const links = map.getByRole('link');
+    expect(await links.count()).toBeGreaterThan(0);
+    for (const link of await links.all()) {
+      const title = (await link.innerText()).replace(/^\d+\s*/, '').trim();
+      expect(projects.some((project) => project.title === title)).toBe(true);
+    }
     await page.getByRole('button', { name: 'Python' }).click();
-    await expect(slot).toHaveAttribute('data-active-skill', 'Python');
+    await expect(map).toHaveAttribute('data-active-skill', 'Python');
     await expect(slot).toContainText('Python');
     await expect(slot).toBeInViewport();
   });

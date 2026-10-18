@@ -1,0 +1,1 @@
+export const ELECTRIC_LOGO_MORPH_SECONDS = 1;

@@ -70,7 +70,7 @@ test.describe('미디어', () => {
     await expect.poll(playingCount).toBe(0);
   });
 
-  test('About 링 청크는 최초 진입에 없고 처음 고를 때 한 번만 온다', async ({ page }) => {
+  test('About ElectricLogo는 문항·섹션 전환 뒤에도 캔버스와 청크를 재사용한다', async ({ page }) => {
     const requested: string[] = [];
     page.on('request', (request) => {
       const url = request.url();
@@ -78,20 +78,16 @@ test.describe('미디어', () => {
     });
 
     await enter(page, 'about');
-    const beforeRings = new Set(requested);
-
     const rail = page.getByRole('navigation', { name: 'About 문항' }).getByRole('button');
-    await rail.nth(1).click();
-
-    const canvas = page.locator('[data-about-visual-index="1"] canvas');
+    const canvas = page.locator('[data-about-visual] canvas');
     await expect(canvas).toBeAttached({ timeout: 20_000 });
     await canvas.evaluate((el) => {
-      el.setAttribute('data-e2e-mark', 'rings');
+      el.setAttribute('data-e2e-mark', 'electric-logo');
     });
 
-    // 최초 진입에는 없던 청크다. three는 링을 고르는 순간에야 온다.
-    const ringsChunks = requested.filter((url) => !beforeRings.has(url));
-    expect(ringsChunks.length).toBeGreaterThan(0);
+    const loadedChunks = new Set(requested);
+    await rail.nth(1).click();
+    await expect(canvas).toHaveAttribute('data-e2e-mark', 'electric-logo');
 
     await navButton(page, 'Skills').click();
     await expectActive(page, 'skills');
@@ -100,8 +96,8 @@ test.describe('미디어', () => {
     await rail.nth(1).click();
 
     // 표식이 남아 있다 = 같은 노드다. 떠났다 와도 다시 마운트하지 않는다.
-    await expect(canvas).toHaveAttribute('data-e2e-mark', 'rings');
-    const refetched = ringsChunks.filter(
+    await expect(canvas).toHaveAttribute('data-e2e-mark', 'electric-logo');
+    const refetched = [...loadedChunks].filter(
       (url) => requested.filter((seen) => seen === url).length > 1
     );
     expect(refetched).toEqual([]);
