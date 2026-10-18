@@ -36,10 +36,9 @@ const DynamicElectricLogo = dynamic(() => import('@/components/blocks/ElectricLo
 });
 const ABOUT_LOGOS = coreValues.map((value) => value.logoSrc);
 
-function AboutElectricVisual({ logoSrc, active, prewarm, reducedMotion }: {
+function AboutElectricVisual({ logoSrc, active, reducedMotion }: {
   logoSrc: string;
   active: boolean;
-  prewarm: boolean;
   reducedMotion: boolean;
 }) {
   const [ready, setReady] = useState(false);
@@ -59,7 +58,6 @@ function AboutElectricVisual({ logoSrc, active, prewarm, reducedMotion }: {
         <DynamicElectricLogo
           src={logoSrc}
           active={active}
-          prewarm={prewarm}
           preloadSrcs={ABOUT_LOGOS}
           onReady={(renderedSrc) => { if (renderedSrc === logoSrc) setReady(true); }}
           color="#7fe3ee"
@@ -89,7 +87,6 @@ export default function AboutSection() {
   const { reducedMotion, motionReady, pageVisible, obscured } = useSectionActivity();
   const { ref, visible, hasEntered } = useSectionVisibility<HTMLElement>();
   const active = visible && motionReady && pageVisible && !obscured;
-  const prewarmLogo = false;
 
   useEffect(() => {
     const query = window.matchMedia('(min-width: 1024px)');
@@ -99,13 +96,10 @@ export default function AboutSection() {
     return () => query.removeEventListener('change', update);
   }, []);
 
-  // 스크림을 body로 포털하기 전 게이트. 서버 렌더에는 document가 없다.
-  // 마운트된 뒤에만 포털한다(스크림은 aria-hidden 장식이라 클라이언트
-  // 전용이어도 SEO 계약을 깨지 않는다). About 비활성일 때 숨기는 것은
-  // 이 마운트 게이트가 아니라 아래 각 레이어의 불투명도가 맡는다(이유는
-  // 포털 JSX 바로 위 주석 참고, C1 재수정).
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  // 스크림 포털 대상. 서버 렌더에는 document가 없어 마운트 뒤에 정한다.
+  // .portfolio-document 안에 붙여야 배경과 같은 쌓임 맥락에 놓인다.
+  const [scrimHost, setScrimHost] = useState<Element | null>(null);
+  useEffect(() => setScrimHost(ref.current?.closest('.portfolio-document') ?? document.body), [ref]);
 
   function handleSelect(next: number) {
     const delta = next - activeIndex;
@@ -138,7 +132,7 @@ export default function AboutSection() {
       />
 
       {/* 상세 3개: 전부 DOM에 상주한다. 활성 하나만 보이고 나머지는 inert.
-          .section-hidden과 같은 방식(opacity + pointer-events)으로 감춘다.
+          opacity와 pointer-events로 감춘다.
           활성 하나만 렌더하면 계획 2가 고친 SEO 조건부 렌더 결함을 이
           레벨에서 재생산한다.
 
@@ -147,12 +141,7 @@ export default function AboutSection() {
           자식을 하나도 못 봐서 자체 높이가 0으로 무너진다(Task 7 조사).
           lg 이상에서는 기존처럼 전부 absolute로 겹쳐 크로스페이드한다. */}
       <div className="relative flex-1 lg:h-full">
-        {/* 문항별 배경 스크림. 레일은 이 컨테이너 바깥(별도 flex 자식)이라
-            겹치지 않는다. .section-stage(fixed, header/footer만큼 inset)
-            안에 있으면 그 여백만큼 배경이 빠져 밝게 남으므로 fixed로 띄워
-            뷰포트 전체를 덮는다. fixed는 DOM 순서가 아니라 -z-[1]로
-            쌓임을 정한다: 배경(HyperspeedBackground, fixed -z-10)보다는
-            위, 상세 콘텐츠(z-index 없음)보다는 아래로 깔린다.
+        {/* 문항별 배경 스크림. fixed로 띄워 뷰포트 전체를 덮는다.
             평평한 검은 막이 아니라 그라데이션을 써서 광선이 그대로 흐르게
             한다(scrim.ts).
 
@@ -167,27 +156,15 @@ export default function AboutSection() {
             왼쪽 끝의 알파가 0이라 그 뒤로 광선이 그대로 지나간다(최종
             리뷰 발견 3). lg 미만 전용으로 세로 그라데이션(ABOUT_SCRIMS_
             MOBILE, to top)을 별도 레이어로 두고 lg부터는 숨긴다. */}
-        {/* 스크림은 document.body로 포털한다(components/atoms/Modal/index.tsx와
-            같은 선례). 이 컨테이너의 조상인 .section-scroll은 진입/이탈
-            전환 동안 잠깐 transform이 걸리는데, transform이 걸린 조상은
-            position: fixed의 기준이 되어 버려 스크림이 뷰포트가 아니라 그
-            조상 박스 안에 갇힌다(최종 리뷰 C1). 서브트리 밖 body로 내보내면
-            그 영향을 받지 않는다. mounted 게이트는 서버 렌더에 document가
-            없어서다.
-
-            포털은 .section-hidden의 opacity: 0 상속을 벗어나므로 About이
-            비활성일 때 스스로 감춰야 한다. 그것을 언마운트가 아니라
-            불투명도로 한다(아래 각 레이어의 className 조건). 언마운트로
-            하면(active를 마운트 조건에 넣으면) About을 떠나는 첫 프레임에
-            스크림 여섯이 통째로 사라지는데, About 본문은 .section-hidden의
-            opacity transition을 타고 300ms에 걸쳐서만 사라진다. 그 사이
-            글자가 어두워지지 않은 배경 위에 그대로 놓인다(컨트롤러 실측:
-            About에서 워드마크로 overview 이동 시 130ms 동안 본문 opacity가
-            0.4 이상인데 스크림은 이미 0). 대신 불투명도로 감추면 아래
-            transition-opacity duration-500이 본문과 나란히 페이드해
-            포털 이전 동작(스크림이 .section-hidden의 opacity: 0을 전환과
-            함께 상속하던 것)과 같아진다. */}
-        {mounted
+        {/* 스크림은 섹션 서브트리 밖, .portfolio-document의 끝으로 포털한다.
+            그 문서는 isolation으로 쌓임 맥락을 만들고 배경을 z -1에 둔다.
+            body에 두면 그 맥락 전체보다 먼저 칠해져 불투명한 배경에 가린다.
+            같은 맥락의 z -1에서는 DOM 순서상 배경 뒤라 배경 위·본문 아래에
+            깔린다. 보이는 조건은 About이 읽기선을 가질 때다
+            (design-tokens.css의 [data-about-scrim] 형제 선택자). 일부만
+            보이는 About이 Hero나 Projects를 물들이지 않는다.
+            언마운트가 아니라 불투명도로 감춰 떠날 때도 페이드한다. */}
+        {scrimHost
           ? createPortal(
               <>
                 {ABOUT_SCRIMS.map((scrim, index) => (
@@ -219,7 +196,7 @@ export default function AboutSection() {
                   />
                 ))}
               </>,
-              document.body
+              scrimHost
             )
           : null}
         <div
@@ -227,11 +204,10 @@ export default function AboutSection() {
           className="pointer-events-none absolute inset-0 z-10 hidden grid-cols-12 grid-rows-6 gap-x-6 gap-y-2 px-10 py-8 lg:grid"
         >
           <div data-about-visual className="col-span-4 col-start-2 row-span-4 row-start-2 flex items-center justify-center">
-            {wideScreen && (hasEntered || active || prewarmLogo) ? (
+            {wideScreen && (hasEntered || active) ? (
               <AboutElectricVisual
                 logoSrc={coreValues[activeIndex].logoSrc}
                 active={active}
-                prewarm={prewarmLogo}
                 reducedMotion={reducedMotion}
               />
             ) : null}

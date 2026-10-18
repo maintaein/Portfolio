@@ -164,16 +164,6 @@
   --tunnel-vanishing-x: 53%;
   --tunnel-vanishing-y: 52%;
 
-  /* 워드마크 FLIP 지속(세 이음매 브리프 3절). HomeClient의
-     Flip.from({ duration: WORDMARK_FLIP_DURATION_MS / 1000 })과 반드시 같은
-     값이어야 한다. 워드마크가 hero→compact로 착지하는 시간과 정확히 같은
-     시간만큼 .nav-strip-visible의 등장을 늦춰야("이름이 자리를 잡고, 그다음
-     메뉴가 나온다") 모바일에서 워드마크 궤적이 ABOUT 항목과 겹치지 않는다.
-     TS와 CSS는 빌드 타임에 값을 공유할 수 없으므로
-     WordmarkFlip.test.tsx가 두 파일을 각각 읽어 숫자가 같은지 교차
-     검증한다 — 한쪽만 바뀌면 그 테스트가 FAIL한다. */
-  --wordmark-flip-duration: 500ms;
-
   /* 부팅 화면 중앙 정렬. 이름(Navigation 워드마크)과 캡션(BootSequence
      역할·START)은 서로 다른 컴포넌트라 DOM은 합칠 수 없지만, 뷰포트 50%
      지점을 공유 기준점으로 삼는다. 이름은 top:50%에서 -translate-y-full로
@@ -419,6 +409,8 @@
   /* Root sections remain in document flow; only local panels own clipping. */
 .portfolio-document { position: relative; isolation: isolate; }
 .portfolio-document > [aria-hidden='true'] { z-index: -1; }
+/* About 스크림은 About이 읽기선을 가질 때만 보인다. 일부만 보이는 About이 이웃 섹션을 물들이지 않는다. */
+.section-stage:not([data-active-section='about']) ~ [data-about-scrim] { opacity: 0; }
 .section-stage { position: relative; padding-top: 76px; }
 .document-section { position: relative; min-height: calc(100svh - 76px); scroll-margin-top: 92px; }
 .document-section > section { min-height: calc(100svh - 76px); }
@@ -426,22 +418,13 @@
 .portfolio-hero p { font-size: clamp(1.5rem, 4vw, 3rem); line-height: 1.6; }
 .portfolio-hero h1 { max-width: 44rem; margin-top: 2rem; font-size: clamp(1.25rem, 2.5vw, 2rem); line-height: 1.6; }
 .site-footer { min-height: 120px; padding-bottom: max(2rem, env(safe-area-inset-bottom, 0px)); }
-.section-horizontal-scroll { touch-action: pan-x pan-y pinch-zoom; }
-.section-plate { background: rgb(0 0 0 / 0.72); }
 @media (min-width: 1024px) {
   .about-document { height: max(760px, calc(100svh - 76px)); }
 }
 
-/* 부팅 캡션(역할·START) 은닉. 워드마크와 마찬가지로 셸 레벨(overview
-     섹션 밖)에 산다(부팅 안무 브리프 3절). overview의 `.section-hidden`은
-     `content-visibility: auto`를 쓰는데, 콘텐츠가 스킵되는 순간 그 서브트리가
-     paint containment를 얻어 `position: fixed` 자손을 뷰포트가 아니라 그
-     컨테이닝 박스 기준으로 재배치한다 — opacity 페이드(500ms)보다 containment
-     전환이 훨씬 빨라 START를 누르는 순간 캡션이 `.section-stage`의 inset만큼
-     아래로 튀는 버그였다. 이 클래스 쌍은 content-visibility를 아예 쓰지
-     않아 그 버그가 구조적으로 재발할 수 없다 — nav-strip과 같은 opacity+
-     visibility 은닉이지만, 이전에 caption이 section-hidden을 통해 상속받던
-     500ms 페이드와 시각 차이를 최소화하도록 같은 duration을 쓴다. */
+/* 부팅 캡션(역할·START) 은닉. content-visibility를 쓰지 않는다. 쓰면
+     paint containment가 fixed 캡션을 뷰포트가 아니라 컨테이닝 박스
+     기준으로 옮겨 아래로 튄다. opacity+visibility로만 감춘다. */
   .boot-caption-hidden {
     opacity: 0;
     visibility: hidden;
@@ -780,8 +763,7 @@
     transition-delay: var(--animate-duration-slow);
   }
 
-  /* 모션을 끈 사용자에게는 열린 모습이 즉시 나타난다. 이 저장소가
-     .section-hidden부터 매번 짝지어 온 방어다. */
+  /* 모션을 끈 사용자에게는 열린 모습이 즉시 나타난다. */
   @media (prefers-reduced-motion: reduce) {
     .about-folder,
     .about-folder-paper,
@@ -1121,9 +1103,7 @@
   /* 상세 크로스페이드(.transition-opacity, index.tsx의 [data-detail])와
      스크림 레이어(.transition-opacity, [data-about-scrim])는 Tailwind
      유틸리티 조합이라 이 파일에 자체 클래스 선언이 없다. 모션을 끈
-     사용자에게는 transition 자체를 끊어야 즉시 전환된다. 이 저장소가
-     .section-hidden/.section-visible(위)부터 매번 짝지어 온 방어다
-     (최종 리뷰 발견 2). */
+     사용자에게는 transition 자체를 끊어야 즉시 전환된다(최종 리뷰 발견 2). */
   @media (prefers-reduced-motion: reduce) {
     [data-detail],
     [data-about-scrim] {

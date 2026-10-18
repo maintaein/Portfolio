@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { enter } from './helpers';
+import { enter, expectActive } from './helpers';
 import { projects } from '@/lib/data/projects';
 
 // 계획 6 Task 5b-2. 접근성 계약 3건. 포커스 순서, 리플로, 레이아웃 이동은
@@ -21,6 +21,32 @@ test.describe('접근성', () => {
   test('첫 화면에 페이지 제목이 하나 있다', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+  });
+
+  test('About 대비 스크림은 배경 위·본문 아래에 깔리고 Projects가 읽기선을 가지면 투명하다', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await enter(page, 'about');
+    const scrim = page.locator('[data-about-scrim][data-about-scrim-index="0"]').first();
+    await expect(scrim).toHaveCSS('opacity', '1');
+    // pointer-events는 칠하는 순서를 바꾸지 않는다. 히트 테스트에 잡히게만 연다.
+    const order = await page.evaluate(() => {
+      const scrimEl = document.querySelector<HTMLElement>('[data-about-scrim][data-about-scrim-index="0"]')!;
+      const background = document.querySelector<HTMLElement>('.portfolio-document > [aria-hidden="true"]')!;
+      scrimEl.style.pointerEvents = 'auto'; background.style.pointerEvents = 'auto';
+      const stack = document.elementsFromPoint(1400, 500);
+      scrimEl.style.pointerEvents = ''; background.style.pointerEvents = '';
+      return {
+        section: stack.findIndex(el => el.closest('[data-section="about"]')),
+        scrim: stack.indexOf(scrimEl),
+        background: stack.findIndex(el => background.contains(el)),
+      };
+    });
+    expect(order.scrim).toBeGreaterThanOrEqual(0);
+    expect(order.scrim).toBeLessThan(order.background);
+    expect(order.section).toBeLessThan(order.scrim);
+    await page.locator('[data-section="projects"]').evaluate(el => window.scrollTo(0, el.getBoundingClientRect().top + scrollY - 400));
+    await expectActive(page, 'projects');
+    for (const layer of await page.locator('[data-about-scrim]').all()) await expect(layer).toHaveCSS('opacity', '0');
   });
 
   test('긴 프로젝트 제목이 모바일 화면 안에 보인다', async ({ page }) => {
