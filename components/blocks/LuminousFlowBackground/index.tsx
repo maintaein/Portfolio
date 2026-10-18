@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, type CSSProperties } from 'react';
 import { CYAN_PALETTE } from '../Hyperspeed/presets';
+import { buildFlowGeometry, normalOffset, type FlowGeometry, type FlowPoint } from './geometry';
 import styles from './styles.module.css';
 
 type LuminousFlowBackgroundProps = {
@@ -19,50 +20,6 @@ const SCROLL_FLOW = {
   responseTime: .18, // Smaller values respond to scrolling faster.
   decayTime: .3, // Smaller values slow down sooner after scrolling stops.
 };
-
-// x, y, half-width: broad pools alternate with narrow, luminous turns.
-const anchors = [
-  [540, -50, 48], [342, 65, 24], [251, 112, 55], [178, 219, 2],
-  [282, 267, 37], [390, 410, 67], [295, 535, 23], [85, 635, 76],
-  [32, 710, 3], [202, 818, 72], [348, 970, 26], [468, 1130, 65],
-  [453, 1230, 4], [249, 1350, 79], [38, 1493, 3], [214, 1602, 58],
-  [424, 1715, 24], [463, 1792, 47], [294, 1870, 54], [110, 1860, 20],
-  [-40, 1925, 38],
-];
-const constrictions = [-3, 3, 8, 12, 14, 17, 24];
-
-const centerline = anchors.slice(0, -1).flatMap((anchor, segment) => {
-  const previous = anchors[Math.max(segment - 1, 0)];
-  const next = anchors[segment + 1];
-  const after = anchors[Math.min(segment + 2, anchors.length - 1)];
-  return Array.from({ length: segment === anchors.length - 2 ? 7 : 6 }, (_, step) => {
-    const t = step / 6;
-    const controls = [previous, anchor, next, after];
-    // A cubic B-spline keeps position, tangent and curvature continuous at knots.
-    const basis = [(1 - t) ** 3, 3 * t ** 3 - 6 * t * t + 4, -3 * t ** 3 + 3 * t * t + 3 * t + 1, t ** 3];
-    const coordinates = [0, 1].map(axis => controls.reduce((sum, point, index) => sum + point[axis] * basis[index] / 6, 0));
-    const velocity = [-.5 * (1 - t) ** 2, 1.5 * t * t - 2 * t, -1.5 * t * t + t + .5, .5 * t * t];
-    const acceleration = [1 - t, 3 * t - 2, 1 - 3 * t, t];
-    const [dx, dy] = [0, 1].map(axis => controls.reduce((sum, point, index) => sum + point[axis] * velocity[index], 0));
-    const [ax, ay] = [0, 1].map(axis => controls.reduce((sum, point, index) => sum + point[axis] * acceleration[index], 0));
-    const length = Math.hypot(dx, dy);
-    const curvature = (dx * ay - dy * ax) / length ** 3;
-    // One broad, smooth fan between turns, rather than a bump at every anchor.
-    const position = segment + t;
-    const interval = constrictions.findIndex((knot, index) => index > 0 && knot >= position);
-    const start = constrictions[interval - 1], end = constrictions[interval];
-    const progress = (position - start) / (end - start);
-    const peak = Math.max(...anchors.slice(Math.max(0, start), Math.min(anchors.length, end + 1)).map(point => point[2])) * 1.35 * Math.min(1, (end - start) / 3);
-    const width = 2 + (peak - 2) * 64 * progress ** 3 * (1 - progress) ** 3;
-    return [...coordinates, width, -dy / length, dx / length, curvature];
-  });
-});
-
-let distance = 0;
-const distances = centerline.map(([x, y], index) => {
-  if (index) distance += Math.hypot(x - centerline[index - 1][0], y - centerline[index - 1][1]);
-  return distance;
-});
 
 const createCurve = (points: number[][]) => {
   const coordinate = (point: number[]) => point.slice(0, 2).map(value => value.toFixed(3)).join(' ');
@@ -85,46 +42,33 @@ const palette = {
   glow: hex(CYAN_PALETTE.leftCars[2]),
   depth: hex(CYAN_PALETTE.rightCars[2]),
 };
-const centerlinePath = createCurve(centerline);
-
-// Only the inside of a turn needs a curvature limit; outer branches can fan out.
-const normalOffset = (offset: number, curvature: number, limit: number) => offset / Math.sqrt(1 + (Math.max(0, offset * curvature) / limit) ** 2);
-const envelopePaths = Array.from({ length: 80 }, (_, layer) => {
-  const edges = [-1, 1].map(side => centerline.map(([x, y, width, nx, ny, curvature]) => {
-    const offset = normalOffset(side * (25 + width) * (1 - layer / 80), curvature, .65);
-    return [x + nx * offset, y + ny * offset];
-  }));
-  return `${createCurve(edges[0])}${createCurve(edges[1].reverse()).replace(/^M/, 'L')} Z`;
-});
-
-const strands = Array.from({ length: 28 }, (_, index) => {
-  const phase = index * 2.399963;
-  const lane = Math.sin(phase) * .73;
-  const createPath = (clock: number) => {
-    const points = centerline.map(([x, y, width, nx, ny, curvature], sample) => {
-      const travel = distances[sample];
-      const wanderingLane = lane + Math.sin(travel * .007 + phase - clock) * .28
-        + Math.sin(travel * .003 + phase * .7 + clock) * .18;
-      const ripple = (Math.sin(travel * (.014 + index % 5 * .001) + phase - clock * 2) * 3
-        + Math.sin(travel * .009 + index * .7 - clock) * 5) * width / 35;
-      const offset = normalOffset(wanderingLane * width + ripple, curvature, .2);
+// The glow envelope is drawn in document pixels from the same center the strands follow.
+const createEnvelope = ({ width, center }: FlowGeometry) => {
+  const frames = center.map((point, index) => {
+    const before = center[Math.max(index - 1, 0)], after = center[Math.min(index + 1, center.length - 1)];
+    const [ax, ay, bx, by] = [point.x - before.x, point.y - before.y, after.x - point.x, after.y - point.y];
+    const chord = Math.hypot(ax + bx, ay + by) || 1;
+    // Menger curvature of the neighboring samples; zero at the open ends.
+    const curvature = 2 * (ax * by - ay * bx) / (Math.hypot(ax, ay) * Math.hypot(bx, by) * chord || 1);
+    return [point.x, point.y, point.halfWidth, -(ay + by) / chord, (ax + bx) / chord, curvature];
+  });
+  return Array.from({ length: 80 }, (_, layer) => {
+    const edges = [-1, 1].map(side => frames.map(([x, y, halfWidth, nx, ny, curvature]) => {
+      const offset = normalOffset(side * (25 * width / 492 + halfWidth) * (1 - layer / 80), curvature, .65);
       return [x + nx * offset, y + ny * offset];
-    });
-    return points;
-  };
-  const poses = Array.from({ length: 16 }, (_, frame) => createPath(frame / 16 * Math.PI * 2));
-  // Match the first pose exactly at the seam, including numeric rounding.
-  poses.push(poses[0]);
-  const blue = index % 7 === 0;
-  const colors = [palette.cyan, palette.glow, palette.cyan, palette.blue, palette.depth];
-  return { poses, blue, index, color: blue ? palette.blue : colors[index % colors.length] };
-});
+    }));
+    return `${createCurve(edges[0])}${createCurve(edges[1].reverse()).replace(/^M/, 'L')} Z`;
+  });
+};
 
-const bends = [219, 710, 1230, 1493, 1792].map(y => centerline.reduce((nearest, point) => Math.abs(point[1] - y) < Math.abs(nearest[1] - y) ? point : nearest).slice(0, 2));
+// One color per geometry strand; the renderer owns color, the geometry owns shape.
+const colors = [palette.cyan, palette.glow, palette.cyan, palette.blue, palette.depth];
+const strandColors = Array.from({ length: 28 }, (_, index) => index % 7 === 0 ? palette.blue : colors[index % colors.length]);
+const BEND_HEIGHTS = [219, 710, 1230, 1493, 1792].map(y => y / 2162);
 
 const atoms = Array.from({ length: 48 }, (_, index) => ({
   index,
-  strand: (index * 11 + 3) % strands.length,
+  strand: (index * 11 + 3) % strandColors.length,
   phase: ((index * .618034 + .07) % 1).toFixed(4),
   duration: 58 + index % 7 * 6,
   radius: .65 + index % 5 * .3,
@@ -189,7 +133,7 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
       image.src = url;
     };
     // A scene-space pattern follows the draw transform without recreating a viewport gradient.
-    const strandPaints = strands.map(({ index, color }) => {
+    const strandPaints = strandColors.map((color, index) => {
       const texture = document.createElement('canvas');
       texture.width = 1; texture.height = 2162;
       const paint = texture.getContext('2d');
@@ -202,9 +146,10 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
       paint.fillRect(0, 0, 1, 2162);
       return context.createPattern(texture, 'repeat') ?? color;
     });
-    let atmosphereSized = false;
-    const interpolated = strands.map(strand => strand.poses[0].map(point => [...point]));
-    const cumulativeLengths = strands.map(strand => new Float64Array(strand.poses[0].length));
+    let geometry: FlowGeometry | null = null;
+    let bends: FlowPoint[] = [];
+    let interpolated: number[][][] = [];
+    let cumulativeLengths: Float64Array[] = [];
     let viewportHeight = window.innerHeight;
     let viewportWidth = window.innerWidth;
     let overscan = viewportHeight / 2;
@@ -217,7 +162,6 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
     let flowSpeed = SCROLL_FLOW.idleSpeed;
     let flowTime = 0;
     let sceneTime = 0;
-    const sceneHeight = scrollScene ? 2162 : 318;
 
     const resize = () => {
       boundsDirty = true;
@@ -237,7 +181,7 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
     const updateBounds = () => {
       const measured = root.getBoundingClientRect();
       const next = new DOMRect(measured.left, measured.top, measured.width, Math.max(measured.height, viewportHeight * minimumSceneScreens));
-      const sizeChanged = !atmosphereSized || next.left !== bounds.left || next.height !== bounds.height || next.width !== bounds.width;
+      const sizeChanged = !geometry || next.left !== bounds.left || next.height !== bounds.height || next.width !== bounds.width;
       const positionChanged = sizeChanged || next.top !== bounds.top;
       bounds = next;
       if (positionChanged) {
@@ -245,21 +189,40 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
         // Redrawing and moving the crop together preserves the same scene coordinates.
         canvas.style.transform = `translate3d(0, ${-bounds.top - overscan}px, 0)`;
       }
-      // The SVG is a texture source; glow and energy share the document canvas.
-      if (atmosphere) {
-        if (sizeChanged) {
-          const mobile = viewportWidth <= 600 && !scrollScene;
+      if (sizeChanged) {
+        const mobile = viewportWidth <= 600 && !scrollScene;
+        // Only a new document or viewport size makes a new shape; scrolling only moves the crop.
+        const shape = buildFlowGeometry(bounds.width * (mobile ? 3 : 1), bounds.height * (scrollScene ? 1 : 2162 / 318));
+        geometry = shape;
+        bends = BEND_HEIGHTS.map(y => shape.center.reduce((nearest, point) => Math.abs(point.y - y * shape.height) < Math.abs(nearest.y - y * shape.height) ? point : nearest));
+        interpolated = shape.strands.map(poses => poses[0].map(() => [0, 0]));
+        cumulativeLengths = shape.strands.map(poses => new Float64Array(poses[0].length));
+        // Keep each strand's color fade spanning the whole scene.
+        strandPaints.forEach(paint => { if (typeof paint !== 'string') paint.setTransform({ d: shape.height / shape.width * 492 / 2162 }); });
+        // The SVG is a texture source; glow and energy share the document canvas.
+        if (atmosphere) {
+          atmosphere.setAttribute('viewBox', `0 0 ${shape.width} ${shape.height}`);
+          const gradient = atmosphere.querySelector('linearGradient');
+          gradient?.setAttribute('y2', String(shape.height));
+          if (gradient) gradient.innerHTML = Array.from({ length: 81 }, (_, index) => {
+            const emission = Math.min(1, .24 + bends.reduce((sum, { y }) => sum + .76 * Math.exp(-(((index / 80 - y / shape.height) * 2162 / 85) ** 2)), 0));
+            return `<stop offset="${index / 80}" stop-color="${palette.glow}" stop-opacity="${emission.toFixed(4)}"/>`;
+          }).join('');
+          const envelope = atmosphere.querySelector('[data-flow-envelope]');
+          if (envelope) envelope.innerHTML = createEnvelope(shape).map(path => `<path d="${path}" opacity=".025"/>`).join('');
           atmosphere.style.position = 'fixed';
           atmosphere.style.inset = 'auto';
           atmosphere.style.top = '0';
           atmosphere.style.left = `${bounds.left - (mobile ? bounds.width * .8 : 0)}px`;
-          atmosphere.style.width = `${bounds.width * (mobile ? 3 : 1)}px`;
-          atmosphere.style.height = `${bounds.height}px`;
-          cacheAtmosphere(bounds.width * (mobile ? 3 : 1), bounds.height);
-          atmosphereSized = true;
+          atmosphere.style.width = `${shape.width}px`;
+          atmosphere.style.height = `${shape.height}px`;
+          // A texture of the previous size must not stretch over the new shape.
+          atmosphereTexture = null;
+          atmosphere.style.visibility = '';
+          cacheAtmosphere(shape.width, shape.height);
         }
-        if (positionChanged) atmosphere.style.transform = `translate3d(0, ${bounds.top}px, 0)`;
       }
+      if (atmosphere && positionChanged) atmosphere.style.transform = `translate3d(0, ${bounds.top}px, 0)`;
       boundsDirty = false;
     };
     const observer = new ResizeObserver(resize);
@@ -288,32 +251,36 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
       const time = media.matches ? 0 : flowTime;
       const bobTime = media.matches ? 0 : sceneTime;
       const mobile = viewportWidth <= 600 && !scrollScene;
-      const scaleX = bounds.width * (mobile ? 3 : 1) / 492;
-      const scaleY = bounds.height / sceneHeight;
+      const { width, height, strands } = geometry!;
+      // Stroke widths and dashes keep their design units under a uniform scale, so circles stay round.
+      const unit = width / 492;
       const left = bounds.left - (mobile ? bounds.width * .8 : 0);
       const paths: Path2D[] = [];
       const points = interpolated;
       const lengths = cumulativeLengths;
       context.resetTransform();
       context.clearRect(0, 0, canvas.width, canvas.height);
-      context.setTransform(pixelRatio * scaleX, 0, 0, pixelRatio * scaleY, pixelRatio * (left - bounds.left), pixelRatio * (bounds.top + overscan));
+      context.setTransform(pixelRatio * unit, 0, 0, pixelRatio * unit, pixelRatio * (left - bounds.left), pixelRatio * (bounds.top + overscan));
       context.lineCap = 'round';
-      const top = Math.max(0, (-bounds.top - overscan) / scaleY);
-      const bottom = Math.min(sceneHeight, (viewportHeight + overscan - bounds.top) / scaleY);
-      if (bottom <= top) return;
+      const top = Math.max(0, (-bounds.top - overscan) / unit);
+      const bottom = Math.min(height / unit, (viewportHeight + overscan - bounds.top) / unit);
+      if (!unit || bottom <= top) return;
 
       if (atmosphereTexture) {
         context.globalAlpha = 1;
-        context.drawImage(atmosphereTexture, 0, 0, 492, sceneHeight);
+        context.drawImage(atmosphereTexture, 0, 0, width / unit, height / unit);
       }
 
-      strands.forEach(({ poses, index, blue }) => {
+      strands.forEach((poses, index) => {
+        const blue = index % 7 === 0;
         const pose = (time / (8 + index % 5 * 1.5) % 1) * 16;
         const first = Math.floor(pose), fraction = pose - first;
+        // The last pose blends back into the first, the same object, so the seam matches exactly.
+        const from = poses[first], to = poses[(first + 1) % poses.length];
         const current = interpolated[index];
         for (let sample = 0; sample < current.length; sample++) {
-          for (let axis = 0; axis < 2; axis++) current[sample][axis] = poses[first][sample][axis]
-            + (poses[first + 1][sample][axis] - poses[first][sample][axis]) * fraction;
+          current[sample][0] = (from[sample].x + (to[sample].x - from[sample].x) * fraction) / unit;
+          current[sample][1] = (from[sample].y + (to[sample].y - from[sample].y) * fraction) / unit;
         }
         let total = 0;
         const cumulative = cumulativeLengths[index];
@@ -367,9 +334,9 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
       // Each bend mask gets a small local surface rather than a full-scene texture.
       const combinedPath = new Path2D();
       paths.forEach(path => combinedPath.addPath(path));
-      bends.filter(([, y]) => y + 38 >= top && y - 38 <= bottom).forEach(([x, y]) => {
-        const rimWidth = Math.ceil(90 * scaleX * pixelRatio);
-        const rimHeight = Math.ceil(76 * scaleY * pixelRatio);
+      bends.map(bend => [bend.x / unit, bend.y / unit]).filter(([, y]) => y + 38 >= top && y - 38 <= bottom).forEach(([x, y]) => {
+        const rimWidth = Math.ceil(90 * unit * pixelRatio);
+        const rimHeight = Math.ceil(76 * unit * pixelRatio);
         if (rimCanvas.width !== rimWidth) rimCanvas.width = rimWidth;
         if (rimCanvas.height !== rimHeight) rimCanvas.height = rimHeight;
         rim.resetTransform();
@@ -483,20 +450,12 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
       '--flow-glow-rgb': rgb(CYAN_PALETTE.leftCars[2]),
     } as CSSProperties} aria-hidden="true">
       <div className={styles.sourceHaze} />
-      <svg className={`${styles.flow} ${styles.atmosphere}`} viewBox={`0 0 492 ${scrollScene ? 2162 : 318}`} preserveAspectRatio="none" focusable="false">
+      {/* Paths and stops are written from the measured geometry; React owns only the empty shells. */}
+      <svg className={`${styles.flow} ${styles.atmosphere}`} focusable="false">
         <defs>
-          <path id={`${id}-glow-route`} d={centerlinePath} />
-          <linearGradient id={`${id}-envelope`} x1="0" y1="0" x2="0" y2="2162" gradientUnits="userSpaceOnUse">
-            {Array.from({ length: 81 }, (_, index) => {
-              const y = index / 80 * 2162;
-              const emission = Math.min(1, .24 + bends.reduce((sum, [, bendY]) => sum + .76 * Math.exp(-(((y - bendY) / 85) ** 2)), 0));
-              return <stop key={index} offset={index / 80} stopColor={palette.glow} stopOpacity={emission.toFixed(4)} />;
-            })}
-          </linearGradient>
+          <linearGradient id={`${id}-envelope`} x1="0" y1="0" x2="0" gradientUnits="userSpaceOnUse" />
         </defs>
-        <g data-flow-envelope="" fill={`url(#${id}-envelope)`} opacity=".45">
-          {envelopePaths.map((path, index) => <path key={index} d={path} opacity=".025" />)}
-        </g>
+        <g data-flow-envelope="" fill={`url(#${id}-envelope)`} opacity=".45" />
       </svg>
       <canvas ref={canvasRef} className={styles.motionCanvas} />
       <div className={styles.grain} />
