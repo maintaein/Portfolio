@@ -1,0 +1,81 @@
+.section > div:first-child { max-width: 720px; }
+.scrollHint { display: flex; gap: 24px; margin: 38px 0 68px; font-size: 14px; color: var(--color-text-secondary); }
+.sequence { position: relative; }
+.reading { display: grid; grid-template-columns: .85fr 1.15fr; gap: 10%; align-items: start; }
+.rail { min-width: 0; }
+.reading > .rail { position: sticky; top: 80px; padding-top: 40px; }
+.electric { position: relative; width: 100%; height: clamp(220px, 27vw, 360px); margin: 24px 0; }
+.fallback { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.fallback > span { width: 65%; height: 65%; }
+.chapterNav { display: flex; flex-direction: column; gap: 0; max-width: 380px; }
+.chapterNav a { display: flex; gap: 28px; align-items: center; min-height: 48px; border-top: 1px solid rgb(255 255 255 / .12); color: var(--color-text-secondary); font-size: 13px; letter-spacing: .08em; }
+.chapterNav a[aria-current] { color: var(--color-cyan-hi); }
+.panel { min-width: 0; scroll-margin-top: 120px; }
+.reading .panel { min-height: 100svh; display: flex; align-items: center; padding: 64px 0; }
+.copy { position: relative; width: 100%; }
+.copy::before { content: ''; position: absolute; z-index: -1; inset: -40px; pointer-events: none; background: radial-gradient(ellipse, rgb(0 0 0 / .94), rgb(0 0 0 / .68) 60%, transparent 85%); }
+.copy h2 { font-size: clamp(28px, 3vw, 42px); line-height: 1.4; font-weight: 500; letter-spacing: -.045em; word-break: keep-all; margin: 24px 0 32px; }
+.focus, .cinema { height: 390svh; }
+.cinema { height: 520svh; }
+.pinnedReading { display: block; height: 520svh; }
+.pinnedReading .articles { display: grid; min-width: 0; }
+.pinnedReading .panel { grid-area: 1 / 1; min-height: 0; padding: 0; display: block; }
+.pinnedHeader { position: absolute; inset: 24px 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 20px; font-size: 13px; color: var(--color-text-secondary); }
+.progressTrack { position: absolute; inset: auto 0 -18px; height: 1px; background: rgb(255 255 255 / .16); }
+.progressTrack > span { display: block; height: 100%; background: var(--color-cyan-hi); transform: scaleX(0); transform-origin: left; }
+.viewport { position: sticky; top: 0; height: 100svh; display: grid; grid-template-columns: .85fr 1.15fr; gap: 10%; align-items: center; }
+.focus .articles, .cinema .articles { display: grid; min-width: 0; }
+.focus .panel, .cinema .panel { grid-area: 1 / 1; }
+.cinema .viewport { display: flex; flex-direction: column; justify-content: center; gap: 12px; }
+.cinema .rail { display: flex; flex-direction: column; align-items: center; width: 100%; }
+.cinema .electric { width: 320px; height: 210px; margin: 0; }
+.cinema .rail > p { display: none; }
+.cinema .chapterNav { flex-direction: row; gap: 28px; max-width: none; }
+.cinema .chapterNav a { gap: 10px; border: 0; min-height: 44px; }
+.cinema .articles { width: min(740px, 100%); text-align: center; }
+.cinema .copy h2 { font-size: clamp(30px, 3.4vw, 46px); margin: 12px 0 22px; }
+.cinema .copy dl { justify-content: center; margin: 0 0 22px; }
+.cinema .copy p { line-height: 1.7; }
+.sequence[data-static] { height: auto; }
+.sequence[data-static] .viewport { position: static; height: auto; display: block; }
+.sequence[data-static] .rail { position: static; }
+.sequence[data-static] .articles { display: block; width: 100%; }
+.sequence[data-static] .panel { padding: 60px 0; min-height: 0; border-top: 1px solid rgb(255 255 255 / .15); }
+.sequence[data-static] .pinnedHeader { display: none; }
+@media (max-width: 767px) {
+  .scrollHint { font-size: 13px; line-height: 1.7; margin-bottom: 38px; }
+  .reading { grid-template-columns: 1fr; gap: 0; }
+  .reading > .rail { top: 0; padding: 12px 0; z-index: 3; background: linear-gradient(#000 70%, transparent); }
+  .reading .rail { display: grid; grid-template-columns: 120px 1fr; align-items: center; column-gap: 20px; }
+  .reading .rail > p { grid-column: 2; grid-row: 1; }
+  .reading .electric { width: 120px; height: 120px; margin: 0; grid-row: 1 / 3; }
+  .reading .chapterNav { grid-column: 2; flex-direction: row; gap: 16px; }
+  .reading .chapterNav a { gap: 0; border: 0; }
+  .reading .chapterNav a > span:last-child { display: none; }
+  .reading .panel { min-height: 100svh; padding: 70px 0; }
+  .pinnedReading .rail { display: grid; grid-template-columns: 125px 1fr; width: 100%; align-items: center; }
+  .pinnedReading .rail > p { grid-column: 2; grid-row: 1; }
+  .pinnedReading .electric { width: 125px; height: 145px; grid-row: 1 / 3; margin: 0; }
+  .pinnedReading .chapterNav { grid-column: 2; flex-direction: row; gap: 18px; }
+  .pinnedReading .chapterNav a { border: 0; }
+  .pinnedReading .chapterNav a > span:last-child { display: none; }
+  .pinnedReading .panel { min-height: 0; padding: 0; }
+  .viewport { display: flex; flex-direction: column; justify-content: center; gap: 10px; }
+  .focus .rail { display: grid; grid-template-columns: 125px 1fr; width: 100%; align-items: center; }
+  .focus .rail > p { grid-column: 2; grid-row: 1; }
+  .focus .electric { width: 125px; height: 145px; grid-row: 1 / 3; margin: 0; }
+  .focus .chapterNav { grid-column: 2; flex-direction: row; gap: 18px; }
+  .focus .chapterNav a { border: 0; }
+  .focus .chapterNav a > span:last-child { display: none; }
+  .copy h2 { font-size: 29px; margin: 18px 0 24px; }
+  .copy dl { margin: 0 0 26px; gap: 26px; }
+  .copy dl dd { font-size: 27px; }
+  .copy p { font-size: 15px; line-height: 1.75; }
+  .cinema .electric { height: 150px; width: 240px; }
+  .cinema .chapterNav { gap: 16px; }
+  .cinema .chapterNav a { font-size: 11px; gap: 7px; }
+  .cinema .copy h2 { font-size: 29px; }
+  .cinema .copy p { font-size: 14px; }
+  .pinnedHeader { font-size: 11px; gap: 12px; top: 18px; }
+  .sequence[data-static] .panel { text-align: left; }
+}
