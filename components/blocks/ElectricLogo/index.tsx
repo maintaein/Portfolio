@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { Renderer, Program, Mesh, Triangle, Texture } from 'ogl';
+import { ELECTRIC_LOGO_MORPH_SECONDS } from './motion';
 
 const BOLT = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><path d="M39 3 12 37h17l-4 24 27-34H35z" fill="#fff"/></svg>'
@@ -14,7 +15,7 @@ const ARCS = 5;
 const PULSES = 3;
 const PIXEL_BUDGET = 4e6;
 const MAX_DPR = 1.25;
-const MORPH_DURATION = 1;
+const MORPH_DURATION = ELECTRIC_LOGO_MORPH_SECONDS;
 const EMPTY_PRELOAD_SRCS: string[] = [];
 
 type Rgb = [number, number, number];
@@ -23,6 +24,8 @@ export interface ElectricLogoProps {
   src?: string;
   active?: boolean;
   prewarm?: boolean;
+  maxFps?: number;
+  maxDpr?: number;
   preloadSrcs?: string[];
   onReady?: (src: string) => void;
   color?: string;
@@ -46,7 +49,7 @@ export interface ElectricLogoProps {
   style?: CSSProperties;
 }
 
-type Settings = Required<Omit<ElectricLogoProps, 'src' | 'active' | 'prewarm' | 'preloadSrcs' | 'onReady' | 'className' | 'style'>>;
+type Settings = Required<Omit<ElectricLogoProps, 'src' | 'active' | 'prewarm' | 'maxFps' | 'maxDpr' | 'preloadSrcs' | 'onReady' | 'className' | 'style'>>;
 
 interface Shape {
   src?: string;
@@ -726,6 +729,8 @@ const ElectricLogo = ({
   src = BOLT,
   active = true,
   prewarm = false,
+  maxFps = Infinity,
+  maxDpr = MAX_DPR,
   preloadSrcs = EMPTY_PRELOAD_SRCS,
   onReady,
   color = '#ecc7ff',
@@ -754,6 +759,10 @@ const ElectricLogo = ({
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
   const activeRef = useRef(active);
+  const maxFpsRef = useRef(maxFps);
+  maxFpsRef.current = maxFps;
+  const maxDprRef = useRef(maxDpr);
+  maxDprRef.current = maxDpr;
   const prewarmRef = useRef(prewarm);
   const onActivationRef = useRef<(() => void) | null>(null);
 
@@ -846,7 +855,7 @@ const ElectricLogo = ({
     if (!container) return undefined;
 
     const renderer = new Renderer({
-      dpr: Math.min(window.devicePixelRatio || 1, MAX_DPR),
+      dpr: Math.min(window.devicePixelRatio || 1, maxDprRef.current),
       alpha: true,
       premultipliedAlpha: true,
       antialias: false
@@ -957,6 +966,7 @@ const ElectricLogo = ({
     let height = 1;
     let raf = 0;
     let last = performance.now();
+    let lastRenderedAt = -Infinity;
     let visible = true;
     const shouldRun = () => visible && (activeRef.current || (prewarmRef.current && !prewarmPainted));
 
@@ -985,13 +995,18 @@ const ElectricLogo = ({
     const resize = () => {
       width = Math.max(1, container.clientWidth);
       height = Math.max(1, container.clientHeight);
-      renderer.dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR, Math.sqrt(PIXEL_BUDGET / (width * height)));
+      renderer.dpr = Math.min(window.devicePixelRatio || 1, maxDprRef.current, Math.sqrt(PIXEL_BUDGET / (width * height)));
       renderer.setSize(width, height);
       uniforms.uResolution.value = [width, height];
     };
 
     const frame = (now: number) => {
       raf = 0;
+      if (now - lastRenderedAt + .5 < 1000 / Math.max(1, maxFpsRef.current)) {
+        if (shouldRun()) raf = requestAnimationFrame(frame);
+        return;
+      }
+      lastRenderedAt = now;
       if (!(mesh.program as ParallelProgram).finish()) {
         if (shouldRun()) raf = requestAnimationFrame(frame);
         return;
