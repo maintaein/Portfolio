@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { enter, expectActive, historyLength, navButton } from './helpers';
+import { enter, expectActive, historyLength, navButton, waitFrames } from './helpers';
 
 test('history returns to the previous reading destination @smoke', async ({ page }) => {
   await enter(page, 'about'); const before = await historyLength(page);
@@ -7,6 +7,15 @@ test('history returns to the previous reading destination @smoke', async ({ page
   expect(await historyLength(page)).toBe(before + 1);
   await page.goBack(); await expectActive(page, 'about');
   await page.goForward(); await expectActive(page, 'projects');
+});
+test('back keeps the reading position the browser restores', async ({ page }) => {
+  await enter(page, 'experience');
+  await page.locator('[data-section="experience"]').evaluate(el => window.scrollTo(0, el.getBoundingClientRect().top + scrollY - 76 + 150));
+  await waitFrames(page, 5); await expectActive(page, 'experience');
+  const before = await page.evaluate(() => window.scrollY);
+  await navButton(page, 'Skills').click(); await expectActive(page, 'skills');
+  await page.goBack(); await expectActive(page, 'experience'); await waitFrames(page, 10);
+  expect(await page.evaluate(() => window.scrollY)).toBe(before);
 });
 test('native document scroll exposes the next original section without hiding siblings', async ({ page }) => {
   await enter(page, 'about');

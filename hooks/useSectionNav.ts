@@ -20,6 +20,8 @@ export type SectionNavOptions = {
   onBeforeNavigate?: () => void;
 };
 
+const SCROLL_KEYS = ['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End', ' '];
+
 function readHash(): NavId {
   const hash = window.location.hash.slice(1);
   return NAV_SEQUENCE.includes(hash as NavId) ? hash as NavId : OVERVIEW;
@@ -39,10 +41,18 @@ export function useSectionNav(options: SectionNavOptions) {
   const section = useCallback((id: NavId) => latest.current.rootRef.current?.querySelector<HTMLElement>(`[data-section="${id}"]`), []);
   const headerHeight = useCallback(() => latest.current.headerRef.current?.getBoundingClientRect().height ?? 0, []);
   const documentHeight = () => Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+  // 실측 header 높이에 16px 여유를 더한다. scroll-margin-top도 같은 자리에 둔다.
   const targetTop = useCallback((id: NavId) => Math.max(0, Math.min(
-    (section(id)?.getBoundingClientRect().top ?? 0) + window.scrollY - headerHeight(),
+    (section(id)?.getBoundingClientRect().top ?? 0) + window.scrollY - headerHeight() - 16,
     Math.max(0, documentHeight() - window.innerHeight)
   )), [section, headerHeight]);
+  const current = useCallback(() => resolveCurrentSection({
+    sections: NAV_SEQUENCE.flatMap(id => {
+      const element = section(id);
+      return element ? [{ id, top: element.getBoundingClientRect().top + window.scrollY }] : [];
+    }),
+    scrollY: window.scrollY, viewportHeight: window.innerHeight, headerHeight: headerHeight(), documentHeight: documentHeight(),
+  }), [section, headerHeight]);
 
   const sample = useCallback(() => {
     frame.current = 0;
@@ -55,16 +65,11 @@ export function useSectionNav(options: SectionNavOptions) {
       setNavigationTarget(null);
       if (pending.focus) section(pending.id)?.focus({ preventScroll: true });
     }
-    const sections = NAV_SEQUENCE.flatMap(id => {
-      const element = section(id);
-      return element ? [{ id, top: element.getBoundingClientRect().top + window.scrollY }] : [];
-    });
-    const id = resolveCurrentSection({ sections, scrollY: window.scrollY,
-      viewportHeight: window.innerHeight, headerHeight: headerHeight(), documentHeight: documentHeight() });
+    const id = current();
     activeRef.current = id;
     setActive(id);
     if (readHash() !== id) window.history.replaceState(window.history.state, '', `#${id}`);
-  }, [section, headerHeight]);
+  }, [section, current]);
   const schedule = useCallback(() => {
     if (!frame.current) frame.current = requestAnimationFrame(sample);
   }, [sample]);
@@ -99,23 +104,31 @@ export function useSectionNav(options: SectionNavOptions) {
     const id = readHash();
     activeRef.current = id;
     setActive(id);
-    window.scrollTo({ top: targetTop(id), behavior: 'auto' });
+    const type = (performance.getEntriesByType?.('navigation')[0] as PerformanceNavigationTiming | undefined)?.type;
+    // 새로고침·앞뒤 이동은 브라우저가 복원한 읽기 위치가 이미 그 섹션이면 존중한다.
+    if (!((type === 'reload' || type === 'back_forward') && current() === id)) window.scrollTo({ top: targetTop(id), behavior: 'auto' });
     setRouteResolved(true);
-  }, [targetTop]);
+  }, [targetTop, current]);
 
   useEffect(() => {
+    // popstate는 브라우저 스크롤 복원보다 먼저 온다. 복원 뒤에 오는 hashchange에서만 판단한다.
+    // 모달 항목은 섹션 해시를 공유하므로 hashchange가 없고 스크롤 복원도 스스로 맡는다.
     const onHistory = () => {
       const id = readHash();
-      // Modal entries share the section hash and own their own scroll restoration.
-      if (id !== activeRef.current) move(id, false, 'auto');
+      if (id === activeRef.current) return;
+      if (current() !== id) return move(id, false, 'auto');
+      transaction.current = null;
+      clearTimeout(timer.current);
+      setNavigationTarget(null);
+      activeRef.current = id;
+      setActive(id);
     };
     const cancel = (event: Event) => {
       if (!transaction.current) return;
       if (event instanceof KeyboardEvent) {
         const target = event.target;
-        if (target instanceof HTMLElement && (target.closest('input, textarea, select, [contenteditable="true"]') ||
-          !['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End', ' '].includes(event.key))) return;
-        if (!['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End', ' '].includes(event.key)) return;
+        if (!SCROLL_KEYS.includes(event.key) ||
+          (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable="true"]'))) return;
       }
       transaction.current = null;
       clearTimeout(timer.current);
@@ -126,7 +139,6 @@ export function useSectionNav(options: SectionNavOptions) {
     window.addEventListener('scroll', schedule, { passive: true });
     window.addEventListener('scrollend', schedule);
     window.addEventListener('resize', schedule);
-    window.addEventListener('popstate', onHistory);
     window.addEventListener('hashchange', onHistory);
     window.addEventListener('wheel', cancel, { passive: true });
     window.addEventListener('touchstart', cancel, { passive: true });
@@ -140,13 +152,12 @@ export function useSectionNav(options: SectionNavOptions) {
       window.removeEventListener('scroll', schedule);
       window.removeEventListener('scrollend', schedule);
       window.removeEventListener('resize', schedule);
-      window.removeEventListener('popstate', onHistory);
       window.removeEventListener('hashchange', onHistory);
       window.removeEventListener('wheel', cancel);
       window.removeEventListener('touchstart', cancel);
       window.removeEventListener('keydown', cancel);
     };
-  }, [move, schedule]);
+  }, [move, schedule, current]);
 
   return { active, routeResolved, navigationTarget, navigate };
 }

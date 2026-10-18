@@ -44,6 +44,22 @@ it('same-hash modal popstate leaves scroll and pending navigation alone', () => 
   act(() => window.dispatchEvent(new PopStateEvent('popstate', { state: { projectModalId: 'other' } })));
   expect(window.scrollTo).not.toHaveBeenCalled(); expect(result.current.navigationTarget).toBe('projects');
 });
+it('history traversal keeps a restored mid-section position and moves only when it is elsewhere', () => {
+  const { result } = renderHook(() => useSectionNav(options()));
+  vi.mocked(window.scrollTo).mockClear();
+  y = 3700; history.replaceState(history.state, '', '#skills');
+  act(() => { window.dispatchEvent(new PopStateEvent('popstate')); window.dispatchEvent(new HashChangeEvent('hashchange')); });
+  expect(window.scrollTo).not.toHaveBeenCalled(); expect(result.current.active).toBe('skills');
+  history.replaceState(history.state, '', '#about');
+  act(() => { window.dispatchEvent(new PopStateEvent('popstate')); window.dispatchEvent(new HashChangeEvent('hashchange')); });
+  expect(window.scrollTo).toHaveBeenCalledWith({ top: 804, behavior: 'auto' }); expect(result.current.active).toBe('about');
+});
+it('reload and back-forward keep a restored position that already shows the hash', () => {
+  history.replaceState(history.state, '', '#skills'); y = 3700;
+  vi.spyOn(performance, 'getEntriesByType').mockReturnValue([{ type: 'reload' } as PerformanceNavigationTiming]);
+  const { result } = renderHook(() => useSectionNav(options()));
+  expect(window.scrollTo).not.toHaveBeenCalled(); expect(result.current.active).toBe('skills');
+});
 it('only scrolling input cancels; Tab and editing keys do not cancel', () => {
   const { result } = renderHook(() => useSectionNav(options()));
   act(() => result.current.navigate('projects'));
@@ -59,23 +75,23 @@ it('only scrolling input cancels; Tab and editing keys do not cancel', () => {
 it('new navigation wins stale completion and focuses only its destination', () => {
   const { result } = renderHook(() => useSectionNav(options()));
   act(() => result.current.navigate('about')); act(() => result.current.navigate('projects'));
-  y = 820; act(() => window.dispatchEvent(new Event('scrollend'))); tick();
+  y = 804; act(() => window.dispatchEvent(new Event('scrollend'))); tick();
   expect(result.current.navigationTarget).toBe('projects');
-  y = 1720; act(() => window.dispatchEvent(new Event('scrollend'))); tick();
+  y = 1704; act(() => window.dispatchEvent(new Event('scrollend'))); tick();
   expect(result.current.navigationTarget).toBeNull();
   expect(document.activeElement).toBe(root.querySelector('[data-section="projects"]'));
 });
-it('resolves deep links using the measured header without adding history', () => {
+it('resolves deep links using the measured header plus 16px without adding history', () => {
   history.replaceState(history.state, '', '#projects');
   const push = vi.spyOn(history, 'pushState');
   const { result } = renderHook(() => useSectionNav(options()));
   expect(result.current.routeResolved).toBe(true); expect(result.current.active).toBe('projects');
-  expect(window.scrollTo).toHaveBeenCalledWith({ top: 1720, behavior: 'auto' }); expect(push).not.toHaveBeenCalled();
+  expect(window.scrollTo).toHaveBeenCalledWith({ top: 1704, behavior: 'auto' }); expect(push).not.toHaveBeenCalled();
 });
 it('uses an instant explicit destination under reduced motion and blocks modal-obscured navigation', () => {
   const initial = options(); initial.reducedMotion = true;
   const { result, rerender } = renderHook(({ blocked }) => useSectionNav({ ...initial, blocked }), { initialProps: { blocked: false } });
-  act(() => result.current.navigate('about')); expect(window.scrollTo).toHaveBeenLastCalledWith({ top: 820, behavior: 'auto' });
+  act(() => result.current.navigate('about')); expect(window.scrollTo).toHaveBeenLastCalledWith({ top: 804, behavior: 'auto' });
   rerender({ blocked: true }); const hash = location.hash;
   act(() => result.current.navigate('skills')); expect(location.hash).toBe(hash);
 });
