@@ -1,72 +1,23 @@
 'use client';
 
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import type { NavId } from '@/hooks/useSectionNav';
 
-interface SectionActivityState {
-  active: NavId;
-  entryAnimationTarget: NavId | null;
+export interface SectionActivityState {
   pageVisible: boolean;
   routeResolved: boolean;
   motionReady: boolean;
   reducedMotion: boolean;
-  heroRevealed: boolean;
+  obscured: boolean;
 }
-
-export interface SectionActivityProviderProps extends Omit<SectionActivityState, 'heroRevealed'> {
-  heroRevealed?: boolean;
-  children: ReactNode;
+export interface SectionActivityProviderProps extends SectionActivityState { children: ReactNode }
+const SectionActivityContext = createContext<Readonly<SectionActivityState> | null>(null);
+export function SectionActivityProvider({ pageVisible, routeResolved, motionReady, reducedMotion, obscured, children }: SectionActivityProviderProps) {
+  const value = useMemo(() => ({ pageVisible, routeResolved, motionReady, reducedMotion, obscured }),
+    [pageVisible, routeResolved, motionReady, reducedMotion, obscured]);
+  return <SectionActivityContext.Provider value={value}>{children}</SectionActivityContext.Provider>;
 }
-
-const SectionActivityContext = createContext<Readonly<SectionActivityState> | null>(
-  null
-);
-
-export function SectionActivityProvider({
-  active,
-  entryAnimationTarget,
-  pageVisible,
-  routeResolved,
-  motionReady,
-  reducedMotion,
-  heroRevealed = true,
-  children,
-}: SectionActivityProviderProps) {
-  const value = useMemo(
-    () => ({
-      active,
-      entryAnimationTarget,
-      pageVisible,
-      routeResolved,
-      motionReady,
-      reducedMotion,
-      heroRevealed,
-    }),
-    [
-      active,
-      entryAnimationTarget,
-      pageVisible,
-      routeResolved,
-      motionReady,
-      reducedMotion,
-      heroRevealed,
-    ]
-  );
-
-  return (
-    <SectionActivityContext.Provider value={value}>
-      {children}
-    </SectionActivityContext.Provider>
-  );
-}
-
 export function useSectionActivity(): Readonly<SectionActivityState> {
   const state = useContext(SectionActivityContext);
-  if (state === null) {
-    throw new Error(
-      'useSectionActivity must be used within SectionActivityProvider'
-    );
-  }
-
+  if (state === null) throw new Error('useSectionActivity must be used within SectionActivityProvider');
   return state;
 }

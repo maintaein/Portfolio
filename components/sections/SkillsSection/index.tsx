@@ -6,6 +6,7 @@ import { SECTION_IDS } from '@/lib/constants';
 import { projects, skillCategories } from '@/lib/data';
 import ScrollArea from '@/components/common/ScrollArea';
 import { useSectionActivity } from '@/components/common/SectionActivityContext';
+import { useSectionVisibility } from '@/hooks/useSectionVisibility';
 
 const names = [
   'React', 'TypeScript', 'Next.js', 'Tailwind CSS',
@@ -34,8 +35,9 @@ export default function SkillsSection() {
   const [selected, setSelected] = useState(skills[0]);
   const mapRef = useRef<HTMLDivElement>(null);
   const lastDrawnSkill = useRef<string | null>(null);
-  const { active, routeResolved, motionReady, pageVisible, reducedMotion } = useSectionActivity();
-  const entered = active === SECTION_IDS.SKILLS && routeResolved && motionReady && pageVisible;
+  const { routeResolved, motionReady, pageVisible, reducedMotion, obscured } = useSectionActivity();
+  const { ref, visible } = useSectionVisibility<HTMLElement>();
+  const entered = visible && routeResolved && motionReady && pageVisible && !obscured;
   const count = selected.projects.length;
 
   useLayoutEffect(() => {
@@ -124,7 +126,7 @@ export default function SkillsSection() {
   }));
 
   return (
-    <section id={SECTION_IDS.SKILLS} aria-labelledby="skills-heading" className="skills-signal flex min-h-full">
+    <section ref={ref} id={SECTION_IDS.SKILLS} aria-labelledby="skills-heading" className="skills-signal flex min-h-full">
       <div className="signal-shell m-auto w-full">
         <div className="signal-workspace">
           <ScrollArea as="nav" className="signal-nav" aria-label="기술 선택">

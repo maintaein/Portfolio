@@ -544,3 +544,20 @@ describe('PreviewMorph - 프리로드', () => {
     expect(images.length).toBe(requestedBefore);
   });
 });
+
+it('pauses the owned morph tween in place and resumes its phase without restarting the renderer', () => {
+  withCanvas();
+  const { ref, view, canvas } = mount();
+  warmCache(ref, '/next.webp');
+  act(() => { ref.current!.morph(makeVideo(), '/next.webp'); });
+  const tween = liveTweens().at(-1)!;
+  act(() => { tween.progress(.35); });
+  const progress = tween.progress(); const renders = renderer().render.mock.calls.length;
+  view.rerender(<PreviewMorph ref={ref} paused />);
+  expect(tween.paused()).toBe(true); expect(tween.progress()).toBe(progress);
+  expect(rendererInstances).toHaveLength(1); expect(renderer().render).toHaveBeenCalledTimes(renders);
+  view.rerender(<PreviewMorph ref={ref} />);
+  expect(tween.paused()).toBe(false); expect(tween.progress()).toBe(progress);
+  act(() => { tween.progress(1); }); expect(canvas.style.opacity).toBe('0');
+  view.unmount(); expect(renderer().dispose).toHaveBeenCalledTimes(1);
+});

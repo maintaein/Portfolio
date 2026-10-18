@@ -1,3 +1,6 @@
+import { useRef as useVisibilityRef } from 'react';
+const localVisibility = vi.hoisted(() => ({ visible: true, hasEntered: true }));
+vi.mock('@/hooks/useSectionVisibility', () => ({ useSectionVisibility: () => ({ ref: useVisibilityRef(null), visible: localVisibility.visible, hasEntered: localVisibility.hasEntered }) }));
 import { readFileSync } from 'node:fs';
 import { StrictMode } from 'react';
 import { resolve } from 'node:path';
@@ -18,7 +21,7 @@ const css = readFileSync(resolve(process.cwd(), 'styles/design-tokens.css'), 'ut
 
 function skillsWithActivity(state: Partial<Omit<SectionActivityProviderProps, 'children'>> = {}) {
   return (
-    <SectionActivityProvider active={SECTION_IDS.SKILLS} entryAnimationTarget={null}
+    <SectionActivityProvider obscured={false}
       routeResolved motionReady pageVisible reducedMotion={false} {...state}>
       <SkillsSection />
     </SectionActivityProvider>
@@ -28,6 +31,7 @@ function skillsWithActivity(state: Partial<Omit<SectionActivityProviderProps, 'c
 describe('SkillsSection signal map', () => {
   let resize: () => void;
   beforeEach(() => {
+  localVisibility.visible = true; localVisibility.hasEntered = true;
     vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(600);
     vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(490);
     vi.stubGlobal('matchMedia', vi.fn(() => ({
@@ -174,7 +178,7 @@ describe('SkillsSection signal map', () => {
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(600);
     vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(490);
     const timelines = vi.spyOn(gsap, 'timeline');
-    const { container, rerender } = render(skillsWithActivity({ active: SECTION_IDS.ABOUT }));
+    const { container, rerender } = render(skillsWithActivity({ obscured: true }));
     expect(timelines).not.toHaveBeenCalled();
     for (const state of [{ routeResolved: false }, { motionReady: false }, { pageVisible: false }]) {
       rerender(skillsWithActivity(state));
@@ -184,7 +188,7 @@ describe('SkillsSection signal map', () => {
     const initialCount = container.querySelectorAll('.signal-path').length;
     expect(timelines).toHaveBeenCalledTimes(initialCount);
     timelines.mock.results.forEach(({ value }) => value.progress(1));
-    rerender(skillsWithActivity({ active: SECTION_IDS.ABOUT }));
+    rerender(skillsWithActivity({ obscured: true }));
     for (const span of container.querySelectorAll<HTMLElement>('.signal-project > span')) {
       expect(span.style.opacity).toBe('');
     }

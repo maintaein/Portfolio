@@ -7,6 +7,7 @@ import { experiences } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
 import ScrollArea from '@/components/common/ScrollArea';
 import { useSectionActivity } from '@/components/common/SectionActivityContext';
+import { useSectionVisibility } from '@/hooks/useSectionVisibility';
 
 export default function ExperienceSection() {
   const [selected, setSelected] = useState(0);
@@ -17,11 +18,13 @@ export default function ExperienceSection() {
   const motionRef = useRef<gsap.core.Timeline | null>(null);
   const flowRef = useRef({ head: 0, tail: 0 });
   const previousIndex = useRef<number | null>(null);
-  const { active, reducedMotion } = useSectionActivity();
+  const { reducedMotion, pageVisible, motionReady, obscured } = useSectionActivity();
+  const { ref, visible } = useSectionVisibility<HTMLElement>();
+  const active = visible && pageVisible && motionReady && !obscured;
   const select = (index: number) => setSelected((index + experiences.length) % experiences.length);
 
   useLayoutEffect(() => {
-    if (active !== SECTION_IDS.EXPERIENCE) {
+    if (!active) {
       previousIndex.current = null;
       return;
     }
@@ -98,7 +101,7 @@ export default function ExperienceSection() {
   }
 
   return (
-    <section id={SECTION_IDS.EXPERIENCE} aria-label="경력" className="experience-depth">
+    <section ref={ref} id={SECTION_IDS.EXPERIENCE} aria-label="경력" className="experience-depth">
 
       <div className="experience-depth-layout">
         <div className="experience-depth-rail">

@@ -154,6 +154,7 @@ export interface PreviewMorphHandle {
 }
 
 export interface PreviewMorphProps {
+  paused?: boolean;
   // 캔버스가 덮을 상자의 크기를 부모가 정한다. 캔버스는 absolute inset-0이다.
   className?: string;
   // 마운트 직후 받아 둘 도착 이미지 경로들. DOM img의 src와 원본 경로가
@@ -195,12 +196,15 @@ interface Engine {
 }
 
 const PreviewMorph = forwardRef<PreviewMorphHandle, PreviewMorphProps>(function PreviewMorph(
-  { className, preload },
+  { className, preload, paused = false },
   ref
 ) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<Engine | null>(null);
   const tweenRef = useRef<gsap.core.Tween | null>(null);
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
+  useEffect(() => { tweenRef.current?.paused(paused); }, [paused]);
   // 이미 받아 둔 도착 이미지. 같은 프로젝트를 다시 훑으면 첫 프레임부터 물린다
   const imageCacheRef = useRef(new Map<string, HTMLImageElement>());
   // 지금 전환이 향하는 도착지. 늦게 온 이미지가 자기 차례인지 이걸로 판정한다
@@ -428,15 +432,17 @@ const PreviewMorph = forwardRef<PreviewMorphHandle, PreviewMorphProps>(function 
         // 태운다 - 출발 텍스처는 직전 모프가 그리던 화면이 아니라 방금 굳힌
         // sourceEl 한 장이다
         tweenRef.current?.kill();
+        const startedAt = performance.now() * 0.001;
         tweenRef.current = gsap.fromTo(
           u.uProgress,
           { value: 0 },
           {
             value: 1,
             duration: DURATION_S,
+            paused: pausedRef.current,
             ease: MORPH_EASE,
             onUpdate: () => {
-              u.uTime.value = performance.now() * 0.001;
+              u.uTime.value = startedAt + (tweenRef.current?.time() ?? 0);
               engine.renderer.render(engine.scene, engine.camera);
             },
             onComplete: () => {

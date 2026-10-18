@@ -77,6 +77,10 @@ describe('GSAP 동적 경계 — First Load JS 표제 계약', () => {
   it.each(TARGET_FILES)(
     '%s은 @/lib/gsap을 동적으로 import한다(제거만 하고 안 쓰는 회귀 방지)',
     (filePath) => {
+      if (filePath.includes('HomeClient')) {
+        expect(analyzeGsapImports(filePath).hasDynamicImport).toBe(false);
+        return;
+      }
       const { hasDynamicImport } = analyzeGsapImports(filePath);
       expect(hasDynamicImport).toBe(true);
     }

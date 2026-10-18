@@ -1,3 +1,11 @@
+import { useRef as useVisibilityRef } from 'react';
+import { SectionActivityProvider } from '@/components/common/SectionActivityContext';
+const visibility = vi.hoisted(() => ({ visible: true }));
+vi.mock('@/hooks/useSectionVisibility', () => ({ useSectionVisibility: () => ({ ref: useVisibilityRef(null), visible: visibility.visible, hasEntered: true }) }));
+function awardsView(visible = true) {
+  visibility.visible = visible;
+  return <SectionActivityProvider obscured={false} pageVisible routeResolved motionReady reducedMotion={false}><AwardsSection /></SectionActivityProvider>;
+}
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -51,7 +59,7 @@ afterEach(() => {
 
 describe('Awards orbit', () => {
   it('renders all award facts before interaction', () => {
-    const rendered = new DOMParser().parseFromString(renderToString(<AwardsSection active />), 'text/html');
+    const rendered = new DOMParser().parseFromString(renderToString(awardsView()), 'text/html');
     expect(rendered.querySelector('section')?.id).toBe(SECTION_IDS.AWARDS_CERTIFICATES);
     for (const award of awards) {
       const card = rendered.querySelector(`[data-award-card="${award.id}"]`);
@@ -68,7 +76,7 @@ describe('Awards orbit', () => {
   });
 
   it('updates the center on hover, focus, and click without stopping orbit motion', () => {
-    const { container } = render(<AwardsSection active />);
+    const { container } = render(awardsView());
     const nodes = [...container.querySelectorAll<HTMLElement>('[data-orbit-node]')];
     const buttons = [...container.querySelectorAll<HTMLButtonElement>('[data-award-select]')];
     step(1000);
@@ -86,9 +94,9 @@ describe('Awards orbit', () => {
   });
 
   it('stops offscreen, hidden, and for reduced motion, then cleans up', () => {
-    const { rerender, unmount } = render(<AwardsSection active={false} />);
+    const { rerender, unmount } = render(awardsView(false));
     expect(frames.size).toBe(0);
-    rerender(<AwardsSection active />);
+    rerender(awardsView());
     expect(frames.size).toBe(1);
     pageHidden = true;
     fireEvent(document, new Event('visibilitychange'));
@@ -96,10 +104,10 @@ describe('Awards orbit', () => {
     pageHidden = false;
     fireEvent(document, new Event('visibilitychange'));
     expect(frames.size).toBe(1);
-    rerender(<AwardsSection active={false} />);
+    rerender(awardsView(false));
     expect(frames.size).toBe(0);
     reducedMotion = true;
-    rerender(<AwardsSection active />);
+    rerender(awardsView());
     expect(frames.size).toBe(0);
     unmount();
     expect(frames.size).toBe(0);

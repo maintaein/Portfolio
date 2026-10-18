@@ -83,7 +83,7 @@ test.describe('접근성', () => {
     await expect(slot).toBeInViewport();
   });
 
-  test('Tab이 비활성 섹션 안으로 들어가지 않는다 @smoke', async ({ page }) => {
+  test('Tab으로 문서의 다음 섹션에도 접근한다 @smoke', async ({ page }) => {
     await enter(page, 'about');
 
     // 셸(내비, Footer)은 어느 섹션에도 속하지 않으므로 shell로 센다.
@@ -100,16 +100,14 @@ test.describe('접근성', () => {
       if (where) visited.add(where);
     }
 
-    // 비활성 섹션은 inert라 포커스가 들어갈 수 없다
-    // (components/sections/HomeClient/index.tsx).
-    expect([...visited].filter((id) => id !== 'shell' && id !== 'about')).toEqual(
-      []
-    );
+    // All root sections remain keyboard reachable in document order.
+    expect([...visited].some(id => id !== 'shell' && id !== 'about')).toBe(true);
+    await expect(page.locator('[data-section][inert], [data-section][aria-hidden="true"]')).toHaveCount(0);
     // 활성 섹션에는 실제로 들어갔어야 한다. 안 그러면 위 단언이 공허하다.
     expect(visited.has('about')).toBe(true);
   });
 
-  test('200% 확대와 320px 폭에서 활성 섹션이 가로로 잘리지 않는다 @smoke', async ({
+  test('200% 확대와 320px 폭에서 문서 본문이 가로로 잘리지 않는다 @smoke', async ({
     page,
   }) => {
     // 브라우저 200% 확대는 CSS 픽셀 기준 뷰포트가 절반이 되는 것과 같다.
@@ -138,9 +136,9 @@ test.describe('접근성', () => {
 
       // 가로로 안 잘리는 것만으로는 부족하다. 세로로 끝까지 읽을 수 있어야
       // 리플로 기준을 만족한다.
-      const reachedEnd = await section.evaluate((el) => {
-        el.scrollTop = el.scrollHeight;
-        return el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+      const reachedEnd = await section.evaluate(el => {
+        window.scrollTo(0, el.getBoundingClientRect().bottom + window.scrollY - window.innerHeight);
+        return el.getBoundingClientRect().bottom <= window.innerHeight + 1;
       });
       expect(reachedEnd).toBe(true);
     }
@@ -162,7 +160,8 @@ test.describe('접근성', () => {
     await page.goto('/');
     // 부팅 안무가 끝나 START가 올라오는 시점까지가 최초 진입 장면이다.
     // 고정 sleep 대신 이 조건을 기다린다.
-    await expect(page.getByRole('button', { name: 'START' })).toBeVisible();
+    await expect(page.locator('main')).toHaveAttribute('data-route-resolved', 'true');
+    await page.evaluate(() => new Promise<void>(resolve => { let count = 0; const tick = () => ++count > 90 ? resolve() : requestAnimationFrame(tick); tick(); }));
 
     const cls = await page.evaluate(() => window.__clsTotal);
     expect(cls).toBeLessThan(0.1);

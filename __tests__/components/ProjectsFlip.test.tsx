@@ -1,9 +1,10 @@
+import { useRef as useVisibilityRef } from 'react';
+vi.mock('@/hooks/useSectionVisibility', () => ({ useSectionVisibility: () => ({ ref: useVisibilityRef(null), visible: true, hasEntered: true }) }));
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import ProjectsSection from '@/components/sections/ProjectsSection';
 import { SectionActivityProvider } from '@/components/common/SectionActivityContext';
 import { projects } from '@/lib/data';
-import { SECTION_IDS } from '@/lib/constants';
 import { isProjectModalReady } from '@/lib/utils/projectContract';
 import { Flip, REVEAL_OUT_MS, SITE_EASE, gsap } from '@/lib/gsap';
 import {
@@ -84,9 +85,9 @@ function obscured() {
 
 function renderSection(gates: Gates = {}) {
   return render(
-    <SectionActivityProvider
-      active={SECTION_IDS.PROJECTS}
-      entryAnimationTarget={null}
+    <SectionActivityProvider obscured={false}
+
+
       pageVisible
       routeResolved={gates.routeResolved ?? true}
       motionReady={gates.motionReady ?? true}

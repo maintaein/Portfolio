@@ -7,7 +7,7 @@ import { coreValues } from '@/lib/data';
 import { RichText, parseRichText } from '@/lib/utils/richText';
 import { SECTION_IDS } from '@/lib/constants';
 import { useSectionActivity } from '@/components/common/SectionActivityContext';
-import { OVERVIEW } from '@/hooks/useSectionNav';
+import { useSectionVisibility } from '@/hooks/useSectionVisibility';
 import AboutRail from './rail';
 import { ABOUT_SCRIMS, ABOUT_SCRIMS_MOBILE } from './scrim';
 
@@ -80,15 +80,16 @@ function AboutElectricVisual({ logoSrc, active, prewarm, reducedMotion }: {
 // 6줄 격자를 쓰고, 그 미만에서는 4칸으로 줄여 세로로 쌓는다(Task 7).
 export default function AboutSection() {
   const [activeIndex, setActiveIndex] = useState(0);
-  const [hasVisited, setHasVisited] = useState(false);
   const [wideScreen, setWideScreen] = useState(false);
   const [transition, setTransition] = useState<AboutTransition>({
     direction: 'none',
     distance: 0,
   });
   const [transitionSeq, setTransitionSeq] = useState(0);
-  const { reducedMotion, motionReady, heroRevealed, active } = useSectionActivity();
-  const prewarmLogo = wideScreen && active === OVERVIEW && motionReady && heroRevealed && !reducedMotion;
+  const { reducedMotion, motionReady, pageVisible, obscured } = useSectionActivity();
+  const { ref, visible, hasEntered } = useSectionVisibility<HTMLElement>();
+  const active = visible && motionReady && pageVisible && !obscured;
+  const prewarmLogo = false;
 
   useEffect(() => {
     const query = window.matchMedia('(min-width: 1024px)');
@@ -105,9 +106,6 @@ export default function AboutSection() {
   // 포털 JSX 바로 위 주석 참고, C1 재수정).
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  useEffect(() => {
-    if (active === SECTION_IDS.ABOUT) setHasVisited(true);
-  }, [active]);
 
   function handleSelect(next: number) {
     const delta = next - activeIndex;
@@ -121,9 +119,10 @@ export default function AboutSection() {
 
   return (
     <section
+      ref={ref}
       id={SECTION_IDS.ABOUT}
       aria-labelledby="about-heading"
-      className="flex flex-col lg:h-full lg:flex-row"
+      className="about-document flex flex-col lg:h-full lg:flex-row"
     >
       {/* about-heading: 섹션 aria-labelledby가 참조하는 시각적으로 숨긴
           제목. AboutRail은 라벨 레일 자체만 그리므로 여기서 섹션 이름을
@@ -134,7 +133,7 @@ export default function AboutSection() {
       <AboutRail
         activeIndex={activeIndex}
         onSelect={handleSelect}
-        active={active === SECTION_IDS.ABOUT}
+        active={active}
         reducedMotion={reducedMotion}
       />
 
@@ -198,7 +197,7 @@ export default function AboutSection() {
                     data-about-scrim-index={index}
                     aria-hidden="true"
                     className={`pointer-events-none fixed inset-0 -z-[1] hidden transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] lg:block ${
-                      active === SECTION_IDS.ABOUT && index === activeIndex
+                      active && index === activeIndex
                         ? 'opacity-100'
                         : 'opacity-0'
                     }`}
@@ -212,7 +211,7 @@ export default function AboutSection() {
                     data-about-scrim-index={index}
                     aria-hidden="true"
                     className={`pointer-events-none fixed inset-0 -z-[1] transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] lg:hidden ${
-                      active === SECTION_IDS.ABOUT && index === activeIndex
+                      active && index === activeIndex
                         ? 'opacity-100'
                         : 'opacity-0'
                     }`}
@@ -228,10 +227,10 @@ export default function AboutSection() {
           className="pointer-events-none absolute inset-0 z-10 hidden grid-cols-12 grid-rows-6 gap-x-6 gap-y-2 px-10 py-8 lg:grid"
         >
           <div data-about-visual className="col-span-4 col-start-2 row-span-4 row-start-2 flex items-center justify-center">
-            {wideScreen && (hasVisited || active === SECTION_IDS.ABOUT || prewarmLogo) ? (
+            {wideScreen && (hasEntered || active || prewarmLogo) ? (
               <AboutElectricVisual
                 logoSrc={coreValues[activeIndex].logoSrc}
-                active={active === SECTION_IDS.ABOUT}
+                active={active}
                 prewarm={prewarmLogo}
                 reducedMotion={reducedMotion}
               />

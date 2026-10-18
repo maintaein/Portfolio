@@ -1278,7 +1278,7 @@ describe('BootSequence — 워드마크 opacity 안무 (Navigation 결합)', () 
     await flushGsapImport();
 
     const wordmark = screen.getByTestId('wordmark');
-    expect(wordmark).toHaveAttribute('data-wordmark-mode', 'hero');
+    expect(wordmark).toHaveAttribute('data-wordmark-mode', 'compact');
     // 뮤테이션 (i) — revealFinalState()의 opacity 대입을 지우면 이 값이
     // ''로 남고, CSS의 no-preference 오버라이드(opacity:0)가 재방문에도
     // 그대로 적용돼 이름이 안 보인다.

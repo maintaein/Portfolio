@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { awards } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
+import { useSectionActivity } from '@/components/common/SectionActivityContext';
+import { useSectionVisibility } from '@/hooks/useSectionVisibility';
 
 const INITIAL_ANGLE = -Math.PI / 3;
 
@@ -15,7 +17,10 @@ function position(node: HTMLElement, angle: number) {
   node.style.setProperty('--orbit-layer', depth > .28 ? '6' : '2');
 }
 
-export default function AwardsAndCertificatesSection({ active = false }: { active?: boolean }) {
+export default function AwardsAndCertificatesSection() {
+  const { pageVisible, motionReady, reducedMotion, obscured } = useSectionActivity();
+  const { ref, visible } = useSectionVisibility<HTMLElement>();
+  const active = visible && pageVisible && motionReady && !reducedMotion && !obscured;
   const [selected, setSelected] = useState(0);
   const stageRef = useRef<HTMLDivElement>(null);
   const angleRef = useRef(INITIAL_ANGLE);
@@ -60,6 +65,7 @@ export default function AwardsAndCertificatesSection({ active = false }: { activ
 
   return (
     <section
+      ref={ref}
       id={SECTION_IDS.AWARDS_CERTIFICATES}
       aria-labelledby="awards-heading"
       className="awards-orbit-section"

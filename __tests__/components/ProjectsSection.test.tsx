@@ -1,10 +1,12 @@
+import { useRef as useVisibilityRef } from 'react';
+const localVisibility = vi.hoisted(() => ({ visible: true, hasEntered: true }));
+vi.mock('@/hooks/useSectionVisibility', () => ({ useSectionVisibility: () => ({ ref: useVisibilityRef(null), visible: localVisibility.visible, hasEntered: localVisibility.hasEntered }) }));
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import ProjectsSection from '@/components/sections/ProjectsSection';
 import { SectionActivityProvider } from '@/components/common/SectionActivityContext';
 import { projects } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
-import type { NavId } from '@/hooks/useSectionNav';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { isProjectModalReady } from '@/lib/utils/projectContract';
@@ -52,6 +54,7 @@ vi.mock('@/components/blocks/PreviewMorph', async () => {
 });
 
 beforeEach(() => {
+  localVisibility.visible = true; localVisibility.hasEntered = true;
   vi.stubGlobal(
     'matchMedia',
     vi.fn().mockReturnValue({
@@ -74,11 +77,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function renderSection(active: NavId = SECTION_IDS.PROJECTS) {
+function renderSection() {
   return render(
-    <SectionActivityProvider
-      active={active}
-      entryAnimationTarget={null}
+    <SectionActivityProvider obscured={false}
+
+
       pageVisible
       routeResolved
       motionReady
@@ -89,15 +92,12 @@ function renderSection(active: NavId = SECTION_IDS.PROJECTS) {
   );
 }
 
-it('이름 파티클 형성 중에는 프로젝트 WebGL 모프를 초기화하지 않는다', async () => {
-  const view = (heroRevealed: boolean) => (
-    <SectionActivityProvider active={'overview' as NavId} entryAnimationTarget={null} pageVisible routeResolved motionReady reducedMotion={false} heroRevealed={heroRevealed}>
-      <ProjectsSection />
-    </SectionActivityProvider>
-  );
-  const { rerender } = render(view(false));
+it('loads preview morph after local entry', async () => {
+  localVisibility.hasEntered = false;
+  const view = () => <SectionActivityProvider obscured={false} pageVisible routeResolved motionReady reducedMotion={false}><ProjectsSection /></SectionActivityProvider>;
+  const { rerender } = render(view());
   expect(document.querySelector('[data-part="preview-morph"]')).toBeNull();
-  rerender(view(true));
+  localVisibility.hasEntered = true; rerender(view());
   await waitFor(() => expect(document.querySelector('[data-part="preview-morph"]')).toBeInTheDocument());
 });
 
@@ -1001,9 +1001,9 @@ describe('ProjectsSection 프로젝트 전환 모션', () => {
 
   async function renderReady(reduced = false) {
     const view = render(
-      <SectionActivityProvider
-        active={SECTION_IDS.PROJECTS}
-        entryAnimationTarget={null}
+      <SectionActivityProvider obscured={false}
+
+
         pageVisible
         routeResolved
         motionReady
@@ -1102,9 +1102,9 @@ describe('ProjectsSection 프리뷰 셰이더 모프', () => {
 
   async function renderWithMorph(reduced = false) {
     const view = render(
-      <SectionActivityProvider
-        active={SECTION_IDS.PROJECTS}
-        entryAnimationTarget={null}
+      <SectionActivityProvider obscured={false}
+
+
         pageVisible
         routeResolved
         motionReady
@@ -1338,9 +1338,9 @@ function flipSpan(i: number) {
 
 function renderWheel(reduced = false) {
   return render(
-    <SectionActivityProvider
-      active={SECTION_IDS.PROJECTS}
-      entryAnimationTarget={null}
+    <SectionActivityProvider obscured={false}
+
+
       pageVisible
       routeResolved
       motionReady
@@ -1622,9 +1622,9 @@ describe('ProjectsSection 이름 휠', () => {
       rig.settle();
       expect(nameEl(1).style.transform).not.toBe('');
       view.rerender(
-        <SectionActivityProvider
-          active={SECTION_IDS.PROJECTS}
-          entryAnimationTarget={null}
+        <SectionActivityProvider obscured={false}
+
+
           pageVisible
           routeResolved
           motionReady

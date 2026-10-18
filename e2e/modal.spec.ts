@@ -25,8 +25,10 @@ test.describe('프로젝트 상세', () => {
   }) => {
     await enter(page, 'projects');
     const before = await historyLength(page);
+    const scrollBefore = await page.evaluate(() => window.scrollY);
 
     await openProjectModal(page, ready!.title);
+    expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
     // 모달은 항목 하나만 쌓는다. 해시는 그대로다.
     expect(await historyLength(page)).toBe(before + 1);
     expect(new URL(page.url()).hash).toBe('#projects');

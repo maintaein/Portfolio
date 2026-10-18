@@ -1,5 +1,6 @@
 import { renderToString } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+vi.mock('@/components/blocks/LuminousFlowBackground', () => ({ default: () => null }));
 import HomeClient from '@/components/sections/HomeClient';
 import {
   awards,
@@ -55,4 +56,12 @@ describe('HomeClient 실제 섹션 SSR 상주', () => {
     expect(html).toContain('data-section="awards-certificates"');
     expect(html).toContain(awards[0].title);
   });
+});
+
+it('keeps the approved static Hero text and real future name destinations in SSR', () => {
+  const html = renderToString(<HomeClient />);
+  expect(html).toContain('탄탄한 기본기를 바탕으로 꾸준히 개선하고, 협업으로 함께 성장하는 개발자.');
+  expect(html).toContain('data-motion-anchor="hero-name"');
+  expect(html).toContain('data-motion-anchor="nav-name"');
+  expect(html).not.toContain('section-hidden');
 });

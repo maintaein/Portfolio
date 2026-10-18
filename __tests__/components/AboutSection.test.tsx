@@ -1,3 +1,6 @@
+import { useRef as useVisibilityRef } from 'react';
+const localVisibility = vi.hoisted(() => ({ visible: true, hasEntered: true }));
+vi.mock('@/hooks/useSectionVisibility', () => ({ useSectionVisibility: () => ({ ref: useVisibilityRef(null), visible: localVisibility.visible, hasEntered: localVisibility.hasEntered }) }));
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -27,6 +30,7 @@ vi.mock('@/components/blocks/ElectricLogo', () => ({
 vi.mock('@/components/blocks/AboutRings', () => ({ default: () => null }));
 
 beforeEach(() => {
+  localVisibility.visible = true; localVisibility.hasEntered = true;
   vi.stubGlobal(
     'matchMedia',
     vi.fn().mockImplementation((query: string) => ({
@@ -43,10 +47,11 @@ beforeEach(() => {
 // active는 스크림 포털(C1)의 활성 게이트다. 스크림 동작을 보는 테스트는
 // About이 실제로 활성이어야 하므로 기본값을 about으로 둔다.
 function renderAboutSection(active: NavId = SECTION_IDS.ABOUT) {
+  localVisibility.visible = active === SECTION_IDS.ABOUT;
   return render(
-    <SectionActivityProvider
-      active={active}
-      entryAnimationTarget={null}
+    <SectionActivityProvider obscured={false}
+
+
       pageVisible
       routeResolved
       motionReady
@@ -203,7 +208,8 @@ describe('AboutSection', () => {
 
   it('About을 떠났다가 돌아와도 WebGL 인스턴스를 재사용한다', async () => {
     const view = (active: NavId) => (
-      <SectionActivityProvider active={active} entryAnimationTarget={null} pageVisible routeResolved motionReady reducedMotion={false}>
+      localVisibility.visible = active === SECTION_IDS.ABOUT,
+      <SectionActivityProvider obscured={false} pageVisible routeResolved motionReady reducedMotion={false}>
         <AboutSection />
       </SectionActivityProvider>
     );
@@ -598,37 +604,16 @@ describe('AboutSection', () => {
       expect(container.querySelector('[data-electric-src]')).toBeNull();
     });
 
-    it('START 전 WebGL을 예열하고 About 진입 시 같은 인스턴스를 사용한다', async () => {
-      const view = (active: NavId) => (
-        <SectionActivityProvider active={active} entryAnimationTarget={null} pageVisible routeResolved motionReady reducedMotion={false}>
-          <AboutSection />
-        </SectionActivityProvider>
-      );
-      const { container, rerender } = render(view('overview' as NavId));
-      await act(async () => { await Promise.resolve(); });
-      const logo = container.querySelector('[data-electric-src]');
-      expect(logo).toHaveAttribute('data-electric-active', 'false');
-      expect(logo).toHaveAttribute('data-electric-prewarm', 'true');
-      fireEvent.click(container.querySelector('[data-signal-ready]')!);
-      expect(container.querySelector('.about-electric-static')).toHaveClass('opacity-0');
-
-      rerender(view(SECTION_IDS.ABOUT));
-      expect(container.querySelector('[data-electric-src]')).toBe(logo);
-      expect(logo).toHaveAttribute('data-electric-active', 'true');
-      expect(logo).toHaveAttribute('data-electric-prewarm', 'false');
-    });
-
-    it('이름 파티클이 끝나기 전에는 About WebGL을 예열하지 않는다', async () => {
-      const view = (heroRevealed: boolean) => (
-        <SectionActivityProvider active={'overview' as NavId} entryAnimationTarget={null} pageVisible routeResolved motionReady reducedMotion={false} heroRevealed={heroRevealed}>
-          <AboutSection />
-        </SectionActivityProvider>
-      );
-      const { container, rerender } = render(view(false));
+    it('loads the desktop logo only after local entry and preserves it offscreen', async () => {
+      localVisibility.visible = false; localVisibility.hasEntered = false;
+      const view = () => <SectionActivityProvider obscured={false} pageVisible routeResolved motionReady reducedMotion={false}><AboutSection /></SectionActivityProvider>;
+      const { container, rerender } = render(view());
       expect(container.querySelector('[data-electric-src]')).toBeNull();
-      rerender(view(true));
-      await act(async () => { await Promise.resolve(); });
-      expect(container.querySelector('[data-electric-prewarm="true"]')).toBeInTheDocument();
+      localVisibility.visible = true; localVisibility.hasEntered = true;
+      rerender(view()); await act(async () => { await Promise.resolve(); });
+      const logo = container.querySelector('[data-electric-src]'); expect(logo).toHaveAttribute('data-electric-active', 'true');
+      localVisibility.visible = false; rerender(view());
+      expect(container.querySelector('[data-electric-src]')).toBe(logo); expect(logo).toHaveAttribute('data-electric-active', 'false');
     });
 
     it('모바일에서는 보이지 않는 WebGL 로고를 예열하지 않는다', () => {

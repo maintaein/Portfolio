@@ -1,21 +1,11 @@
 import { expect, type Page } from '@playwright/test';
 
-// 계획 6 Task 5b. 여러 스펙이 같이 쓰는 진입·판정 도구. 파일 이름에 spec이
-// 없으므로 Playwright가 이 파일을 테스트로 수집하지 않는다.
-
-// 활성 섹션은 aria-hidden이 false이고 inert가 붙지 않는다. 비활성은 그
-// 반대다(components/sections/HomeClient/index.tsx). 클래스 이름보다 이쪽이
-// 안정된 계약이라 여기에 건다. 사용자에게 실제로 닿는 상태이기도 하다.
+// Native document navigation exposes its reading destination on main.
 export async function expectActive(page: Page, id: string) {
-  await expect(page.locator(`[data-section="${id}"]`)).toHaveAttribute(
-    'aria-hidden',
-    'false'
-  );
+  await expect(page.locator('main')).toHaveAttribute('data-active-section', id);
+  await expect(page.locator('main')).not.toHaveAttribute('data-navigation-target');
 }
 
-// 해시로 바로 들어간다. overview에서는 내비 스트립이 pointer-events: none이라
-// (.nav-strip-hidden, styles/design-tokens.css) 단추를 누를 수 없다. 섹션에
-// 한 번 들어가야 스트립이 살아난다.
 export async function enter(page: Page, id: string) {
   await page.goto(`/#${id}`);
   // 하이드레이션이 끝나야 routeResolved가 열린다. 혼자 재면 1.2초에서
@@ -57,7 +47,19 @@ export async function openProjectModal(page: Page, title: string) {
     await tab.click();
     await expect(tab).toHaveAttribute('aria-selected', 'true');
   }
-  await tab.click();
+  // WebKit's protocol scroll-into-view moves this transformed wheel before input.
+  // Click the visible, settled title as a physical pointer would.
+  let previous: { x: number; y: number; width: number; height: number } | null = null;
+  await expect.poll(async () => {
+    const box = await tab.boundingBox();
+    const settled = box && previous && Math.abs(box.x - previous.x) < .5 && Math.abs(box.y - previous.y) < .5;
+    previous = box;
+    return !!settled;
+  }).toBe(true);
+  await expect(tab).toBeInViewport();
+  const box = await tab.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
   await expectModalOpen(page);
 }
 

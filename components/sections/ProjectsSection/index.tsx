@@ -8,6 +8,7 @@ import { projects } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
 import { setProjectModalObscured } from '@/hooks/useProjectModalObscured';
 import { useSectionActivity } from '@/components/common/SectionActivityContext';
+import { useSectionVisibility } from '@/hooks/useSectionVisibility';
 import type { Flip } from '@/lib/gsap';
 import type { PreviewMorphHandle } from '@/components/blocks/PreviewMorph';
 
@@ -27,13 +28,15 @@ const DynamicPreviewMorph = dynamic(
       default: function PreviewMorphRefBridge({
         className,
         preload,
+        paused,
         onHandle,
       }: {
         className?: string;
         preload?: readonly string[];
+        paused?: boolean;
         onHandle: (handle: PreviewMorphHandle | null) => void;
       }) {
-        return <PreviewMorph ref={onHandle} className={className} preload={preload} />;
+        return <PreviewMorph ref={onHandle} className={className} preload={preload} paused={paused} />;
       },
     })),
   { ssr: false }
@@ -211,8 +214,10 @@ function snapshotMedia(
 }
 
 export default function ProjectsSection() {
-  const { routeResolved, motionReady, reducedMotion, heroRevealed } =
+  const { routeResolved, motionReady, reducedMotion, pageVisible, obscured } =
     useSectionActivity();
+  const { ref: visibilityRef, visible, hasEntered } = useSectionVisibility<HTMLElement>();
+  const decorationActive = visible && pageVisible && !obscured;
   const [activeIndex, setActiveIndex] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
   // 상세 판 내용의 등장 소유권은 ProjectModal에 있다. 여기는 비행과 셸 배경과
@@ -343,7 +348,7 @@ export default function ProjectsSection() {
     if (!layer) return;
     const mod = gsapModuleRef.current;
     // reduce에서는 즉시 교체로 무너진다. 죽은 tween이 남긴 transform도 걷는다
-    if (morphed || !mod || !motionReady || reducedMotion) {
+    if (morphed || !mod || !motionReady || reducedMotion || !decorationActive) {
       layer.style.removeProperty('transform');
       layer.style.removeProperty('opacity');
       return;
@@ -363,7 +368,7 @@ export default function ProjectsSection() {
         }
       )
     );
-  }, [activeIndex, motionReady, reducedMotion]);
+  }, [activeIndex, motionReady, reducedMotion, decorationActive]);
 
   // 모달이 사라지면 남은 비행과 재진입 잠금을 푼다. 정상 닫기에서는 이미 끝난
   // tween을 한 번 더 kill할 뿐이지만, popstate가 비행 중에 모달을 걷어가는
@@ -1129,6 +1134,7 @@ export default function ProjectsSection() {
       clearWheel();
       return;
     }
+    if (!decorationActive && !modalOpen) return;
     if (modalOpen) {
       // 새로고침으로 복구된 모달은 openModal을 안 거치므로 snapWheel도 안
       // 불렸다. 여기서 못박지 않으면 휠 pos가 마운트 기본값에 멈춘 채라,
@@ -1149,7 +1155,7 @@ export default function ProjectsSection() {
       if (wheelRafRef.current != null) cancelAnimationFrame(wheelRafRef.current);
       wheelRafRef.current = null;
     };
-  }, [activeIndex, modalOpen, reducedMotion, startWheel, applyWheel, clearWheel, snapWheel]);
+  }, [activeIndex, modalOpen, reducedMotion, decorationActive, startWheel, applyWheel, clearWheel, snapWheel]);
 
   // 클릭과 키보드가 이 하나로 선택을 옮긴다. focus 옵션은 키보드 경로
   // 전용이다. 포커스 자체는 선택을 옮기지 않는다. mousedown이 클릭보다
@@ -1216,13 +1222,9 @@ export default function ProjectsSection() {
 
   return (
     <section
-      ref={sectionRef}
+      ref={node => { sectionRef.current = node; visibilityRef.current = node; }}
       id={SECTION_IDS.PROJECTS}
-      // min-h-full은 .section-scroll(absolute inset-0)의 확정 높이를 받는다.
-      // h-screen을 쓰면 푸터 띠와 헤더를 두 번 빼야 해서 무대와 어긋난다.
-      // 세로 가운데는 justify-center가 아니라 자식의 my-auto로 잡는다 -
-      // 내용이 무대보다 길어지면 auto 여백이 0으로 접혀 위에서부터 흐르고,
-      // justify-center였다면 위쪽이 스크롤로 닿지 않는 자리에 잘린다
+      // The document section supplies viewport height while content can grow.
       className="py-6 px-10 min-h-full flex flex-col"
     >
       <h2 className="sr-only">Projects</h2>
@@ -1279,10 +1281,11 @@ export default function ProjectsSection() {
                   읽힌다. 평소에는 opacity 0이고 rAF도 안 돈다. reduce에서는
                   아예 만들지 않는다(셰이더에 분기를 넣는 것보다 캔버스를
                   안 만드는 쪽이 싸다) */}
-              {motionReady && heroRevealed && !reducedMotion ? (
+              {motionReady && hasEntered && !reducedMotion ? (
                 <DynamicPreviewMorph
                   className="pointer-events-none absolute inset-0 h-full w-full"
                   preload={PROJECT_IMAGE_PATHS}
+                  paused={!decorationActive}
                   onHandle={handleMorphHandle}
                 />
               ) : null}

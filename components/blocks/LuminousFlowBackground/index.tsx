@@ -6,6 +6,7 @@ import styles from './styles.module.css';
 
 type LuminousFlowBackgroundProps = {
   className?: string;
+  paused?: boolean;
   scrollScene?: boolean;
   minimumSceneScreens?: number;
 };
@@ -129,10 +130,14 @@ const atoms = Array.from({ length: 48 }, (_, index) => ({
   radius: .65 + index % 5 * .3,
 }));
 
-export default function LuminousFlowBackground({ className, scrollScene = false, minimumSceneScreens = 0 }: LuminousFlowBackgroundProps) {
+export default function LuminousFlowBackground({ className, scrollScene = false, minimumSceneScreens = 0, paused = false }: LuminousFlowBackgroundProps) {
   const id = useId().replace(/:/g, '');
   const rootRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const pausedRef = useRef(paused);
+  const syncMotionRef = useRef<(() => void) | null>(null);
+  pausedRef.current = paused;
+  useEffect(() => { syncMotionRef.current?.(); }, [paused]);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -211,6 +216,7 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
     let scrollVelocity = 0;
     let flowSpeed = SCROLL_FLOW.idleSpeed;
     let flowTime = 0;
+    let sceneTime = 0;
     const sceneHeight = scrollScene ? 2162 : 318;
 
     const resize = () => {
@@ -269,7 +275,8 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
       if (boundsDirty) updateBounds();
       const delta = Math.min(.1, Math.max(0, now - previousFrame) / 1000);
       previousFrame = now;
-      if (!media.matches) {
+      if (!media.matches && !pausedRef.current) {
+        sceneTime += delta;
         const targetSpeed = SCROLL_FLOW.idleSpeed + (SCROLL_FLOW.maxSpeed - SCROLL_FLOW.idleSpeed)
           * Math.min(1, scrollVelocity / SCROLL_FLOW.fullSpeedScroll);
         const nextSpeed = flowSpeed + (targetSpeed - flowSpeed) * (1 - Math.exp(-delta / SCROLL_FLOW.responseTime));
@@ -279,7 +286,7 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
         scrollVelocity *= Math.exp(-delta / SCROLL_FLOW.decayTime);
       }
       const time = media.matches ? 0 : flowTime;
-      const bobTime = Math.max(0, now - started) / 1000;
+      const bobTime = media.matches ? 0 : sceneTime;
       const mobile = viewportWidth <= 600 && !scrollScene;
       const scaleX = bounds.width * (mobile ? 3 : 1) / 492;
       const scaleY = bounds.height / sceneHeight;
@@ -411,7 +418,7 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
         context.fillStyle = palette.glow;
         context.beginPath(); context.arc(x, y, radius * .35, 0, Math.PI * 2); context.fill();
       });
-      if (!media.matches && !document.hidden && visible) frame = requestAnimationFrame(draw);
+      if (!pausedRef.current && !media.matches && !document.hidden && visible) frame = requestAnimationFrame(draw);
     };
     const syncMotion = () => {
       cancelAnimationFrame(frame);
@@ -419,7 +426,7 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
       previousFrame = performance.now();
       previousScrollTime = previousFrame;
       previousScrollY = window.scrollY;
-      if (media.matches || document.hidden || !visible) {
+      if (pausedRef.current || media.matches || document.hidden || !visible) {
         scrollVelocity = 0;
         flowSpeed = SCROLL_FLOW.idleSpeed;
       }
@@ -434,9 +441,10 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
       boundsDirty = true;
       if (media.matches) syncMotion();
     };
+    syncMotionRef.current = syncMotion;
     let previousWheelTime = 0;
     const onWheel = (event: WheelEvent) => {
-      if (event.ctrlKey || media.matches || !visible) return;
+      if (event.ctrlKey || pausedRef.current || media.matches || !visible) return;
       const units = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewportHeight : 1;
       const elapsed = Math.max(16, Math.min(100, event.timeStamp - previousWheelTime));
       previousWheelTime = event.timeStamp;
@@ -450,6 +458,7 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
     media.addEventListener('change', syncMotion);
     document.addEventListener('visibilitychange', syncMotion);
     return () => {
+      syncMotionRef.current = null;
       textureVersion++;
       if (textureUrl) URL.revokeObjectURL(textureUrl);
       cancelAnimationFrame(frame);

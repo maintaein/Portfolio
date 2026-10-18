@@ -1,3 +1,6 @@
+import { useRef as useVisibilityRef } from 'react';
+const localVisibility = vi.hoisted(() => ({ visible: true, hasEntered: true }));
+vi.mock('@/hooks/useSectionVisibility', () => ({ useSectionVisibility: () => ({ ref: useVisibilityRef(null), visible: localVisibility.visible, hasEntered: localVisibility.hasEntered }) }));
 import { renderToString } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
@@ -17,7 +20,7 @@ function activeCard() {
 
 function experienceWithActivity(state: Partial<Omit<SectionActivityProviderProps, 'children'>> = {}) {
   return (
-    <SectionActivityProvider active={SECTION_IDS.EXPERIENCE} entryAnimationTarget={null}
+    <SectionActivityProvider obscured={false}
       routeResolved motionReady pageVisible reducedMotion={false} {...state}>
       <ExperienceSection />
     </SectionActivityProvider>
