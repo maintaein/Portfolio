@@ -27,9 +27,9 @@ export const coreValues: CoreValue[] = [
     },
     {
       id: '3',
-      title: '원활한 소통과 협업 역량을 가진 개발자',
+      title: '원활한 협업을 추구하는 개발자',
       label: 'TEAMWORK',
-      description: '팀이 효율적인 방식으로 일할 구조를 고민합니다.\n\nAlphamail 프로젝트에서 프론트엔드 리더를 맡아 git과 jira 컨벤션을 설정하여 팀의 협업 효율성을 끌어올린 경험이 있습니다.',
+      description: '팀이 효율적인 방식으로 일하도록 돕습니다.\n\nAlphamail 프로젝트에서 프론트엔드 리더를 맡아 git과 jira 컨벤션을 설정하여 팀의 협업 효율성을 끌어올린 경험이 있습니다.',
       logoSrc: '/about/handshake.webp',
       evidenceStyle: 'detail',
       evidence: [
