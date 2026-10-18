@@ -183,6 +183,40 @@ test.describe('모션', () => {
     await expect.poll(draws).toBeGreaterThan(settled);
   });
 
+  test('Luminous는 화면 밖에서 렌더링을 멈추고 돌아오면 재개한다', async ({ page }) => {
+    await page.addInitScript(() => {
+      const counts = new WeakMap<HTMLCanvasElement, number>();
+      const original = CanvasRenderingContext2D.prototype.clearRect;
+      CanvasRenderingContext2D.prototype.clearRect = function (...args) {
+        counts.set(this.canvas, (counts.get(this.canvas) ?? 0) + 1);
+        return original.apply(this, args);
+      };
+      window.__drawsFor = (selector: string) => {
+        const canvas = document.querySelector<HTMLCanvasElement>(selector);
+        return canvas ? (counts.get(canvas) ?? 0) : -1;
+      };
+    });
+    await page.goto('/background-preview');
+    const canvas = page.locator('main canvas');
+    await expect(canvas).toHaveCount(1);
+    const draws = () => page.evaluate(() => window.__drawsFor('main canvas'));
+    await expect.poll(draws).toBeGreaterThan(0);
+
+    // DOM을 유지한 채 가시성만 바꿔 IntersectionObserver의 정지 계약을 검증한다.
+    await canvas.evaluate((el) => {
+      el.parentElement!.style.transform = 'translateX(200vw)';
+    });
+    await waitFrames(page, 30);
+    const settled = await draws();
+    await waitFrames(page, 30);
+    expect(await draws()).toBe(settled);
+
+    await canvas.evaluate((el) => {
+      el.parentElement!.style.transform = '';
+    });
+    await expect.poll(draws).toBeGreaterThan(settled);
+  });
+
   test('해시로 바로 들어가면 overview 부팅도 Hyperspeed boost도 없다 @smoke', async ({
     page,
   }) => {

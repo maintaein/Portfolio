@@ -1,0 +1,54 @@
+.background {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  isolation: isolate;
+  pointer-events: none;
+  background: var(--flow-background);
+}
+
+.sourceHaze {
+  position: absolute;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(ellipse 23% 34% at 40% 69%, rgb(var(--flow-rgb) / 12%), transparent 72%),
+    radial-gradient(ellipse 34% 29% at 79% 31%, rgb(var(--flow-blue-rgb) / 9%), transparent 78%);
+}
+
+.scrollScene .sourceHaze { height: 100svh; }
+
+.flow {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.atmosphere { transform: translateZ(0); }
+
+.grain {
+  position: absolute;
+  inset: 0;
+  opacity: .13;
+  background-image:
+    radial-gradient(circle, rgb(var(--flow-glow-rgb) / 38%) .5px, transparent .8px),
+    radial-gradient(circle, rgb(var(--flow-rgb) / 30%) .5px, transparent .8px);
+  background-size: 101px 107px, 137px 131px;
+  background-position: 8px 13px, 30px 19px;
+}
+
+@media (max-width: 600px) {
+  .flow {
+    left: -80%;
+    width: 300%;
+  }
+
+  .scrollScene .flow {
+    left: 0;
+    width: 100%;
+  }
+}
+
+.motionCanvas { position: absolute; top: 0; left: 0; width: 100vw; height: 200vh; transform: translateZ(0); }
