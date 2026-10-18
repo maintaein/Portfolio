@@ -8,7 +8,9 @@ test('history returns to the previous reading destination @smoke', async ({ page
   await page.goBack(); await expectActive(page, 'about');
   await page.goForward(); await expectActive(page, 'projects');
 });
-test('back keeps the reading position the browser restores', async ({ page }) => {
+test('back keeps the reading position the browser restores @smoke', async ({ page, browserName }) => {
+  // Chromium은 같은 문서 Back에서 저장된 위치 대신 해시 대상 요소로 스크롤한다(훅 없는 페이지에서도 같다).
+  test.skip(browserName === 'chromium', 'Chromium scrolls to the fragment target instead of restoring');
   await enter(page, 'experience');
   await page.locator('[data-section="experience"]').evaluate(el => window.scrollTo(0, el.getBoundingClientRect().top + scrollY - 76 + 150));
   await waitFrames(page, 5); await expectActive(page, 'experience');
@@ -16,6 +18,12 @@ test('back keeps the reading position the browser restores', async ({ page }) =>
   await navButton(page, 'Skills').click(); await expectActive(page, 'skills');
   await page.goBack(); await expectActive(page, 'experience'); await waitFrames(page, 10);
   expect(await page.evaluate(() => window.scrollY)).toBe(before);
+});
+test('every section anchor clears the measured header by 16px for native fragment jumps', async ({ page }) => {
+  await enter(page, 'overview');
+  const header = await page.locator('[data-scroll-header]').evaluate(el => el.getBoundingClientRect().height);
+  const margins = await page.locator('main [data-section]').evaluateAll(els => els.map(el => getComputedStyle(document.getElementById(el.getAttribute('data-section')!)!).scrollMarginTop));
+  expect(margins).toEqual(margins.map(() => `${header + 16}px`));
 });
 test('native document scroll exposes the next original section without hiding siblings', async ({ page }) => {
   await enter(page, 'about');

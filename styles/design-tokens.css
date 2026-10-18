@@ -413,7 +413,7 @@
 .section-stage:not([data-active-section='about']) ~ [data-about-scrim] { opacity: 0; }
 .section-stage { position: relative; padding-top: 76px; }
 .document-section { position: relative; min-height: calc(100svh - 76px); scroll-margin-top: 92px; }
-.document-section > section { min-height: calc(100svh - 76px); }
+.document-section > section { min-height: calc(100svh - 76px); scroll-margin-top: 92px; }
 .portfolio-hero { display: flex; flex-direction: column; justify-content: center; padding: 4rem max(1.5rem, 8vw); }
 .portfolio-hero p { font-size: clamp(1.5rem, 4vw, 3rem); line-height: 1.6; }
 .portfolio-hero h1 { max-width: 44rem; margin-top: 2rem; font-size: clamp(1.25rem, 2.5vw, 2rem); line-height: 1.6; }
