@@ -1,16 +1,20 @@
 'use client';
 
-import { useEffect, useId, useRef, type CSSProperties } from 'react';
+import { forwardRef, useEffect, useId, useImperativeHandle, useRef, type CSSProperties } from 'react';
 import { CYAN_PALETTE } from '../Hyperspeed/presets';
 import { buildFlowGeometry, normalOffset, type FlowGeometry, type FlowPoint } from './geometry';
 import styles from './styles.module.css';
 
-type LuminousFlowBackgroundProps = {
+export type LuminousFlowBackgroundProps = {
   className?: string;
-  paused?: boolean;
   scrollScene?: boolean;
   minimumSceneScreens?: number;
+  paused?: boolean;
 };
+
+export interface LuminousFlowBackgroundHandle {
+  setRevealProgress(progress: number): void;
+}
 
 // Speed multipliers relative to the original flow; times are in seconds.
 const SCROLL_FLOW = {
@@ -52,13 +56,21 @@ const createEnvelope = ({ width, center }: FlowGeometry) => {
     const curvature = 2 * (ax * by - ay * bx) / (Math.hypot(ax, ay) * Math.hypot(bx, by) * chord || 1);
     return [point.x, point.y, point.halfWidth, -(ay + by) / chord, (ax + bx) / chord, curvature];
   });
-  return Array.from({ length: 80 }, (_, layer) => {
-    const edges = [-1, 1].map(side => frames.map(([x, y, halfWidth, nx, ny, curvature]) => {
-      const offset = normalOffset(side * (25 * width / 492 + halfWidth) * (1 - layer / 80), curvature, .65);
-      return [x + nx * offset, y + ny * offset];
-    }));
-    return `${createCurve(edges[0])}${createCurve(edges[1].reverse()).replace(/^M/, 'L')} Z`;
-  });
+  return Array.from({ length: 80 }, (_, layer) => [-1, 1].map(side => frames.map(([x, y, halfWidth, nx, ny, curvature]) => {
+    const offset = normalOffset(side * (25 * width / 492 + halfWidth) * (1 - layer / 80), curvature, .65);
+    return [x + nx * offset, y + ny * offset];
+  })));
+};
+const envelopePath = ([left, right]: number[][][]) => `${createCurve(left)}${createCurve([...right].reverse()).replace(/^M/, 'L')} Z`;
+// The outermost glow edges up to the cut, closed straight across the band where the strands end.
+const revealOutline = ([left, right]: number[][][], end: number, t: number) => {
+  const edge = (points: number[][]) => [...points.slice(0, end), points[end - 1].map((value, axis) => value + (points[end][axis] - value) * t)];
+  return `M ${[...edge(left), ...edge(right).reverse()].map(point => point.join(' ')).join(' L ')} Z`;
+};
+// The part of a cubic Bezier before parameter t, along one axis (de Casteljau).
+const bezierHead = (t: number, a: number, b: number, c: number, d: number) => {
+  const ab = a + (b - a) * t, bc = b + (c - b) * t, abc = ab + (bc - ab) * t;
+  return [ab, abc, abc + (bc + (c + (d - c) * t - bc) * t - abc) * t];
 };
 
 // One color per geometry strand; the renderer owns color, the geometry owns shape.
@@ -74,14 +86,22 @@ const atoms = Array.from({ length: 48 }, (_, index) => ({
   radius: .65 + index % 5 * .3,
 }));
 
-export default function LuminousFlowBackground({ className, scrollScene = false, minimumSceneScreens = 0, paused = false }: LuminousFlowBackgroundProps) {
+const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, LuminousFlowBackgroundProps>(function LuminousFlowBackground({ className, scrollScene = false, minimumSceneScreens = 0, paused = false }, ref) {
   const id = useId().replace(/:/g, '');
   const rootRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pausedRef = useRef(paused);
+  const revealRef = useRef(1);
   const syncMotionRef = useRef<(() => void) | null>(null);
+  const requestDrawRef = useRef<(() => void) | null>(null);
   pausedRef.current = paused;
   useEffect(() => { syncMotionRef.current?.(); }, [paused]);
+  useImperativeHandle(ref, () => ({
+    setRevealProgress(progress: number) {
+      revealRef.current = Math.min(1, Math.max(0, progress));
+      requestDrawRef.current?.();
+    },
+  }), []);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -107,6 +127,8 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
       const copy = atmosphere.cloneNode(true) as SVGSVGElement;
       copy.removeAttribute('style');
       copy.removeAttribute('class');
+      // The texture holds the whole glow; the reveal clips it when drawn.
+      copy.querySelector('[data-flow-envelope]')?.removeAttribute('clip-path');
       copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
       copy.setAttribute('width', String(width));
       copy.setAttribute('height', String(height));
@@ -125,7 +147,7 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
           paint.drawImage(image, 0, 0, texture.width, texture.height);
           atmosphereTexture = texture;
           atmosphere.style.visibility = 'hidden';
-          if (media.matches) syncMotion();
+          requestDraw();
         }
         URL.revokeObjectURL(url);
         if (textureUrl === url) textureUrl = null;
@@ -146,6 +168,23 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
       paint.fillRect(0, 0, 1, 2162);
       return context.createPattern(texture, 'repeat') ?? color;
     });
+    // Rim and particle glows are fixed in design units, so each is built once and moved into place.
+    const rimGlow = rim.createRadialGradient(0, 0, 0, 0, 0, 45);
+    rimGlow.addColorStop(0, '#fff');
+    rimGlow.addColorStop(.3, '#ffffffe6');
+    rimGlow.addColorStop(1, '#ffffff00');
+    const atomGlows = atoms.map(({ radius }) => {
+      const glow = context.createRadialGradient(0, 0, 0, 0, 0, radius * 5);
+      [[0, palette.glow], [.12, `${palette.glow}e6`], [.3, `${palette.cyan}61`], [.65, `${palette.blue}14`], [1, `${palette.blue}00`]].forEach(([stop, color]) => glow.addColorStop(Number(stop), String(color)));
+      return glow;
+    });
+    const glowGroup = atmosphere?.querySelector('[data-flow-envelope]');
+    const revealShape = atmosphere?.querySelector('clipPath path');
+    let glowOutline: number[][][] = [];
+    let revealClip: Path2D | null = null;
+    let appliedReveal = NaN;
+    let pausedApplied = pausedRef.current;
+    let drawn = false;
     let geometry: FlowGeometry | null = null;
     let bends: FlowPoint[] = [];
     let interpolated: number[][][] = [];
@@ -176,7 +215,7 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
       const nextHeight = Math.ceil(renderHeight * pixelRatio);
       if (canvas.width !== nextWidth) canvas.width = nextWidth;
       if (canvas.height !== nextHeight) canvas.height = nextHeight;
-      if (media.matches) syncMotion();
+      requestDraw();
     };
     const updateBounds = () => {
       const measured = root.getBoundingClientRect();
@@ -208,8 +247,10 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
             const emission = Math.min(1, .24 + bends.reduce((sum, { y }) => sum + .76 * Math.exp(-(((index / 80 - y / shape.height) * 2162 / 85) ** 2)), 0));
             return `<stop offset="${index / 80}" stop-color="${palette.glow}" stop-opacity="${emission.toFixed(4)}"/>`;
           }).join('');
-          const envelope = atmosphere.querySelector('[data-flow-envelope]');
-          if (envelope) envelope.innerHTML = createEnvelope(shape).map(path => `<path d="${path}" opacity=".025"/>`).join('');
+          const layers = createEnvelope(shape);
+          glowOutline = layers[0];
+          appliedReveal = NaN;
+          if (glowGroup) glowGroup.innerHTML = layers.map(edges => `<path d="${envelopePath(edges)}" opacity=".025"/>`).join('');
           atmosphere.style.position = 'fixed';
           atmosphere.style.inset = 'auto';
           atmosphere.style.top = '0';
@@ -235,6 +276,7 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
 
     const draw = (now: number) => {
       frame = 0;
+      drawn = true;
       if (boundsDirty) updateBounds();
       const delta = Math.min(.1, Math.max(0, now - previousFrame) / 1000);
       previousFrame = now;
@@ -251,7 +293,7 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
       const time = media.matches ? 0 : flowTime;
       const bobTime = media.matches ? 0 : sceneTime;
       const mobile = viewportWidth <= 600 && !scrollScene;
-      const { width, height, strands } = geometry!;
+      const { width, height, length, center, strands } = geometry!;
       // Stroke widths and dashes keep their design units under a uniform scale, so circles stay round.
       const unit = width / 492;
       const left = bounds.left - (mobile ? bounds.width * .8 : 0);
@@ -266,9 +308,29 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
       const bottom = Math.min(height / unit, (viewportHeight + overscan - bounds.top) / unit);
       if (!unit || bottom <= top) return;
 
-      if (atmosphereTexture) {
+      // One cut along the shared center length: strands, particles and glow end in the same segment.
+      const reveal = revealRef.current;
+      const cut = reveal * length;
+      const end = reveal < 1 ? center.findIndex(point => point.s > cut) : center.length;
+      const partial = end < center.length ? (cut - center[end - 1].s) / (center[end].s - center[end - 1].s) : 1;
+      if (appliedReveal !== reveal) {
+        appliedReveal = reveal;
+        const outline = reveal < 1 ? revealOutline(glowOutline, end, partial) : null;
+        revealClip = outline ? new Path2D(outline) : null;
+        // The live SVG shows until the texture loads, so it takes the same cut.
+        revealShape?.setAttribute('d', outline ?? '');
+        if (outline) glowGroup?.setAttribute('clip-path', `url(#${id}-reveal)`);
+        else glowGroup?.removeAttribute('clip-path');
+      }
+
+      if (atmosphereTexture && cut) {
+        context.save();
+        // The texture and its reveal outline are in document pixels.
+        context.scale(1 / unit, 1 / unit);
+        if (revealClip) context.clip(revealClip);
         context.globalAlpha = 1;
-        context.drawImage(atmosphereTexture, 0, 0, width / unit, height / unit);
+        context.drawImage(atmosphereTexture, 0, 0, width, height);
+        context.restore();
       }
 
       strands.forEach((poses, index) => {
@@ -296,7 +358,8 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
           const before = current[Math.max(sample - 1, 0)];
           const next = current[sample + 1];
           const after = current[Math.min(sample + 2, current.length - 1)];
-          if (Math.max(point[1], next[1]) < top - 50 || Math.min(point[1], next[1]) > bottom + 50) {
+          const portion = sample < end - 1 ? 1 : sample === end - 1 ? partial : 0;
+          if (!portion || Math.max(point[1], next[1]) < top - 50 || Math.min(point[1], next[1]) > bottom + 50) {
             connected = false;
             return;
           }
@@ -304,16 +367,20 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
             path.moveTo(point[0], point[1]);
             skippedLength = cumulative[sample];
           }
-          path.bezierCurveTo(point[0] + (next[0] - before[0]) / 6, point[1] + (next[1] - before[1]) / 6,
+          if (portion < 1) {
+            const [x, y] = [0, 1].map(axis => bezierHead(portion, point[axis], point[axis] + (next[axis] - before[axis]) / 6,
+              next[axis] - (after[axis] - point[axis]) / 6, next[axis]));
+            path.bezierCurveTo(x[0], y[0], x[1], y[1], x[2], y[2]);
+          } else path.bezierCurveTo(point[0] + (next[0] - before[0]) / 6, point[1] + (next[1] - before[1]) / 6,
             next[0] - (after[0] - point[0]) / 6, next[1] - (after[1] - point[1]) / 6, next[0], next[1]);
           connected = true;
         });
         paths.push(path);
         context.strokeStyle = strandPaints[index];
         const strength = .8 + index % 6 * .16;
-        const width = .17 + index % 5 * .075;
+        const coreWidth = .17 + index % 5 * .075;
         context.setLineDash([]);
-        [[13, .023 * strength], [2 + width * 5, .13 * strength], [width, .48 * strength]].forEach(([strokeWidth, opacity]) => {
+        [[13, .023 * strength], [2 + coreWidth * 5, .13 * strength], [coreWidth, .48 * strength]].forEach(([strokeWidth, opacity]) => {
           context.lineWidth = strokeWidth;
           context.globalAlpha = opacity;
           context.stroke(path);
@@ -350,11 +417,7 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
         rim.globalCompositeOperation = 'destination-in';
         rim.translate(x, y);
         rim.scale(1, 38 / 45);
-        const glow = rim.createRadialGradient(0, 0, 0, 0, 0, 45);
-        glow.addColorStop(0, '#fff');
-        glow.addColorStop(.3, '#ffffffe6');
-        glow.addColorStop(1, '#ffffff00');
-        rim.fillStyle = glow;
+        rim.fillStyle = rimGlow;
         rim.fillRect(-700, -4000, 1400, 8000);
         context.globalAlpha = 1;
         context.drawImage(rimCanvas, x - 45, y - 38, 90, 76);
@@ -372,24 +435,32 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
         const bob = media.matches ? 0 : (1 - Math.cos((bobTime + index * .37) * Math.PI / (1.8 + index % 5 * .45))) / 2;
         const x = path[sample - 1][0] + (path[sample][0] - path[sample - 1][0]) * mix + (-4 + index % 5 * 2) * bob;
         const y = path[sample - 1][1] + (path[sample][1] - path[sample - 1][1]) * mix + (-5 - index % 4 * 2) * bob;
-        if (y < top - 15 || y > bottom + 15) return;
+        const s = center[sample - 1].s + (center[sample].s - center[sample - 1].s) * mix;
+        if (y < top - 15 || y > bottom + 15 || reveal < 1 && s >= cut) return;
         context.globalAlpha = .4 + index % 4 * .14;
-        const glow = context.createRadialGradient(x, y, 0, x, y, radius * 5);
-        [[0, palette.glow], [.12, `${palette.glow}e6`], [.3, `${palette.cyan}61`], [.65, `${palette.blue}14`], [1, `${palette.blue}00`]].forEach(([stop, color]) => glow.addColorStop(Number(stop), String(color)));
-        context.fillStyle = glow;
-        context.beginPath(); context.arc(x, y, radius * 5, 0, Math.PI * 2); context.fill();
+        context.translate(x, y);
+        context.fillStyle = atomGlows[index];
+        context.beginPath(); context.arc(0, 0, radius * 5, 0, Math.PI * 2); context.fill();
         context.strokeStyle = palette.glow; context.lineWidth = .22;
         context.globalAlpha *= .45;
-        context.beginPath(); context.arc(x, y, radius, 0, Math.PI * 2); context.stroke();
+        context.beginPath(); context.arc(0, 0, radius, 0, Math.PI * 2); context.stroke();
         context.globalAlpha = .4 + index % 4 * .14;
         context.fillStyle = palette.glow;
-        context.beginPath(); context.arc(x, y, radius * .35, 0, Math.PI * 2); context.fill();
+        context.beginPath(); context.arc(0, 0, radius * .35, 0, Math.PI * 2); context.fill();
+        context.translate(-x, -y);
       });
       if (!pausedRef.current && !media.matches && !document.hidden && visible) frame = requestAnimationFrame(draw);
     };
+    // One frame for layout, texture or reveal changes; the loop itself reschedules only while running.
+    const requestDraw = () => {
+      if (!frame && !document.hidden && visible) frame = requestAnimationFrame(draw);
+    };
     const syncMotion = () => {
+      const pausing = pausedRef.current && !pausedApplied;
+      pausedApplied = pausedRef.current;
       cancelAnimationFrame(frame);
       frame = 0;
+      // Resuming measures from now, so the phase continues from where it stopped.
       previousFrame = performance.now();
       previousScrollTime = previousFrame;
       previousScrollY = window.scrollY;
@@ -397,7 +468,8 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
         scrollVelocity = 0;
         flowSpeed = SCROLL_FLOW.idleSpeed;
       }
-      if (!document.hidden && visible) frame = requestAnimationFrame(draw);
+      // A pause keeps the last frame on screen instead of drawing another.
+      if (!pausing || !drawn) requestDraw();
     };
     const onScroll = () => {
       const now = performance.now();
@@ -409,6 +481,7 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
       if (media.matches) syncMotion();
     };
     syncMotionRef.current = syncMotion;
+    requestDrawRef.current = requestDraw;
     let previousWheelTime = 0;
     const onWheel = (event: WheelEvent) => {
       if (event.ctrlKey || pausedRef.current || media.matches || !visible) return;
@@ -426,6 +499,7 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
     document.addEventListener('visibilitychange', syncMotion);
     return () => {
       syncMotionRef.current = null;
+      requestDrawRef.current = null;
       textureVersion++;
       if (textureUrl) URL.revokeObjectURL(textureUrl);
       cancelAnimationFrame(frame);
@@ -437,7 +511,7 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
       media.removeEventListener('change', syncMotion);
       document.removeEventListener('visibilitychange', syncMotion);
     };
-  }, [scrollScene, minimumSceneScreens]);
+  }, [id, scrollScene, minimumSceneScreens]);
 
   return (
     <div ref={rootRef} className={[styles.background, scrollScene && styles.scrollScene, className].filter(Boolean).join(' ')} style={{
@@ -454,6 +528,7 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
       <svg className={`${styles.flow} ${styles.atmosphere}`} focusable="false">
         <defs>
           <linearGradient id={`${id}-envelope`} x1="0" y1="0" x2="0" gradientUnits="userSpaceOnUse" />
+          <clipPath id={`${id}-reveal`}><path /></clipPath>
         </defs>
         <g data-flow-envelope="" fill={`url(#${id}-envelope)`} opacity=".45" />
       </svg>
@@ -461,4 +536,6 @@ export default function LuminousFlowBackground({ className, scrollScene = false,
       <div className={styles.grain} />
     </div>
   );
-}
+});
+
+export default LuminousFlowBackground;

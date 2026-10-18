@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { enter, expectActive, navButton, openProjectModal, waitFrames } from './helpers';
 import { projects } from '@/lib/data/projects';
 import { isProjectModalReady } from '@/lib/utils/projectContract';
-declare global { interface Window { __drawsFor: (selector: string) => number; } }
+declare global { interface Window { __drawsFor: (selector: string) => number; __setHidden: (hidden: boolean) => void; } }
 
 test.describe('Native motion activity', () => {
   test('다른 섹션으로 가면 About ElectricLogo가 멈추고 돌아오면 다시 그린다', async ({ page }) => {
@@ -95,6 +95,34 @@ test.describe('Native motion activity', () => {
       el.parentElement!.style.transform = '';
     });
     await expect.poll(draws).toBeGreaterThan(settled);
+  });
+
+  test('Luminous는 탭이 숨으면 멈추고 창 크기가 바뀌어도 같은 캔버스로 이어 그린다', async ({ page }) => {
+    await page.addInitScript(() => {
+      const counts = new WeakMap<HTMLCanvasElement, number>(); const original = CanvasRenderingContext2D.prototype.clearRect;
+      CanvasRenderingContext2D.prototype.clearRect = function (...args) { counts.set(this.canvas, (counts.get(this.canvas) ?? 0) + 1); return original.apply(this, args); };
+      window.__drawsFor = selector => { const canvas = document.querySelector<HTMLCanvasElement>(selector); return canvas ? counts.get(canvas) ?? 0 : -1; };
+      // 헤드리스 탭은 실제로 숨지 않으므로 visibilitychange 계약만 흉내 낸다.
+      let hidden = false;
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+      window.__setHidden = value => { hidden = value; document.dispatchEvent(new Event('visibilitychange')); };
+    });
+    await page.goto('/background-preview');
+    const canvas = page.locator('main canvas');
+    await canvas.evaluate(el => el.setAttribute('data-e2e-mark', 'same'));
+    const draws = () => page.evaluate(() => window.__drawsFor('main canvas'));
+    await expect.poll(draws).toBeGreaterThan(0);
+
+    await page.evaluate(() => window.__setHidden(true)); await waitFrames(page, 30);
+    const hidden = await draws(); await waitFrames(page, 30); expect(await draws()).toBe(hidden);
+    await page.evaluate(() => window.__setHidden(false));
+    await expect.poll(draws).toBeGreaterThan(hidden);
+
+    const beforeResize = await draws();
+    await page.setViewportSize({ width: 900, height: 700 });
+    await expect(canvas).toHaveCSS('width', '900px');
+    await expect(canvas).toHaveAttribute('data-e2e-mark', 'same');
+    await expect.poll(draws).toBeGreaterThan(beforeResize);
   });
 
   test('wordmark remains one persistent node through document navigation', async ({ page, request }) => {
