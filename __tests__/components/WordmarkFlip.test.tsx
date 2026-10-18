@@ -1,4 +1,4 @@
-﻿import { readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 it('M1 owns a single static wordmark and defers intro/FLIP choreography', () => {
   const home = readFileSync('components/sections/HomeClient/index.tsx', 'utf8');

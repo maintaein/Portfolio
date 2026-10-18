@@ -1,4 +1,4 @@
-﻿import { render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import WhenVisible from '@/components/common/WhenVisible';
 import { SectionActivityProvider, type SectionActivityState } from '@/components/common/SectionActivityContext';

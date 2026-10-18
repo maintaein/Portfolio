@@ -1,4 +1,4 @@
-﻿import { test, expect } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { enter, expectActive, historyLength, navButton } from './helpers';
 
 test('history returns to the previous reading destination @smoke', async ({ page }) => {

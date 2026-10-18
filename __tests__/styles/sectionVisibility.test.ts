@@ -1,4 +1,4 @@
-﻿import { readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 const css = readFileSync('styles/design-tokens.css', 'utf8');
 it('keeps root sections in native document flow without whole-page snap or hidden panels', () => {

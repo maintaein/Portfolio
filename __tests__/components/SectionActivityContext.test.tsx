@@ -1,4 +1,4 @@
-﻿import { render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import { SectionActivityProvider, useSectionActivity } from '@/components/common/SectionActivityContext';
 function Probe() { return <output>{JSON.stringify(useSectionActivity())}</output>; }

@@ -1,4 +1,4 @@
-﻿import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 vi.mock('@/components/blocks/LuminousFlowBackground/styles.module.css', () => ({ default: {} }));
 import LuminousFlowBackground from '@/components/blocks/LuminousFlowBackground';

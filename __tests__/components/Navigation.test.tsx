@@ -1,4 +1,4 @@
-﻿import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import Navigation from '@/components/blocks/Navigation';
 import { NAV_ITEMS, PERSONAL_INFO } from '@/lib/constants';

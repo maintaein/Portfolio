@@ -1,4 +1,4 @@
-﻿import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import HomeClient from '@/components/sections/HomeClient';
 import { HOME_SECTION_CONFIG } from '@/lib/constants';

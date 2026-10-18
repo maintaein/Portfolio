@@ -1,4 +1,4 @@
-﻿import { act, renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { useSectionVisibility } from '@/hooks/useSectionVisibility';
 afterEach(() => vi.unstubAllGlobals());
