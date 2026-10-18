@@ -19,6 +19,10 @@ async function readFixtureAsset(root: string, relativePath: string) {
   return readFile(path.join(root, relativePath));
 }
 
+async function readLoadableManifest(root: string) {
+  return JSON.parse(await readFile(path.join(root, 'react-loadable-manifest.json'), 'utf8')) as Record<string, unknown>;
+}
+
 function runMeasure(root: string) {
   return spawnSync(process.execPath, [scriptPath, '--measure', root], { encoding: 'utf8' });
 }
@@ -28,7 +32,7 @@ function independentGzipSize(bytes: Buffer) {
 }
 
 // 이 파일의 테스트는 임시 디렉터리에 fixture를 통째로 복사하고 node 서브프로세스를
-// 띄운다. 기본 5초는 전체 스위트가 병렬로 도는 상황에서 부족하다 — 계획 3 Task 4가
+// 띄운다. 기본 5초는 전체 스위트가 병렬로 도는 상황에서 부족하다. 계획 3 Task 4가
 // vi.mock('three')를 쓰는 무거운 테스트 파일 둘을 더하자 4건이 타임아웃했다.
 // 실제 수행 시간이 아니라 다른 파일과의 CPU 경합 대기가 원인이므로 넉넉히 준다.
 describe('check-bundle resolver', { timeout: 30_000 }, () => {
@@ -53,20 +57,89 @@ describe('check-bundle resolver', { timeout: 30_000 }, () => {
     }
   });
 
-  it('Hyperspeed 증가분에서 First Load JS 공유 청크를 한 번만 제외한다', async () => {
+  it('지연 자산은 홈이 부르는 edge의 합집합이고 공유 chunk는 한 번만 센다', async () => {
     const root = await copyFixture();
 
     try {
       const metrics = resolveBundleMetrics(root);
-      const sharedBytes = await readFixtureAsset(root, 'static/chunks/shared.js');
-      const hyperspeedBytes = await readFixtureAsset(root, 'static/chunks/hyperspeed-789abc.js');
-
-      expect(metrics.firstLoadJs.files.filter((file) => file === 'static/chunks/shared.js')).toHaveLength(1);
-      expect(metrics.hyperspeed?.files).toEqual(['static/chunks/hyperspeed-789abc.js']);
-      expect(metrics.hyperspeed?.gzipBytes).toBe(independentGzipSize(hyperspeedBytes));
-      expect(metrics.hyperspeed?.gzipBytes).not.toBe(
-        independentGzipSize(sharedBytes) + independentGzipSize(hyperspeedBytes),
+      const expectedFiles = [
+        'static/chunks/202.aaa111.js',
+        'static/chunks/650.bbb222.js',
+        'static/chunks/462.ccc333.js',
+        'static/chunks/777.ddd444.js',
+        'static/chunks/948.eee555.js',
+        'static/chunks/131.fff666.js',
+      ].sort();
+      const expectedGzipBytes = await Promise.all(
+        expectedFiles.map(async (file) => independentGzipSize(await readFixtureAsset(root, file))),
       );
+
+      // 202는 gsap과 PreviewMorph edge가 함께 가리키고, shared.js는 First Load에 이미 있다.
+      expect(metrics.deferred.files).toEqual(expectedFiles);
+      expect(metrics.deferred.gzipBytes).toBe(expectedGzipBytes.reduce((sum, size) => sum + size, 0));
+      expect(metrics.deferred.files).not.toContain('static/chunks/shared.js');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('홈이 부르지 않는 prototype 전용 edge와 chunk는 세지 않는다', async () => {
+    const root = await copyFixture();
+
+    try {
+      const metrics = resolveBundleMetrics(root);
+
+      expect(metrics.deferred.files).not.toContain('static/chunks/888.hhh888.js');
+      // 같은 모듈 id를 prototype도 부르지만 그쪽 전용 chunk(512)는 홈 호출에 없다.
+      expect(metrics.deferred.files).not.toContain('static/chunks/512.ggg777.js');
+      expect(metrics.deferred.targets).not.toContain('@/components/blocks/PrototypeOnly');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('지연 chunk 안의 중첩 import도 홈 지연 자산으로 센다', async () => {
+    const root = await copyFixture();
+
+    try {
+      expect(resolveBundleMetrics(root).deferred.files).toContain('static/chunks/777.ddd444.js');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('나중에 홈에 추가된 dynamic import edge도 목록 수정 없이 측정한다', async () => {
+    const root = await copyFixture();
+
+    try {
+      await writeFile(path.join(root, 'static/chunks/999.iii999.js'), 'window.__bundle_new_plugin__ = true;');
+      const manifest = await readLoadableManifest(root);
+      manifest['components\\sections\\NewSection\\index.tsx -> @/components/blocks/NewPlugin'] = {
+        id: 9990,
+        files: ['static/chunks/999.iii999.js'],
+      };
+      await writeFile(path.join(root, 'react-loadable-manifest.json'), JSON.stringify(manifest));
+      const pagePath = path.join(root, 'static/chunks/page-abc123.js');
+      await writeFile(
+        pagePath,
+        `${await readFile(pagePath, 'utf8')}r.e(999).then(r.bind(r,9990));`,
+      );
+
+      const metrics = resolveBundleMetrics(root);
+      expect(metrics.deferred.files).toContain('static/chunks/999.iii999.js');
+      expect(metrics.deferred.targets).toContain('@/components/blocks/NewPlugin');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('정적 Luminous는 지연 chunk 없이 정적 포함으로 구분한다', async () => {
+    const root = await copyFixture();
+
+    try {
+      const metrics = resolveBundleMetrics(root);
+      expect(metrics.luminous).toBe('static');
+      expect(metrics.deferred.targets.some((target: string) => /Luminous/i.test(target))).toBe(false);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -88,31 +161,98 @@ describe('check-bundle resolver', { timeout: 30_000 }, () => {
       const metrics = resolveBundleMetrics(root);
       expect(metrics.firstLoadJs.files).toContain('static/chunks/page-newhash.js');
       expect(metrics.firstLoadJs.files).toContain('static/chunks/layout-newhash.js');
+      expect(metrics.deferred.files).toContain('static/chunks/650.bbb222.js');
     } finally {
       await rm(root, { recursive: true, force: true });
     }
   });
 
-  it('Hyperspeed edge가 아직 없으면 First Load JS와 미구현 상태를 분리한다', async () => {
+  it('홈에 @/lib/gsap 지연 edge가 없으면 실패한다', async () => {
     const root = await copyFixture();
-
     try {
-      await writeFile(
-        path.join(root, 'react-loadable-manifest.json'),
-        JSON.stringify({ 'components/blocks/Other.tsx -> @/components/blocks/Other': { id: 2, files: [] } }),
-      );
+      const manifest = await readLoadableManifest(root);
+      for (const key of Object.keys(manifest)) {
+        if (key.endsWith('-> @/lib/gsap')) delete manifest[key];
+      }
+      await writeFile(path.join(root, 'react-loadable-manifest.json'), JSON.stringify(manifest));
 
-      const metrics = resolveBundleMetrics(root);
-      expect(metrics.firstLoadJs.gzipBytes).toBeGreaterThan(0);
-      expect(metrics.hyperspeed).toBeNull();
-      expect(metrics.hyperspeedStatus).toBe('not-built');
+      const result = runMeasure(root);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toMatch(/@\/lib\/gsap/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('gsap edge가 있어도 홈이 부르지 않으면 실패한다', async () => {
+    const root = await copyFixture();
+    try {
+      const pagePath = path.join(root, 'static/chunks/page-abc123.js');
+      const page = await readFile(pagePath, 'utf8');
+      await writeFile(pagePath, page.replace('r.bind(r,2650)', 'r.bind(r,1)'));
+
+      const result = runMeasure(root);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toMatch(/@\/lib\/gsap/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('react-loadable manifest가 없으면 실패한다', async () => {
+    const root = await copyFixture();
+    try {
+      await rm(path.join(root, 'react-loadable-manifest.json'));
+      const result = runMeasure(root);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toMatch(/react-loadable-manifest/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('client reference manifest가 없으면 실패한다', async () => {
+    const root = await copyFixture();
+    try {
+      await rm(path.join(root, 'server/app/page_client-reference-manifest.js'));
+      const result = runMeasure(root);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toMatch(/client-reference-manifest/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('Luminous가 홈 client graph에 없으면 실패한다', async () => {
+    const root = await copyFixture();
+    try {
+      const manifestPath = path.join(root, 'server/app/page_client-reference-manifest.js');
+      const source = await readFile(manifestPath, 'utf8');
+      await writeFile(manifestPath, source.replace('LuminousFlowBackground', 'SomethingElse'));
+      const result = runMeasure(root);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toMatch(/Luminous/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('Luminous가 별도 chunk를 요구하면 정적 포함이 아니므로 실패한다', async () => {
+    const root = await copyFixture();
+    try {
+      const manifestPath = path.join(root, 'server/app/page_client-reference-manifest.js');
+      const source = await readFile(manifestPath, 'utf8');
+      await writeFile(manifestPath, source.replace('"id":11,"name":"*","chunks":[]', '"id":11,"name":"*","chunks":["x"]'));
+      const result = runMeasure(root);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toMatch(/Luminous/);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
   });
 
   it('root app path가 없으면 실패한다', async () => {
-      const root = await copyFixture();
+    const root = await copyFixture();
     try {
       await writeFile(path.join(root, 'app-path-routes-manifest.json'), JSON.stringify({ '/page': '/other' }));
       const result = runMeasure(root);
@@ -135,37 +275,13 @@ describe('check-bundle resolver', { timeout: 30_000 }, () => {
     }
   });
 
-  it('Hyperspeed exact edge가 두 개로 정규화되면 모호성으로 실패한다', async () => {
+  it('홈 edge가 가리키는 지연 자산이 없으면 실패한다', async () => {
     const root = await copyFixture();
     try {
-      const manifestPath = path.join(root, 'react-loadable-manifest.json');
-      const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>;
-      manifest['components/blocks/HyperspeedBackground.tsx -> @/components/blocks/Hyperspeed'] = {
-        id: 1002,
-        files: ['static/chunks/hyperspeed-789abc.js'],
-      };
-      await writeFile(manifestPath, JSON.stringify(manifest));
+      await rm(path.join(root, 'static/chunks/650.bbb222.js'));
       const result = runMeasure(root);
       expect(result.status).toBe(1);
-      expect(result.stderr).toMatch(/exactly one|ambiguous/i);
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  it('importer는 맞지만 specifier가 다르면 누락된 edge로 실패한다', async () => {
-    const root = await copyFixture();
-    try {
-      await writeFile(
-        path.join(root, 'react-loadable-manifest.json'),
-        JSON.stringify({
-          'components/blocks/HyperspeedBackground.tsx -> @/components/blocks/Other': {
-            id: 2,
-            files: ['static/chunks/hyperspeed-789abc.js'],
-          },
-        }),
-      );
-      expect(() => resolveBundleMetrics(root)).toThrow(/edge/i);
+      expect(result.stderr).toMatch(/asset/i);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -196,7 +312,46 @@ describe('check-bundle resolver', { timeout: 30_000 }, () => {
   it('--measure가 JSON 측정 경로를 실행한다', () => {
     const result = spawnSync(process.execPath, [scriptPath, '--measure', fixtureRoot], { encoding: 'utf8' });
     expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout)).toMatchObject({ hyperspeedStatus: 'measured' });
+    expect(JSON.parse(result.stdout)).toMatchObject({ luminous: 'static' });
+  });
+});
+
+describe('check-bundle CLI', { timeout: 30_000 }, () => {
+  async function runCheckIn(cwd: string) {
+    return spawnSync(process.execPath, [scriptPath], { cwd, encoding: 'utf8' });
+  }
+
+  async function projectWithBuild() {
+    const project = await mkdtemp(path.join(tmpdir(), 'bundle-project-'));
+    await cp(fixtureRoot, path.join(project, '.next'), { recursive: true });
+    return project;
+  }
+
+  it('측정이 되면 지연 청크와 Luminous 정적 포함을 함께 보고한다', async () => {
+    const project = await projectWithBuild();
+    try {
+      const result = await runCheckIn(project);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('check-bundle: pass');
+      expect(result.stdout).toContain('지연 청크');
+      expect(result.stdout).toContain('Luminous: 정적 포함 (지연 청크 없음)');
+    } finally {
+      await rm(project, { recursive: true, force: true });
+    }
+  });
+
+  it('gsap edge가 없으면 통과로 대체하지 않고 실패한다', async () => {
+    const project = await projectWithBuild();
+    try {
+      const manifestPath = path.join(project, '.next/react-loadable-manifest.json');
+      await writeFile(manifestPath, JSON.stringify({}));
+      const result = await runCheckIn(project);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toMatch(/@\/lib\/gsap/);
+      expect(result.stdout).not.toContain('check-bundle: pass');
+    } finally {
+      await rm(project, { recursive: true, force: true });
+    }
   });
 });
 
