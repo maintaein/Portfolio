@@ -125,7 +125,7 @@ test.describe('모션', () => {
     await expect(background).toHaveAttribute('data-hyperspeed-motion', 'slow');
   });
 
-  test('다른 섹션으로 가면 About 링이 프레임을 그리지 않는다', async ({ page }) => {
+  test('다른 섹션으로 가면 About ElectricLogo가 멈추고 돌아오면 다시 그린다', async ({ page }) => {
     // three가 프레임마다 부르는 그리기 호출을 캔버스별로 센다. 픽셀을 읽지
     // 않으므로 비결정적인 셰이더 출력에 기대지 않는다.
     await page.addInitScript(() => {
@@ -157,18 +157,17 @@ test.describe('모션', () => {
     });
 
     await enter(page, 'about');
-    // 링은 두 번째 문항(AI WORKFLOW)을 고를 때 비로소 청크가 풀린다.
-    // 라벨은 사용자 콘텐츠라 순서로 집는다.
+    // 한 캔버스가 문항별 로고를 바꾼다. 라벨 대신 문항 순서로 고른다.
     await page
       .getByRole('navigation', { name: 'About 문항' })
       .getByRole('button')
       .nth(1)
       .click();
 
-    const rings = '[data-about-visual-index="1"] canvas';
+    const logo = '[data-about-visual] canvas';
     // 장식이라 aria-hidden이다. 보이는지가 아니라 붙었는지만 본다.
-    await expect(page.locator(rings)).toBeAttached({ timeout: 20_000 });
-    const draws = () => page.evaluate((selector) => window.__drawsFor(selector), rings);
+    await expect(page.locator(logo)).toBeAttached({ timeout: 20_000 });
+    const draws = () => page.evaluate((selector) => window.__drawsFor(selector), logo);
     await expect.poll(draws).toBeGreaterThan(0);
 
     await navButton(page, 'Skills').click();
@@ -179,6 +178,9 @@ test.describe('모션', () => {
     const settled = await draws();
     await waitFrames(page, 30);
     expect(await draws()).toBe(settled);
+    await navButton(page, 'About').click();
+    await expectActive(page, 'about');
+    await expect.poll(draws).toBeGreaterThan(settled);
   });
 
   test('해시로 바로 들어가면 overview 부팅도 Hyperspeed boost도 없다 @smoke', async ({
