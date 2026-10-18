@@ -190,7 +190,7 @@ describe('SkillsSection signal map', () => {
     timelines.mock.results.forEach(({ value }) => value.progress(1));
     rerender(skillsWithActivity({ obscured: true }));
     for (const span of container.querySelectorAll<HTMLElement>('.signal-project > span')) {
-      expect(span.style.opacity).toBe('');
+      expect(span.style.opacity).not.toBe('0');
     }
     rerender(skillsWithActivity());
     expect(timelines).toHaveBeenCalledTimes(initialCount);
@@ -243,4 +243,36 @@ describe('SkillsSection signal map', () => {
     expect(html).toContain('TUI (Taein UI)');
     expect(html).toContain('AlphaMail');
   });
+  it('retains partially drawn links and completion callbacks across temporary pauses', () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(600);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(490);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const hub = this.classList.contains('signal-hub'); const link = this.classList.contains('signal-project');
+      return { left: hub ? 94 : link ? 350 : 0, top: hub ? 185 : link ? 40 : 0, width: hub ? 120 : link ? 150 : 600, height: hub ? 120 : link ? 54 : 490 } as DOMRect;
+    });
+    const timelines = vi.spyOn(gsap, 'timeline');
+    const { container, rerender, unmount } = render(skillsWithActivity());
+    const owned = timelines.mock.results.map(result => result.value as gsap.core.Timeline);
+    owned.forEach(tween => tween.progress(.4));
+    const styles = () => [...container.querySelectorAll<HTMLElement>('.signal-path, .signal-project > span')].map(el => el.style.cssText);
+    const partial = styles();
+    for (const state of [{ pageVisible: false }, { obscured: true }, {}]) {
+      if (!Object.keys(state).length) localVisibility.visible = false;
+      rerender(skillsWithActivity(state)); owned.forEach(tween => { expect(tween.paused()).toBe(true); expect(tween.progress()).toBeCloseTo(.4); }); expect(styles()).toEqual(partial);
+      localVisibility.visible = true; rerender(skillsWithActivity()); owned.forEach(tween => expect(tween.paused()).toBe(false)); expect(timelines).toHaveBeenCalledTimes(owned.length);
+      expect(container.querySelector('[data-skill-map]')).toHaveAttribute('data-active-skill', 'React');
+    }
+    owned.forEach(tween => tween.progress(1));
+    rerender(skillsWithActivity({ obscured: true })); rerender(skillsWithActivity()); expect(timelines).toHaveBeenCalledTimes(owned.length);
+    fireEvent.focus(screen.getByRole('button', { name: 'Python' }));
+    const next = timelines.mock.results.slice(owned.length).map(result => result.value as gsap.core.Timeline); next.forEach(tween => tween.progress(.4));
+    rerender(skillsWithActivity({ pageVisible: false })); rerender(skillsWithActivity({ pageVisible: false, reducedMotion: true }));
+    next.forEach(tween => expect(tween.parent).toBeNull());
+    for (const span of container.querySelectorAll<HTMLElement>('.signal-project > span')) expect(span.style.opacity).toBe('');
+    const count = timelines.mock.calls.length; rerender(skillsWithActivity()); expect(timelines).toHaveBeenCalledTimes(count);
+    fireEvent.focus(screen.getByRole('button', { name: 'React' }));
+    const last = timelines.mock.results.slice(count).map(result => result.value as gsap.core.Timeline); expect(last.length).toBeGreaterThan(0);
+    unmount(); last.forEach(tween => expect(tween.parent).toBeNull());
+  });
+
 });

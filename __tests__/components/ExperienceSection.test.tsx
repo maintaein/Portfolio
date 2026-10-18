@@ -130,4 +130,32 @@ describe('ExperienceSection', () => {
     fireEvent(deck, new MouseEvent('pointerup', { bubbles: true, clientX: 100 }));
     expect(activeCard()).toHaveTextContent(experiences[1].company);
   });
+  it('pauses the same unfinished marker timeline for page, modal and local inactivity', () => {
+    localVisibility.visible = true;
+    vi.spyOn(HTMLElement.prototype, 'offsetTop', 'get').mockImplementation(function (this: HTMLElement) {
+      return Math.max(0, [...(this.parentElement?.querySelectorAll('li') ?? [])].indexOf(this as HTMLLIElement)) * 140;
+    });
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(100);
+    const timelines = vi.spyOn(gsap, 'timeline');
+    const { container, rerender, unmount } = render(experienceWithActivity());
+    fireEvent.click(container.querySelectorAll('.experience-depth-timeline button')[2]);
+    const tween = timelines.mock.results.at(-1)!.value as gsap.core.Timeline;
+    tween.progress(.4); const phase = tween.progress(); const marker = container.querySelector<HTMLElement>('.experience-depth-marker')!; const style = marker.style.cssText;
+    for (const state of [{ pageVisible: false }, { obscured: true }, {}]) {
+      if (!Object.keys(state).length) localVisibility.visible = false;
+      rerender(experienceWithActivity(state)); expect(tween.paused()).toBe(true); expect(tween.progress()).toBe(phase); expect(marker.style.cssText).toBe(style);
+      localVisibility.visible = true; rerender(experienceWithActivity()); expect(tween.paused()).toBe(false); expect(timelines).toHaveBeenCalledTimes(1);
+      expect(container.querySelectorAll('.experience-depth-timeline button')[2]).toHaveAttribute('aria-current', 'true');
+    }
+    tween.progress(1); expect(marker.style.top).toBe('330px');
+    rerender(experienceWithActivity({ obscured: true })); rerender(experienceWithActivity()); expect(timelines).toHaveBeenCalledTimes(1);
+    fireEvent.click(container.querySelectorAll('.experience-depth-timeline button')[1]);
+    const next = timelines.mock.results.at(-1)!.value as gsap.core.Timeline;
+    next.progress(.3); rerender(experienceWithActivity({ reducedMotion: true }));
+    expect(next.parent).toBeNull(); expect(marker.style.top).toBe('190px');
+    rerender(experienceWithActivity()); expect(timelines).toHaveBeenCalledTimes(2);
+    fireEvent.click(container.querySelectorAll('.experience-depth-timeline button')[2]);
+    const last = timelines.mock.results.at(-1)!.value as gsap.core.Timeline; unmount(); expect(last.parent).toBeNull();
+  });
+
 });

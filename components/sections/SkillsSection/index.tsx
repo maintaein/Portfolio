@@ -38,21 +38,25 @@ export default function SkillsSection() {
   const { routeResolved, motionReady, pageVisible, reducedMotion, obscured } = useSectionActivity();
   const { ref, visible } = useSectionVisibility<HTMLElement>();
   const entered = visible && routeResolved && motionReady && pageVisible && !obscured;
+  const enteredRef = useRef(entered);
+  enteredRef.current = entered;
+  const timelinesRef = useRef<gsap.core.Timeline[]>([]);
+  const drawRef = useRef<(() => void) | null>(null);
   const count = selected.projects.length;
 
   useLayoutEffect(() => {
-    if (!entered) return;
     const map = mapRef.current!;
     const svg = map.querySelector('svg')!;
     const hub = map.querySelector<HTMLElement>('.signal-hub')!;
     const links = [...map.querySelectorAll<HTMLAnchorElement>('.signal-project')];
     const paths = [...svg.querySelectorAll('path')];
     let context: gsap.Context | undefined;
+    if (reducedMotion) lastDrawnSkill.current = selected.name;
     let drawn = lastDrawnSkill.current === selected.name;
     let geometry = '';
 
     const draw = () => {
-      if (!map.clientWidth || !map.clientHeight) return;
+      if (!enteredRef.current || !map.clientWidth || !map.clientHeight) return;
       const bounds = map.getBoundingClientRect();
       const scaleX = bounds.width / map.offsetWidth;
       const scaleY = bounds.height / map.offsetHeight;
@@ -75,6 +79,7 @@ export default function SkillsSection() {
       if (nextGeometry === geometry) return;
       geometry = nextGeometry;
       context?.revert();
+      timelinesRef.current = [];
       svg.setAttribute('viewBox', `0 0 ${map.clientWidth} ${map.clientHeight}`);
       context = gsap.context(() => {
         links.forEach((link, index) => {
@@ -96,28 +101,37 @@ export default function SkillsSection() {
           const text = link.querySelectorAll('.signal-project > span:not(.signal-surface)');
           gsap.set(path, { strokeDasharray: connector + perimeter, strokeDashoffset: connector + perimeter });
           gsap.set([surface, ...text], { opacity: 0 });
-          gsap.timeline({
+          const timeline = gsap.timeline({
             delay: index * .16,
             onComplete: index === links.length - 1 ? () => { lastDrawnSkill.current = selected.name; } : undefined,
           })
             .to(path, { strokeDashoffset: perimeter, duration: connector / 700, ease: 'none' })
             .to(path, { strokeDashoffset: 0, duration: Math.min(perimeter / 700, .36), ease: 'none' })
             .to([surface, ...text], { opacity: 1, duration: .18, ease: 'power2.out' });
+          timelinesRef.current.push(timeline);
         });
       }, map);
       if (reducedMotion || drawn) lastDrawnSkill.current = selected.name;
       drawn = true;
     };
 
+    drawRef.current = draw;
     draw();
     const observer = new ResizeObserver(() => draw());
     observer.observe(map);
     links.forEach((link) => observer.observe(link));
     return () => {
+      drawRef.current = null;
       observer.disconnect();
       context?.revert();
+      timelinesRef.current = [];
     };
-  }, [selected, entered, reducedMotion]);
+  }, [selected, reducedMotion]);
+
+  useLayoutEffect(() => {
+    if (entered) drawRef.current?.();
+    timelinesRef.current.forEach(timeline => timeline.paused(!entered));
+  }, [entered]);
   const ys = count === 1 ? [50] : count === 2 ? [34, 66] :
     count === 3 ? [22, 50, 78] : count === 4 ? [17, 39, 61, 83] : [13, 31, 50, 69, 87];
   const points = selected.projects.map((_, index) => ({

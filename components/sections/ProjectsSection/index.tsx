@@ -9,7 +9,7 @@ import { SECTION_IDS } from '@/lib/constants';
 import { setProjectModalObscured } from '@/hooks/useProjectModalObscured';
 import { useSectionActivity } from '@/components/common/SectionActivityContext';
 import { useSectionVisibility } from '@/hooks/useSectionVisibility';
-import type { Flip } from '@/lib/gsap';
+import type { Flip, gsap } from '@/lib/gsap';
 import type { PreviewMorphHandle } from '@/components/blocks/PreviewMorph';
 
 const ProjectModal = dynamic(
@@ -250,7 +250,8 @@ export default function ProjectsSection() {
   // 않는 이유가 이것이다. 프리뷰 자신에 걸었다면 openModal에서 tween을
   // 먼저 죽여야 했을 것이다
   const mediaLayerRef = useRef<HTMLDivElement | null>(null);
-  const swapTweenRef = useRef<{ kill: () => void } | null>(null);
+  const swapTweenRef = useRef<gsap.core.Tween | null>(null);
+  const swappedIndexRef = useRef(activeIndex);
   // 비행 앞뒤로 접힘 프리뷰(previewRef 자신)에 거는 opacity tween. 전환
   // tween(swapTweenRef, mediaLayerRef 담당)과는 대상도 시점도 다르다
   const previewTweenRef = useRef<{ kill: () => void } | null>(null);
@@ -338,6 +339,8 @@ export default function ProjectsSection() {
   // 이전 것을 죽이고 다음을 태운다
   useEffect(() => {
     activeIndexRef.current = activeIndex;
+    if (swappedIndexRef.current === activeIndex) return;
+    swappedIndexRef.current = activeIndex;
     const layer = mediaLayerRef.current;
     swapTweenRef.current?.kill();
     swapTweenRef.current = null;
@@ -348,27 +351,37 @@ export default function ProjectsSection() {
     if (!layer) return;
     const mod = gsapModuleRef.current;
     // reduce에서는 즉시 교체로 무너진다. 죽은 tween이 남긴 transform도 걷는다
-    if (morphed || !mod || !motionReady || reducedMotion || !decorationActive) {
+    if (morphed || !mod || reducedMotion) {
       layer.style.removeProperty('transform');
       layer.style.removeProperty('opacity');
       return;
     }
     mod.registerGsap();
-    swapTweenRef.current = asKillable(
-      mod.gsap.fromTo(
-        layer,
-        { opacity: 0, scale: 1.06, yPercent: 3 },
-        {
-          opacity: 1,
-          scale: 1,
-          yPercent: 0,
-          duration: PREVIEW_SWAP_MS / 1000,
-          ease: mod.SITE_EASE,
-          clearProps: 'transform',
-        }
-      )
+    swapTweenRef.current = mod.gsap.fromTo(
+      layer,
+      { opacity: 0, scale: 1.06, yPercent: 3 },
+      {
+        opacity: 1,
+        scale: 1,
+        yPercent: 0,
+        duration: PREVIEW_SWAP_MS / 1000,
+        paused: !motionReady || !decorationActive,
+        ease: mod.SITE_EASE,
+        clearProps: 'transform',
+      }
     );
   }, [activeIndex, motionReady, reducedMotion, decorationActive]);
+
+  useEffect(() => {
+    if (reducedMotion) {
+      swapTweenRef.current?.kill();
+      swapTweenRef.current = null;
+      mediaLayerRef.current?.style.removeProperty('transform');
+      mediaLayerRef.current?.style.removeProperty('opacity');
+    } else {
+      swapTweenRef.current?.paused(!motionReady || !decorationActive);
+    }
+  }, [motionReady, reducedMotion, decorationActive]);
 
   // 모달이 사라지면 남은 비행과 재진입 잠금을 푼다. 정상 닫기에서는 이미 끝난
   // tween을 한 번 더 kill할 뿐이지만, popstate가 비행 중에 모달을 걷어가는

@@ -21,13 +21,11 @@ export default function ExperienceSection() {
   const { reducedMotion, pageVisible, motionReady, obscured } = useSectionActivity();
   const { ref, visible } = useSectionVisibility<HTMLElement>();
   const active = visible && pageVisible && motionReady && !obscured;
+  const activityRef = useRef(active);
+  activityRef.current = active;
   const select = (index: number) => setSelected((index + experiences.length) % experiences.length);
 
   useLayoutEffect(() => {
-    if (!active) {
-      previousIndex.current = null;
-      return;
-    }
     const line = lineRef.current;
     const marker = markerRef.current;
     const items = itemsRef.current;
@@ -53,23 +51,29 @@ export default function ExperienceSection() {
       }
       return position(items[selected]!);
     };
-    const target = measure();
+    let target = measure();
     motionRef.current?.kill();
+    motionRef.current = null;
     if (previousIndex.current === null || reducedMotion ||
       (flow.head === target && flow.tail === target)) {
       flow.head = target;
       flow.tail = target;
       draw();
     } else {
-      motionRef.current = gsap.timeline()
+      motionRef.current = gsap.timeline({ paused: !activityRef.current })
         .to(flow, { head: target, duration: 0.55, ease: 'power2.inOut', onUpdate: draw }, 0)
         .to(flow, { tail: target, duration: 0.55, ease: 'power2.inOut', onUpdate: draw }, 0.12);
     }
     previousIndex.current = selected;
     const onResize = () => {
-      motionRef.current?.kill();
+      const wasMobile = mobile;
       mobile = window.innerWidth <= 760;
-      flow.head = measure();
+      const nextTarget = measure();
+      if (mobile === wasMobile && nextTarget === target) return;
+      target = nextTarget;
+      motionRef.current?.kill();
+      motionRef.current = null;
+      flow.head = target;
       flow.tail = flow.head;
       draw();
     };
@@ -78,7 +82,9 @@ export default function ExperienceSection() {
       window.removeEventListener('resize', onResize);
       motionRef.current?.kill();
     };
-  }, [active, reducedMotion, selected]);
+  }, [reducedMotion, selected]);
+
+  useLayoutEffect(() => { motionRef.current?.paused(!active); }, [active]);
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {

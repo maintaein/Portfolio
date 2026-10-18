@@ -996,7 +996,7 @@ describe('ProjectsSection 프로젝트 전환 모션', () => {
   ];
 
   function fakeTween() {
-    return { kill: vi.fn() };
+    return { kill: vi.fn(), paused: vi.fn() };
   }
 
   async function renderReady(reduced = false) {
@@ -1097,7 +1097,7 @@ describe('ProjectsSection 프로젝트 전환 모션', () => {
 
 describe('ProjectsSection 프리뷰 셰이더 모프', () => {
   function fakeTween() {
-    return { kill: vi.fn() };
+    return { kill: vi.fn(), paused: vi.fn() };
   }
 
   async function renderWithMorph(reduced = false) {
@@ -1905,4 +1905,31 @@ describe('ProjectsSection 머리띠 제거', () => {
     expect(screen.queryByText('MY PROJECTS')).toBeNull();
     expect(document.querySelector('[data-part="index-progress"]')).toBeNull();
   });
+});
+
+it('holds an unfinished preview swap through temporary inactivity and never replays a completed selection', async () => {
+  const view = (pageVisible = true, obscured = false, reducedMotion = false) => <SectionActivityProvider pageVisible={pageVisible} obscured={obscured} reducedMotion={reducedMotion} routeResolved motionReady><ProjectsSection /></SectionActivityProvider>;
+  const swaps = vi.spyOn(gsap, 'fromTo');
+  const { container, rerender, unmount } = render(view());
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  fireEvent.click(screen.getAllByRole('tab')[1]);
+  const tween = swaps.mock.results.at(-1)!.value as gsap.core.Tween;
+  const layer = container.querySelector<HTMLElement>('[data-part="preview-media"]')!;
+  tween.progress(.4); const phase = tween.progress(); const style = layer.style.cssText;
+  for (const state of [[false, false], [true, true], [true, false]]) {
+    if (state[0] && !state[1]) localVisibility.visible = false;
+    rerender(view(state[0], state[1]));
+    expect(tween.paused()).toBe(true); expect(tween.progress()).toBe(phase); expect(layer.style.cssText).toBe(style);
+    localVisibility.visible = true; rerender(view());
+    expect(tween.paused()).toBe(false); expect(swaps).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByRole('tab')[1]).toHaveAttribute('aria-selected', 'true');
+  }
+  tween.progress(1); rerender(view(false)); rerender(view()); expect(swaps).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getAllByRole('tab')[2]);
+  const next = swaps.mock.results.at(-1)!.value as gsap.core.Tween;
+  next.progress(.3); rerender(view(true, false, true));
+  expect(next.parent).toBeNull(); expect(layer.style.opacity).toBe(''); expect(layer.style.transform).toBe('');
+  rerender(view()); expect(swaps).toHaveBeenCalledTimes(2);
+  fireEvent.click(screen.getAllByRole('tab')[3]);
+  const last = swaps.mock.results.at(-1)!.value as gsap.core.Tween; unmount(); expect(last.parent).toBeNull();
 });
