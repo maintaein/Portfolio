@@ -27,6 +27,15 @@ function readHash(): NavId {
   return NAV_SEQUENCE.includes(hash as NavId) ? hash as NavId : OVERVIEW;
 }
 
+const documentHeight = () => Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+const clampTop = (top: number) => Math.max(0, Math.min(top, Math.max(0, documentHeight() - window.innerHeight)));
+// Next 필드와 projectModalId를 지키려고 항목 state는 언제나 펼쳐서 덮는다.
+const saveScroll = () => window.history.replaceState({ ...window.history.state, sectionScrollY: window.scrollY }, '');
+const savedScroll = (): number | null => {
+  const saved = window.history.state?.sectionScrollY;
+  return Number.isFinite(saved) ? saved : null;
+};
+
 export function useSectionNav(options: SectionNavOptions) {
   const [active, setActive] = useState<NavId>(OVERVIEW);
   const [routeResolved, setRouteResolved] = useState(false);
@@ -37,15 +46,14 @@ export function useSectionNav(options: SectionNavOptions) {
   const transaction = useRef<{ id: NavId; top: number; focus: boolean } | null>(null);
   const frame = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const section = useCallback((id: NavId) => latest.current.rootRef.current?.querySelector<HTMLElement>(`[data-section="${id}"]`), []);
   const headerHeight = useCallback(() => latest.current.headerRef.current?.getBoundingClientRect().height ?? 0, []);
-  const documentHeight = () => Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
   // 실측 header 높이에 16px 여유를 더한다. scroll-margin-top도 같은 자리에 둔다.
-  const targetTop = useCallback((id: NavId) => Math.max(0, Math.min(
-    (section(id)?.getBoundingClientRect().top ?? 0) + window.scrollY - headerHeight() - 16,
-    Math.max(0, documentHeight() - window.innerHeight)
-  )), [section, headerHeight]);
+  const targetTop = useCallback((id: NavId) => clampTop(
+    (section(id)?.getBoundingClientRect().top ?? 0) + window.scrollY - headerHeight() - 16
+  ), [section, headerHeight]);
   const current = useCallback(() => resolveCurrentSection({
     sections: NAV_SEQUENCE.flatMap(id => {
       const element = section(id);
@@ -69,6 +77,9 @@ export function useSectionNav(options: SectionNavOptions) {
     activeRef.current = id;
     setActive(id);
     if (readHash() !== id) window.history.replaceState(window.history.state, '', `#${id}`);
+    // Safari는 짧은 시간에 replaceState가 몰리면 던진다. 스크롤이 멎은 뒤 한 번만 저장한다.
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(saveScroll, 200);
   }, [section, current]);
   const schedule = useCallback(() => {
     if (!frame.current) frame.current = requestAnimationFrame(sample);
@@ -96,7 +107,12 @@ export function useSectionNav(options: SectionNavOptions) {
 
   const navigate = useCallback((id: NavId, navigationOptions?: { focus?: boolean; behavior?: 'auto' | 'smooth' }) => {
     if (latest.current.blocked) return;
-    if (readHash() !== id) window.history.pushState(window.history.state, '', `#${id}`);
+    if (readHash() !== id) {
+      clearTimeout(saveTimer.current);
+      saveScroll();
+      // 새 항목은 떠나는 항목의 위치를 물려받지 않는다. 도착 뒤 저장이 채운다.
+      window.history.pushState({ ...window.history.state, sectionScrollY: null }, '', `#${id}`);
+    }
     move(id, navigationOptions?.focus ?? true, navigationOptions?.behavior ?? 'smooth');
   }, [move]);
 
@@ -105,18 +121,24 @@ export function useSectionNav(options: SectionNavOptions) {
     activeRef.current = id;
     setActive(id);
     const type = (performance.getEntriesByType?.('navigation')[0] as PerformanceNavigationTiming | undefined)?.type;
-    // 새로고침·앞뒤 이동은 브라우저가 복원한 읽기 위치가 이미 그 섹션이면 존중한다.
-    if (!((type === 'reload' || type === 'back_forward') && current() === id)) window.scrollTo({ top: targetTop(id), behavior: 'auto' });
+    const restoring = type === 'reload' || type === 'back_forward';
+    const saved = savedScroll();
+    // 새로고침·앞뒤 이동은 저장한 읽기 위치로 간다. 없으면 이미 그 섹션인 위치를 존중한다.
+    if (restoring && saved !== null) window.scrollTo({ top: clampTop(saved), behavior: 'auto' });
+    else if (!(restoring && current() === id)) window.scrollTo({ top: targetTop(id), behavior: 'auto' });
     setRouteResolved(true);
   }, [targetTop, current]);
 
   useEffect(() => {
-    // popstate는 브라우저 스크롤 복원보다 먼저 온다. 복원 뒤에 오는 hashchange에서만 판단한다.
-    // 모달 항목은 섹션 해시를 공유하므로 hashchange가 없고 스크롤 복원도 스스로 맡는다.
+    // 판단은 hashchange에서만 한다. popstate는 지연 저장을 끊을 뿐 위치를 건드리지 않는다.
+    // 모달 항목은 섹션 해시를 공유하므로 hashchange가 없고, body 잠금이라 스크롤도 그대로다.
+    // 복원이 manual이라 저장한 위치는 직접 돌려놓는다. 저장이 없으면 앵커가 만든 새 항목이다.
     const onHistory = () => {
       const id = readHash();
-      if (id === activeRef.current) return;
-      if (current() !== id) return move(id, false, 'auto');
+      const saved = savedScroll();
+      if (saved === null && id === activeRef.current) return;
+      if (saved !== null) window.scrollTo({ top: clampTop(saved), behavior: 'auto' });
+      else if (current() !== id) return move(id, false, 'auto');
       transaction.current = null;
       clearTimeout(timer.current);
       setNavigationTarget(null);
@@ -136,10 +158,16 @@ export function useSectionNav(options: SectionNavOptions) {
       window.scrollTo({ top: window.scrollY, behavior: 'auto' });
       schedule();
     };
+    const restoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = 'manual';
+    // 떠나는 항목의 지연 저장이 새 항목에 옛 위치를 쓰지 않게 이동 순간에 끊는다.
+    const dropSave = () => clearTimeout(saveTimer.current);
     window.addEventListener('scroll', schedule, { passive: true });
     window.addEventListener('scrollend', schedule);
     window.addEventListener('resize', schedule);
     window.addEventListener('hashchange', onHistory);
+    window.addEventListener('popstate', dropSave);
+    window.addEventListener('pagehide', saveScroll);
     window.addEventListener('wheel', cancel, { passive: true });
     window.addEventListener('touchstart', cancel, { passive: true });
     window.addEventListener('keydown', cancel);
@@ -148,11 +176,14 @@ export function useSectionNav(options: SectionNavOptions) {
     if (latest.current.headerRef.current) observer?.observe(latest.current.headerRef.current);
     return () => {
       cancelAnimationFrame(frame.current); frame.current = 0;
-      clearTimeout(timer.current); observer?.disconnect();
+      clearTimeout(timer.current); clearTimeout(saveTimer.current); observer?.disconnect();
+      window.history.scrollRestoration = restoration;
       window.removeEventListener('scroll', schedule);
       window.removeEventListener('scrollend', schedule);
       window.removeEventListener('resize', schedule);
       window.removeEventListener('hashchange', onHistory);
+      window.removeEventListener('popstate', dropSave);
+      window.removeEventListener('pagehide', saveScroll);
       window.removeEventListener('wheel', cancel);
       window.removeEventListener('touchstart', cancel);
       window.removeEventListener('keydown', cancel);

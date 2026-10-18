@@ -60,6 +60,53 @@ it('reload and back-forward keep a restored position that already shows the hash
   const { result } = renderHook(() => useSectionNav(options()));
   expect(window.scrollTo).not.toHaveBeenCalled(); expect(result.current.active).toBe('skills');
 });
+it('owns manual scroll restoration while mounted and gives the previous value back', () => {
+  history.scrollRestoration = 'auto';
+  const { unmount } = renderHook(() => useSectionNav(options()));
+  expect(history.scrollRestoration).toBe('manual');
+  unmount();
+  expect(history.scrollRestoration).toBe('auto');
+});
+it('saves the reading position into the entry after settling, before a push and on pagehide, keeping other fields', () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  try {
+    const { result } = renderHook(() => useSectionNav(options()));
+    const replace = vi.spyOn(history, 'replaceState');
+    y = 600; act(() => window.dispatchEvent(new Event('scroll'))); tick();
+    y = 700; act(() => window.dispatchEvent(new Event('scroll'))); tick();
+    expect(history.state.sectionScrollY).toBeUndefined();
+    act(() => vi.advanceTimersByTime(1000));
+    expect(history.state).toMatchObject({ __NA: true, tree: ['next'], projectModalId: 'existing', sectionScrollY: 700 });
+    expect(replace.mock.calls.filter(([state]) => state?.sectionScrollY !== undefined)).toHaveLength(1);
+    y = 750; act(() => result.current.navigate('projects'));
+    expect(replace).toHaveBeenLastCalledWith(expect.objectContaining({ __NA: true, projectModalId: 'existing', sectionScrollY: 750 }), '');
+    expect(history.state).toMatchObject({ __NA: true, tree: ['next'], projectModalId: 'existing' });
+    y = 1704; act(() => window.dispatchEvent(new Event('pagehide')));
+    expect(history.state).toMatchObject({ __NA: true, projectModalId: 'existing', sectionScrollY: 1704 });
+  } finally { vi.useRealTimers(); }
+});
+it('history traversal to an entry with a saved position restores it instead of the section top', () => {
+  const { result } = renderHook(() => useSectionNav(options()));
+  act(() => result.current.navigate('projects')); vi.mocked(window.scrollTo).mockClear();
+  y = 1704; history.replaceState({ ...history.state, sectionScrollY: 3700 }, '', '#skills');
+  act(() => { window.dispatchEvent(new PopStateEvent('popstate')); window.dispatchEvent(new HashChangeEvent('hashchange')); });
+  expect(window.scrollTo).toHaveBeenCalledTimes(1);
+  expect(window.scrollTo).toHaveBeenCalledWith({ top: 3700, behavior: 'auto' });
+  expect(result.current.active).toBe('skills'); expect(result.current.navigationTarget).toBeNull();
+  history.replaceState({ ...history.state, sectionScrollY: 9000 }, '', '#about');
+  act(() => window.dispatchEvent(new HashChangeEvent('hashchange')));
+  expect(window.scrollTo).toHaveBeenLastCalledWith({ top: 5200, behavior: 'auto' }); expect(result.current.active).toBe('about');
+});
+it('reload and back-forward restore a saved position on mount; a fresh navigation still goes to the section', () => {
+  history.replaceState({ ...history.state, sectionScrollY: 2500 }, '', '#skills');
+  const entries = vi.spyOn(performance, 'getEntriesByType').mockReturnValue([{ type: 'reload' } as PerformanceNavigationTiming]);
+  const reload = renderHook(() => useSectionNav(options()));
+  expect(window.scrollTo).toHaveBeenCalledWith({ top: 2500, behavior: 'auto' }); expect(reload.result.current.active).toBe('skills');
+  reload.unmount(); vi.mocked(window.scrollTo).mockClear();
+  entries.mockReturnValue([{ type: 'navigate' } as PerformanceNavigationTiming]);
+  renderHook(() => useSectionNav(options()));
+  expect(window.scrollTo).toHaveBeenCalledWith({ top: 3504, behavior: 'auto' });
+});
 it('only scrolling input cancels; Tab and editing keys do not cancel', () => {
   const { result } = renderHook(() => useSectionNav(options()));
   act(() => result.current.navigate('projects'));

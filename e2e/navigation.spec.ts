@@ -8,16 +8,30 @@ test('history returns to the previous reading destination @smoke', async ({ page
   await page.goBack(); await expectActive(page, 'about');
   await page.goForward(); await expectActive(page, 'projects');
 });
-test('back keeps the reading position the browser restores @smoke', async ({ page, browserName }) => {
-  // Chromium은 같은 문서 Back에서 저장된 위치 대신 해시 대상 요소로 스크롤한다(훅 없는 페이지에서도 같다).
-  test.skip(browserName === 'chromium', 'Chromium scrolls to the fragment target instead of restoring');
+test('back and forward keep the reading position of each entry @smoke', async ({ page }) => {
   await enter(page, 'experience');
   await page.locator('[data-section="experience"]').evaluate(el => window.scrollTo(0, el.getBoundingClientRect().top + scrollY - 76 + 150));
   await waitFrames(page, 5); await expectActive(page, 'experience');
   const before = await page.evaluate(() => window.scrollY);
   await navButton(page, 'Skills').click(); await expectActive(page, 'skills');
+  await page.locator('[data-section="skills"]').evaluate(el => window.scrollTo(0, el.getBoundingClientRect().top + scrollY - 76 + 120));
+  // 읽기를 멈춘 뒤 저장된 위치가 이 항목이 떠날 때의 자리다.
+  await expect.poll(() => page.evaluate(() => history.state?.sectionScrollY === window.scrollY)).toBe(true);
+  const left = await page.evaluate(() => window.scrollY);
   await page.goBack(); await expectActive(page, 'experience'); await waitFrames(page, 10);
-  expect(await page.evaluate(() => window.scrollY)).toBe(before);
+  expect(Math.abs(await page.evaluate(() => window.scrollY) - before)).toBeLessThanOrEqual(2);
+  await page.goForward(); await expectActive(page, 'skills'); await waitFrames(page, 10);
+  expect(Math.abs(await page.evaluate(() => window.scrollY) - left)).toBeLessThanOrEqual(2);
+});
+test('reload keeps the reading position @smoke', async ({ page }) => {
+  await enter(page, 'experience');
+  await page.locator('[data-section="experience"]').evaluate(el => window.scrollTo(0, el.getBoundingClientRect().top + scrollY - 76 + 150));
+  await waitFrames(page, 5); await expectActive(page, 'experience');
+  const before = await page.evaluate(() => window.scrollY);
+  await page.reload();
+  await expect(page.locator('main')).toHaveAttribute('data-route-resolved', 'true', { timeout: 20_000 });
+  await waitFrames(page, 10);
+  expect(Math.abs(await page.evaluate(() => window.scrollY) - before)).toBeLessThanOrEqual(2);
 });
 test('every section anchor clears the measured header by 16px for native fragment jumps', async ({ page }) => {
   await enter(page, 'overview');
