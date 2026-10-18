@@ -98,6 +98,25 @@ describe('check-bundle resolver', { timeout: 30_000 }, () => {
     }
   });
 
+  it('이름이 우연히 8자리 숫자인 해시 chunk도 edge에서 탈락시키지 않는다', async () => {
+    const root = await copyFixture();
+
+    try {
+      await writeFile(path.join(root, 'static/chunks/12345678.zzz999.js'), 'window.__bundle_digit_named__ = true;');
+      const manifest = await readLoadableManifest(root);
+      const key = 'components\\sections\\ProjectsSection\\index.tsx -> @/components/blocks/PreviewMorph';
+      (manifest[key] as { files: string[] }).files.push('static/chunks/12345678.zzz999.js');
+      await writeFile(path.join(root, 'react-loadable-manifest.json'), JSON.stringify(manifest));
+
+      const metrics = resolveBundleMetrics(root);
+      expect(metrics.deferred.targets).toContain('@/components/blocks/PreviewMorph');
+      expect(metrics.deferred.files).toContain('static/chunks/12345678.zzz999.js');
+      expect(metrics.deferred.files).toContain('static/chunks/777.ddd444.js');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('지연 chunk 안의 중첩 import도 홈 지연 자산으로 센다', async () => {
     const root = await copyFixture();
 

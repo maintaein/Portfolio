@@ -155,7 +155,8 @@ function isHomeEdge(call, value) {
     value.id === call.moduleId &&
     Array.isArray(value.files) &&
     value.files.every((file) => {
-      const chunkId = /(?:^|\/)(\d+)\.[^/]*\.js$/.exec(normalizeImporter(file))?.[1];
+      // Next의 라이브러리 분할 chunk 이름은 8자리 hex라 우연히 전부 숫자일 수 있다. 숫자 chunk id는 7자리 이하만 본다.
+      const chunkId = /(?:^|\/)(\d{1,7})\.[^/]*\.js$/.exec(normalizeImporter(file))?.[1];
       return chunkId === undefined || call.chunkIds.includes(Number(chunkId));
     })
   );
