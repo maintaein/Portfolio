@@ -415,8 +415,8 @@
 .document-section { position: relative; min-height: calc(100svh - 76px); scroll-margin-top: 92px; }
 .document-section > section { min-height: calc(100svh - 76px); scroll-margin-top: 92px; }
 .portfolio-hero { display: flex; flex-direction: column; justify-content: center; padding: 4rem max(1.5rem, 8vw); }
-.portfolio-hero p { font-size: clamp(1.5rem, 4vw, 3rem); line-height: 1.6; }
-.portfolio-hero h1 { max-width: 44rem; margin-top: 2rem; font-size: clamp(1.25rem, 2.5vw, 2rem); line-height: 1.6; }
+.portfolio-hero p { font-size: clamp(1.5rem, 4vw, 3rem); line-height: 1.6; word-break: keep-all; }
+.portfolio-hero h1 { max-width: 44rem; margin-top: 2rem; font-size: clamp(1.25rem, 2.5vw, 2rem); line-height: 1.6; word-break: keep-all; }
 .site-footer { min-height: 120px; padding-bottom: max(2rem, env(safe-area-inset-bottom, 0px)); }
 @media (min-width: 1024px) {
   .about-document { height: max(760px, calc(100svh - 76px)); }

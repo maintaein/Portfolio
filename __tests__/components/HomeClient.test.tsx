@@ -17,6 +17,7 @@ it('renders all section bodies in document order without single-active hiding or
   expect([...container.querySelectorAll('[data-section]')].map(el => el.getAttribute('data-section'))).toEqual(['overview', ...HOME_SECTION_CONFIG.map(section => section.id)]);
   expect(container.querySelector('[data-section][inert], [data-section][aria-hidden="true"]')).toBeNull();
   expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument(); expect(screen.queryByRole('button', { name: 'START' })).toBeNull();
+  expect(container.querySelector('#overview [aria-hidden="true"][style*="/icons-mono/react.svg"]')).not.toBeNull();
   fireEvent.pointerDown(screen.getByRole('main'), { clientX: 300, pointerId: 1 }); fireEvent.pointerUp(screen.getByRole('main'), { clientX: 20, pointerId: 1 });
   expect(location.hash).toBe('');
 });
@@ -26,5 +27,6 @@ it.each(['obscured', 'pageVisible', 'reduced'] as const)('pauses the flow for %s
 it('only the modal obscures the readable main and navigation', () => {
   flags.obscured = true; const { container } = render(<HomeClient />);
   expect(screen.getByRole('main')).toHaveAttribute('inert'); expect(container.querySelector('nav')!.parentElement).toHaveAttribute('inert');
+  expect(screen.getByText('Contacts').parentElement).toHaveAttribute('inert');
   expect(container.querySelectorAll('[data-section][inert]')).toHaveLength(0);
 });
