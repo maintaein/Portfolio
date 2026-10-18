@@ -182,6 +182,12 @@ function resolveDeferredAssets(buildDir, firstLoadAssets) {
   while (pending.length > 0) {
     const source = readFileSync(path.join(buildDir, pending.pop()), 'utf8');
     for (const call of findDynamicImportCalls(source)) {
+      // 모듈 id가 같은 edge가 있는데 하나도 홈 호출의 chunk 목록과 맞지 않으면 측정이 조용히 빠지므로 실패시킨다.
+      const sameModule = edges.filter((edge) => edge.value.id === call.moduleId);
+      if (sameModule.length > 0 && !sameModule.some((edge) => isHomeEdge(call, edge.value))) {
+        const names = sameModule.map((edge) => `${edge.importer} -> ${edge.specifier}`).join(', ');
+        throw new Error(`Home dynamic import of module ${call.moduleId} matches no react-loadable edge by chunk list: ${names}`);
+      }
       for (const edge of edges) {
         if (homeEdges.has(edge) || !isHomeEdge(call, edge.value)) continue;
         homeEdges.add(edge);

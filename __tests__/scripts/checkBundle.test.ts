@@ -117,6 +117,26 @@ describe('check-bundle resolver', { timeout: 30_000 }, () => {
     }
   });
 
+  it('홈 호출의 chunk 목록에 없는 숫자 chunk를 edge가 요구하면 조용히 빼지 않고 실패한다', async () => {
+    const root = await copyFixture();
+
+    try {
+      // 홈 호출은 r.e(202), r.e(462)만 부르는데 edge는 부모가 미리 올리는 chunk 999도 요구한다.
+      await writeFile(path.join(root, 'static/chunks/999.iii999.js'), 'window.__bundle_parent_loaded__ = true;');
+      const manifest = await readLoadableManifest(root);
+      const key = 'components\\sections\\ProjectsSection\\index.tsx -> @/components/blocks/PreviewMorph';
+      (manifest[key] as { files: string[] }).files.push('static/chunks/999.iii999.js');
+      await writeFile(path.join(root, 'react-loadable-manifest.json'), JSON.stringify(manifest));
+
+      const result = runMeasure(root);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toMatch(/module 3462/);
+      expect(result.stderr).toMatch(/PreviewMorph/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('지연 chunk 안의 중첩 import도 홈 지연 자산으로 센다', async () => {
     const root = await copyFixture();
 
