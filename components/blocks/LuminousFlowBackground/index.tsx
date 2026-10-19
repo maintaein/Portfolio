@@ -325,6 +325,7 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
         else glowGroup?.removeAttribute('clip-path');
         // The source haze fills the first screen, which the cut clears by about .2 on the measured pages.
         // Fading in only after .5 keeps it behind the strands; at 1 it is untouched.
+        // shortcut: assumes the strand cut leaves the first screen before reveal .5 (fails on documents shorter than about two screens), derive the threshold from the cut once such a page uses this background.
         if (haze) haze.style.opacity = reveal < 1 ? String(Math.max(0, reveal * 2 - 1)) : '';
       }
 
@@ -530,7 +531,7 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
     } as CSSProperties} aria-hidden="true">
       <div ref={hazeRef} className={styles.sourceHaze} />
       {/* Paths and stops are written from the measured geometry; React owns only the empty shells. */}
-      <svg className={`${styles.flow} ${styles.atmosphere}`} focusable="false">
+      <svg className={styles.atmosphere} focusable="false">
         <defs>
           <linearGradient id={`${id}-envelope`} x1="0" y1="0" x2="0" gradientUnits="userSpaceOnUse" />
           <clipPath id={`${id}-reveal`}><path /></clipPath>
