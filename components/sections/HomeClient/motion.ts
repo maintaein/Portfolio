@@ -19,9 +19,11 @@ const TURN_END = .85;
 const SETTLE_SHARE = .08;
 const TILT_DEG = 8;
 const SHIFT_PX = 12;
-// Hero에서 정면을 보기 전의 기울기.
-const REST_X_DEG = 6;
-const REST_Y_DEG = -16;
+// Hero에서는 원자 궤도처럼 눕혀 보인다. 평면 캔버스라 크게 눕혀야 기울기가 읽힌다(cos 56° = .56).
+const REST_X_DEG = 56;
+const REST_Y_DEG = -24;
+// 85%에 남는 기울기 비율. 정면에 가깝게 다가간 뒤 마지막 15%에 정면이 된다.
+const NEAR_FRONT = .12;
 const PERSPECTIVE_PX = 900;
 
 type Box = { x: number; y: number; w: number; h: number };
@@ -113,15 +115,17 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, logo, 
       report('none');
       return;
     }
-    const turned = turnEase(span(NAME_END, TURN_END));
-    const travel = (1 - SETTLE_SHARE) * turned + SETTLE_SHARE * settleEase(span(TURN_END, 1));
+    const settled = settleEase(span(TURN_END, 1));
+    // 20%부터 About 로고 자리로 향하고, 50–85%에 정면으로 돌며 다가가 마지막 15%에 내려앉는다.
+    const travel = (1 - SETTLE_SHARE) * turnEase(span(NAME_START, TURN_END)) + SETTLE_SHARE * settled;
+    const lean = (1 - (1 - NEAR_FRONT) * turnEase(span(NAME_END, TURN_END))) * (1 - settled);
     const { hero, about, origin } = m;
-    // 50%까지는 화면에 붙어 있고 그 뒤 About 앵커로 옮겨 간다. 문서 좌표라 경계 밖에서는 앵커와 함께 흐른다.
+    // 20%까지는 화면에 붙어 있다. 문서 좌표라 경계 밖에서는 앵커와 함께 흐른다.
     const pinned = hero.y + clamp(scroll, m.start, m.end) - m.start;
     const x = lerp(hero.x + hero.w / 2, about.x + about.w / 2, travel);
     const y = lerp(pinned + hero.h / 2, about.y + about.h / 2, travel);
     const scale = lerp(hero.w, about.w, travel) / (about.w || 1);
-    logoHost.style.transform = `translate3d(${x - about.w / 2 - origin.x}px, ${y - about.h / 2 - origin.y}px, 0) perspective(${PERSPECTIVE_PX}px) rotateX(${REST_X_DEG * (1 - turned)}deg) rotateY(${REST_Y_DEG * (1 - turned)}deg) scale(${scale})`;
+    logoHost.style.transform = `translate3d(${x - about.w / 2 - origin.x}px, ${y - about.h / 2 - origin.y}px, 0) perspective(${PERSPECTIVE_PX}px) rotateX(${REST_X_DEG * lean}deg) rotateY(${REST_Y_DEG * lean}deg) scale(${scale})`;
     Object.assign(centre, { x, y: y - scroll, r: about.w * scale / 2 });
 
     const nextWeight = 1 - span(0, POINTER_END);

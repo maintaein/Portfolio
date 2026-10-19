@@ -43,7 +43,8 @@ function build() {
   place(hero, { x: 0, y: 76, w: 1440, h: 824 });
   place(about, { x: 0, y: 900, w: 1440, h: 900 });
   place(heroName, { x: 600, y: 200, w: 300, h: 44 });
-  place(heroObject, { x: 120, y: 300, w: 360, h: 360 });
+  // D5-A: 1024px부터 오브젝트는 문장 오른쪽에 있다.
+  place(heroObject, { x: 960, y: 300, w: 360, h: 360 });
   place(aboutLogo, { x: 140, y: 1100, w: 360, h: 360 });
   place(host, { x: 0, y: 0, w: 360, h: 360 }, root);
 }
@@ -76,8 +77,10 @@ describe('Hero→About 경계', () => {
     create();
     // 이름: 왼쪽 끝을 맞추고 세로 가운데를 맞춘다. (600-24, 222-38)
     expect(name()).toEqual([576, 184]);
-    expect(logo()).toMatchObject({ x: 120, y: 300, scale: 1 });
-    expect(logo().ry).toBeLessThan(0);
+    expect(logo()).toMatchObject({ x: 960, y: 300, scale: 1 });
+    // 원자 궤도처럼 눕힌 자세. 평면 캔버스라 눈에 띄려면 크게 눕혀야 한다.
+    expect(logo().rx).toBeGreaterThanOrEqual(45);
+    expect(Math.abs(logo().ry)).toBeGreaterThanOrEqual(15);
     expect(owners).toEqual(['hero']);
   });
 
@@ -93,18 +96,21 @@ describe('Hero→About 경계', () => {
     expect(owners).toEqual(['hero', 'boundary']);
   });
 
-  it('50%까지 로고는 화면에 붙어 있고 50–85%에 정면으로 돌며 About에 다가가 100%에 BASICS 자리에 앉는다', () => {
+  it('20%까지 로고는 화면에 붙어 있고 20%부터 About으로 향해 50–85%에 정면 가까이 돌며 100%에 BASICS 자리에 정면으로 앉는다', () => {
     create();
+    const rest = logo();
+    scrollAt(808 * .2);
+    // 문서 좌표 300+161.6: 화면에서는 처음 자리 그대로다.
+    expect(logo().x).toBe(960); expect(logo().y).toBeCloseTo(461.6, 1);
     scrollAt(404);
-    // 문서 좌표 300+404: 화면에서는 처음 자리 그대로다.
-    expect(logo()).toMatchObject({ x: 120, y: 704 });
-    const rest = logo().ry;
+    expect(logo().x).toBeLessThan(960); expect(logo().x).toBeGreaterThan(140);
+    expect(logo().rx).toBeCloseTo(rest.rx, 5);
     scrollAt(808 * .85);
-    expect(logo().ry).toBeCloseTo(0, 5);
+    // 정면에 가깝다: 처음 기울기의 12%.
+    expect(logo().rx).toBeCloseTo(rest.rx * .12, 3); expect(logo().ry).toBeCloseTo(rest.ry * .12, 3);
     expect(logo().y).toBeGreaterThan(1050); expect(logo().y).toBeLessThan(1100);
     scrollAt(808);
     expect(logo()).toMatchObject({ x: 140, y: 1100, rx: 0, ry: 0, scale: 1 });
-    expect(rest).toBeLessThan(0);
     expect(owners).toEqual(['hero', 'boundary', 'about']);
   });
 
@@ -113,10 +119,10 @@ describe('Hero→About 경계', () => {
     scrollAt(2400);
     expect(logo()).toMatchObject({ x: 140, y: 1100 });
     expect(wordmark.style.transform).toBe('');
-    scrollAt(404); expect(logo()).toMatchObject({ x: 120, y: 704 });
+    scrollAt(100); expect(logo()).toMatchObject({ x: 960, y: 400 });
     scrollAt(0);
     expect(name()).toEqual([576, 184]);
-    expect(logo()).toMatchObject({ x: 120, y: 300 });
+    expect(logo()).toMatchObject({ x: 960, y: 300 });
     expect(owners).toEqual(['hero', 'about', 'boundary', 'hero']);
   });
 
@@ -126,7 +132,7 @@ describe('Hero→About 경계', () => {
     create();
     scrollAt(200);
     expect(name()).toEqual([576, -16]);
-    expect(logo()).toMatchObject({ x: 120, y: 300 });
+    expect(logo()).toMatchObject({ x: 960, y: 300 });
     expect(owners).toEqual(['hero']);
     // 시작 400, 도착 1208.
     scrollAt(400 + 808 * .5);
@@ -199,20 +205,20 @@ describe('pointer 반응', () => {
   it('host 로컬 좌표로 바꾼 포인터에 안쪽만 ±8°·12px 기울고 문장은 그대로다', () => {
     create();
     const outer = host.style.transform;
-    // host 가운데(300, 480)에서 오른쪽 끝·위쪽 끝을 넘어간 자리.
-    move(900, 0, 'mouse');
+    // host 가운데(1140, 480)에서 오른쪽 끝·위쪽 끝을 넘어간 자리.
+    move(1500, 0, 'mouse');
     settle();
     expect(tilt()).toMatchObject({ rx: 8, ry: 8, x: 12, y: -12 });
     expect(host.style.transform).toBe(outer);
     expect(heroName.style.transform).toBe('');
-    move(390, 480, 'mouse');
+    move(1230, 480, 'mouse');
     settle();
     expect(tilt().ry).toBeCloseTo(4, 3);
   });
 
   it('0–20% 사이에 포인터 반응이 잦아들어 20%에는 남지 않는다', () => {
     create();
-    move(900, 0, 'mouse');
+    move(1500, 0, 'mouse');
     settle();
     scrollAt(808 * .1); settle();
     expect(tilt().ry).toBeCloseTo(4, 3);
@@ -222,7 +228,7 @@ describe('pointer 반응', () => {
 
   it('터치는 기울이지 않는다', () => {
     create();
-    move(900, 0, 'touch');
+    move(1500, 0, 'touch');
     settle();
     expect(tilt().ry).toBe(0);
   });

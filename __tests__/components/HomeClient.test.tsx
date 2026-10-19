@@ -155,3 +155,19 @@ it('the shared logo host lives outside clipping ancestors and can shrink with it
   expect(host.parentElement).toBe(screen.getByRole('main'));
   expect(host.closest('#about, .about-electric')).toBeNull();
 });
+
+// D5-A: 1024px부터 왼쪽 문장·오른쪽 오브젝트, 그 아래는 이름·문장·오브젝트 순서. 크기는 소개 문장(h1)에 걸고
+// 낮은 화면에서는 오브젝트가 먼저 준다. 로고는 날아가는 동안 chapter 단어 줄(z 3) 아래로 지나간다.
+it('lays the Hero out as name, sentence, then object, and the object shrinks first on low screens', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync('styles/design-tokens.css', 'utf8');
+  const { container } = render(<HomeClient />);
+  const order = [...container.querySelectorAll('#overview [data-motion-anchor], #overview h1')].map(el => el.getAttribute('data-motion-anchor') ?? el.tagName);
+  expect(order).toEqual(['hero-name', 'H1', 'hero-object']);
+  expect(css).toMatch(/\.portfolio-hero h1 \{[^}]*font-size: var\(--font-size-t1\)/);
+  expect(css).toMatch(/@media \(min-width: 1024px\) \{[^@]*\.portfolio-hero \{[^}]*flex-direction: row;[^@]*\.portfolio-hero h1 \{ font-size: var\(--font-size-d3\)/);
+  expect(css).toMatch(/@media \(min-width: 1536px\) \{[^@]*\.portfolio-hero h1 \{ font-size: var\(--font-size-d2\)/);
+  expect(css).toMatch(/\.hero-object \{[^}]*width: min\([^}]*svh\)/);
+  expect(css).not.toMatch(/\.portfolio-hero (p|h1) \{[^}]*svh/);
+  expect(css).toMatch(/\.logo-host \{[^}]*z-index: 2;/);
+});

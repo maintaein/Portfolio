@@ -94,17 +94,18 @@ export default function HomeClient() {
         data-route-resolved={routeResolved} data-motion-ready={motionReady} data-reduced-motion={reducedMotion}
         data-navigation-target={navigationTarget ?? undefined} data-active-section={active}>
         <section id="overview" data-section="overview" role="region" aria-label="Overview" tabIndex={-1} className="document-section portfolio-hero">
-          {/* 공유 로고가 앉는 자리. GL이 없거나 준비 전, 모션 감소에서는 정적 실루엣이 대신한다. */}
-          <div data-motion-anchor="hero-object" aria-hidden="true" className="hero-object">
-            <div className={`about-electric-static ${glLogo ? 'about-electric-static-charging' : ''}`}>
-              <div className="about-electric-static-shape" style={{ maskImage: `url(${LOGO_SRCS[0]})`, WebkitMaskImage: `url(${LOGO_SRCS[0]})` }} />
-            </div>
-          </div>
           <div className="hero-copy">
             {/* 이름 버튼은 nav에 하나뿐이다. 여기는 경계가 그 버튼을 옮겨 오는 빈 자리다. */}
             <div data-motion-anchor="hero-name" aria-hidden="true" className="h-11" />
             <p>안녕하세요.</p><p>SW개발자.</p><p>김태인입니다.</p><p>잘부탁드립니다.</p>
             <h1>탄탄한 기본기를 바탕으로 꾸준히 개선하고, 협업으로 함께 성장하는 개발자.</h1>
+          </div>
+          {/* 공유 로고가 앉는 자리. GL이 없거나 준비 전, 모션 감소에서는 정적 실루엣이 대신한다.
+              D5-A: 1024px부터 문장 오른쪽, 그 아래는 이름·문장 다음이다. */}
+          <div data-motion-anchor="hero-object" aria-hidden="true" className="hero-object">
+            <div className={`about-electric-static ${glLogo ? 'about-electric-static-charging' : ''}`}>
+              <div className="about-electric-static-shape" style={{ maskImage: `url(${LOGO_SRCS[0]})`, WebkitMaskImage: `url(${LOGO_SRCS[0]})` }} />
+            </div>
           </div>
         </section>
         {HOME_SECTION_CONFIG.map(({ id, label }) => {
