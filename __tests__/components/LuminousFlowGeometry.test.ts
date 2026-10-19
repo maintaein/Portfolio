@@ -39,6 +39,17 @@ describe('buildFlowGeometry', () => {
     });
   });
 
+  it('흐름의 끝은 좁은 화면에서도 화면 왼쪽 가장자리 밖에서 끝난다', () => {
+    [[390, 4927], [390, 5739], [390, 15000], [768, 5500], [1440, 4927], [1440, 6120]].forEach(([width, height]) => {
+      const { center, strands } = buildFlowGeometry(width, height);
+      const unit = width / 492;
+      const end = center.at(-1)!;
+      // 글로 띠(중심에서 25 단위 + 반폭)와 가장 굵은 획의 둥근 끝(13 단위의 절반)까지 화면 밖이어야 한다.
+      expect(end.x + 25 * unit + end.halfWidth).toBeLessThan(0);
+      strands.flat().forEach(pose => expect(pose.at(-1)!.x + 6.5 * unit).toBeLessThan(0));
+    });
+  });
+
   it('0 크기 입력에서도 NaN이나 무한값을 만들지 않는다', () => {
     [[0, 0], [0, 4000], [1440, 0]].forEach(([width, height]) => {
       expect(numbers(buildFlowGeometry(width, height)).every(Number.isFinite)).toBe(true);

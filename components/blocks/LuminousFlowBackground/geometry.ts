@@ -12,7 +12,8 @@ const anchors = [
   [32, 710, 3], [202, 818, 72], [348, 970, 26], [468, 1130, 65],
   [453, 1230, 4], [249, 1350, 79], [38, 1493, 3], [214, 1602, 58],
   [424, 1715, 24], [463, 1792, 47], [294, 1870, 54], [110, 1860, 20],
-  [-40, 1925, 38],
+  // The last step continues the same heading, so on a tall narrow document the band end, spread sideways, still lies past the left edge.
+  [-40, 1925, 38], [-190, 1990, 38],
 ];
 const constrictions = [-3, 3, 8, 12, 14, 17, 24];
 
