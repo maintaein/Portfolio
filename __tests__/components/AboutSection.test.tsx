@@ -487,6 +487,25 @@ describe('AboutSection', () => {
       expect(focusCss()).toMatch(/\.word \{[^}]*min-height: 44px;/);
     });
 
+    // 리뷰 발견 2: 비활성 단어도 누를 수 있는 컨트롤이다. 시안의 .35 불투명·흐림은 검정 위 2:1이었다.
+    // 바닥값: 보조 텍스트 토큰, 불투명도 .75 이상, 흐림 없음. 측정은 probe/labels-2a.mjs.
+    it('비활성 chapter 단어는 읽을 수 있는 바닥값을 지키고 포커스하면 밝아진다', () => {
+      const css = focusCss();
+      const label = css.match(/\.label \{([^}]*)\}/)?.[1] ?? '';
+      expect(label).toMatch(/color: var\(--color-text-secondary\);/);
+      expect(Number(label.match(/opacity: ([\d.]+);/)?.[1] ?? 1)).toBeGreaterThanOrEqual(0.75);
+      expect(label).not.toMatch(/blur\(/);
+      expect(css).toMatch(/\.word:focus-visible \.label \{[^}]*color: var\(--color-text-primary\);/);
+      // 단어 줄 뒤 판이 광선을 눌러 바닥값이 줄 전체에서 유지된다.
+      expect(css).toMatch(/\.chapters::before \{[^}]*background: linear-gradient\(/);
+    });
+
+    it('chapter 단어는 사이트 글꼴과 디자인 토큰을 쓴다', () => {
+      const css = focusCss();
+      expect(css).toMatch(/\.word \{[^}]*font-family: inherit;/);
+      expect(css).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+    });
+
     // JS가 data-static을 붙이기 전에 해시 이동이 위치를 재므로 배치는 CSS가 첫 페인트부터 맡는다.
     it('정적 원문 배치는 JS와 같은 미디어 조건에서 첫 페인트부터 쌓인다', () => {
       expect(readingCss()).toMatch(/@media \(prefers-reduced-motion: reduce\), \(max-height: 640px\) \{[^@]*\.stage \{ display: block; height: auto;[^@]*\.panelViewport \{ display: block; overflow: visible;/);
@@ -576,6 +595,23 @@ describe('AboutSection', () => {
       const { container } = mount(START);
       send([[0, 200], [16, 85], [32, 77], [64, 142.6]], 20_000);
       send(Array.from({ length: 76 }, (_, i) => [80 + i * 16, Math.max(1, 66 * 0.95 ** i)]), 20_000);
+      expect(chapter(container)).toBe('QUALITY');
+    });
+
+    // 리뷰 발견 1: 마우스 노치는 크기가 늘 같고 간격만 30-160ms로 흔들린다. 간격으로 나눈 속도로 재면 그 흔들림이 새 stroke가 됐다.
+    const notches = [0, 45, 60, 110, 40, 35, 90, 150, 50, 40, 70, 120, 45, 38, 85, 140, 55, 42, 95, 60, 35, 120, 45, 90, 40, 130, 50, 35, 80, 160, 30, 75, 110, 45];
+    const spin = (base: number) => { let at = base; for (const gap of notches) { at += gap; wheel(100, at); } return at - base; };
+
+    it('불규칙한 마우스 노치를 2초 넘게 굴려 들어와도 BASICS에 선다', () => {
+      const { container } = mount(900);
+      expect(spin(20_000)).toBeGreaterThan(2000);
+      expect(isLocked(container)).toBe(true);
+      expect(chapter(container)).toBe('BASICS');
+    });
+
+    it('잠긴 뒤 불규칙한 마우스 노치를 2초 넘게 굴려도 한 chapter만 간다', () => {
+      const { container } = mount(START);
+      spin(20_000);
       expect(chapter(container)).toBe('QUALITY');
     });
 
@@ -670,6 +706,30 @@ describe('AboutSection', () => {
       expect(container.querySelector('[data-static]')).not.toBeNull();
       expect(container.querySelectorAll('[data-detail][inert]')).toHaveLength(0);
       expect(wheel(100, 20_000).defaultPrevented).toBe(false);
+      expect(window.scrollTo).not.toHaveBeenCalled();
+    });
+
+    // 리뷰 발견 3: 정적 모드에 들어가기 전의 잠금이 남아 있다가 읽기 모드로 돌아올 때 About으로 끌어왔다.
+    it('정적 모드를 지나 돌아와도 About 밖의 읽기 위치를 끌어오지 않는다', () => {
+      let short = false;
+      const listeners: (() => void)[] = [];
+      vi.stubGlobal('matchMedia', vi.fn().mockImplementation((media: string) => ({
+        get matches() { return media === '(max-height: 640px)' ? short : media === '(min-width: 1024px)'; }, media,
+        addEventListener: (_: string, listener: () => void) => { if (media === '(max-height: 640px)') listeners.push(listener); }, removeEventListener: () => {},
+      })));
+      const flip = (next: boolean) => { short = next; act(() => listeners.forEach((listener) => listener())); };
+      const { container } = mount(START);
+      expect(isLocked(container)).toBe(true);
+      flip(true);
+      scrollAt(START + 2000, 30_000);
+      flip(false);
+      expect(window.scrollTo).not.toHaveBeenCalled();
+      expect(isLocked(container)).toBe(false);
+      // 제자리에 머문 채 돌아오면 다시 잠근다.
+      scrollAt(START, 31_000);
+      flip(true);
+      flip(false);
+      expect(isLocked(container)).toBe(true);
       expect(window.scrollTo).not.toHaveBeenCalled();
     });
   });

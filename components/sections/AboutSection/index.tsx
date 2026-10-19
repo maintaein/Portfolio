@@ -113,7 +113,7 @@ export default function AboutSection({ ref, onChapterChange, navigationPending }
     let pendingGesture = false;
     let lastWheelTime = -Infinity;
     let lastWheelDelta = 0;
-    let lastMagnitude = 0;
+    let lastWheelGap = Infinity;
     let wheelPeak = 0;
     let wheelTail = false;
     let touchY = 0;
@@ -131,12 +131,16 @@ export default function AboutSection({ ref, onChapterChange, navigationPending }
     };
     const choose = (index: number) => { selected.current = index; setActiveIndex(index); };
     const measure = () => {
+      const wasDisabled = disabled;
       disabled = reducedMotion || short.matches;
-      setPhase(phase);
       setPlain(disabled);
       // 헤더 아래 여백은 해시 이동과 같은 scroll-margin-top을 쓴다.
       start = Math.round(window.scrollY + element.getBoundingClientRect().top - (parseFloat(getComputedStyle(element).scrollMarginTop) || 0));
-      if (phase === 'locked' && !disabled) window.scrollTo({ top: start, behavior: 'instant' });
+      // 정적 모드는 잠금을 들고 가지 않는다. 그동안 읽은 위치를 돌아올 때 끌어오지 않도록 위치로 앞뒤를 정한다.
+      if (disabled && phase === 'locked') phase = window.scrollY > start ? 'after' : 'before';
+      setPhase(phase);
+      if (wasDisabled && !disabled) scroll();
+      else if (phase === 'locked' && !disabled) window.scrollTo({ top: start, behavior: 'instant' });
     };
     const lock = (fromBelow: boolean, time: number) => {
       setPhase('locked'); lastInput = time; lastStep = time;
@@ -172,12 +176,15 @@ export default function AboutSection({ ref, onChapterChange, navigationPending }
       if (event.ctrlKey || editable(event.target)) return false;
       const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1);
       if (delta === 0) return false;
-      const idle = event.timeStamp - lastWheelTime > GESTURE_IDLE_MS;
-      // 바쁜 메인 스레드는 wheel 여럿을 하나로 합쳐 크기를 키운다. 16ms당 속도로 재야 합쳐진 관성이 새 stroke로 보이지 않는다.
-      const magnitude = Math.abs(delta) * 16 / (idle ? 16 : Math.max(16, event.timeStamp - lastWheelTime));
+      const magnitude = Math.abs(delta);
+      const gap = event.timeStamp - lastWheelTime;
+      const idle = gap > GESTURE_IDLE_MS;
+      // 바쁜 메인 스레드는 wheel 둘을 하나로 합쳐 간격과 크기를 함께 키운다. 앞 간격보다 길어진 만큼만
+      // 줄여 비교하면 합쳐진 관성은 새 stroke가 아니고, 크기가 늘 같은 마우스 노치는 간격이 흔들려도 그대로다.
+      const comparable = magnitude * (idle ? 1 : Math.min(1, lastWheelGap / gap));
       const reversed = delta * lastWheelDelta < 0;
       // 트랙패드는 앞 stroke의 관성이 끝나기 전에 새 stroke를 시작할 수 있다.
-      const renewed = wheelTail && magnitude >= 4 && magnitude >= lastMagnitude * 1.8;
+      const renewed = wheelTail && comparable >= 4 && comparable >= Math.abs(lastWheelDelta) * 1.8;
       if (idle || reversed || renewed) {
         wheelPeak = magnitude;
         wheelTail = false;
@@ -187,7 +194,7 @@ export default function AboutSection({ ref, onChapterChange, navigationPending }
       }
       lastWheelTime = event.timeStamp;
       lastWheelDelta = delta;
-      lastMagnitude = magnitude;
+      lastWheelGap = gap;
       return input(delta, event.timeStamp, reversed || renewed);
     };
     const wheel = (event: WheelEvent) => { if (phase !== 'locked') wheelInput(event); };
