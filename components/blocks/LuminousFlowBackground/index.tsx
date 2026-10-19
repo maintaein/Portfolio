@@ -323,8 +323,9 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
         revealShape?.setAttribute('d', outline ?? '');
         if (outline) glowGroup?.setAttribute('clip-path', `url(#${id}-reveal)`);
         else glowGroup?.removeAttribute('clip-path');
-        // The source haze is glow too: hidden at 0, untouched at 1.
-        if (haze) haze.style.opacity = reveal < 1 ? String(reveal) : '';
+        // The source haze fills the first screen, which the cut clears by about .2 on the measured pages.
+        // Fading in only after .5 keeps it behind the strands; at 1 it is untouched.
+        if (haze) haze.style.opacity = reveal < 1 ? String(Math.max(0, reveal * 2 - 1)) : '';
       }
 
       if (atmosphereTexture && cut) {

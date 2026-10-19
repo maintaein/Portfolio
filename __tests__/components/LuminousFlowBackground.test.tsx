@@ -141,6 +141,9 @@ it('reveal은 공통 중심선의 누적 길이로 줄기·입자·광휘를 함
   expect(half.arcs).toBeGreaterThan(0); expect(half.arcs).toBeLessThan(full.arcs);
   const clipId = envelope.getAttribute('clip-path')!.match(/^url\(#(.+)\)$/)![1];
   expect(container.querySelector(`[id="${clipId}"] path`)!.getAttribute('d')).toMatch(/^M .+ Z$/);
+  // The haze waits until the cut is past the first screen, then fades in up to reveal 1.
+  expect(haze.style.opacity).toBe('0');
+  act(() => ref.current!.setRevealProgress(.75)); tick();
   expect(haze.style.opacity).toBe('0.5');
 
   act(() => ref.current!.setRevealProgress(-1)); tick();
