@@ -119,6 +119,10 @@ it('reveal은 공통 중심선의 누적 길이로 줄기·입자·광휘를 함
   tick(); loadImages(); tick();
   const [shape] = shapes();
   const envelope = container.querySelector('[data-flow-envelope]')!;
+  // The source haze is the root's first child; it is Luminous glow, so it follows the reveal too.
+  const haze = container.firstElementChild!.firstElementChild as HTMLElement;
+  const canvas = container.querySelector('canvas');
+  expect(haze.style.opacity).toBe('');
   // The first 28 paths of a frame are the strands; the combined rim path follows them.
   const strands = (frame: DrawnFrame) => frame.paths.slice(0, 28).map(segments => segments.length);
   const full = drawn.at(-1)!;
@@ -137,18 +141,24 @@ it('reveal은 공통 중심선의 누적 길이로 줄기·입자·광휘를 함
   expect(half.arcs).toBeGreaterThan(0); expect(half.arcs).toBeLessThan(full.arcs);
   const clipId = envelope.getAttribute('clip-path')!.match(/^url\(#(.+)\)$/)![1];
   expect(container.querySelector(`[id="${clipId}"] path`)!.getAttribute('d')).toMatch(/^M .+ Z$/);
+  expect(haze.style.opacity).toBe('0.5');
 
   act(() => ref.current!.setRevealProgress(-1)); tick();
   const hidden = drawn.at(-1)!;
   expect(strands(hidden)).toEqual(counts.map(() => 0));
   expect(hidden.arcs).toBe(0); expect(hidden.glow).toBe(0);
   expect(envelope.hasAttribute('clip-path')).toBe(true);
+  expect(haze.style.opacity).toBe('0');
 
   act(() => ref.current!.setRevealProgress(2)); tick();
   const again = drawn.at(-1)!;
   expect(strands(again)).toEqual(counts);
   expect(again.clips).toBe(0); expect(again.glow).toBe(1);
   expect(envelope.hasAttribute('clip-path')).toBe(false);
+  expect(haze.style.opacity).toBe('');
+  expect(container.firstElementChild!.firstElementChild).toBe(haze);
+  expect(container.querySelector('canvas')).toBe(canvas);
+  expect(shapes()).toHaveLength(1);
 });
 
 it('reveal 갱신은 형상·캔버스·흐름 시간을 다시 만들지 않고 정지 중에는 한 장만 그린다', () => {

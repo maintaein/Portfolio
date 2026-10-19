@@ -90,6 +90,7 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
   const id = useId().replace(/:/g, '');
   const rootRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const hazeRef = useRef<HTMLDivElement>(null);
   const pausedRef = useRef(paused);
   const revealRef = useRef(1);
   const syncMotionRef = useRef<(() => void) | null>(null);
@@ -179,6 +180,7 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
       return glow;
     });
     const glowGroup = atmosphere?.querySelector('[data-flow-envelope]');
+    const haze = hazeRef.current;
     const revealShape = atmosphere?.querySelector('clipPath path');
     let glowOutline: number[][][] = [];
     let revealClip: Path2D | null = null;
@@ -321,6 +323,8 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
         revealShape?.setAttribute('d', outline ?? '');
         if (outline) glowGroup?.setAttribute('clip-path', `url(#${id}-reveal)`);
         else glowGroup?.removeAttribute('clip-path');
+        // The source haze is glow too: hidden at 0, untouched at 1.
+        if (haze) haze.style.opacity = reveal < 1 ? String(reveal) : '';
       }
 
       if (atmosphereTexture && cut) {
@@ -523,7 +527,7 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
       '--flow-blue-rgb': rgb(CYAN_PALETTE.leftCars[1]),
       '--flow-glow-rgb': rgb(CYAN_PALETTE.leftCars[2]),
     } as CSSProperties} aria-hidden="true">
-      <div className={styles.sourceHaze} />
+      <div ref={hazeRef} className={styles.sourceHaze} />
       {/* Paths and stops are written from the measured geometry; React owns only the empty shells. */}
       <svg className={`${styles.flow} ${styles.atmosphere}`} focusable="false">
         <defs>
