@@ -1,5 +1,8 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { enter, expectActive, historyLength, navButton, waitFrames } from './helpers';
+
+const chapter = (page: Page) => page.locator('[data-section="about"] [data-position="active"]').getAttribute('data-chapter');
+const locked = (page: Page) => page.locator('[data-motion-layout="reading"][data-locked="true"]');
 
 test('history returns to the previous reading destination @smoke', async ({ page }) => {
   await enter(page, 'about'); const before = await historyLength(page);
@@ -39,8 +42,9 @@ test('every section anchor clears the measured header by 16px for native fragmen
   const margins = await page.locator('main [data-section]').evaluateAll(els => els.map(el => getComputedStyle(document.getElementById(el.getAttribute('data-section')!)!).scrollMarginTop));
   expect(margins).toEqual(margins.map(() => `${header + 16}px`));
 });
+// About은 제 자리에서만 읽기 잠금을 잡으므로 일반 문서 스크롤은 그 밖의 섹션에서 잰다.
 test('native document scroll exposes the next original section without hiding siblings', async ({ page }) => {
-  await enter(page, 'about');
+  await enter(page, 'skills');
   await expect(page.locator('[data-section][inert], [data-section][aria-hidden="true"]')).toHaveCount(0);
   const before = await page.evaluate(() => window.scrollY); const length = await historyLength(page);
   await page.mouse.move(20, 400); await page.mouse.wheel(0, 950);
@@ -80,4 +84,49 @@ test('two adjacent sections can occupy the viewport together', async ({ page }) 
   await page.locator('[data-section="projects"]').evaluate(el => window.scrollTo(0, el.getBoundingClientRect().top + scrollY - innerHeight / 2));
   const visible = await page.locator('[data-section]').evaluateAll(elements => elements.filter(el => { const r = el.getBoundingClientRect(); return r.top < innerHeight && r.bottom > 80; }).length);
   expect(visible).toBeGreaterThanOrEqual(2);
+});
+test('About reading lock moves one chapter per wheel gesture and hands the last one back to the document', async ({ page }) => {
+  await enter(page, 'about');
+  await expect(locked(page)).toHaveCount(1);
+  const start = await page.evaluate(() => window.scrollY);
+  await page.mouse.move(640, 400);
+  await page.mouse.wheel(0, 100);
+  await expect.poll(() => chapter(page)).toBe('QUALITY');
+  // 로고 모프 1초가 끝나야 다음 제스처가 chapter를 넘긴다.
+  await page.waitForTimeout(1100);
+  await page.mouse.wheel(0, 100);
+  await expect.poll(() => chapter(page)).toBe('TEAMWORK');
+  expect(await page.evaluate(() => window.scrollY)).toBe(start);
+  await page.waitForTimeout(1100);
+  await page.mouse.wheel(0, 300);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(start);
+  await expect(locked(page)).toHaveCount(0);
+});
+test('explicit navigation from inside About is not pulled back, and arriving at About locks it', async ({ page }) => {
+  await enter(page, 'about');
+  await page.mouse.move(640, 400);
+  await page.mouse.wheel(0, 100);
+  await navButton(page, 'Projects').click(); await expectActive(page, 'projects');
+  await waitFrames(page, 20);
+  await expectActive(page, 'projects'); await expect(locked(page)).toHaveCount(0);
+  await navButton(page, 'About').click(); await expectActive(page, 'about');
+  await expect(locked(page)).toHaveCount(1);
+  expect(await chapter(page)).toBe('QUALITY');
+});
+test('keyboard steps About chapters while End and programmatic scroll leave without a pull back', async ({ page }) => {
+  await enter(page, 'about');
+  await page.keyboard.press('ArrowDown');
+  await expect.poll(() => chapter(page)).toBe('QUALITY');
+  await page.keyboard.press('End');
+  const atEnd = () => page.evaluate(() => window.scrollY + innerHeight >= document.documentElement.scrollHeight - 2);
+  await expect.poll(atEnd).toBe(true);
+  await waitFrames(page, 20); expect(await atEnd()).toBe(true);
+  const top = await page.locator('#about').evaluate(el => el.getBoundingClientRect().top + scrollY - 92 + 300);
+  await page.evaluate(y => window.scrollTo(0, y), top);
+  await waitFrames(page, 20);
+  expect(Math.abs(await page.evaluate(() => window.scrollY) - top)).toBeLessThanOrEqual(1);
+});
+test('direct hash below About opens at its destination', async ({ page }) => {
+  await enter(page, 'projects'); await waitFrames(page, 20);
+  await expectActive(page, 'projects'); await expect(locked(page)).toHaveCount(0);
 });

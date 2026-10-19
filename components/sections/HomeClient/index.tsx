@@ -5,6 +5,7 @@ import LuminousFlowBackground from '@/components/blocks/LuminousFlowBackground';
 import Navigation from '@/components/blocks/Navigation';
 import { SectionActivityProvider } from '@/components/common/SectionActivityContext';
 import { AboutSection, AwardAndCertificateSection, ExperienceSection, Footer, ProjectsSection, SkillsSection } from '@/components/sections';
+import type { AboutSectionHandle } from '@/components/sections/AboutSection';
 import { useMotionPreference } from '@/hooks/useMotionPreference';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useProjectModalObscured } from '@/hooks/useProjectModalObscured';
@@ -12,12 +13,11 @@ import { useSectionNav } from '@/hooks/useSectionNav';
 import { HOME_SECTION_CONFIG, NAV_ITEMS, SECTION_IDS, type HomeSectionId } from '@/lib/constants';
 
 const SECTION_COMPONENTS = {
-  [SECTION_IDS.ABOUT]: AboutSection,
   [SECTION_IDS.SKILLS]: SkillsSection,
   [SECTION_IDS.PROJECTS]: ProjectsSection,
   [SECTION_IDS.AWARDS_CERTIFICATES]: AwardAndCertificateSection,
   [SECTION_IDS.EXPERIENCE]: ExperienceSection,
-} satisfies Record<HomeSectionId, ComponentType>;
+} satisfies Record<Exclude<HomeSectionId, typeof SECTION_IDS.ABOUT>, ComponentType>;
 
 export default function HomeClient() {
   const rootRef = useRef<HTMLElement>(null);
@@ -25,7 +25,11 @@ export default function HomeClient() {
   const { ready: preferenceReady, reduced: reducedMotion } = useMotionPreference();
   const pageVisible = usePageVisibility();
   const obscured = useProjectModalObscured();
-  const { active, routeResolved, navigationTarget, navigate } = useSectionNav({ rootRef, headerRef, blocked: obscured, reducedMotion });
+  const aboutRef = useRef<AboutSectionHandle>(null);
+  // 공유 로고가 선택한 chapter를 따라가도록 셸이 들고 있는다.
+  const [, setAboutChapter] = useState(0);
+  // 명시적 이동 직전에 About의 읽기 잠금을 풀어 목적지로 가는 스크롤을 붙잡지 않는다.
+  const { active, routeResolved, navigationTarget, navigate } = useSectionNav({ rootRef, headerRef, blocked: obscured, reducedMotion, onBeforeNavigate: () => aboutRef.current?.release() });
   const motionReady = routeResolved && preferenceReady;
   const activeLabel = HOME_SECTION_CONFIG.find(section => section.id === active)?.label ?? 'Overview';
   const [announcement, setAnnouncement] = useState('');
@@ -51,8 +55,10 @@ export default function HomeClient() {
           <h1>탄탄한 기본기를 바탕으로 꾸준히 개선하고, 협업으로 함께 성장하는 개발자.</h1>
         </section>
         {HOME_SECTION_CONFIG.map(({ id, label }) => {
-          const Section = SECTION_COMPONENTS[id];
-          return <div key={id} data-section={id} role="region" aria-label={label} tabIndex={-1} className="document-section"><Section /></div>;
+          const Section = id === SECTION_IDS.ABOUT ? null : SECTION_COMPONENTS[id];
+          return <div key={id} data-section={id} role="region" aria-label={label} tabIndex={-1} className="document-section">
+            {Section ? <Section /> : <AboutSection ref={aboutRef} onChapterChange={setAboutChapter} navigationPending={navigationTarget !== null} />}
+          </div>;
         })}
       </main>
       <div inert={obscured} data-flow-finale=""><Footer /></div>

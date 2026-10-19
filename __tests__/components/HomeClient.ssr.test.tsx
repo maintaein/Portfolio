@@ -1,6 +1,8 @@
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/components/blocks/LuminousFlowBackground', () => ({ default: () => null }));
+vi.mock('@/components/sections/AboutSection/styles.module.css', () => ({ default: {} }));
+vi.mock('@/components/sections/AboutSection/chapter-focus.module.css', () => ({ default: {} }));
 import HomeClient from '@/components/sections/HomeClient';
 import {
   awards,

@@ -1,40 +1,32 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useEffect, useState } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState, type CSSProperties, type Ref } from 'react';
 import { createPortal } from 'react-dom';
+import { ELECTRIC_LOGO_MORPH_SECONDS } from '@/components/blocks/ElectricLogo/motion';
 import { coreValues } from '@/lib/data';
 import { RichText, parseRichText } from '@/lib/utils/richText';
 import { SECTION_IDS } from '@/lib/constants';
 import { useSectionActivity } from '@/components/common/SectionActivityContext';
 import { useSectionVisibility } from '@/hooks/useSectionVisibility';
-import AboutRail from './rail';
+import ChapterFocus from './ChapterFocus';
 import { ABOUT_SCRIMS, ABOUT_SCRIMS_MOBILE } from './scrim';
+import styles from './styles.module.css';
 
-// 문항 전환의 방향과 거리. 클릭 시점에 정해 상태로 들고 있는다. 렌더 중에
-// ref로 직전 값과 비교하면 StrictMode 이중 렌더에서 두 번째 렌더의 차가
-// 0이 되어 방향이 사라진다. 실제 이동량(배율·투명도)은 CSS의
-// [data-about-direction], [data-about-distance] 선택자가 만든다
-// (styles/design-tokens.css). 시차(증거가 먼저, 제목·설명이 늦게)도 거기
-// animation-delay로만 존재한다. TS 쪽에 같은 값을 상수로 복제하면 CSS가
-// 바뀌어도 아무도 모르게 어긋나므로, 그 계약은 CSS 자체를 읽는 테스트로
-// 고정한다(__tests__/components/AboutSection.test.tsx).
-//
-// 같은 방향으로 연속 이동하면(01→02→03) direction/distance 값이 문자열로
-// 그대로라 React가 속성을 다시 쓰지 않고 CSS 애니메이션도 재시작하지
-// 않는다(최종 리뷰 발견 1). transitionSeq를 클릭마다 늘려 격자의 key로
-// 걸면 값이 같아도 매 전환마다 노드를 새로 만들어 애니메이션이 항상
-// 재생된다.
-type AboutTransition = {
-  direction: 'forward' | 'backward' | 'none';
-  distance: number;
-};
+export interface AboutSectionHandle { release(): void }
+export interface AboutSectionProps {
+  onChapterChange: (index: number) => void;
+  navigationPending: boolean;
+}
 
 // WebGL 장식은 선택할 때만 내려받아 공유 번들에서 분리한다.
 const DynamicElectricLogo = dynamic(() => import('@/components/blocks/ElectricLogo'), {
   ssr: false,
 });
 const ABOUT_LOGOS = coreValues.map((value) => value.logoSrc);
+const GESTURE_IDLE_MS = 220;
+// 본문 전환과 로고 모프가 같은 1초를 쓴다.
+const TRANSITION_MS = ELECTRIC_LOGO_MORPH_SECONDS * 1000;
 
 function AboutElectricVisual({ logoSrc, active, reducedMotion }: {
   logoSrc: string;
@@ -73,20 +65,26 @@ function AboutElectricVisual({ logoSrc, active, reducedMotion }: {
   );
 }
 
-// Cubes와 Orbit은 폐기했다. 배경이 이미 있는데 별도 도형을 얹으면 경쟁한다.
-// 순번 인덱스는 라벨 레일(AboutRail)로 바뀌었다. 상세 내부는 lg부터 12칸
-// 6줄 격자를 쓰고, 그 미만에서는 4칸으로 줄여 세로로 쌓는다(Task 7).
-export default function AboutSection() {
+// reading 시안(app/prototypes/about/GestureReading)의 이식이다. About에
+// 닿은 제스처 하나가 chapter 하나를 넘기고, 마지막 chapter에서 새 제스처가
+// 오면 문서 스크롤로 돌려준다. 잠금은 About 위에서만 capture wheel·touchmove를
+// 막는다. 시안에 있던 "마운트 때 About 아래면 About으로 되돌린다"는 직접 해시와
+// 명시적 이동을 끌어오므로 옮기지 않았다.
+export default function AboutSection({ ref, onChapterChange, navigationPending }: AboutSectionProps & { ref?: Ref<AboutSectionHandle> }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [wideScreen, setWideScreen] = useState(false);
-  const [transition, setTransition] = useState<AboutTransition>({
-    direction: 'none',
-    distance: 0,
-  });
-  const [transitionSeq, setTransitionSeq] = useState(0);
+  const [locked, setLocked] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+  const [plain, setPlain] = useState(false);
+  const selected = useRef(0);
+  const selectRef = useRef<(index: number) => void>(() => {});
+  const releaseRef = useRef(() => {});
   const { reducedMotion, motionReady, pageVisible, obscured } = useSectionActivity();
-  const { ref, visible, hasEntered } = useSectionVisibility<HTMLElement>();
+  const { ref: sectionRef, visible, hasEntered } = useSectionVisibility<HTMLElement>();
   const active = visible && motionReady && pageVisible && !obscured;
+
+  useImperativeHandle(ref, () => ({ release: () => releaseRef.current() }), []);
+  useEffect(() => { onChapterChange(activeIndex); }, [activeIndex, onChapterChange]);
 
   useEffect(() => {
     const query = window.matchMedia('(min-width: 1024px)');
@@ -99,176 +97,269 @@ export default function AboutSection() {
   // 스크림 포털 대상. 서버 렌더에는 document가 없어 마운트 뒤에 정한다.
   // .portfolio-document 안에 붙여야 배경과 같은 쌓임 맥락에 놓인다.
   const [scrimHost, setScrimHost] = useState<Element | null>(null);
-  useEffect(() => setScrimHost(ref.current?.closest('.portfolio-document') ?? document.body), [ref]);
+  useEffect(() => setScrimHost(sectionRef.current?.closest('.portfolio-document') ?? document.body), [sectionRef]);
 
-  function handleSelect(next: number) {
-    const delta = next - activeIndex;
-    setTransition({
-      direction: reducedMotion ? 'none' : delta > 0 ? 'forward' : delta < 0 ? 'backward' : 'none',
-      distance: Math.abs(delta),
-    });
-    setTransitionSeq((seq) => seq + 1);
-    setActiveIndex(next);
-  }
+  useEffect(() => {
+    const element = sectionRef.current;
+    if (!element) return;
+    const short = window.matchMedia('(max-height: 640px)');
+    // 명시적 이동 중이거나 모달이 본문을 가리면 새 잠금을 잡지 않는다.
+    const blocked = navigationPending || obscured;
+    let disabled = false;
+    let start = 0;
+    let phase: 'before' | 'locked' | 'after' = 'before';
+    let lastInput = -Infinity;
+    let lastStep = -Infinity;
+    let pendingGesture = false;
+    let lastWheelTime = -Infinity;
+    let lastWheelDelta = 0;
+    let lastMagnitude = 0;
+    let wheelPeak = 0;
+    let wheelTail = false;
+    let touchY = 0;
+    let touchConsumed = false;
+    let lastNativeInput = -Infinity;
+    const setPhase = (next: typeof phase) => {
+      phase = next;
+      setLocked(phase === 'locked');
+      window.removeEventListener('wheel', lockedWheel, true);
+      window.removeEventListener('touchmove', lockedTouchMove, true);
+      if (phase === 'locked' && !disabled) {
+        window.addEventListener('wheel', lockedWheel, { passive: false, capture: true });
+        window.addEventListener('touchmove', lockedTouchMove, { passive: false, capture: true });
+      }
+    };
+    const choose = (index: number) => { selected.current = index; setActiveIndex(index); };
+    const measure = () => {
+      disabled = reducedMotion || short.matches;
+      setPhase(phase);
+      setPlain(disabled);
+      // 헤더 아래 여백은 해시 이동과 같은 scroll-margin-top을 쓴다.
+      start = Math.round(window.scrollY + element.getBoundingClientRect().top - (parseFloat(getComputedStyle(element).scrollMarginTop) || 0));
+      if (phase === 'locked' && !disabled) window.scrollTo({ top: start, behavior: 'instant' });
+    };
+    const lock = (fromBelow: boolean, time: number) => {
+      setPhase('locked'); lastInput = time; lastStep = time;
+      pendingGesture = false;
+      choose(fromBelow ? 2 : 0);
+      window.scrollTo({ top: start, behavior: 'instant' });
+    };
+    // 진입 제스처는 자리만 잡는다. 그 관성은 chapter를 넘기지 못한다.
+    const input = (delta: number, time: number, fresh = false) => {
+      if (disabled || blocked || delta === 0) return false;
+      lastNativeInput = performance.now();
+      if (phase !== 'locked') {
+        const y = window.scrollY;
+        const entering = phase === 'before' && delta > 0 && y + delta >= start;
+        const returning = phase === 'after' && delta < 0 && y >= start && y + delta <= start;
+        if (entering || returning) { lock(returning, time); return true; }
+        return false;
+      }
+      const newGesture = fresh || time - lastInput > GESTURE_IDLE_MS;
+      lastInput = time;
+      pendingGesture ||= newGesture;
+      if (!pendingGesture || time - lastStep < TRANSITION_MS) return true;
+      pendingGesture = false;
+      const next = selected.current + (delta > 0 ? 1 : -1);
+      if (next < 0 || next > 2) { setPhase(next < 0 ? 'before' : 'after'); return false; }
+      lastStep = time;
+      choose(next);
+      return true;
+    };
+    const editable = (target: EventTarget | null) => target instanceof HTMLElement
+      && !!target.closest('input, textarea, select, [contenteditable="true"]');
+    const wheelInput = (event: WheelEvent) => {
+      if (event.ctrlKey || editable(event.target)) return false;
+      const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1);
+      if (delta === 0) return false;
+      const idle = event.timeStamp - lastWheelTime > GESTURE_IDLE_MS;
+      // 바쁜 메인 스레드는 wheel 여럿을 하나로 합쳐 크기를 키운다. 16ms당 속도로 재야 합쳐진 관성이 새 stroke로 보이지 않는다.
+      const magnitude = Math.abs(delta) * 16 / (idle ? 16 : Math.max(16, event.timeStamp - lastWheelTime));
+      const reversed = delta * lastWheelDelta < 0;
+      // 트랙패드는 앞 stroke의 관성이 끝나기 전에 새 stroke를 시작할 수 있다.
+      const renewed = wheelTail && magnitude >= 4 && magnitude >= lastMagnitude * 1.8;
+      if (idle || reversed || renewed) {
+        wheelPeak = magnitude;
+        wheelTail = false;
+      } else {
+        wheelPeak = Math.max(wheelPeak, magnitude);
+        if (magnitude < wheelPeak * .6) wheelTail = true;
+      }
+      lastWheelTime = event.timeStamp;
+      lastWheelDelta = delta;
+      lastMagnitude = magnitude;
+      return input(delta, event.timeStamp, reversed || renewed);
+    };
+    const wheel = (event: WheelEvent) => { if (phase !== 'locked') wheelInput(event); };
+    function lockedWheel(event: WheelEvent) {
+      if (wheelInput(event) && event.cancelable) event.preventDefault();
+    }
+    const closeOvershoot = () => { lastNativeInput = -Infinity; };
+    const key = (event: KeyboardEvent) => {
+      closeOvershoot();
+      if (editable(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
+      if ((event.key === ' ' || event.key === 'Enter') && event.target instanceof HTMLElement && event.target.closest('button, a')) return;
+      const direction = ['ArrowDown', 'PageDown'].includes(event.key) || (event.key === ' ' && !event.shiftKey) ? 1
+        : ['ArrowUp', 'PageUp'].includes(event.key) || (event.key === ' ' && event.shiftKey) ? -1 : 0;
+      if (!direction) return;
+      if (event.repeat && phase === 'locked') { event.preventDefault(); return; }
+      if (input(direction * window.innerHeight * .8, event.timeStamp, true)) event.preventDefault();
+    };
+    const touchStart = (event: TouchEvent) => { touchY = event.touches[0]?.clientY ?? 0; touchConsumed = false; };
+    const touchInput = (event: TouchEvent, blocking: boolean) => {
+      if (event.touches.length !== 1 || editable(event.target)) return;
+      const nextY = event.touches[0].clientY;
+      const delta = touchY - nextY;
+      touchY = nextY;
+      if (touchConsumed && phase === 'locked' && !disabled) { if (blocking && event.cancelable) event.preventDefault(); return; }
+      if (input(delta, event.timeStamp, true)) {
+        touchConsumed = true;
+        if (blocking && event.cancelable) event.preventDefault();
+      }
+    };
+    const touchMove = (event: TouchEvent) => { if (phase !== 'locked') touchInput(event, false); };
+    function lockedTouchMove(event: TouchEvent) { touchInput(event, true); }
+    const scroll = () => {
+      if (disabled) return;
+      const offset = window.scrollY - start;
+      setRevealed(Math.abs(offset) < window.innerHeight / 2);
+      // 방금 들어온 제스처의 관성이 넘친 거리만 되돌린다. 넘침은 Chrome의 부드러운 wheel
+      // 스크롤 때문에 수백 px까지 간다. 스크롤바는 입력이 없고, History·명시적 이동·다른 키는
+      // 이 창을 닫으므로 끌려오지 않는다.
+      const overshoot = !blocked && performance.now() - lastNativeInput < 350;
+      if (overshoot && phase !== 'locked' && (phase === 'before' ? offset > 0 : offset < 0)) {
+        lock(phase === 'after', performance.now());
+        return;
+      }
+      if (overshoot && phase === 'locked' && Math.abs(offset) > 1) {
+        window.scrollTo({ top: start, behavior: 'instant' });
+        return;
+      }
+      if (Math.abs(offset) <= 1) {
+        if (phase !== 'locked' && !blocked) { setPhase('locked'); lastInput = -Infinity; lastStep = -Infinity; }
+      } else if (phase !== 'locked' || Math.abs(offset) > 2) {
+        // 잠금 밖에서는 위치로 앞뒤를 다시 정해 스크롤바로 건너뛴 뒤에도 돌아오는 방향을 안다.
+        const next = offset > 0 ? 'after' : 'before';
+        if (next !== phase) setPhase(next);
+      }
+    };
+    selectRef.current = index => {
+      if (disabled || blocked) { choose(index); return; }
+      setPhase('locked'); choose(index); lastStep = performance.now(); lastInput = lastStep; pendingGesture = false;
+      window.scrollTo({ top: start, behavior: 'instant' });
+    };
+    releaseRef.current = () => {
+      closeOvershoot(); pendingGesture = false;
+      if (phase === 'locked') setPhase(window.scrollY > start ? 'after' : 'before');
+    };
+    measure();
+    scroll();
+    const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    // 위쪽 Hero 높이가 바뀌어도 About의 문서 위치가 움직이므로 문서 전체를 본다.
+    resize?.observe(element);
+    resize?.observe(document.documentElement);
+    window.addEventListener('wheel', wheel, { passive: true, capture: true });
+    window.addEventListener('keydown', key);
+    window.addEventListener('touchstart', touchStart, { passive: true });
+    window.addEventListener('touchmove', touchMove, { passive: true, capture: true });
+    window.addEventListener('scroll', scroll, { passive: true });
+    window.addEventListener('popstate', closeOvershoot);
+    window.addEventListener('resize', measure);
+    short.addEventListener('change', measure);
+    return () => {
+      resize?.disconnect();
+      window.removeEventListener('wheel', lockedWheel, true);
+      window.removeEventListener('touchmove', lockedTouchMove, true);
+      window.removeEventListener('wheel', wheel, true); window.removeEventListener('keydown', key);
+      window.removeEventListener('touchstart', touchStart); window.removeEventListener('touchmove', touchMove, true);
+      window.removeEventListener('scroll', scroll); window.removeEventListener('popstate', closeOvershoot); window.removeEventListener('resize', measure);
+      short.removeEventListener('change', measure);
+      releaseRef.current = () => {};
+    };
+  }, [sectionRef, reducedMotion, navigationPending, obscured]);
 
+  const value = coreValues[activeIndex];
+  const entered = revealed || plain;
   return (
-    <section
-      ref={ref}
-      id={SECTION_IDS.ABOUT}
-      aria-labelledby="about-heading"
-      className="about-document flex flex-col lg:h-full lg:flex-row"
-    >
-      {/* about-heading: 섹션 aria-labelledby가 참조하는 시각적으로 숨긴
-          제목. AboutRail은 라벨 레일 자체만 그리므로 여기서 섹션 이름을
-          별도로 붙잡아 둔다. */}
+    <section ref={sectionRef} id={SECTION_IDS.ABOUT} aria-labelledby="about-heading" className={styles.section}>
+      {/* 섹션 제목은 시각적으로 숨긴다. 화면 위에는 chapter 단어만 남는다. */}
       <h2 id="about-heading" className="sr-only">
         About
       </h2>
-      <AboutRail
-        activeIndex={activeIndex}
-        onSelect={handleSelect}
-        active={active}
-        reducedMotion={reducedMotion}
-      />
-
-      {/* 상세 3개: 전부 DOM에 상주한다. 활성 하나만 보이고 나머지는 inert.
-          opacity와 pointer-events로 감춘다.
-          활성 하나만 렌더하면 계획 2가 고친 SEO 조건부 렌더 결함을 이
-          레벨에서 재생산한다.
-
-          lg 미만에서는 활성 하나만 흐름 안에 두고 나머지를 absolute로
-          빼낸다. 셋 다 absolute로 겹쳐두면(desktop 방식) 부모가 in-flow
-          자식을 하나도 못 봐서 자체 높이가 0으로 무너진다(Task 7 조사).
-          lg 이상에서는 기존처럼 전부 absolute로 겹쳐 크로스페이드한다. */}
-      <div className="relative flex-1 lg:h-full">
-        {/* 문항별 배경 스크림. fixed로 띄워 뷰포트 전체를 덮는다.
-            평평한 검은 막이 아니라 그라데이션을 써서 광선이 그대로 흐르게
-            한다(scrim.ts).
-
-            문항 수만큼 레이어를 겹쳐 opacity로 교차시킨다. background
-            트랜지션은 transform·opacity·filter만 쓴다는 제약 위반이라
-            (최종 리뷰 발견 2), 배경 값 자체는 고정하고 활성 레이어만
-            opacity로 드러낸다. reduce 방어([data-about-scrim],
-            design-tokens.css)도 opacity 전환 하나만 끊으면 끝난다.
-
-            lg 미만은 글자가 col-start-1부터 폭 전체를 쓴다. 가로
-            그라데이션(ABOUT_SCRIMS, to left)을 그대로 쓰면 본문이 시작하는
-            왼쪽 끝의 알파가 0이라 그 뒤로 광선이 그대로 지나간다(최종
-            리뷰 발견 3). lg 미만 전용으로 세로 그라데이션(ABOUT_SCRIMS_
-            MOBILE, to top)을 별도 레이어로 두고 lg부터는 숨긴다. */}
-        {/* 스크림은 섹션 서브트리 밖, .portfolio-document의 끝으로 포털한다.
-            그 문서는 isolation으로 쌓임 맥락을 만들고 배경을 z -1에 둔다.
-            body에 두면 그 맥락 전체보다 먼저 칠해져 불투명한 배경에 가린다.
-            같은 맥락의 z -1에서는 DOM 순서상 배경 뒤라 배경 위·본문 아래에
-            깔린다. 보이는 조건은 About이 읽기선을 가질 때다
-            (design-tokens.css의 [data-about-scrim] 형제 선택자). 일부만
-            보이는 About이 Hero나 Projects를 물들이지 않는다.
-            언마운트가 아니라 불투명도로 감춰 떠날 때도 페이드한다. */}
-        {scrimHost
-          ? createPortal(
-              <>
-                {ABOUT_SCRIMS.map((scrim, index) => (
-                  <div
-                    key={`desktop-${index}`}
-                    data-about-scrim
-                    data-about-scrim-index={index}
-                    aria-hidden="true"
-                    className={`pointer-events-none fixed inset-0 -z-[1] hidden transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] lg:block ${
-                      active && index === activeIndex
-                        ? 'opacity-100'
-                        : 'opacity-0'
-                    }`}
-                    style={{ background: scrim }}
-                  />
-                ))}
-                {ABOUT_SCRIMS_MOBILE.map((scrim, index) => (
-                  <div
-                    key={`mobile-${index}`}
-                    data-about-scrim
-                    data-about-scrim-index={index}
-                    aria-hidden="true"
-                    className={`pointer-events-none fixed inset-0 -z-[1] transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] lg:hidden ${
-                      active && index === activeIndex
-                        ? 'opacity-100'
-                        : 'opacity-0'
-                    }`}
-                    style={{ background: scrim }}
-                  />
-                ))}
-              </>,
-              scrimHost
-            )
-          : null}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 z-10 hidden grid-cols-12 grid-rows-6 gap-x-6 gap-y-2 px-10 py-8 lg:grid"
-        >
-          <div data-about-visual className="col-span-4 col-start-2 row-span-4 row-start-2 flex items-center justify-center">
+      {/* 스크림은 .portfolio-document의 끝으로 포털해 배경 위·본문 아래에 깐다.
+          보이는 조건은 About이 읽기선을 가질 때다(design-tokens.css의
+          [data-about-scrim] 형제 선택자). 언마운트가 아니라 불투명도로 감춰
+          떠날 때도 페이드한다. lg 미만은 세로 그라데이션을 쓴다(scrim.ts). */}
+      {scrimHost
+        ? createPortal(
+            <>
+              {ABOUT_SCRIMS.map((scrim, index) => (
+                <div
+                  key={`desktop-${index}`}
+                  data-about-scrim
+                  data-about-scrim-index={index}
+                  aria-hidden="true"
+                  className={`pointer-events-none fixed inset-0 -z-[1] hidden transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] lg:block ${
+                    active && index === activeIndex
+                      ? 'opacity-100'
+                      : 'opacity-0'
+                  }`}
+                  style={{ background: scrim }}
+                />
+              ))}
+              {ABOUT_SCRIMS_MOBILE.map((scrim, index) => (
+                <div
+                  key={`mobile-${index}`}
+                  data-about-scrim
+                  data-about-scrim-index={index}
+                  aria-hidden="true"
+                  className={`pointer-events-none fixed inset-0 -z-[1] transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] lg:hidden ${
+                    active && index === activeIndex
+                      ? 'opacity-100'
+                      : 'opacity-0'
+                  }`}
+                  style={{ background: scrim }}
+                />
+              ))}
+            </>,
+            scrimHost
+          )
+        : null}
+      <div className={styles.stage} style={{ '--chapter-transition': `${TRANSITION_MS}ms` } as CSSProperties}
+        data-motion-layout="reading" data-static={plain ? '' : undefined} data-entered={entered} data-locked={locked}>
+        <div className={styles.header}>
+          <ChapterFocus active={activeIndex} entered={entered} onSelect={index => selectRef.current(index)} />
+        </div>
+        <div className={styles.rail} aria-hidden="true">
+          <div data-about-visual>
             {wideScreen && (hasEntered || active) ? (
-              <AboutElectricVisual
-                logoSrc={coreValues[activeIndex].logoSrc}
-                active={active}
-                reducedMotion={reducedMotion}
-              />
+              <AboutElectricVisual logoSrc={value.logoSrc} active={active} reducedMotion={reducedMotion || plain} />
             ) : null}
           </div>
         </div>
-        {coreValues.map((value, index) => {
-          const isActive = index === activeIndex;
-
-          return (
-            <div
-              key={value.id}
-              data-detail={index}
-              inert={!isActive}
-              aria-hidden={!isActive}
-              className={`transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] lg:absolute lg:inset-0 ${
-                isActive
-                  ? 'opacity-100 pointer-events-auto'
-                  : 'absolute inset-0 opacity-0 pointer-events-none'
-              }`}
-            >
-
-              <div
-                key={transitionSeq}
-                data-about-grid
-                data-about-direction={transition.direction}
-                data-about-distance={String(transition.distance)}
-                className="grid grid-cols-4 gap-x-4 gap-y-6 px-5 py-6 lg:h-full lg:grid-cols-12 lg:grid-rows-6 lg:gap-x-6 lg:gap-y-2 lg:px-10 lg:py-8"
-              >
-                <h3
-                  data-about-title
-                  className="col-span-4 col-start-1 text-t3 font-bold leading-tight text-[var(--color-text-primary)] sm:text-t2 lg:col-span-5 lg:col-start-7 lg:row-start-2 lg:self-center lg:text-t1"
-                >
-                  {parseRichText(value.title)}
-                </h3>
-                <div
-                  data-about-evidence
-                  className="col-span-4 col-start-1 lg:col-span-4 lg:col-start-7 lg:row-span-2 lg:row-start-3 lg:self-center"
-                >
-                  <div className={`flex flex-col ${value.evidenceStyle === 'detail' ? 'gap-4' : 'gap-5'}`}>
-                    {value.evidence.map(({ label, value: evidenceValue }) => (
-                      <div key={label}>
-                        <div className={`text-t8 tracking-[0.2em] text-[var(--color-text-secondary)] ${value.evidenceStyle === 'metric' ? 'uppercase' : ''}`}>
-                          {parseRichText(label)}
-                        </div>
-                        <div className="text-d3 font-bold leading-none text-[var(--color-text-primary)]">
-                          {parseRichText(evidenceValue)}
-                        </div>
-                      </div>
+        {/* 세 chapter가 전부 DOM에 상주한다. 활성 하나만 보이고 나머지는 inert다. */}
+        <div className={styles.articles}>
+          <div className={styles.panelViewport}>
+            {coreValues.map((chapter, index) => {
+              const current = plain || index === activeIndex;
+              return (
+                <article key={chapter.id} data-detail={index} data-chapter={chapter.label} className={styles.panel}
+                  data-position={index === activeIndex ? 'active' : index < activeIndex ? 'past' : 'future'}
+                  inert={!current} aria-hidden={!current}>
+                  <h3 data-about-title className={styles.title}>{parseRichText(chapter.title)}</h3>
+                  <dl data-about-evidence className={styles.evidence}>
+                    {chapter.evidence.map(({ label, value: evidenceValue }) => (
+                      <div key={label}><dt>{parseRichText(label)}</dt><dd>{parseRichText(evidenceValue)}</dd></div>
                     ))}
+                  </dl>
+                  <div data-about-description className={styles.description}>
+                    <RichText text={chapter.description} />
                   </div>
-                </div>
-                <div
-                  data-about-description
-                  className="col-span-4 col-start-1 text-t7 leading-relaxed text-[var(--color-text-secondary)] sm:text-t6 lg:col-span-5 lg:col-start-7 lg:row-start-5 lg:self-center"
-                >
-                  <RichText text={value.description} />
-                </div>
-              </div>
-            </div>
-          );
-        })}
+                </article>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </section>
   );

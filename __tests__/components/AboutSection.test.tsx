@@ -4,9 +4,10 @@ vi.mock('@/hooks/useSectionVisibility', () => ({ useSectionVisibility: () => ({ 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { createRef } from 'react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import AboutSection from '@/components/sections/AboutSection';
+import AboutSection, { type AboutSectionHandle } from '@/components/sections/AboutSection';
 import { SectionActivityProvider } from '@/components/common/SectionActivityContext';
 import { coreValues } from '@/lib/data';
 import { ABOUT_SCRIMS } from '@/components/sections/AboutSection/scrim';
@@ -28,9 +29,16 @@ vi.mock('@/components/blocks/ElectricLogo', () => ({
   ),
 }));
 vi.mock('@/components/blocks/AboutRings', () => ({ default: () => null }));
+vi.mock('@/components/sections/AboutSection/styles.module.css', () => ({ default: {} }));
+vi.mock('@/components/sections/AboutSection/chapter-focus.module.css', () => ({ default: {} }));
 
+// 문서 스크롤 위치. jsdom은 스크롤하지 않으므로 scrollTo가 이 값만 옮긴다.
+let documentY = 0;
 beforeEach(() => {
   localVisibility.visible = true; localVisibility.hasEntered = true;
+  documentY = 0;
+  Object.defineProperty(window, 'scrollY', { configurable: true, get: () => documentY });
+  vi.spyOn(window, 'scrollTo').mockImplementation(((options: ScrollToOptions) => { documentY = options.top ?? documentY; }) as typeof window.scrollTo);
   vi.stubGlobal(
     'matchMedia',
     vi.fn().mockImplementation((query: string) => ({
@@ -40,10 +48,10 @@ beforeEach(() => {
   );
 });
 
-// HomeClient는 항상 이 Provider로 전 섹션을 감싼다. AboutSection은 문항
-// 전환의 방향(direction)을 정할 때 useSectionActivity().reducedMotion을
-// 읽는다(Task 6). reducedMotion을 matchMedia 스텁 값으로 계산해 넘겨야
-// 아래 'reducedMotion이면...' 테스트의 stubGlobal 재정의가 실제로 전달된다.
+// HomeClient는 항상 이 Provider로 전 섹션을 감싼다. AboutSection은 정적
+// 원문 여부를 정할 때 useSectionActivity().reducedMotion을 읽는다.
+// reducedMotion을 matchMedia 스텁 값으로 계산해 넘겨야 모션 감소 테스트의
+// stubGlobal 재정의가 실제로 전달된다.
 // active는 스크림 포털(C1)의 활성 게이트다. 스크림 동작을 보는 테스트는
 // About이 실제로 활성이어야 하므로 기본값을 about으로 둔다.
 function renderAboutSection(active: NavId = SECTION_IDS.ABOUT) {
@@ -57,7 +65,7 @@ function renderAboutSection(active: NavId = SECTION_IDS.ABOUT) {
       motionReady
       reducedMotion={matchMedia('(prefers-reduced-motion: reduce)').matches}
     >
-      <AboutSection />
+      <AboutSection onChapterChange={() => {}} navigationPending={false} />
     </SectionActivityProvider>
   );
 }
@@ -119,15 +127,10 @@ describe('AboutSection', () => {
 
   it('세 인덱스의 증거 값에 같은 글꼴과 크기를 적용한다', () => {
     const { container } = renderAboutSection();
-
-    for (const evidence of container.querySelectorAll('[data-about-evidence]')) {
-      expect(evidence.firstElementChild).not.toHaveClass('font-mono');
-      const values = evidence.querySelectorAll(':scope > div > div > div:last-child');
-      expect(values).toHaveLength(2);
-      for (const value of values) {
-        expect(value).toHaveClass('text-d3', 'font-bold');
-      }
-    }
+    const evidence = [...container.querySelectorAll('[data-about-evidence]')];
+    expect(evidence).toHaveLength(3);
+    expect(new Set(evidence.map((item) => item.className)).size).toBe(1);
+    for (const item of evidence) expect(item.querySelectorAll('dd')).toHaveLength(2);
   });
 
   it('제목·설명·증거 문구의 강조 표기와 설명 문단을 렌더한다', () => {
@@ -210,7 +213,7 @@ describe('AboutSection', () => {
     const view = (active: NavId) => (
       localVisibility.visible = active === SECTION_IDS.ABOUT,
       <SectionActivityProvider obscured={false} pageVisible routeResolved motionReady reducedMotion={false}>
-        <AboutSection />
+        <AboutSection onChapterChange={() => {}} navigationPending={false} />
       </SectionActivityProvider>
     );
     const { container, rerender } = render(view(SECTION_IDS.ABOUT));
@@ -252,7 +255,7 @@ describe('AboutSection', () => {
     renderAboutSection();
     await userEvent.click(screen.getByRole('button', { name: new RegExp(coreValues[2].label) }));
     expect(screen.getByRole('button', { name: new RegExp(coreValues[2].label) }))
-      .toHaveAttribute('aria-current', 'true');
+      .toHaveAttribute('aria-current', 'step');
   });
 
   // 계획 4 Global Constraints: "선택 전까지 01이 활성이다".
@@ -260,7 +263,7 @@ describe('AboutSection', () => {
     const { container } = renderAboutSection();
     expect(container.querySelector('[data-detail="0"]')?.hasAttribute('inert')).toBe(false);
     expect(screen.getByRole('button', { name: new RegExp(coreValues[0].label) }))
-      .toHaveAttribute('aria-current', 'true');
+      .toHaveAttribute('aria-current', 'step');
   });
 
   describe('자동 순환하지 않고 선택된 상세 하나만 활성화한다', () => {
@@ -332,47 +335,6 @@ describe('AboutSection', () => {
     expect(titles).toHaveLength(3);
     const classes = [...titles].map((t) => t.className);
     expect(new Set(classes).size, '세 제목의 배치가 서로 달라졌다').toBe(1);
-  });
-
-  it('격자가 12칸 6줄이다', () => {
-    const { container } = renderAboutSection();
-    const grid = container.querySelector('[data-about-grid]');
-    expect(grid?.className).toMatch(/grid-cols-12/);
-    expect(grid?.className).toMatch(/grid-rows-6/);
-  });
-
-  // Task 7: 폭이 좁아 열두 칸 배치가 의미를 잃는다. 넷으로 줄이고 세로로
-  // 쌓는다. 스크롤 없음은 데스크톱 요구였다. 모바일은 허용한다.
-  it('좁은 화면에서 격자가 넷으로 줄고 세로로 쌓인다', () => {
-    const { container } = renderAboutSection();
-    const grid = container.querySelector('[data-about-grid]');
-    expect(grid?.className).toMatch(/grid-cols-4/);
-    expect(grid?.className).toMatch(/lg:grid-cols-12/);
-  });
-
-  it('좁은 화면에서 요소가 첫 칸부터 폭 전체를 쓴다', () => {
-    const { container } = renderAboutSection();
-    const title = container.querySelector('[data-about-title]');
-    expect(title?.className).toMatch(/col-span-4/);
-    expect(title?.className).toMatch(/lg:col-span-5/);
-  });
-
-  // Task 7 조사: 상세 3개가 전부 absolute로 겹쳐 있으면 부모(.relative
-  // flex-1)에 흐름 안 자식이 하나도 없어 자체 높이가 0으로 무너진다(Task 2가
-  // min-h-[640px]를 걷어낸 뒤 lg 미만에서 About 전체가 안 보이던 원인).
-  // 활성 상세만 lg 미만에서 흐름에 남기고 비활성은 absolute로 빼내 해결한다.
-  it('lg 미만에서 활성 상세만 흐름에 남고 비활성은 absolute로 빠진다 (0px 붕괴 방지)', () => {
-    const { container } = renderAboutSection();
-    const activeTokens = container.querySelector('[data-detail="0"]')?.className.split(/\s+/) ?? [];
-    const inactiveTokens = container.querySelector('[data-detail="1"]')?.className.split(/\s+/) ?? [];
-
-    // 활성: lg 미만 기본 클래스에 absolute가 없어야 흐름에 남아 부모에 실제
-    // 콘텐츠 높이를 물려준다. lg부터는 여전히 absolute로 겹쳐 크로스페이드한다.
-    expect(activeTokens).not.toContain('absolute');
-    expect(activeTokens).toContain('lg:absolute');
-
-    // 비활성: lg 미만에서도 absolute로 빼내야 자리가 두 배로 늘어나지 않는다.
-    expect(inactiveTokens).toContain('absolute');
   });
 
   // 리뷰 발견 2: 옛 인덱스 nav 안에 있던 about-heading h2를 레일과
@@ -493,103 +455,229 @@ describe('AboutSection', () => {
     }
   });
 
-  // 슬라이드도 크로스페이드도 아니다. 카메라가 터널을 지나간다. 앞으로 갈
-  // 때 나가는 요소가 커지며 벌어지고 새 요소가 소실점에서 자란다.
-  it('앞으로 갈 때와 뒤로 갈 때 방향이 반대다', async () => {
-    const { container } = renderAboutSection();
-    const grid = () => container.querySelector('[data-about-grid]') as HTMLElement;
+  describe('reading 시안', () => {
+    const readingCss = () => readFileSync(resolve(process.cwd(), 'components/sections/AboutSection/styles.module.css'), 'utf8');
+    const focusCss = () => readFileSync(resolve(process.cwd(), 'components/sections/AboutSection/chapter-focus.module.css'), 'utf8');
 
-    await userEvent.click(screen.getByRole('button', { name: coreValues[1].label }));
-    const forward = grid().dataset.aboutDirection;
+    it('상단에는 BASICS/QUALITY/TEAMWORK만 있고 진행도·인덱스·01/ABOUT·스크롤 안내가 없다', () => {
+      const { container } = renderAboutSection();
+      const words = within(screen.getByRole('navigation', { name: 'About 문항' })).getAllByRole('button');
+      expect(words.map((word) => word.getAttribute('data-chapter-word'))).toEqual(['BASICS', 'QUALITY', 'TEAMWORK']);
+      expect(container.querySelector('[role="progressbar"], [data-progress-boundary], [data-chapter-index]')).toBeNull();
+      expect(container.textContent).not.toMatch(/01\s*\/\s*ABOUT|스크롤/);
+    });
 
-    await userEvent.click(screen.getByRole('button', { name: /BASICS/ }));
-    const backward = grid().dataset.aboutDirection;
+    it('About h2 아래에 chapter 제목 h3가 이어진다', () => {
+      const { container } = renderAboutSection();
+      expect([...container.querySelectorAll('h1, h2, h3, h4')].map((heading) => heading.tagName)).toEqual(['H2', 'H3', 'H3', 'H3']);
+    });
 
-    expect(forward).toBe('forward');
-    expect(backward).toBe('backward');
+    it('상단 단어는 정지한 광휘로 교차하고 설명은 같은 1초 동안 구면으로 돈다', () => {
+      const { container } = renderAboutSection();
+      expect(container.querySelector('[data-motion-layout="reading"]')).toHaveStyle({ '--chapter-transition': '1000ms' });
+      const focus = focusCss();
+      expect(focus).toMatch(/\.glow \{[^}]*transition: opacity calc\(var\(--chapter-transition\) \/ 2\) ease;/);
+      expect(focus).not.toMatch(/animation/);
+      const reading = readingCss();
+      expect(reading).toMatch(/\.panel \{[^}]*filter: blur\(8px\);[^}]*transform: rotateX\(-25deg\);[^}]*transform-origin: 50% 50% calc\(0px - var\(--reading-orbit-radius\)\);/);
+      expect(reading).toMatch(/\.panel\[data-position="past"\] \{ transform: rotateX\(25deg\); \}/);
+    });
+
+    it('chapter 단어는 44px 이상 누를 자리를 갖는다', () => {
+      expect(focusCss()).toMatch(/\.word \{[^}]*min-height: 44px;/);
+    });
+
+    // JS가 data-static을 붙이기 전에 해시 이동이 위치를 재므로 배치는 CSS가 첫 페인트부터 맡는다.
+    it('정적 원문 배치는 JS와 같은 미디어 조건에서 첫 페인트부터 쌓인다', () => {
+      expect(readingCss()).toMatch(/@media \(prefers-reduced-motion: reduce\), \(max-height: 640px\) \{[^@]*\.stage \{ display: block; height: auto;[^@]*\.panelViewport \{ display: block; overflow: visible;/);
+    });
+
+    it('좁은 화면에서는 로고 자리를 접는다', () => {
+      expect(readingCss()).toMatch(/@media \(max-width: 1023px\) \{[^@]*\.rail \{ display: none; \}/);
+    });
   });
 
-  // 건너뛰면 깊이 차가 둘이다. 이동 거리와 배율 변화가 그만큼 커진다.
-  it('건너뛰면 깊이 차가 커진다', async () => {
-    const { container } = renderAboutSection();
-    await userEvent.click(screen.getByRole('button', { name: /TEAMWORK/ }));
-    const grid = container.querySelector('[data-about-grid]') as HTMLElement;
-    expect(grid.dataset.aboutDistance).toBe('2');
-  });
+  describe('reading 제스처', () => {
+    // 섹션의 문서 위 자리. jsdom은 scroll-margin을 계산하지 않으므로 잠금 위치가 곧 이 값이다.
+    const START = 1000;
+    let clock = 10_000;
+    beforeEach(() => {
+      clock = 10_000;
+      vi.spyOn(performance, 'now').mockImplementation(() => clock);
+      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+        const top = this.id === SECTION_IDS.ABOUT ? START - documentY : 0;
+        return { top, bottom: top, left: 0, right: 0, width: 0, height: 0, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
+      });
+    });
+    afterEach(() => vi.restoreAllMocks());
 
-  // 최종 리뷰 발견 1: 01→02는 direction/distance가 none/0에서 forward/1로
-  // 바뀌어 재생되지만, 이어서 02→03으로 가면 값이 그대로 forward/1이라
-  // key 없이는 React가 DOM 속성을 다시 쓰지 않아 CSS 애니메이션이
-  // 재시작하지 않는다. 03(TEAMWORK)의 격자는 첫 클릭(0→1) 시점에 이미
-  // forward/1 값을 공유 상태로부터 받으므로, 그 직후 노드 참조와 두 번째
-  // 클릭(1→2, 같은 방향) 직후 노드 참조가 같으면 리마운트가 없었다는
-  // 뜻이다.
-  it('같은 방향으로 두 번 연속 이동해도 격자 노드가 매번 교체된다 (전환 재생 보장)', async () => {
-    const { container } = renderAboutSection();
+    const stamp = <T extends Event>(event: T, at: number) => {
+      clock = at;
+      Object.defineProperty(event, 'timeStamp', { value: at });
+      act(() => { window.dispatchEvent(event); });
+      return event;
+    };
+    const wheel = (deltaY: number, at: number) => stamp(new WheelEvent('wheel', { deltaY, cancelable: true }), at);
+    const key = (name: string, at: number) => stamp(new KeyboardEvent('keydown', { key: name, cancelable: true }), at);
+    const scrollAt = (top: number, at: number) => { documentY = top; stamp(new Event('scroll'), at); };
+    const mount = (top: number, initial: { navigationPending?: boolean; obscured?: boolean } = {}) => {
+      documentY = top;
+      const handle = createRef<AboutSectionHandle>();
+      const onChapterChange = vi.fn();
+      const view = ({ navigationPending = false, obscured = false }: typeof initial) => (
+        <SectionActivityProvider obscured={obscured} pageVisible routeResolved motionReady reducedMotion={matchMedia('(prefers-reduced-motion: reduce)').matches}>
+          <AboutSection ref={handle} onChapterChange={onChapterChange} navigationPending={navigationPending} />
+        </SectionActivityProvider>
+      );
+      const utils = render(view(initial));
+      return { ...utils, handle, onChapterChange, update: (next: typeof initial) => utils.rerender(view(next)) };
+    };
+    const chapter = (container: HTMLElement) => container.querySelector('[data-position="active"]')?.getAttribute('data-chapter');
+    const isLocked = (container: HTMLElement) => container.querySelector('[data-locked="true"]') !== null;
+    const send = (events: [number, number][], base: number) => { for (const [time, delta] of events) wheel(delta, base + time); };
 
-    await userEvent.click(screen.getByRole('button', { name: coreValues[1].label })); // 0 -> 1, forward
-    const gridAfterFirstMove = container.querySelector('[data-detail="2"] [data-about-grid]');
+    it('진입 제스처는 BASICS에 세우기만 하고 남은 관성은 chapter를 넘기지 않는다', () => {
+      const { container } = mount(900);
+      wheel(60, 20_000);
+      expect(window.scrollTo).not.toHaveBeenCalled();
+      documentY = 960;
+      wheel(60, 20_016);
+      expect(window.scrollTo).toHaveBeenLastCalledWith({ top: START, behavior: 'instant' });
+      expect(isLocked(container)).toBe(true);
+      for (let i = 1; i <= 40; i += 1) expect(wheel(40, 20_016 + i * 16).defaultPrevented).toBe(true);
+      expect(chapter(container)).toBe('BASICS');
+    });
 
-    await userEvent.click(screen.getByRole('button', { name: /TEAMWORK/ })); // 1 -> 2, forward 그대로
-    const gridAfterSecondMove = container.querySelector('[data-detail="2"] [data-about-grid]');
+    it('짧은 wheel과 긴 관성은 한 chapter만 넘긴다', () => {
+      const { container, onChapterChange } = mount(START);
+      expect(isLocked(container)).toBe(true);
+      expect(wheel(1, 20_000).defaultPrevented).toBe(true);
+      expect(chapter(container)).toBe('QUALITY');
+      expect(onChapterChange).toHaveBeenLastCalledWith(1);
+      send(Array.from({ length: 60 }, (_, i) => [20 + i * 20, Math.max(1, 30 * 0.95 ** i)]), 20_000);
+      expect(chapter(container)).toBe('QUALITY');
+      wheel(100, 22_000);
+      expect(chapter(container)).toBe('TEAMWORK');
+      expect(window.scrollTo).not.toHaveBeenCalled();
+    });
 
-    expect(gridAfterSecondMove).not.toBe(gridAfterFirstMove);
-  });
+    it('쉬지 않은 새 트랙패드 stroke는 다음 chapter로 간다', () => {
+      const { container } = mount(START);
+      send([[0, 40], [20, 20], [40, 8], [60, 3]], 20_000);
+      expect(chapter(container)).toBe('QUALITY');
+      send(Array.from({ length: 60 }, (_, i) => [80 + i * 20, 2 * 0.96 ** i]), 20_000);
+      expect(chapter(container)).toBe('QUALITY');
+      send([[1300, 35], [1320, 45]], 20_000);
+      expect(chapter(container)).toBe('TEAMWORK');
+    });
 
-  // 실제 이동은 CSS의 animation-delay가 만든다. TS 쪽에 같은 값을 상수로
-  // 복제하면 아무 데서도 쓰이지 않아 lint가 잡거나, 잡히지 않으면 CSS와
-  // 조용히 어긋난다. design-tokens.css 원문을 정규식으로 읽어 계약을
-  // 고정한다(BootSequence.test.tsx와 같은 관례). 동시에 같은 양으로
-  // 움직이면 화면 전체가 줌하는 것으로 보여 깊이감이 사라진다. 증거가
-  // 먼저 움직이고 제목과 설명이 늦게 따라온다.
-  it('증거가 제목과 설명보다 먼저 움직인다 (design-tokens.css의 animation-delay)', () => {
-    const css = readFileSync(
-      resolve(process.cwd(), 'styles/design-tokens.css'),
-      'utf8'
-    );
-    const evidenceDelay = css.match(
-      /\[data-about-evidence\]\s*\{\s*animation-delay:\s*(\d+)ms;/
-    )?.[1];
-    const titleDelay = css.match(
-      /\[data-about-title\]\s*\{\s*animation-delay:\s*(\d+)ms;/
-    )?.[1];
-    expect(evidenceDelay, '[data-about-evidence]의 animation-delay를 찾지 못했다').toBeDefined();
-    expect(titleDelay, '[data-about-title]의 animation-delay를 찾지 못했다').toBeDefined();
-    expect(Number(evidenceDelay)).toBeLessThan(Number(titleDelay));
-  });
+    // 실측(headed Chrome, 15fps): 바쁜 메인 스레드는 관성 wheel 둘을 하나로 합쳐 크기가 두 배로 온다.
+    it('합쳐진 관성 wheel은 새 stroke로 보지 않는다', () => {
+      const { container } = mount(START);
+      send([[0, 200], [16, 85], [32, 77], [64, 142.6]], 20_000);
+      send(Array.from({ length: 76 }, (_, i) => [80 + i * 16, Math.max(1, 66 * 0.95 ** i)]), 20_000);
+      expect(chapter(container)).toBe('QUALITY');
+    });
 
-  it('reducedMotion이면 전환 없이 즉시 바뀐다', async () => {
-    // 이 파일의 beforeEach가 matchMedia를 matches:false로 stub한다. 여기서만
-    // true로 덮는다.
-    vi.stubGlobal(
-      'matchMedia',
-      vi.fn().mockReturnValue({
-        matches: true,
-        media: '',
-        addEventListener: () => {},
-        removeEventListener: () => {},
-      })
-    );
-    const { container } = renderAboutSection();
-    await userEvent.click(screen.getByRole('button', { name: /TEAMWORK/ }));
-    const grid = container.querySelector('[data-about-grid]') as HTMLElement;
-    expect(grid.dataset.aboutDirection).toBe('none');
+    it('클릭도 같은 선택으로 이동하고 마지막 chapter의 새 제스처는 문서로 돌려준다', () => {
+      const { container, onChapterChange } = mount(START);
+      clock = 20_000;
+      fireEvent.click(screen.getByRole('button', { name: 'TEAMWORK' }));
+      expect(chapter(container)).toBe('TEAMWORK');
+      expect(onChapterChange).toHaveBeenLastCalledWith(2);
+      expect(wheel(100, 21_500).defaultPrevented).toBe(false);
+      expect(isLocked(container)).toBe(false);
+      expect(wheel(100, 21_516).defaultPrevented).toBe(false);
+    });
+
+    it('명시적 이동이 진행 중이면 새 잠금을 잡지 않고 도착한 뒤에 잡는다', () => {
+      const { container, update } = mount(960, { navigationPending: true });
+      expect(wheel(100, 20_000).defaultPrevented).toBe(false);
+      scrollAt(START, 20_050);
+      expect(window.scrollTo).not.toHaveBeenCalled();
+      expect(isLocked(container)).toBe(false);
+      update({ navigationPending: false });
+      expect(isLocked(container)).toBe(true);
+    });
+
+    it('release()는 잠금을 풀어 명시적 이동을 About으로 끌어오지 않는다', () => {
+      const { container, handle, update } = mount(START);
+      wheel(1, 20_000);
+      act(() => handle.current!.release());
+      expect(isLocked(container)).toBe(false);
+      scrollAt(START + 200, 20_050);
+      expect(window.scrollTo).not.toHaveBeenCalled();
+      update({ navigationPending: true });
+      documentY = START;
+      expect(wheel(100, 20_400).defaultPrevented).toBe(false);
+      expect(window.scrollTo).not.toHaveBeenCalled();
+    });
+
+    // 실측: Chrome의 부드러운 wheel 스크롤은 잠근 뒤에도 수백 px를 더 간다.
+    it('진입 관성이 크게 넘쳐도 되돌리고, History와 다른 키는 그 창을 닫는다', () => {
+      const { container } = mount(960);
+      wheel(120, 20_000);
+      scrollAt(START + 600, 20_100);
+      expect(window.scrollTo).toHaveBeenLastCalledWith({ top: START, behavior: 'instant' });
+      expect(isLocked(container)).toBe(true);
+      vi.mocked(window.scrollTo).mockClear();
+      wheel(40, 20_200);
+      act(() => { window.dispatchEvent(new PopStateEvent('popstate')); });
+      scrollAt(START + 300, 20_250);
+      expect(window.scrollTo).not.toHaveBeenCalled();
+      expect(isLocked(container)).toBe(false);
+      scrollAt(START - 1, 25_000);
+      wheel(40, 25_100);
+      key('End', 25_150);
+      scrollAt(START + 3000, 25_200);
+      expect(window.scrollTo).not.toHaveBeenCalled();
+    });
+
+    it('직접 해시로 About 아래에 열려도 About으로 돌려보내지 않는다', () => {
+      vi.spyOn(performance, 'getEntriesByType').mockReturnValue([{ type: 'navigate' }] as never);
+      const { container } = mount(3000);
+      expect(window.scrollTo).not.toHaveBeenCalled();
+      expect(isLocked(container)).toBe(false);
+    });
+
+    it('스크롤바·프로그램 이동은 잠금에서 빠져나가고 끌려오지 않는다', () => {
+      const { container } = mount(START);
+      scrollAt(START + 400, 30_000);
+      expect(window.scrollTo).not.toHaveBeenCalled();
+      expect(isLocked(container)).toBe(false);
+      expect(wheel(100, 30_100).defaultPrevented).toBe(false);
+    });
+
+    it('키보드 화살표는 chapter를 넘기고 End는 문서에 맡긴다', () => {
+      const { container } = mount(START);
+      expect(key('ArrowDown', 20_000).defaultPrevented).toBe(true);
+      expect(chapter(container)).toBe('QUALITY');
+      expect(key('End', 20_100).defaultPrevented).toBe(false);
+      expect(chapter(container)).toBe('QUALITY');
+    });
+
+    it('모달이 본문을 가리면 잠그지 않는다', () => {
+      const { container } = mount(START, { obscured: true });
+      expect(isLocked(container)).toBe(false);
+      expect(wheel(100, 20_000).defaultPrevented).toBe(false);
+    });
+
+    it.each(['(prefers-reduced-motion: reduce)', '(max-height: 640px)'])('%s이면 모든 chapter를 정적 원문으로 둔다', (query) => {
+      vi.stubGlobal('matchMedia', vi.fn().mockImplementation((media: string) => ({
+        matches: media === query || media === '(min-width: 1024px)', media, addEventListener: () => {}, removeEventListener: () => {},
+      })));
+      const { container } = mount(START);
+      expect(container.querySelector('[data-static]')).not.toBeNull();
+      expect(container.querySelectorAll('[data-detail][inert]')).toHaveLength(0);
+      expect(wheel(100, 20_000).defaultPrevented).toBe(false);
+      expect(window.scrollTo).not.toHaveBeenCalled();
+    });
   });
 
   describe('shared visual', () => {
     it('uses one visual slot for all three items', () => {
       const { container } = renderAboutSection();
-      const visuals = container.querySelectorAll('[data-about-visual]');
-      expect(visuals).toHaveLength(1);
-      expect(visuals[0].className).toMatch(/\bcol-start-2\b/);
-      expect(visuals[0].className).toMatch(/\bcol-span-4\b/);
-    });
-
-    it('hides the visual slot on narrow screens', () => {
-      const { container } = renderAboutSection();
-      const layer = container.querySelector('[data-about-visual]')?.parentElement;
-      expect(layer?.className).toMatch(/\bhidden\b/);
-      expect(layer?.className).toMatch(/\blg:grid\b/);
+      expect(container.querySelectorAll('[data-about-visual]')).toHaveLength(1);
     });
 
     it('uses a static mask of the selected logo for reduced motion', () => {
@@ -606,7 +694,7 @@ describe('AboutSection', () => {
 
     it('loads the desktop logo only after local entry and preserves it offscreen', async () => {
       localVisibility.visible = false; localVisibility.hasEntered = false;
-      const view = () => <SectionActivityProvider obscured={false} pageVisible routeResolved motionReady reducedMotion={false}><AboutSection /></SectionActivityProvider>;
+      const view = () => <SectionActivityProvider obscured={false} pageVisible routeResolved motionReady reducedMotion={false}><AboutSection onChapterChange={() => {}} navigationPending={false} /></SectionActivityProvider>;
       const { container, rerender } = render(view());
       expect(container.querySelector('[data-electric-src]')).toBeNull();
       localVisibility.visible = true; localVisibility.hasEntered = true;

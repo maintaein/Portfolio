@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { enter, expectActive } from './helpers';
 import { projects } from '@/lib/data/projects';
+import { coreValues } from '@/lib/data/profile';
 
 // 계획 6 Task 5b-2. 접근성 계약 3건. 포커스 순서, 리플로, 레이아웃 이동은
 // 실제 레이아웃 엔진이 있어야 잴 수 있다.
@@ -47,6 +48,32 @@ test.describe('접근성', () => {
     await page.locator('[data-section="projects"]').evaluate(el => window.scrollTo(0, el.getBoundingClientRect().top + scrollY - 400));
     await expectActive(page, 'projects');
     for (const layer of await page.locator('[data-about-scrim]').all()) await expect(layer).toHaveCSS('opacity', '0');
+  });
+
+  test('About chapter 단어는 44px 표적이고 chapter 제목은 섹션 h2 아래 h3다', async ({ page }) => {
+    await enter(page, 'about');
+    const words = page.getByRole('navigation', { name: 'About 문항' }).getByRole('button');
+    await expect(words).toHaveCount(3);
+    for (const word of await words.all()) {
+      const box = await word.boundingBox();
+      expect(box!.width).toBeGreaterThanOrEqual(44);
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+    }
+    expect(await page.locator('#about').locator('h1, h2, h3').evaluateAll(els => els.map(el => el.tagName))).toEqual(['H2', 'H3', 'H3', 'H3']);
+  });
+
+  test('모션 감소와 낮은 화면에서는 About의 세 chapter를 정적 원문으로 읽는다', async ({ page }) => {
+    for (const { reducedMotion, height } of [{ reducedMotion: 'reduce', height: 720 }, { reducedMotion: 'no-preference', height: 600 }] as const) {
+      await page.emulateMedia({ reducedMotion });
+      await page.setViewportSize({ width: 1280, height });
+      await enter(page, 'about');
+      await expect(page.locator('[data-motion-layout="reading"][data-static]')).toHaveCount(1);
+      await expect(page.locator('#about article[inert]')).toHaveCount(0);
+      for (const { title } of coreValues) await expect(page.getByRole('heading', { level: 3, name: title })).toBeVisible();
+      // 세 chapter가 한 칸에 겹치지 않고 차례로 쌓인다.
+      const boxes = await page.locator('#about article').evaluateAll(els => els.map(el => { const r = el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; }));
+      for (let i = 1; i < boxes.length; i += 1) expect(boxes[i].top).toBeGreaterThanOrEqual(boxes[i - 1].bottom - 1);
+    }
   });
 
   test('긴 프로젝트 제목이 모바일 화면 안에 보인다', async ({ page }) => {

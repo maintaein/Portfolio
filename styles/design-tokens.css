@@ -418,9 +418,6 @@
 .portfolio-hero p { font-size: clamp(1.5rem, 4vw, 3rem); line-height: 1.6; word-break: keep-all; }
 .portfolio-hero h1 { max-width: 44rem; margin-top: 2rem; font-size: clamp(1.25rem, 2.5vw, 2rem); line-height: 1.6; word-break: keep-all; }
 .site-footer { min-height: 120px; padding-bottom: max(2rem, env(safe-area-inset-bottom, 0px)); }
-@media (min-width: 1024px) {
-  .about-document { height: max(760px, calc(100svh - 76px)); }
-}
 
 /* 부팅 캡션(역할·START) 은닉. content-visibility를 쓰지 않는다. 쓰면
      paint containment가 fixed 캡션을 뷰포트가 아니라 컨테이닝 박스
@@ -517,64 +514,6 @@
     nav[aria-label="메인 네비게이션"] {
       transition: none;
     }
-  }
-
-  /* About 레일의 구분선. 선 하나만 있으면 멋이 없다는 피드백에 굵기와
-     둥근 끝과 광휘를 넣었다. 가운데로 갈수록 진해지고 양 끝에서 사라진다. */
-  .about-rail-line {
-    width: 3px;
-    border-radius: 9999px;
-    background: linear-gradient(
-      to bottom,
-      rgb(3 179 195 / 0) 0%,
-      rgb(3 179 195 / 0.45) 22%,
-      rgb(3 179 195 / 0.55) 50%,
-      rgb(3 179 195 / 0.45) 78%,
-      rgb(3 179 195 / 0) 100%
-    );
-  }
-
-  .about-rail-tick {
-    width: 3px;
-    height: 8px;
-    border-radius: 9999px;
-    background: var(--color-cyan-core);
-    opacity: 0.45;
-  }
-
-  /* 활성 눈금. START 버튼의 광휘와 같은 언어다. */
-  .about-rail-tick-active {
-    width: 5px;
-    height: 24px;
-    border-radius: 9999px;
-    background: var(--color-cyan-hi);
-    opacity: 1;
-    box-shadow:
-      0 0 14px var(--color-cyan-hi),
-      0 0 5px var(--color-cyan-core);
-  }
-
-  .about-rail-marker {
-    position: absolute;
-    z-index: 1;
-    left: 3px;
-    top: 0;
-    transform: translateY(-50%);
-    pointer-events: none;
-  }
-
-  .about-rail-label {
-    transform-origin: left center;
-    transition: color 220ms ease, transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  button:not([aria-current="true"]):is(:hover, :focus-visible) .about-rail-label {
-    color: var(--color-text-primary);
-    transform: scale(1.12);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .about-rail-label { transition: none; }
   }
 
   /* About BASICS의 폴더(components/blocks/AboutFolder). 문항이 활성이면
@@ -1027,79 +966,6 @@
     }
   }
 
-  /* 문항 전환. 슬라이드도 크로스페이드도 아니고, 카메라가 터널을 지나가는
-     느낌을 낸다. 앞으로 갈 때는 나가는 요소가 커지며 벌어지고 새 요소가
-     소실점에서 자란다. 뒤로 갈 때는 반대다. transform과 opacity만 쓴다. */
-  @keyframes about-enter-forward {
-    from {
-      opacity: 0;
-      transform: scale(0.82) translateX(2%);
-    }
-  }
-
-  @keyframes about-enter-backward {
-    from {
-      opacity: 0;
-      transform: scale(1.18) translateX(-2%);
-    }
-  }
-
-  [data-about-direction='forward'] [data-about-title],
-  [data-about-direction='forward'] [data-about-evidence],
-  [data-about-direction='forward'] [data-about-description] {
-    animation: about-enter-forward var(--animate-duration-slow) cubic-bezier(0.22, 1, 0.36, 1)
-      both;
-  }
-
-  [data-about-direction='backward'] [data-about-title],
-  [data-about-direction='backward'] [data-about-evidence],
-  [data-about-direction='backward'] [data-about-description] {
-    animation: about-enter-backward var(--animate-duration-slow) cubic-bezier(0.22, 1, 0.36, 1)
-      both;
-  }
-
-  /* 건너뛰면 깊이 차가 둘이라 더 멀리서 온다. 배율 변화를 그만큼 키운다. */
-  @keyframes about-enter-forward-far {
-    from {
-      opacity: 0;
-      transform: scale(0.68) translateX(4%);
-    }
-  }
-
-  @keyframes about-enter-backward-far {
-    from {
-      opacity: 0;
-      transform: scale(1.34) translateX(-4%);
-    }
-  }
-
-  [data-about-distance='2'][data-about-direction='forward'] [data-about-title],
-  [data-about-distance='2'][data-about-direction='forward'] [data-about-evidence],
-  [data-about-distance='2'][data-about-direction='forward'] [data-about-description] {
-    animation-name: about-enter-forward-far;
-  }
-
-  [data-about-distance='2'][data-about-direction='backward'] [data-about-title],
-  [data-about-distance='2'][data-about-direction='backward'] [data-about-evidence],
-  [data-about-distance='2'][data-about-direction='backward'] [data-about-description] {
-    animation-name: about-enter-backward-far;
-  }
-
-  /* 시차. 동시에 같은 양으로 움직이면 화면 전체가 줌하는 것으로 보여
-     깊이감이 사라진다. 증거가 먼저 움직이고 제목과 설명이 늦게 따라와야
-     서로 다른 거리에 놓인 것처럼 보인다. */
-  [data-about-evidence] {
-    animation-delay: 0ms;
-  }
-
-  [data-about-title] {
-    animation-delay: 60ms;
-  }
-
-  [data-about-description] {
-    animation-delay: 90ms;
-  }
-
   /* 상세 크로스페이드(.transition-opacity, index.tsx의 [data-detail])와
      스크림 레이어(.transition-opacity, [data-about-scrim])는 Tailwind
      유틸리티 조합이라 이 파일에 자체 클래스 선언이 없다. 모션을 끈
@@ -1171,22 +1037,6 @@
       text-shadow:
         0 0 24px var(--color-cyan-hi),
         0 0 9px var(--color-cyan-core);
-    }
-  }
-
-  /* Reduced motion support */
-  @media (prefers-reduced-motion: reduce) {
-    /* direction이 'none'이라 위 애니메이션 자체가 안 걸리지만, 선택자가
-       나중에 바뀌어도 안전하도록 여기서도 끊는다. 명시도를 forward·
-       backward 선택자([data-about-direction='...'] [data-about-title]
-       등, 속성 선택자 두 개, 위 767행 부근)와 맞춰야 한다. 속성 선택자
-       하나짜리였을 때는 명시도가 밀려 이 규칙이 절대 못 이겼다(최종
-       리뷰 발견 7). [data-about-grid]를 조상으로 얹어 속성 선택자 두
-       개로 맞추고, 이 블록이 소스 순서상 더 뒤에 있어 동점을 이긴다. */
-    [data-about-grid] [data-about-title],
-    [data-about-grid] [data-about-evidence],
-    [data-about-grid] [data-about-description] {
-      animation: none;
     }
   }
 
