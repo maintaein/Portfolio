@@ -2,9 +2,10 @@ import gsap from 'gsap';
 import { CustomEase } from 'gsap/CustomEase';
 import { Flip } from 'gsap/Flip';
 import { MotionPathPlugin } from 'gsap/MotionPathPlugin';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { SplitText } from 'gsap/SplitText';
 
-export { gsap, Flip, SplitText };
+export { gsap, Flip, ScrollTrigger, SplitText };
 
 // DESIGN_GUIDE.md가 정한 프로젝트 공용 진입 커브.
 // framer-motion 시절 [0.22, 1, 0.36, 1] 배열로 쓰던 것과 같은 값이다.
@@ -33,4 +34,15 @@ export function registerGsap(): void {
   CustomEase.create(MORPH_EASE, '0.85, 0, 0.5, 1');
 
   registered = true;
+}
+
+let scrollRegistered = false;
+
+// 멱등. 문서 스크롤 경계(components/sections/HomeClient/motion.ts)만 부른다.
+// ScrollTrigger는 등록할 때 matchMedia와 스크롤 리스너를 붙이므로 다른 소비자에게 얹지 않는다.
+export function registerScrollTrigger(): void {
+  registerGsap();
+  if (scrollRegistered) return;
+  gsap.registerPlugin(ScrollTrigger);
+  scrollRegistered = true;
 }

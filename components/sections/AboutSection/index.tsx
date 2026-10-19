@@ -1,6 +1,5 @@
 'use client';
 
-import dynamic from 'next/dynamic';
 import { useEffect, useImperativeHandle, useRef, useState, type CSSProperties, type Ref } from 'react';
 import { createPortal } from 'react-dom';
 import { ELECTRIC_LOGO_MORPH_SECONDS } from '@/components/blocks/ElectricLogo/motion';
@@ -19,11 +18,6 @@ export interface AboutSectionProps {
   navigationPending: boolean;
 }
 
-// WebGL 장식은 선택할 때만 내려받아 공유 번들에서 분리한다.
-const DynamicElectricLogo = dynamic(() => import('@/components/blocks/ElectricLogo'), {
-  ssr: false,
-});
-const ABOUT_LOGOS = coreValues.map((value) => value.logoSrc);
 const GESTURE_IDLE_MS = 220;
 // 끊긴 wheel의 기준. 프레임 간격(16.7ms)이나 합쳐진 wheel 둘(48ms 안팎)보다 길다.
 const WHEEL_PAUSE_MS = 56;
@@ -32,43 +26,6 @@ const WHEEL_FRAME_MS = 20;
 // 본문 전환과 로고 모프가 같은 1초를 쓴다.
 const TRANSITION_MS = ELECTRIC_LOGO_MORPH_SECONDS * 1000;
 
-function AboutElectricVisual({ logoSrc, active, reducedMotion }: {
-  logoSrc: string;
-  active: boolean;
-  reducedMotion: boolean;
-}) {
-  const [ready, setReady] = useState(false);
-  const charging = !ready && !reducedMotion;
-
-  return (
-    <div className="about-electric">
-      <div
-        className={`about-electric-static ${ready && !reducedMotion ? 'opacity-0' : 'opacity-100'} ${charging ? 'about-electric-static-charging' : ''}`}
-      >
-        <div
-          className="about-electric-static-shape"
-          style={{ maskImage: `url(${logoSrc})`, WebkitMaskImage: `url(${logoSrc})` }}
-        />
-      </div>
-      {!reducedMotion ? (
-        <DynamicElectricLogo
-          src={logoSrc}
-          active={active}
-          preloadSrcs={ABOUT_LOGOS}
-          onReady={(renderedSrc) => { if (renderedSrc === logoSrc) setReady(true); }}
-          color="#7fe3ee"
-          glowColor="#03b3c3"
-          intensity={0.65}
-          glow={0.3}
-          speed={1.1}
-          flicker={0.25}
-          interactive={false}
-        />
-      ) : null}
-    </div>
-  );
-}
-
 // reading 시안(app/prototypes/about/GestureReading)의 이식이다. About에
 // 닿은 제스처 하나가 chapter 하나를 넘기고, 마지막 chapter에서 새 제스처가
 // 오면 문서 스크롤로 돌려준다. 잠금은 About 위에서만 capture wheel·touchmove를
@@ -76,7 +33,6 @@ function AboutElectricVisual({ logoSrc, active, reducedMotion }: {
 // 명시적 이동을 끌어오므로 옮기지 않았다.
 export default function AboutSection({ ref, onChapterChange, navigationPending }: AboutSectionProps & { ref?: Ref<AboutSectionHandle> }) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const [wideScreen, setWideScreen] = useState(false);
   const [locked, setLocked] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const [plain, setPlain] = useState(false);
@@ -84,19 +40,11 @@ export default function AboutSection({ ref, onChapterChange, navigationPending }
   const selectRef = useRef<(index: number) => void>(() => {});
   const releaseRef = useRef(() => {});
   const { reducedMotion, motionReady, pageVisible, obscured } = useSectionActivity();
-  const { ref: sectionRef, visible, hasEntered } = useSectionVisibility<HTMLElement>();
+  const { ref: sectionRef, visible } = useSectionVisibility<HTMLElement>();
   const active = visible && motionReady && pageVisible && !obscured;
 
   useImperativeHandle(ref, () => ({ release: () => releaseRef.current() }), []);
   useEffect(() => { onChapterChange(activeIndex); }, [activeIndex, onChapterChange]);
-
-  useEffect(() => {
-    const query = window.matchMedia('(min-width: 1024px)');
-    const update = () => setWideScreen(query.matches);
-    update();
-    query.addEventListener('change', update);
-    return () => query.removeEventListener('change', update);
-  }, []);
 
   // 스크림 포털 대상. 서버 렌더에는 document가 없어 마운트 뒤에 정한다.
   // .portfolio-document 안에 붙여야 배경과 같은 쌓임 맥락에 놓인다.
@@ -348,10 +296,13 @@ export default function AboutSection({ ref, onChapterChange, navigationPending }
           <ChapterFocus active={activeIndex} entered={entered} onSelect={index => selectRef.current(index)} />
         </div>
         <div className={styles.rail} aria-hidden="true">
+          {/* 공유 로고는 HomeClient 셸의 host 하나가 띄우고 이 앵커에 내려앉는다. 여기는 자리와 정적 실루엣뿐이다. */}
           <div data-about-visual>
-            {wideScreen && (hasEntered || active) ? (
-              <AboutElectricVisual logoSrc={value.logoSrc} active={active} reducedMotion={reducedMotion || plain} />
-            ) : null}
+            <div data-motion-anchor="about-logo" className="about-electric">
+              <div className={`about-electric-static ${reducedMotion || plain ? '' : 'about-electric-static-charging'}`}>
+                <div className="about-electric-static-shape" style={{ maskImage: `url(${value.logoSrc})`, WebkitMaskImage: `url(${value.logoSrc})` }} />
+              </div>
+            </div>
           </div>
         </div>
         {/* 세 chapter가 전부 DOM에 상주한다. 활성 하나만 보이고 나머지는 inert다. */}

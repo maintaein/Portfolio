@@ -414,9 +414,31 @@
 .section-stage { position: relative; padding-top: 76px; }
 .document-section { position: relative; min-height: calc(100svh - 76px); scroll-margin-top: 92px; }
 .document-section > section { min-height: calc(100svh - 76px); scroll-margin-top: 92px; }
-.portfolio-hero { display: flex; flex-direction: column; justify-content: center; padding: 4rem max(1.5rem, 8vw); }
-.portfolio-hero p { font-size: clamp(1.5rem, 4vw, 3rem); line-height: 1.6; word-break: keep-all; }
+/* Hero(D5-A). 1024px부터 로고와 글을 좌우로, 그 아래는 세로로 놓는다. 인사말은 t1(30px)에서
+   d3(48px), 1536px부터 d2(72px)까지 키우되 낮은 화면에서는 svh로 줄여 실제 내용 높이에 맞춘다. */
+.portfolio-hero { display: flex; flex-direction: column; justify-content: center; gap: 30px; padding: 4rem max(1.5rem, 8vw); }
+.portfolio-hero p { font-size: var(--font-size-t1); line-height: 1.4; word-break: keep-all; }
 .portfolio-hero h1 { max-width: 44rem; margin-top: 2rem; font-size: clamp(1.25rem, 2.5vw, 2rem); line-height: 1.6; word-break: keep-all; }
+.hero-copy { min-width: 0; }
+.hero-object { position: relative; flex: none; width: 112px; aspect-ratio: 1 / 1; }
+@media (min-width: 1024px) {
+  .portfolio-hero { flex-direction: row; align-items: center; gap: 48px; }
+  .portfolio-hero p { font-size: clamp(var(--font-size-t1), 7svh, var(--font-size-d3)); }
+  .hero-object { width: clamp(260px, 31vw, 400px); }
+}
+@media (min-width: 1536px) {
+  .portfolio-hero { gap: 72px; }
+  .portfolio-hero p { font-size: clamp(var(--font-size-d3), 8svh, var(--font-size-d2)); }
+}
+@media (max-height: 700px) { .portfolio-hero { padding-block: 2rem; } }
+/* 공유 로고 host. 문서 좌표라 경계 밖에서는 스크롤마다 쓰지 않아도 앵커와 함께 흐른다.
+   GL이 첫 그림을 그리고 경계가 주인을 정한 뒤에만 보이고, 그때 앵커의 정적 실루엣이 물러난다. */
+/* min-width: 0. aspect-ratio의 자동 최소 폭이 이전 크기의 캔버스를 붙잡아 줄어든 앵커를 따라가지 못한다.
+   z-index 4. 날아가는 동안 About chapter 단어의 어두운 띠(z 3) 아래로 들어가 반쯤 가려지지 않는다. */
+.logo-host { position: absolute; left: 0; top: 0; z-index: 4; width: clamp(260px, 31vw, 400px); min-width: 0; aspect-ratio: 1 / 1; pointer-events: none; opacity: 0; transition: opacity 250ms ease; }
+.logo-host > div { width: 100%; height: 100%; }
+[data-logo-live] .logo-host { opacity: 1; }
+[data-logo-live] [data-motion-anchor] .about-electric-static { opacity: 0; }
 .site-footer { min-height: 120px; padding-bottom: max(2rem, env(safe-area-inset-bottom, 0px)); }
 
 /* 부팅 캡션(역할·START) 은닉. content-visibility를 쓰지 않는다. 쓰면

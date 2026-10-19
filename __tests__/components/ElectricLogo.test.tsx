@@ -211,3 +211,49 @@ it('resumes an interrupted morph where begin froze it', () => {
   tick(100);
   expect(last().uMorph).toBeCloseTo(0.5, 3);
 });
+
+// Task 1 review carryovers for the shared logo host (M3 2b).
+function observeVisibility() {
+  const observers: ((entries: { isIntersecting: boolean }[]) => void)[] = [];
+  vi.stubGlobal('IntersectionObserver', class {
+    constructor(callback: (entries: { isIntersecting: boolean }[]) => void) { observers.push(callback); }
+    observe() {} disconnect() {}
+  });
+  return (isIntersecting: boolean) => act(() => observers.forEach((callback) => callback([{ isIntersecting }])));
+}
+
+it('keeps drawing boundary seeks after the container leaves the viewport, because the footprint is larger', () => {
+  const setVisible = observeVisibility();
+  const { ref } = mount('gate-a.svg');
+  ref.current!.beginBoundary(box);
+  tick();
+  setVisible(false);
+  // The frame already queued runs once and the loop stops.
+  tick();
+  ref.current!.seekBoundary(0.6);
+  tick();
+  expect(last().uBoundary).toBe(0.6);
+});
+
+it('draws a boundary end made off screen and inactive once the container returns', () => {
+  const setVisible = observeVisibility();
+  const ref = createRef<ElectricLogoHandle>();
+  const view = render(<ElectricLogo ref={ref} src="dirty-a.svg" />);
+  loadImages(200);
+  tick();
+  ref.current!.beginBoundary(box);
+  tick();
+  view.rerender(<ElectricLogo ref={ref} src="dirty-a.svg" active={false} />);
+  setVisible(false);
+  ref.current!.endBoundary();
+  tick();
+  const draws = gpu.drawn.length;
+  expect(last().uBoundary).toBe(0);
+  expect(last().uResolution).not.toEqual([400, 400]);
+  setVisible(true);
+  tick();
+  expect(gpu.drawn.length).toBe(draws + 1);
+  expect(last().uResolution).toEqual([400, 400]);
+  tick();
+  expect(gpu.drawn.length).toBe(draws + 1);
+});

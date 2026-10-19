@@ -79,7 +79,8 @@ test.describe('미디어', () => {
 
     await enter(page, 'about');
     const rail = page.getByRole('navigation', { name: 'About 문항' }).getByRole('button');
-    const canvas = page.locator('[data-about-visual] canvas');
+    // 공유 로고는 셸의 host 하나에 산다. About은 앵커만 둔다.
+    const canvas = page.locator('[data-logo-host] canvas');
     await expect(canvas).toBeAttached({ timeout: 20_000 });
     await canvas.evaluate((el) => {
       el.setAttribute('data-e2e-mark', 'electric-logo');

@@ -44,7 +44,8 @@ test.describe('Native motion activity', () => {
       .nth(1)
       .click();
 
-    const logo = '[data-about-visual] canvas';
+    // 공유 로고는 셸의 host 하나에 산다. About은 앵커만 둔다.
+    const logo = '[data-logo-host] canvas';
     // 장식이라 aria-hidden이다. 보이는지가 아니라 붙었는지만 본다.
     await expect(page.locator(logo)).toBeAttached({ timeout: 20_000 });
     const draws = () => page.evaluate((selector) => window.__drawsFor(selector), logo);
@@ -132,6 +133,59 @@ test.describe('Native motion activity', () => {
     await navButton(page, 'About').click(); await expectActive(page, 'about');
     await expect(wordmark).toHaveAttribute('data-e2e-mark', 'same');
     await expect(page.getByRole('button', { name: 'START' })).toHaveCount(0);
+  });
+  test('Hero→About 경계는 이름 버튼 하나와 로고 host 하나를 실제 앵커 사이로 옮기고 되감으면 돌려놓는다', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await enter(page, 'overview');
+    const name = page.getByTestId('wordmark');
+    const box = async (selector: string) => (await page.locator(selector).boundingBox())!;
+    const singles = () => page.evaluate(() => [document.querySelectorAll('[data-testid="wordmark"]').length, document.querySelectorAll('[data-logo-host]').length]);
+    // 이름: 왼쪽 끝과 세로 가운데가 앵커에 맞는다.
+    const offAnchor = async (selector: string) => {
+      const [a, b] = [await box(selector), (await name.boundingBox())!];
+      return Math.max(Math.abs(a.x - b.x), Math.abs(a.y + a.height / 2 - b.y - b.height / 2));
+    };
+    const offLogo = async () => {
+      const [a, b] = [await box('[data-motion-anchor="about-logo"]'), await box('[data-logo-host]')];
+      return Math.max(Math.abs(a.x + a.width / 2 - b.x - b.width / 2), Math.abs(a.y + a.height / 2 - b.y - b.height / 2));
+    };
+    await expect.poll(() => offAnchor('[data-motion-anchor="hero-name"]')).toBeLessThan(1.5);
+    await expect(page.locator('.portfolio-document')).toHaveAttribute('data-logo-owner', 'hero');
+    expect(await singles()).toEqual([1, 1]);
+
+    // 경계 한가운데: 이름은 nav에 닿았고 로고는 아직 떠나는 중이다.
+    const end = await page.evaluate(() => { const about = document.querySelector<HTMLElement>('[data-section="about"]')!; return about.getBoundingClientRect().top + scrollY - parseFloat(getComputedStyle(about).scrollMarginTop); });
+    await page.evaluate(top => window.scrollTo({ top, behavior: 'instant' }), Math.round(end * .6));
+    await waitFrames(page, 4);
+    await expect.poll(() => offAnchor('[data-motion-anchor="nav-name"]')).toBeLessThan(1.5);
+    await expect(page.locator('.portfolio-document')).toHaveAttribute('data-logo-owner', 'boundary');
+    expect(await singles()).toEqual([1, 1]);
+
+    await navButton(page, 'About').click(); await expectActive(page, 'about');
+    await expect(page.locator('.portfolio-document')).toHaveAttribute('data-logo-owner', 'about');
+    await expect.poll(offLogo).toBeLessThan(1.5);
+    expect(await singles()).toEqual([1, 1]);
+
+    // 창이 줄면 host도 줄어든 앵커를 따라간다.
+    await page.setViewportSize({ width: 1100, height: 760 });
+    await expect.poll(async () => {
+      const [a, b] = [await box('[data-motion-anchor="about-logo"]'), await box('[data-logo-host]')];
+      return Math.abs(a.width - b.width);
+    }).toBeLessThan(1.5);
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    await navButton(page, '개요로 이동').click(); await expectActive(page, 'overview');
+    await expect(page.locator('.portfolio-document')).toHaveAttribute('data-logo-owner', 'hero');
+    await expect.poll(() => offAnchor('[data-motion-anchor="hero-name"]')).toBeLessThan(1.5);
+    expect(await singles()).toEqual([1, 1]);
+  });
+  test('reduced motion leaves the name in the navigation and mounts no GL logo', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' }); await page.setViewportSize({ width: 1440, height: 900 });
+    await enter(page, 'overview');
+    await expect(page.getByTestId('wordmark')).toHaveCSS('transform', 'none');
+    await expect(page.locator('[data-logo-host]')).toHaveCount(1);
+    await expect(page.locator('[data-logo-host] canvas')).toHaveCount(0);
+    await expect(page.locator('[data-motion-anchor="hero-object"] .about-electric-static')).toBeVisible();
   });
   test('reduced motion deep links settle with native readable sections @smoke', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' }); await enter(page, 'projects');

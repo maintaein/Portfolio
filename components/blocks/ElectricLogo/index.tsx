@@ -1025,7 +1025,8 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
     let dirty = false;
     const shouldRun = () => visible && (activeRef.current || (prewarmRef.current && !prewarmPainted));
     // A seek or end must reach the screen even while the loop is paused.
-    const wants = () => shouldRun() || (visible && dirty);
+    // A boundary footprint is larger than the observed container, so it keeps painting while the container is off screen.
+    const wants = () => shouldRun() || ((visible || !!boundary) && dirty);
 
     const load = (slot: Slot, next: Shape) => {
       slot.shape = next;
@@ -1245,7 +1246,8 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
     };
 
     const start = () => {
-      if (raf || !shouldRun()) return;
+      // A change made off screen while inactive is drawn when the container returns.
+      if (raf || !wants()) return;
       last = performance.now();
       raf = requestAnimationFrame(frame);
     };
@@ -1259,7 +1261,7 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
 
     const paint = () => {
       dirty = true;
-      if (!raf && visible) raf = requestAnimationFrame(frame);
+      if (!raf && wants()) raf = requestAnimationFrame(frame);
     };
     const aim = (next: ElectricBoundaryTarget) => {
       if (!boundary) return;

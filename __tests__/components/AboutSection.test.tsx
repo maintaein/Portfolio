@@ -88,15 +88,18 @@ describe('AboutSection', () => {
   // 요구하는 바다(ProjectsSection이 PreviewMorph를 같은 방식으로 가른다).
   // 그래서 WebGL 블록의 지연 로딩만 허용한다. 섹션 자체가
   // 갈리는 회귀는 HomeClient 쪽 잠금이 잡는다.
-  it('전기 로고를 동적으로 불러온다', () => {
+  // 공유 로고는 HomeClient 셸의 host 하나가 띄운다(2b). About이 두 번째 ElectricLogo를
+  // 만들면 Hero에서 넘어온 로고와 두 개가 겹친다.
+  it('전기 로고를 직접 띄우지 않고 about-logo 앵커만 둔다', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'components/sections/AboutSection/index.tsx'),
       'utf8'
     );
-    const dynamicImports = [...source.matchAll(/dynamic\(\s*\(\)\s*=>\s*import\('([^']+)'\)/g)].map(
-      (m) => m[1]
-    );
-      expect(dynamicImports).toContain('@/components/blocks/ElectricLogo');
+    expect(source).not.toContain('@/components/blocks/ElectricLogo\'');
+    expect(source).not.toMatch(/import\('@\/components\/blocks\/ElectricLogo'\)/);
+    const { container } = renderAboutSection();
+    expect(container.querySelectorAll('[data-motion-anchor="about-logo"]')).toHaveLength(1);
+    expect(container.querySelector('[data-electric-src]')).toBeNull();
   });
 
   it('인덱스 항목 3개를 렌더한다', () => {
@@ -164,67 +167,30 @@ describe('AboutSection', () => {
     }
   });
 
-  it('한 로고가 세 인덱스에 남아 있고 선택할 때만 형태가 바뀐다', async () => {
-    vi.useFakeTimers();
-    try {
-      const { container } = renderAboutSection();
-      await act(async () => { await Promise.resolve(); });
-      const logo = container.querySelector('[data-electric-src]');
-      expect(logo).toHaveAttribute('data-electric-src', '/icons-mono/react.svg');
-      act(() => vi.advanceTimersByTime(60_000));
-      expect(logo).toHaveAttribute('data-electric-src', '/icons-mono/react.svg');
-
-      fireEvent.click(screen.getByRole('button', { name: new RegExp(coreValues[1].label) }));
-      expect(container.querySelector('[data-electric-src]')).toBe(logo);
-      expect(logo).toHaveAttribute('data-electric-src', '/about/fixtool.webp');
-
-      fireEvent.click(screen.getByRole('button', { name: new RegExp(coreValues[2].label) }));
-      expect(container.querySelector('[data-electric-src]')).toBe(logo);
-      expect(logo).toHaveAttribute('data-electric-src', '/about/handshake.webp');
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('첫 로고가 준비될 때까지 정적 실루엣을 보여준다', async () => {
-    const { container } = renderAboutSection();
-    const fallback = container.querySelector('.about-electric-static');
-    expect(fallback).toHaveClass('opacity-100');
-    await act(async () => { await Promise.resolve(); });
-    fireEvent.click(container.querySelector('[data-signal-ready]')!);
-    expect(fallback).toHaveClass('opacity-0');
-  });
-
-  it('로고 전환 중 광휘 강도가 바뀌지 않는다', async () => {
-    const { container } = renderAboutSection();
-    await act(async () => { await Promise.resolve(); });
-    const logo = container.querySelector('[data-electric-src]');
-    const glow = logo?.getAttribute('data-glow');
-    const intensity = logo?.getAttribute('data-intensity');
-    fireEvent.click(screen.getByRole('button', { name: new RegExp(coreValues[1].label) }));
-    expect(logo).toHaveAttribute('data-glow', glow);
-    expect(logo).toHaveAttribute('data-intensity', intensity);
-    fireEvent.click(screen.getByRole('button', { name: new RegExp(coreValues[2].label) }));
-    expect(logo).toHaveAttribute('data-glow', glow);
-    expect(logo).toHaveAttribute('data-intensity', intensity);
-  });
-
-  it('About을 떠났다가 돌아와도 WebGL 인스턴스를 재사용한다', async () => {
-    const view = (active: NavId) => (
-      localVisibility.visible = active === SECTION_IDS.ABOUT,
+  it('한 앵커의 정적 실루엣이 선택할 때만 형태를 바꾸고 선택을 셸에 알린다', () => {
+    const onChapterChange = vi.fn();
+    const { container } = render(
       <SectionActivityProvider obscured={false} pageVisible routeResolved motionReady reducedMotion={false}>
-        <AboutSection onChapterChange={() => {}} navigationPending={false} />
+        <AboutSection onChapterChange={onChapterChange} navigationPending={false} />
       </SectionActivityProvider>
     );
-    const { container, rerender } = render(view(SECTION_IDS.ABOUT));
-    await act(async () => { await Promise.resolve(); });
-    const logo = container.querySelector('[data-electric-src]');
-    rerender(view(SECTION_IDS.SKILLS));
-    expect(container.querySelector('[data-electric-src]')).toBe(logo);
-    expect(logo).toHaveAttribute('data-electric-active', 'false');
-    rerender(view(SECTION_IDS.ABOUT));
-    expect(container.querySelector('[data-electric-src]')).toBe(logo);
-    expect(logo).toHaveAttribute('data-electric-active', 'true');
+    const anchor = container.querySelector('[data-motion-anchor="about-logo"]');
+    const shape = () => container.querySelector<HTMLElement>('[data-motion-anchor="about-logo"] .about-electric-static-shape')!;
+    expect(shape().style.maskImage).toContain('/icons-mono/react.svg');
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(coreValues[1].label) }));
+    expect(shape().style.maskImage).toContain('/about/fixtool.webp');
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(coreValues[2].label) }));
+    expect(container.querySelector('[data-motion-anchor="about-logo"]')).toBe(anchor);
+    expect(shape().style.maskImage).toContain('/about/handshake.webp');
+    expect(onChapterChange).toHaveBeenLastCalledWith(2);
+  });
+
+  // 공유 로고가 그려지면 셸이 data-logo-live를 단다. 그 전에는 실루엣이 자리를 지킨다.
+  it('공유 로고가 살아나기 전까지 정적 실루엣을 보여준다', () => {
+    const { container } = renderAboutSection();
+    expect(container.querySelector('[data-motion-anchor="about-logo"] .about-electric-static')).toHaveClass('about-electric-static-charging');
+    const css = readFileSync(resolve(process.cwd(), 'styles/design-tokens.css'), 'utf8');
+    expect(css).toMatch(/\[data-logo-live\] \[data-motion-anchor\] \.about-electric-static \{[^}]*opacity: 0;/);
   });
 
   // TEAMWORK의 현재 증거 항목을 본문에 표시한다.
@@ -805,16 +771,15 @@ describe('AboutSection', () => {
       expect(container.querySelector('[data-electric-src]')).toBeNull();
     });
 
-    it('loads the desktop logo only after local entry and preserves it offscreen', async () => {
+    // 앵커는 진입 전에도 실제 레이아웃 자리를 가져야 경계가 도착점을 잴 수 있다.
+    it('keeps the about-logo anchor in layout before entry and never mounts a GL logo itself', async () => {
       localVisibility.visible = false; localVisibility.hasEntered = false;
       const view = () => <SectionActivityProvider obscured={false} pageVisible routeResolved motionReady reducedMotion={false}><AboutSection onChapterChange={() => {}} navigationPending={false} /></SectionActivityProvider>;
       const { container, rerender } = render(view());
-      expect(container.querySelector('[data-electric-src]')).toBeNull();
+      expect(container.querySelector('[data-about-visual] [data-motion-anchor="about-logo"]')).not.toBeNull();
       localVisibility.visible = true; localVisibility.hasEntered = true;
       rerender(view()); await act(async () => { await Promise.resolve(); });
-      const logo = container.querySelector('[data-electric-src]'); expect(logo).toHaveAttribute('data-electric-active', 'true');
-      localVisibility.visible = false; rerender(view());
-      expect(container.querySelector('[data-electric-src]')).toBe(logo); expect(logo).toHaveAttribute('data-electric-active', 'false');
+      expect(container.querySelector('[data-electric-src]')).toBeNull();
     });
 
     it('모바일에서는 보이지 않는 WebGL 로고를 예열하지 않는다', () => {
