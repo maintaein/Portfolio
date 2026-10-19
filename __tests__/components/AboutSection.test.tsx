@@ -635,6 +635,39 @@ describe('AboutSection', () => {
       expect(restroke(2, 120, 20, 1.5)).toBe('TEAMWORK');
     });
 
+    // 재리뷰 2: OS wheel 가속은 빨리 굴릴수록 노치 크기를 키운다. 30-160ms 간격이 쉼 경계를 넘나들며 새 stroke로 읽혔다.
+    const accelerated = () => { let ema = 100; return notches.map((gap, i) => { if (i > 0) ema = 0.5 * gap + 0.5 * ema; return Math.round(Math.min(400, Math.max(20, 100 * (100 / ema)))); }); };
+    const acceleratedSpin = (base: number) => { const deltas = accelerated(); let at = base; notches.forEach((gap, i) => { at += gap; wheel(deltas[i], at); }); };
+
+    it('가속된 마우스 노치를 굴려 들어와도 BASICS에 선다', () => {
+      const { container } = mount(900);
+      acceleratedSpin(20_000);
+      expect(isLocked(container)).toBe(true);
+      expect(chapter(container)).toBe('BASICS');
+    });
+
+    it('잠긴 뒤 가속된 마우스 노치를 굴려도 한 chapter만 간다', () => {
+      const { container } = mount(START);
+      acceleratedSpin(20_000);
+      expect(isLocked(container)).toBe(true);
+      expect(chapter(container)).toBe('QUALITY');
+    });
+
+    // 재리뷰 2: 16ms 관성 꼬리에 65-80ms 끊김이 한 번 끼고 그 wheel이 한 프레임 크기만 실어 와도 같은 stroke다.
+    it.each([65, 70, 80])('16ms 관성 꼬리에 %ims 끊김이 한 번 끼어도 새 stroke로 보지 않는다', (hiccup) => {
+      const { container } = mount(START);
+      let at = 20_000; let speed = 40;
+      wheel(speed, at);
+      for (let i = 1; speed > 0.3; i += 1) {
+        speed *= 0.95;
+        let gap = 16;
+        if (i === 20) { gap = hiccup; for (let j = 0; j < Math.round(hiccup / 16) - 1; j += 1) speed *= 0.95; }
+        at += gap;
+        wheel(Math.max(0.1, speed), at);
+      }
+      expect(chapter(container)).toBe('QUALITY');
+    });
+
     it('클릭도 같은 선택으로 이동하고 마지막 chapter의 새 제스처는 문서로 돌려준다', () => {
       const { container, onChapterChange } = mount(START);
       clock = 20_000;

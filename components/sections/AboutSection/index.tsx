@@ -25,6 +25,10 @@ const DynamicElectricLogo = dynamic(() => import('@/components/blocks/ElectricLo
 });
 const ABOUT_LOGOS = coreValues.map((value) => value.logoSrc);
 const GESTURE_IDLE_MS = 220;
+// 끊긴 wheel의 기준. 프레임 간격(16.7ms)이나 합쳐진 wheel 둘(48ms 안팎)보다 길다.
+const WHEEL_PAUSE_MS = 56;
+// 다시 프레임 간격으로 붙는 wheel. 30ms보다 짧아 마우스 노치는 해당하지 않는다.
+const WHEEL_FRAME_MS = 20;
 // 본문 전환과 로고 모프가 같은 1초를 쓴다.
 const TRANSITION_MS = ELECTRIC_LOGO_MORPH_SECONDS * 1000;
 
@@ -114,7 +118,7 @@ export default function AboutSection({ ref, onChapterChange, navigationPending }
     let lastWheelTime = -Infinity;
     let lastWheelDelta = 0;
     let lastWheelGap = Infinity;
-    let lastComparable = 0;
+    let earlierDelta = 0;
     let wheelPeak = 0;
     let wheelTail = false;
     let touchY = 0;
@@ -184,9 +188,10 @@ export default function AboutSection({ ref, onChapterChange, navigationPending }
       // 줄여 비교하면 합쳐진 관성은 새 stroke가 아니고, 크기가 늘 같은 마우스 노치는 간격이 흔들려도 그대로다.
       const comparable = magnitude * (idle ? 1 : Math.min(1, lastWheelGap / gap));
       const reversed = delta * lastWheelDelta < 0;
-      // 짧게 쉰 뒤의 wheel은 위에서 줄여 쟀다. 다음 wheel도 그 줄인 값과 견줘야 쉬고 완만하게 오르는 새 stroke가 보인다.
-      // 64ms는 합쳐진 wheel(32·48ms)보다 길고 손을 뗀 쉼보다 짧다.
-      const reference = lastWheelGap > 64 ? lastComparable : Math.abs(lastWheelDelta);
+      // 끊긴 wheel 바로 뒤 프레임은 끊기기 전 크기와도 견준다. 쉬고 완만하게 오르는 새 stroke는 끊기기 전 꼬리보다
+      // 커서 보이고, 합쳐진 wheel이나 한 번 끊긴 관성은 끊기기 전 크기 그대로라 보이지 않는다.
+      const resumed = lastWheelGap > WHEEL_PAUSE_MS && gap <= WHEEL_FRAME_MS;
+      const reference = resumed ? Math.min(Math.abs(lastWheelDelta), earlierDelta) : Math.abs(lastWheelDelta);
       // 트랙패드는 앞 stroke의 관성이 끝나기 전에 새 stroke를 시작할 수 있다.
       const renewed = wheelTail && comparable >= 4 && comparable >= reference * 1.8;
       if (idle || reversed || renewed) {
@@ -197,9 +202,9 @@ export default function AboutSection({ ref, onChapterChange, navigationPending }
         if (magnitude < wheelPeak * .6) wheelTail = true;
       }
       lastWheelTime = event.timeStamp;
+      earlierDelta = Math.abs(lastWheelDelta);
       lastWheelDelta = delta;
       lastWheelGap = gap;
-      lastComparable = comparable;
       return input(delta, event.timeStamp, reversed || renewed);
     };
     const wheel = (event: WheelEvent) => { if (phase !== 'locked') wheelInput(event); };
