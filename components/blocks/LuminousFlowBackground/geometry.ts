@@ -53,11 +53,17 @@ const distances = design.map(({ coordinates: [x, y] }, index) => {
 // Only the inside of a turn needs a curvature limit; outer branches can fan out.
 export const normalOffset = (offset: number, curvature: number, limit: number) => offset / Math.sqrt(1 + (Math.max(0, offset * curvature) / limit) ** 2);
 
-export function buildFlowGeometry(width: number, height: number): FlowGeometry {
-  const scale = [width / 492, height / 2162];
+// Design y where the level run after the last turn heads for the exit; a vertical scale change there barely bends the path.
+const FINALE_Y = 1865;
+
+// With finaleTop inside the document, the path up to FINALE_Y fills [0, finaleTop) and the exit run fills the rest.
+export function buildFlowGeometry(width: number, height: number, finaleTop = 0): FlowGeometry {
+  const finale = finaleTop > 0 && finaleTop < height;
   // Widths follow the horizontal scale only: a taller document lengthens the path, never the energy.
   const frames = design.map(({ coordinates, derivative, bend, width: designWidth }) => {
-    const [x, y] = coordinates.map((value, axis) => value * scale[axis]);
+    const tail = finale && coordinates[1] > FINALE_Y;
+    const scale = [width / 492, !finale ? height / 2162 : tail ? (height - finaleTop) / (2162 - FINALE_Y) : finaleTop / FINALE_Y];
+    const [x, y] = coordinates.map((value, axis) => axis && tail ? finaleTop + (value - FINALE_Y) * scale[1] : value * scale[axis]);
     const [dx, dy] = derivative.map((value, axis) => value * scale[axis]);
     const [ax, ay] = bend.map((value, axis) => value * scale[axis]);
     const speed = Math.hypot(dx, dy) || 1; // A zero-size box has no direction.

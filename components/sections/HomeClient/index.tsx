@@ -55,7 +55,7 @@ export default function HomeClient() {
           return <div key={id} data-section={id} role="region" aria-label={label} tabIndex={-1} className="document-section"><Section /></div>;
         })}
       </main>
-      <div inert={obscured}><Footer /></div>
+      <div inert={obscured} data-flow-finale=""><Footer /></div>
       <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">{announcement}</div>
     </div>
   </SectionActivityProvider>;

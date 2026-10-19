@@ -11,7 +11,7 @@ import LuminousFlowBackground, { type LuminousFlowBackgroundHandle } from '@/com
 import { buildFlowGeometry, type FlowGeometry } from '@/components/blocks/LuminousFlowBackground/geometry';
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Object.defineProperty(window, 'innerHeight', { configurable: true, writable: true, value: 768 }); });
 
-type DrawnFrame = { dashes: number[]; paths: number[][][]; arcs: number; clips: number; glow: number };
+type DrawnFrame = { dashes: number[]; paths: number[][][]; arcs: number; clips: number; glow: number; rims: number[][] };
 // RAF callback map, fake clock and Canvas/IO mocks. They see frame scheduling, canvas calls and the geometry passed in.
 function harness({ reduced = false, rect = { left: 0, top: 0, width: 1200, height: 4000 } } = {}) {
   // A viewport as tall as the document keeps every segment inside the drawn crop.
@@ -41,11 +41,11 @@ function harness({ reduced = false, rect = { left: 0, top: 0, width: 1200, heigh
   // Only the document canvas is connected; rim, texture and paint canvases are detached.
   const main = new Proxy({}, {
     get: (_target, key) => helpers(key) ?? (
-      key === 'clearRect' ? () => { current = { dashes: [], paths: [], arcs: 0, clips: 0, glow: 0 }; drawn.push(current); }
+      key === 'clearRect' ? () => { current = { dashes: [], paths: [], arcs: 0, clips: 0, glow: 0, rims: [] }; drawn.push(current); }
         : key === 'arc' ? () => { current!.arcs++; }
           : key === 'clip' ? () => { current!.clips++; }
             // The glow texture spans the scene; bend rims are 76 units tall.
-            : key === 'drawImage' ? (...args: number[]) => { if (args[4] > 1000) current!.glow++; }
+            : key === 'drawImage' ? (...args: number[]) => { if (args[4] > 1000) current!.glow++; else current!.rims.push([args[1] + 45, args[2] + 38]); }
               : () => {}),
     set: (_target, key, value) => { if (key === 'lineDashOffset') current?.dashes.push(value); return true; },
   });
@@ -242,6 +242,28 @@ it('resize는 루프를 겹치지 않고 새 크기의 형상을 만들며 정�
   expect(shapes().at(-1)!.width).toBe(900);
   expect(phase()).toBe(paused);
   expect(frames.size).toBe(0);
+});
+
+it('Contacts 표지의 위쪽 끝을 장면 좌표로 재어 형상에 넘기고 크기가 바뀌면 다시 잰다', () => {
+  const { drawn, tick, resizeTo, shapes } = harness({ rect: { left: 0, top: -700, width: 1200, height: 4000 } });
+  let finale = 3180;
+  const rect = vi.mocked(HTMLElement.prototype.getBoundingClientRect);
+  const scene = rect.getMockImplementation()!;
+  rect.mockImplementation(function (this: HTMLElement) { return this.hasAttribute('data-flow-finale') ? { top: finale } as DOMRect : scene.call(this); });
+  render(<><LuminousFlowBackground scrollScene /><div data-flow-finale="" /></>);
+  tick();
+  expect(vi.mocked(buildFlowGeometry).mock.calls.at(-1)).toEqual([1200, 4000, 3880]);
+  finale = 3780;
+  resizeTo({ left: 0, top: -700, width: 1200, height: 4600 });
+  tick();
+  expect(vi.mocked(buildFlowGeometry).mock.calls.at(-1)).toEqual([1200, 4600, 4480]);
+  // Bend rims sit on the narrow turns (the halfWidth minima), whatever the vertical mapping.
+  const shape = shapes().at(-1)!, unit = shape.width / 492;
+  const turns = shape.center.flatMap((point, index, all) => index > 0 && index < all.length - 1 && point.halfWidth < all[index - 1].halfWidth && point.halfWidth <= all[index + 1].halfWidth ? [index] : []);
+  const rims = drawn.at(-1)!.rims.map(([x, y]) => shape.center.findIndex(point => Math.abs(point.x - x * unit) < 1e-6 && Math.abs(point.y - y * unit) < 1e-6));
+  expect(turns).toHaveLength(5);
+  expect(rims).toHaveLength(5);
+  rims.forEach((sample, index) => expect(Math.abs(sample - turns[index])).toBeLessThanOrEqual(1));
 });
 
 it('StrictMode와 unmount에서 observer와 RAF가 겹치거나 남지 않는다', () => {

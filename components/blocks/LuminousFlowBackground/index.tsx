@@ -76,7 +76,8 @@ const bezierHead = (t: number, a: number, b: number, c: number, d: number) => {
 // One color per geometry strand; the renderer owns color, the geometry owns shape.
 const colors = [palette.cyan, palette.glow, palette.cyan, palette.blue, palette.depth];
 const strandColors = Array.from({ length: 28 }, (_, index) => index % 7 === 0 ? palette.blue : colors[index % colors.length]);
-const BEND_HEIGHTS = [219, 710, 1230, 1493, 1792].map(y => y / 2162);
+// Center samples nearest the narrow turns at design y 219, 710, 1230, 1493 and 1792; by index, they stay on the turns when the finale reshapes y.
+const BEND_SAMPLES = [19, 48, 72, 84, 102];
 
 const atoms = Array.from({ length: 48 }, (_, index) => ({
   index,
@@ -233,9 +234,11 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
       if (sizeChanged) {
         const mobile = viewportWidth <= 600 && !scrollScene;
         // Only a new document or viewport size makes a new shape; scrolling only moves the crop.
-        const shape = buildFlowGeometry(bounds.width * (mobile ? 3 : 1), bounds.height * (scrollScene ? 1 : 2162 / 318));
+        // The flow leaves the screen over the page's Contacts area; pages without the marker keep the uniform design.
+        const finale = root.parentElement?.querySelector('[data-flow-finale]')?.getBoundingClientRect().top;
+        const shape = buildFlowGeometry(bounds.width * (mobile ? 3 : 1), bounds.height * (scrollScene ? 1 : 2162 / 318), finale === undefined ? undefined : finale - bounds.top);
         geometry = shape;
-        bends = BEND_HEIGHTS.map(y => shape.center.reduce((nearest, point) => Math.abs(point.y - y * shape.height) < Math.abs(nearest.y - y * shape.height) ? point : nearest));
+        bends = BEND_SAMPLES.map(sample => shape.center[sample]);
         interpolated = shape.strands.map(poses => poses[0].map(() => [0, 0]));
         cumulativeLengths = shape.strands.map(poses => new Float64Array(poses[0].length));
         // Keep each strand's color fade spanning the whole scene.

@@ -50,6 +50,31 @@ describe('buildFlowGeometry', () => {
     });
   });
 
+  it('Contacts 위치가 주어지면 마지막 꺾임 뒤 왼쪽 출구가 Contacts 구간 안에 놓인다', () => {
+    [[390, 4927, 4807], [768, 5884, 5764], [1440, 5140, 5020], [1440, 6000, 5100]].forEach(([width, height, finaleTop]) => {
+      const { center, strands } = buildFlowGeometry(width, height, finaleTop);
+      const turn = center.findLastIndex((point, index) => index > 0 && index < center.length - 1 && point.x >= center[index - 1].x && point.x >= center[index + 1].x);
+      const exit = center.findIndex((point, index) => index > turn && point.x < 0);
+      expect(exit).toBeGreaterThan(turn);
+      expect(center[exit].y).toBeGreaterThanOrEqual(finaleTop);
+      expect(center[exit].y).toBeLessThanOrEqual(height);
+      const unit = width / 492, end = center.at(-1)!;
+      expect(end.x + 25 * unit + end.halfWidth).toBeLessThan(0);
+      strands.flat().forEach(pose => expect(pose.at(-1)!.x + 6.5 * unit).toBeLessThan(0));
+    });
+  });
+
+  it('Contacts 위치가 없거나 문서 안에 있지 않으면 지금의 균일 배치를 그대로 쓴다', () => {
+    const uniform = buildFlowGeometry(1440, 5140);
+    [undefined, 0, -10, 5140, 9000, NaN].forEach(finaleTop => expect(buildFlowGeometry(1440, 5140, finaleTop)).toEqual(uniform));
+    // 균일 배치: 높이를 두 배로 하면 모든 중심점의 y가 정확히 두 배가 된다.
+    const tall = buildFlowGeometry(1440, 10280);
+    tall.center.forEach((point, index) => expect(point.y).toBeCloseTo(uniform.center[index].y * 2, 9));
+    [[0, 0, 0], [1440, 0, 10], [0, 4000, 3000], [1440, 4000, 1]].forEach(([width, height, finaleTop]) => {
+      expect(numbers(buildFlowGeometry(width, height, finaleTop)).every(Number.isFinite)).toBe(true);
+    });
+  });
+
   it('0 크기 입력에서도 NaN이나 무한값을 만들지 않는다', () => {
     [[0, 0], [0, 4000], [1440, 0]].forEach(([width, height]) => {
       expect(numbers(buildFlowGeometry(width, height)).every(Number.isFinite)).toBe(true);
