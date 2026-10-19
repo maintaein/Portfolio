@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { Renderer, Program, Mesh, Triangle, Texture } from 'ogl';
 import { ELECTRIC_LOGO_MORPH_SECONDS } from './motion';
@@ -19,6 +19,19 @@ const MORPH_DURATION = ELECTRIC_LOGO_MORPH_SECONDS;
 const EMPTY_PRELOAD_SRCS: string[] = [];
 
 type Rgb = [number, number, number];
+
+export type ElectricBoundaryTarget = {
+  width: number;
+  height: number;
+  radius: number;
+};
+
+export interface ElectricLogoHandle {
+  beginBoundary(target: ElectricBoundaryTarget): boolean;
+  setBoundaryTarget(target: ElectricBoundaryTarget): void;
+  seekBoundary(progress: number): void;
+  endBoundary(): void;
+}
 
 export interface ElectricLogoProps {
   src?: string;
@@ -150,6 +163,22 @@ interface Focus {
   x: number;
   y: number;
   radius: number;
+}
+
+interface Placement {
+  fit: number;
+  ox: number;
+  oy: number;
+  unit: number;
+}
+
+interface Boundary {
+  progress: number;
+  target: ElectricBoundaryTarget;
+  room: [number, number];
+  near: Placement;
+  far: Placement;
+  overflow: string;
 }
 
 interface Spark {
@@ -491,6 +520,10 @@ uniform float uFill;
 uniform float uInk;
 uniform vec4 uArcEnds[${ARCS}];
 uniform vec4 uArcShape[${ARCS}];
+uniform float uBoundary;
+uniform vec4 uBox;
+uniform float uBoxRadius;
+uniform vec2 uOrigin;
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -515,16 +548,25 @@ vec2 glowAt(sampler2D tex, vec4 map, vec4 size, vec2 p) {
   return textureLod(tex, f / (size.zw * ${CELL}.0), 0.0).rg;
 }
 
+float box(vec2 p) {
+  vec2 q = abs(p - uBox.xy) - uBox.zw + uBoxRadius;
+  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - uBoxRadius;
+}
+
 float shape(vec2 p, float k) {
   float to = fieldAt(tFieldTo, uMapTo, uSizeTo, p);
-  if (k >= 1.0) return to;
-  return mix(fieldAt(tFieldFrom, uMapFrom, uSizeFrom, p), to, k);
+  float logo = k >= 1.0 ? to : mix(fieldAt(tFieldFrom, uMapFrom, uSizeFrom, p), to, k);
+  return uBoundary > 0.0 ? mix(logo, box(p), uBoundary) : logo;
 }
 
 vec2 aura(vec2 p, float k) {
   vec2 to = glowAt(tGlowTo, uMapTo, uSizeTo, p);
-  if (k >= 1.0) return to;
-  return mix(glowAt(tGlowFrom, uMapFrom, uSizeFrom, p), to, k);
+  vec2 logo = k >= 1.0 ? to : mix(glowAt(tGlowFrom, uMapFrom, uSizeFrom, p), to, k);
+  if (uBoundary <= 0.0) return logo;
+  // The traced glow is an edge gaussian 3.5 and 13 units wide; the box gets the same profile.
+  float b = box(p);
+  vec2 s = uUnit * vec2(3.5, 13.0);
+  return mix(logo, exp(-b * b / (2.0 * s * s)), uBoundary);
 }
 
 vec4 corner(ivec2 c, uint seed) {
@@ -646,7 +688,7 @@ void addArc(vec2 p, vec4 ends, vec4 info, float t, inout vec3 light, inout float
 }
 
 void main() {
-  vec2 p = vec2(vUv.x, 1.0 - vUv.y) * uResolution;
+  vec2 p = vec2(vUv.x, 1.0 - vUv.y) * uResolution - uOrigin;
   float t = uTime;
   vec3 light = vec3(0.0);
   float energy = 0.0;
@@ -725,7 +767,7 @@ void main() {
 }
 `;
 
-const ElectricLogo = ({
+const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function ElectricLogo({
   src = BOLT,
   active = true,
   prewarm = false,
@@ -752,8 +794,15 @@ const ElectricLogo = ({
   theme = 'dark',
   className = '',
   style
-}: ElectricLogoProps) => {
+}, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const engineRef = useRef<ElectricLogoHandle | null>(null);
+  useImperativeHandle(ref, () => ({
+    beginBoundary: (next) => engineRef.current?.beginBoundary(next) ?? false,
+    setBoundaryTarget: (next) => engineRef.current?.setBoundaryTarget(next),
+    seekBoundary: (progress) => engineRef.current?.seekBoundary(progress),
+    endBoundary: () => engineRef.current?.endBoundary()
+  }), []);
   const settingsRef = useRef<Settings | null>(null);
   const shapeRef = useRef<Shape | null>(null);
   const onReadyRef = useRef(onReady);
@@ -937,7 +986,11 @@ const ElectricLogo = ({
       uFill: { value: 0.5 },
       uInk: { value: 0 },
       uArcEnds: { value: arcEnds },
-      uArcShape: { value: arcShape }
+      uArcShape: { value: arcShape },
+      uBoundary: { value: 0 },
+      uBox: { value: [0, 0, 0, 0] },
+      uBoxRadius: { value: 0 },
+      uOrigin: { value: [0, 0] }
     };
     const mesh = new Mesh(gl, {
       geometry: new Triangle(gl),
@@ -968,7 +1021,11 @@ const ElectricLogo = ({
     let last = performance.now();
     let lastRenderedAt = -Infinity;
     let visible = true;
+    let boundary: Boundary | null = null;
+    let dirty = false;
     const shouldRun = () => visible && (activeRef.current || (prewarmRef.current && !prewarmPainted));
+    // A seek or end must reach the screen even while the loop is paused.
+    const wants = () => shouldRun() || (visible && dirty);
 
     const load = (slot: Slot, next: Shape) => {
       slot.shape = next;
@@ -982,7 +1039,7 @@ const ElectricLogo = ({
       slot.glow.needsUpdate = true;
     };
 
-    const place = (shape: Shape, s: Settings) => {
+    const place = (shape: Shape, s: Settings): Placement => {
       const fit = Math.max(1e-4, Math.min((width * s.scale) / shape.logoWidth, (height * s.scale) / shape.logoHeight));
       return {
         fit,
@@ -992,23 +1049,33 @@ const ElectricLogo = ({
       };
     };
 
+    const recentre = (at: Placement, k: number): Placement => ({ ...at, ox: at.ox + (k * width) / 2, oy: at.oy + (k * height) / 2 });
+
     const resize = () => {
       width = Math.max(1, container.clientWidth);
       height = Math.max(1, container.clientHeight);
-      renderer.dpr = Math.min(window.devicePixelRatio || 1, maxDprRef.current, Math.sqrt(PIXEL_BUDGET / (width * height)));
-      renderer.setSize(width, height);
-      uniforms.uResolution.value = [width, height];
+      // A boundary canvas already holds the destination box and its glow, so seeks never resize it.
+      const fw = boundary ? Math.max(width, boundary.room[0]) : width;
+      const fh = boundary ? Math.max(height, boundary.room[1]) : height;
+      renderer.dpr = Math.min(window.devicePixelRatio || 1, maxDprRef.current, Math.sqrt(PIXEL_BUDGET / (fw * fh)));
+      renderer.setSize(fw, fh);
+      // Out of flow, or the larger canvas raises the min-content size of a flex parent and shifts the layout.
+      canvas.style.position = boundary ? 'absolute' : '';
+      canvas.style.left = boundary ? `${(width - fw) / 2}px` : '';
+      canvas.style.top = boundary ? `${(height - fh) / 2}px` : '';
+      uniforms.uResolution.value = [fw, fh];
+      uniforms.uOrigin.value = [(fw - width) / 2, (fh - height) / 2];
     };
 
     const frame = (now: number) => {
       raf = 0;
       if (now - lastRenderedAt + .5 < 1000 / Math.max(1, maxFpsRef.current)) {
-        if (shouldRun()) raf = requestAnimationFrame(frame);
+        if (wants()) raf = requestAnimationFrame(frame);
         return;
       }
       lastRenderedAt = now;
       if (!(mesh.program as ParallelProgram).finish()) {
-        if (shouldRun()) raf = requestAnimationFrame(frame);
+        if (wants()) raf = requestAnimationFrame(frame);
         return;
       }
       const s = settingsRef.current;
@@ -1016,26 +1083,29 @@ const ElectricLogo = ({
       const dt = Math.min(0.05, elapsed);
       last = now;
 
-      const incoming = shapeRef.current;
-      if (incoming && incoming !== slots[target].shape) pending = incoming;
-      if (pending && morph >= 1) {
-        if (slots[target].shape) {
-          target = 1 - target;
-          morph = 0;
-          sparks.length = 0;
+      // A boundary owns the shape: new sources wait and the time morph holds until end.
+      if (!boundary) {
+        const incoming = shapeRef.current;
+        if (incoming && incoming !== slots[target].shape) pending = incoming;
+        if (pending && morph >= 1) {
+          if (slots[target].shape) {
+            target = 1 - target;
+            morph = 0;
+            sparks.length = 0;
+          }
+          load(slots[target], pending);
+          pending = null;
         }
-        load(slots[target], pending);
-        pending = null;
+        if (morph < 1) morph = Math.min(1, morph + elapsed / MORPH_DURATION);
       }
-      if (morph < 1) morph = Math.min(1, morph + elapsed / MORPH_DURATION);
 
       const to = slots[target].shape;
       const from = morph < 1 ? slots[1 - target].shape : null;
       const presence = 1;
 
       if (to && s) {
-        const near = place(to, s);
-        const far = from ? place(from, s) : near;
+        const near = boundary ? recentre(boundary.near, 1) : place(to, s);
+        const far = boundary ? recentre(boundary.far, 1) : from ? place(from, s) : near;
         const blend = morph * morph * (3 - 2 * morph);
         const unit = far.unit + (near.unit - far.unit) * blend;
 
@@ -1053,7 +1123,7 @@ const ElectricLogo = ({
         hover.power += ((engaged ? 1 : 0) - hover.power) * (1 - Math.exp(-dt / (engaged ? 0.3 : 0.55)));
 
         const motion = reducedMotion ? 0.2 : 1;
-        time += dt * s.speed * motion;
+        if (shouldRun()) time += dt * s.speed * motion;
 
         for (let i = sparks.length - 1; i >= 0; i--) {
           if (time - sparks[i].born > sparks[i].life) sparks.splice(i, 1);
@@ -1063,14 +1133,14 @@ const ElectricLogo = ({
           y: (spot.y - near.oy) / near.fit,
           radius: Math.max(1, s.cursorRadius) / near.fit
         });
-        if (burst && morph >= 1 && s.arcs > 0) {
+        if (burst && morph >= 1 && !boundary && s.arcs > 0) {
           for (let i = 0; i < 3 && sparks.length < ARCS; i++) {
             const spark = spawnArc(to, time, focus(burst));
             if (spark) sparks.push(spark);
           }
         }
         burst = null;
-        if (!reducedMotion && presence > 0.8 && morph >= 1 && sparks.length < ARCS) {
+        if (!reducedMotion && presence > 0.8 && morph >= 1 && !boundary && sparks.length < ARCS) {
           const chance = dt * s.speed * s.arcs;
           if (Math.random() < chance * 6 * hover.power * s.cursorIntensity) {
             const spark = spawnArc(to, time, focus(hover));
@@ -1131,6 +1201,12 @@ const ElectricLogo = ({
           uniforms.uSizeFrom.value = [from.width, from.height, from.glowWidth, from.glowHeight];
         }
         uniforms.uMorph.value = morph;
+        uniforms.uBoundary.value = boundary ? boundary.progress : 0;
+        if (boundary) {
+          const { width: w, height: h, radius } = boundary.target;
+          uniforms.uBox.value = [width / 2, height / 2, w / 2, h / 2];
+          uniforms.uBoxRadius.value = Math.min(Math.max(0, radius), w / 2, h / 2);
+        }
         uniforms.uUnit.value = unit;
         uniforms.uTime.value = time;
         uniforms.uPresence.value = presence;
@@ -1158,13 +1234,14 @@ const ElectricLogo = ({
         uniforms.uInk.value = ink;
         renderer.render({ scene: mesh });
         prewarmPainted = true;
+        dirty = false;
         if (to.src && to.src !== lastReadySrc) {
           lastReadySrc = to.src;
           onReadyRef.current?.(to.src);
         }
       }
 
-      if (shouldRun()) raf = requestAnimationFrame(frame);
+      if (wants()) raf = requestAnimationFrame(frame);
     };
 
     const start = () => {
@@ -1177,6 +1254,52 @@ const ElectricLogo = ({
       else {
         cancelAnimationFrame(raf);
         raf = 0;
+      }
+    };
+
+    const paint = () => {
+      dirty = true;
+      if (!raf && visible) raf = requestAnimationFrame(frame);
+    };
+    const aim = (next: ElectricBoundaryTarget) => {
+      if (!boundary) return;
+      boundary.target = next;
+      const margin = Math.max(boundary.near.unit, boundary.far.unit) * 40;
+      const [rw, rh] = boundary.room;
+      // Grow only, so a target that keeps changing size does not reallocate the canvas each time.
+      boundary.room = [Math.max(rw, Math.ceil(next.width + margin * 2)), Math.max(rh, Math.ceil(next.height + margin * 2))];
+      if (boundary.room[0] !== rw || boundary.room[1] !== rh) resize();
+      paint();
+    };
+    engineRef.current = {
+      beginBoundary: (next) => {
+        const to = slots[target].shape;
+        const s = settingsRef.current;
+        if (!prewarmPainted || !to || !s) return false;
+        if (!boundary) {
+          // Freeze what is on screen now, including a half-finished morph, as the start shape.
+          const from = morph < 1 ? slots[1 - target].shape : null;
+          const near = place(to, s);
+          boundary = { progress: 0, target: next, room: [0, 0], near: recentre(near, -1), far: recentre(from ? place(from, s) : near, -1), overflow: container.style.overflow };
+          sparks.length = 0;
+          container.style.overflow = 'visible';
+        }
+        aim(next);
+        return true;
+      },
+      setBoundaryTarget: aim,
+      seekBoundary: (progress) => {
+        if (!boundary) return;
+        boundary.progress = Math.min(1, Math.max(0, progress));
+        paint();
+      },
+      endBoundary: () => {
+        if (!boundary) return;
+        container.style.overflow = boundary.overflow;
+        boundary = null;
+        resize();
+        last = performance.now();
+        paint();
       }
     };
 
@@ -1215,6 +1338,8 @@ const ElectricLogo = ({
     return () => {
       visible = false;
       onActivationRef.current = null;
+      engineRef.current = null;
+      if (boundary) container.style.overflow = boundary.overflow;
       cancelAnimationFrame(raf);
       resizeObserver.disconnect();
       intersectionObserver.disconnect();
@@ -1229,6 +1354,6 @@ const ElectricLogo = ({
   return (
     <div ref={containerRef} className={`relative w-full h-full overflow-hidden ${className}`.trim()} style={style} />
   );
-};
+});
 
 export default ElectricLogo;
