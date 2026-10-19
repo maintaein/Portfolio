@@ -615,6 +615,26 @@ describe('AboutSection', () => {
       expect(chapter(container)).toBe('QUALITY');
     });
 
+    // 재리뷰 발견: 짧게 쉬고(80-200ms) 완만하게 올라오는 새 stroke를 놓쳤다. 쉰 뒤 첫 wheel은 줄여 재므로 다음 wheel도 그 줄인 값과 비교한다.
+    const restroke = (tail: number, rest: number, onset: number, ramp: number) => {
+      const { container } = mount(START);
+      let at = 20_000; let speed = 40;
+      wheel(40, at);
+      while (speed > tail || at < 21_100) { at += 16; speed = Math.max(tail, speed * 0.95); wheel(speed, at); }
+      expect(chapter(container)).toBe('QUALITY');
+      at += rest; let delta = onset;
+      for (let i = 0; i < 12; i += 1) { wheel(delta, at); at += 16; delta = Math.min(120, delta * ramp); }
+      return chapter(container);
+    };
+
+    it('관성 꼬리 8px 뒤 100ms 쉬고 60에서 1.3배씩 오르는 stroke는 다음 chapter다', () => {
+      expect(restroke(8, 100, 60, 1.3)).toBe('TEAMWORK');
+    });
+
+    it('관성 꼬리 2px 뒤 120ms 쉬고 20에서 1.5배씩 오르는 stroke는 다음 chapter다', () => {
+      expect(restroke(2, 120, 20, 1.5)).toBe('TEAMWORK');
+    });
+
     it('클릭도 같은 선택으로 이동하고 마지막 chapter의 새 제스처는 문서로 돌려준다', () => {
       const { container, onChapterChange } = mount(START);
       clock = 20_000;

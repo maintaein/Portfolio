@@ -114,6 +114,7 @@ export default function AboutSection({ ref, onChapterChange, navigationPending }
     let lastWheelTime = -Infinity;
     let lastWheelDelta = 0;
     let lastWheelGap = Infinity;
+    let lastComparable = 0;
     let wheelPeak = 0;
     let wheelTail = false;
     let touchY = 0;
@@ -183,8 +184,11 @@ export default function AboutSection({ ref, onChapterChange, navigationPending }
       // 줄여 비교하면 합쳐진 관성은 새 stroke가 아니고, 크기가 늘 같은 마우스 노치는 간격이 흔들려도 그대로다.
       const comparable = magnitude * (idle ? 1 : Math.min(1, lastWheelGap / gap));
       const reversed = delta * lastWheelDelta < 0;
+      // 짧게 쉰 뒤의 wheel은 위에서 줄여 쟀다. 다음 wheel도 그 줄인 값과 견줘야 쉬고 완만하게 오르는 새 stroke가 보인다.
+      // 64ms는 합쳐진 wheel(32·48ms)보다 길고 손을 뗀 쉼보다 짧다.
+      const reference = lastWheelGap > 64 ? lastComparable : Math.abs(lastWheelDelta);
       // 트랙패드는 앞 stroke의 관성이 끝나기 전에 새 stroke를 시작할 수 있다.
-      const renewed = wheelTail && comparable >= 4 && comparable >= Math.abs(lastWheelDelta) * 1.8;
+      const renewed = wheelTail && comparable >= 4 && comparable >= reference * 1.8;
       if (idle || reversed || renewed) {
         wheelPeak = magnitude;
         wheelTail = false;
@@ -195,6 +199,7 @@ export default function AboutSection({ ref, onChapterChange, navigationPending }
       lastWheelTime = event.timeStamp;
       lastWheelDelta = delta;
       lastWheelGap = gap;
+      lastComparable = comparable;
       return input(delta, event.timeStamp, reversed || renewed);
     };
     const wheel = (event: WheelEvent) => { if (phase !== 'locked') wheelInput(event); };
