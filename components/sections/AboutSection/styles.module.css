@@ -3,12 +3,15 @@
 /* 잠금 위치(헤더 아래 16px)에서 머리글과 본문이 한 화면에 든다. */
 .stage { position: relative; width: min(1280px, calc(100% - 112px)); height: calc(100svh - 92px); margin-inline: auto; display: grid; grid-template-columns: .85fr 1.15fr; gap: 10%; align-items: center; }
 .header { position: absolute; inset: 24px 0 auto; z-index: 3; }
-.rail { min-width: 0; display: grid; place-items: center; align-self: stretch; opacity: 0; transform: translate3d(0, 24px, 0) scale(.96); transition: opacity var(--animate-duration-slow) cubic-bezier(.23, 1, .32, 1), transform var(--animate-duration-slow) cubic-bezier(.23, 1, .32, 1); }
+.rail { min-width: 0; display: grid; place-items: center; align-self: stretch; transition: opacity var(--animate-duration-slow) cubic-bezier(.23, 1, .32, 1), transform var(--animate-duration-slow) cubic-bezier(.23, 1, .32, 1); }
 .stage[data-entered="true"] .rail { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
 .stage[data-entered="true"] .articles { opacity: 1; transform: translate3d(0, 0, 0); transition-delay: 80ms; }
-.articles { --reading-orbit-radius: clamp(480px, 75svh, 720px); display: grid; min-width: 0; position: relative; opacity: 0; transform: translate3d(0, 24px, 0); transition: opacity var(--animate-duration-slow) cubic-bezier(.23, 1, .32, 1), transform var(--animate-duration-slow) cubic-bezier(.23, 1, .32, 1); }
+.articles { --reading-orbit-radius: clamp(480px, 75svh, 720px); display: grid; min-width: 0; position: relative; transition: opacity var(--animate-duration-slow) cubic-bezier(.23, 1, .32, 1), transform var(--animate-duration-slow) cubic-bezier(.23, 1, .32, 1); }
+/* 숨긴 출발점은 하이드레이션 뒤(HomeClient의 data-route-resolved)에만 건다. JS가 없거나 번들이 실패해도 활성 chapter는 읽힌다. */
+main[data-route-resolved="true"] .stage[data-entered="false"] .rail { opacity: 0; transform: translate3d(0, 24px, 0) scale(.96); }
+main[data-route-resolved="true"] .stage[data-entered="false"] .articles { opacity: 0; transform: translate3d(0, 24px, 0); }
 .articles::before { content: ''; position: absolute; inset: -40px; pointer-events: none; background: radial-gradient(ellipse, rgb(0 0 0 / .94), rgb(0 0 0 / .68) 60%, transparent 85%); }
-.panelViewport { display: grid; perspective: 1400px; padding-block: 96px; margin-block: -96px; overflow: hidden; mask-image: linear-gradient(to bottom, transparent, black 40px, black calc(100% - 40px), transparent); }
+.panelViewport { display: grid; perspective: 1400px; padding-block: 96px; margin-block: -96px; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, transparent, black 40px, black calc(100% - 40px), transparent); mask-image: linear-gradient(to bottom, transparent, black 40px, black calc(100% - 40px), transparent); }
 /* Keep the spherical arc close to the reading area; blur before it leaves. */
 .panel { grid-area: 1 / 1; position: relative; opacity: 0; filter: blur(8px); transform: rotateX(-25deg); transform-origin: 50% 50% calc(0px - var(--reading-orbit-radius)); transition: opacity calc(var(--chapter-transition) * .45) ease, filter calc(var(--chapter-transition) * .6) ease, transform var(--chapter-transition) cubic-bezier(.77, 0, .175, 1); transition-delay: calc(var(--chapter-transition) * .375), calc(var(--chapter-transition) * .3), 0ms; }
 .panel[data-position="active"] { opacity: 1; filter: blur(0); transform: rotateX(0); transition-duration: calc(var(--chapter-transition) * .825), calc(var(--chapter-transition) * .825), var(--chapter-transition); transition-delay: calc(var(--chapter-transition) * .1), calc(var(--chapter-transition) * .075), 0ms; }
@@ -41,6 +44,6 @@
   .header { display: none; }
   .rail, .articles { opacity: 1; transform: none; transition: none; }
   .articles { display: block; }
-  .panelViewport { display: block; overflow: visible; mask-image: none; padding-block: 0; margin-block: 0; }
+  .panelViewport { display: block; overflow: visible; -webkit-mask-image: none; mask-image: none; padding-block: 0; margin-block: 0; }
   .stage .panel[data-position] { opacity: 1; filter: none; transform: none; padding: 60px 0; border-top: 1px solid rgb(255 255 255 / .15); transition: none; }
 }

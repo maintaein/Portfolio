@@ -21,7 +21,7 @@ export interface AboutSectionProps {
 const GESTURE_IDLE_MS = 220;
 // 끊긴 wheel의 기준. 프레임 간격(16.7ms)이나 합쳐진 wheel 둘(48ms 안팎)보다 길다.
 const WHEEL_PAUSE_MS = 56;
-// 다시 프레임 간격으로 붙는 wheel. 30ms보다 짧아 마우스 노치는 해당하지 않는다.
+// 다시 프레임 간격으로 붙는 wheel. 느리거나 보통 속도로 굴린 마우스 노치는 이보다 길다. 빠르게 튕긴 노치는 10-20ms로 올 수 있다.
 const WHEEL_FRAME_MS = 20;
 // 본문 전환과 로고 모프가 같은 1초를 쓴다.
 const TRANSITION_MS = ELECTRIC_LOGO_MORPH_SECONDS * 1000;
@@ -39,6 +39,7 @@ export default function AboutSection({ ref, onChapterChange, navigationPending }
   const selected = useRef(0);
   const selectRef = useRef<(index: number) => void>(() => {});
   const releaseRef = useRef(() => {});
+  const enterRef = useRef(() => {});
   const { reducedMotion, motionReady, pageVisible, obscured } = useSectionActivity();
   const { ref: sectionRef, visible } = useSectionVisibility<HTMLElement>();
   const active = visible && motionReady && pageVisible && !obscured;
@@ -213,6 +214,9 @@ export default function AboutSection({ ref, onChapterChange, navigationPending }
       setPhase('locked'); choose(index); lastStep = performance.now(); lastInput = lastStep; pendingGesture = false;
       window.scrollTo({ top: start, behavior: 'instant' });
     };
+    // Tab으로 chapter 단어에 닿으면 진입 제스처처럼 잠근다. 위에서 오면 BASICS, 아래에서 오면 TEAMWORK다.
+    // 마우스 클릭의 포커스는 거르고 클릭 선택에 맡긴다. 안 그러면 누르는 순간 다른 chapter로 한 번 넘어간다.
+    enterRef.current = () => { if (!disabled && !blocked && phase !== 'locked') lock(window.scrollY > start, performance.now()); };
     releaseRef.current = () => {
       closeOvershoot(); pendingGesture = false;
       if (phase === 'locked') setPhase(window.scrollY > start ? 'after' : 'before');
@@ -240,6 +244,7 @@ export default function AboutSection({ ref, onChapterChange, navigationPending }
       window.removeEventListener('scroll', scroll); window.removeEventListener('popstate', closeOvershoot); window.removeEventListener('resize', measure);
       short.removeEventListener('change', measure);
       releaseRef.current = () => {};
+      enterRef.current = () => {};
     };
   }, [sectionRef, reducedMotion, navigationPending, obscured]);
 
@@ -292,7 +297,7 @@ export default function AboutSection({ ref, onChapterChange, navigationPending }
         : null}
       <div className={styles.stage} style={{ '--chapter-transition': `${TRANSITION_MS}ms` } as CSSProperties}
         data-motion-layout="reading" data-static={plain ? '' : undefined} data-entered={entered} data-locked={locked}>
-        <div className={styles.header}>
+        <div className={styles.header} onFocus={event => { if (event.target.matches(':focus-visible')) enterRef.current(); }}>
           <ChapterFocus active={activeIndex} entered={entered} onSelect={index => selectRef.current(index)} />
         </div>
         <div className={styles.rail} aria-hidden="true">

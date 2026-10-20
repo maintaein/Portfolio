@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { INTRO_GATE_SCRIPT } from '@/lib/introGate';
@@ -81,10 +82,30 @@ it('ships the curtain hidden by default and the greetings once for readers in SS
   expect(html).toMatch(/data-testid="wordmark"[^>]*><span class="inline-block">KIM TAEIN<\/span><\/button>/);
 });
 
+// 최종 리뷰 I2. JS가 없거나 하이드레이션 전, 본 번들이 실패해도 About의 활성 chapter는 읽혀야 한다.
+// 숨긴 출발점은 HomeClient가 하이드레이션 뒤에 켜는 main[data-route-resolved="true"] 아래에서만 건다.
+it('About의 BASICS chapter와 단어는 서버 상태에서 CSS로 숨지 않는다', () => {
+  const html = renderToString(<HomeClient />);
+  expect(html).toMatch(/<main[^>]*data-route-resolved="false"/);
+  const basics = html.match(/<article[^>]*data-chapter="BASICS"[^>]*>/)![0];
+  expect(basics).toContain('data-position="active"');
+  expect(basics).not.toMatch(/inert|aria-hidden="true"/);
+  expect(html).toMatch(/data-chapter-word="BASICS"[^>]*><span>BASICS<\/span>/);
+  const css = ['styles.module.css', 'chapter-focus.module.css']
+    .map(name => readFileSync(`components/sections/AboutSection/${name}`, 'utf8'))
+    .join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
+  const hidden = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .filter(([, , body]) => /(^|[\s;])opacity:\s*0\s*(;|$)/.test(body))
+    .flatMap(([, selectors]) => selectors.split(',').map(selector => selector.trim()))
+    .filter(selector => /\.(articles|rail|word|label)(\[[^\]]*\]|:[\w-]+(\([^)]*\))?)*$/.test(selector));
+  expect(hidden.length).toBeGreaterThan(0);
+  for (const selector of hidden) expect(selector).toMatch(/^main\[data-route-resolved="true"\] /);
+});
+
 describe('그리기 전 인트로 판정(lib/introGate.ts)', () => {
-  const run = ({ hash = '', reduced = false, type = 'navigate', saved }: { hash?: string; reduced?: boolean; type?: string; saved?: number }) => {
+  const run = ({ path = '/', hash = '', reduced = false, type = 'navigate', saved }: { path?: string; hash?: string; reduced?: boolean; type?: string; saved?: number }) => {
     document.documentElement.removeAttribute('data-intro');
-    window.history.replaceState(saved === undefined ? null : { sectionScrollY: saved }, '', `/${hash}`);
+    window.history.replaceState(saved === undefined ? null : { sectionScrollY: saved }, '', `${path}${hash}`);
     vi.stubGlobal('matchMedia', (query: string) => ({ matches: reduced && query.includes('reduce') }));
     vi.spyOn(performance, 'getEntriesByType').mockReturnValue([{ type } as unknown as PerformanceEntry]);
     new Function(INTRO_GATE_SCRIPT)();
@@ -102,6 +123,8 @@ describe('그리기 전 인트로 판정(lib/introGate.ts)', () => {
     ['모션 감소', { reduced: true }],
     ['앞뒤 이동', { type: 'back_forward' }],
     ['저장된 읽기 위치가 있는 새로고침', { type: 'reload', saved: 900 }],
+    // 최종 리뷰 triage. 다른 경로에 표시가 남으면 load 뒤 3초 안의 클라이언트 이동으로 / 에서 인트로가 시작된다.
+    ['/ 밖의 경로', { path: '/background-preview' }],
   ] as const)('%s는 커튼 없이 바로 간다', (_, options) => {
     expect(run(options)).toBe(false);
   });

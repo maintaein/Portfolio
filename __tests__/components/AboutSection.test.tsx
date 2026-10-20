@@ -521,6 +521,28 @@ describe('AboutSection', () => {
     const isLocked = (container: HTMLElement) => container.querySelector('[data-locked="true"]') !== null;
     const send = (events: [number, number][], base: number) => { for (const [time, delta] of events) wheel(delta, base + time); };
 
+    // 최종 리뷰 triage. 잠금 근처가 아니면 Tab이 About의 유일한 컨트롤을 건너뛰었다. 포커스가 잠금 경로와 같이 About을 연다.
+    it('Hero에서 Tab으로 chapter 단어에 닿고, 그 포커스가 BASICS로 잠가 연다', async () => {
+      const { container } = mount(0);
+      expect(container.querySelector('[data-entered="false"]')).not.toBeNull();
+      expect(isLocked(container)).toBe(false);
+      expect(window.scrollTo).not.toHaveBeenCalled();
+      await userEvent.tab();
+      expect(screen.getByRole('button', { name: 'BASICS' })).toHaveFocus();
+      expect(isLocked(container)).toBe(true);
+      expect(window.scrollTo).toHaveBeenLastCalledWith({ top: START, behavior: 'instant' });
+      expect(chapter(container)).toBe('BASICS');
+    });
+
+    it('아래에서 Shift+Tab으로 돌아와 마지막 단어에 닿으면 TEAMWORK로 잠근다', async () => {
+      const { container } = mount(2400);
+      await userEvent.tab({ shift: true });
+      expect(screen.getByRole('button', { name: 'TEAMWORK' })).toHaveFocus();
+      expect(isLocked(container)).toBe(true);
+      expect(window.scrollTo).toHaveBeenLastCalledWith({ top: START, behavior: 'instant' });
+      expect(chapter(container)).toBe('TEAMWORK');
+    });
+
     it('진입 제스처는 BASICS에 세우기만 하고 남은 관성은 chapter를 넘기지 않는다', () => {
       const { container } = mount(900);
       wheel(60, 20_000);
@@ -581,7 +603,7 @@ describe('AboutSection', () => {
       expect(chapter(container)).toBe('QUALITY');
     });
 
-    // 재리뷰 발견: 짧게 쉬고(80-200ms) 완만하게 올라오는 새 stroke를 놓쳤다. 쉰 뒤 첫 wheel은 줄여 재므로 다음 wheel도 그 줄인 값과 비교한다.
+    // 재리뷰 발견: 짧게 쉬고(80-200ms) 완만하게 올라오는 새 stroke를 놓쳤다. 쉰 뒤 첫 wheel은 줄여 재고, 바로 프레임 간격으로 이어진 다음 wheel은 쉬기 전 꼬리와도 견준다.
     const restroke = (tail: number, rest: number, onset: number, ramp: number) => {
       const { container } = mount(START);
       let at = 20_000; let speed = 40;
