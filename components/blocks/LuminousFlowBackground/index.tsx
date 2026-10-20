@@ -122,9 +122,11 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
     let atmosphereTexture: HTMLCanvasElement | null = null;
     let textureVersion = 0;
     let textureUrl: string | null = null;
+    let stripFrame = 0;
     const cacheAtmosphere = (width: number, height: number) => {
       if (!atmosphere) return;
       const version = ++textureVersion;
+      cancelAnimationFrame(stripFrame);
       if (textureUrl) URL.revokeObjectURL(textureUrl);
       const copy = atmosphere.cloneNode(true) as SVGSVGElement;
       copy.removeAttribute('style');
@@ -145,14 +147,33 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
         texture.width = Math.ceil(width * ratio);
         texture.height = Math.ceil(height * ratio);
         const paint = texture.getContext('2d');
-        if (paint) {
+        const finish = () => {
+          URL.revokeObjectURL(url);
+          if (textureUrl === url) textureUrl = null;
+        };
+        if (!paint) return finish();
+        // 한 번에 그리면 이 기기에서 GPU가 1초 넘게 묶여 첫 화면이 멈춘다. 프레임마다 띠 하나씩 채운다.
+        // 띠는 같은 변환을 잘라 그리고 높이는 8줄의 배수다. 그래디언트 디더 위상이 맞아 한 번에 그린 것과 2/255 안에서 같다.
+        const rows = Math.max(8, Math.floor(25e4 / texture.width / 8) * 8);
+        let top = 0;
+        const drawStrip = () => {
+          paint.save();
+          paint.beginPath();
+          paint.rect(0, top, texture.width, rows);
+          paint.clip();
           paint.drawImage(image, 0, 0, texture.width, texture.height);
+          paint.restore();
+          top += rows;
+          if (top < texture.height) {
+            stripFrame = requestAnimationFrame(drawStrip);
+            return;
+          }
           atmosphereTexture = texture;
           atmosphere.style.visibility = 'hidden';
           requestDraw();
-        }
-        URL.revokeObjectURL(url);
-        if (textureUrl === url) textureUrl = null;
+          finish();
+        };
+        stripFrame = requestAnimationFrame(drawStrip);
       };
       image.src = url;
     };
@@ -512,6 +533,7 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
       textureVersion++;
       if (textureUrl) URL.revokeObjectURL(textureUrl);
       cancelAnimationFrame(frame);
+      cancelAnimationFrame(stripFrame);
       observer.disconnect();
       visibilityObserver.disconnect();
       window.removeEventListener('resize', resize);

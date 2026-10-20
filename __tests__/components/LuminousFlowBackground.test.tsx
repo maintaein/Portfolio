@@ -49,14 +49,19 @@ function harness({ reduced = false, rect = { left: 0, top: 0, width: 1200, heigh
               : () => {}),
     set: (_target, key, value) => { if (key === 'lineDashOffset') current?.dashes.push(value); return true; },
   });
-  const other = new Proxy({}, { get: (_target, key) => helpers(key) ?? (() => {}) });
+  // Only the glow texture draws an image on a detached canvas: each strip is a clip rect, then the whole image.
+  const strips: number[][] = []; let stripRect: number[] = [];
+  const other = new Proxy({}, { get: (_target, key) => helpers(key) ?? (
+    key === 'rect' ? (...args: number[]) => { stripRect = args; }
+      : key === 'drawImage' ? (...args: number[]) => { strips.push([...stripRect, ...args.slice(1)]); }
+        : () => {}) });
   const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (this: HTMLCanvasElement) { return (this.isConnected ? main : other) as CanvasRenderingContext2D; });
   let bounds = rect;
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => bounds as DOMRect);
   const builds = vi.mocked(buildFlowGeometry);
   const built = builds.mock.results.length;
   return {
-    frames, drawn, getContext,
+    frames, drawn, getContext, strips,
     tick: (step = 16) => act(() => { clock += step; const pending = [...frames.values()]; frames.clear(); pending.forEach(callback => callback(clock)); }),
     advance: (step: number) => { clock += step; },
     loadImages: () => act(() => { images.splice(0).forEach(image => image.onload?.()); }),
@@ -116,7 +121,9 @@ it('reveal은 공통 중심선의 누적 길이로 줄기·입자·광휘를 함
   const { drawn, tick, loadImages, shapes } = harness();
   const ref = createRef<LuminousFlowBackgroundHandle>();
   const { container } = render(<LuminousFlowBackground ref={ref} scrollScene />);
-  tick(); loadImages(); tick();
+  // The texture fills a strip per frame; 20 frames cover this scene's 17 strips.
+  tick(); loadImages();
+  for (let frame = 0; frame < 20; frame++) tick();
   const [shape] = shapes();
   const envelope = container.querySelector('[data-flow-envelope]')!;
   // The source haze is the root's first child; it is Luminous glow, so it follows the reveal too.
@@ -265,6 +272,56 @@ it('Contacts 표지의 위쪽 끝을 장면 좌표로 재어 형상에 넘기고
   expect(turns).toHaveLength(5);
   expect(rims).toHaveLength(5);
   rims.forEach((sample, index) => expect(Math.abs(sample - turns[index])).toBeLessThanOrEqual(1));
+});
+
+it('광휘 텍스처는 프레임마다 8줄 단위 띠 하나씩 채우고 다 채운 뒤에야 살아 있는 SVG를 숨긴다', () => {
+  const { drawn, tick, loadImages, shapes, strips } = harness();
+  const { container } = render(<LuminousFlowBackground scrollScene />);
+  tick(); loadImages();
+  const svg = container.querySelector('svg')!;
+  const [{ width, height }] = shapes();
+  const ratio = Math.min(1, Math.sqrt(4e6 / (width * height)));
+  const [textureWidth, textureHeight] = [Math.ceil(width * ratio), Math.ceil(height * ratio)];
+  // 불러온 그 자리에서는 그리지 않는다. 첫 띠는 다음 프레임이다.
+  expect(strips).toHaveLength(0);
+  let frames = 0;
+  while (svg.style.visibility !== 'hidden' && frames < 100) {
+    tick(); frames++;
+    expect(strips).toHaveLength(frames);
+    if (svg.style.visibility !== 'hidden') expect(drawn.at(-1)!.glow).toBe(0);
+  }
+  // 띠는 8줄의 배수이고 텍스처 픽셀 25만 개를 넘지 않는 가장 큰 높이다. 디더 위상이 한 번에 그린 것과 같다.
+  const rows = strips[0][3];
+  expect(rows % 8).toBe(0);
+  expect(textureWidth * rows).toBeLessThanOrEqual(25e4);
+  expect(textureWidth * (rows + 8)).toBeGreaterThan(25e4);
+  strips.forEach(([x, y, w, h, ...image], index) => {
+    expect([x, y, w, h]).toEqual([0, index * rows, textureWidth, rows]);
+    expect(image).toEqual([0, 0, textureWidth, textureHeight]);
+  });
+  expect(strips.length).toBe(Math.ceil(textureHeight / rows));
+  tick();
+  expect(drawn.at(-1)!.glow).toBe(1);
+  tick(); tick();
+  expect(strips).toHaveLength(frames);
+});
+
+it('크기가 바뀌거나 unmount되면 그리던 띠 예약을 버린다', () => {
+  const { frames, tick, loadImages, strips, resizeTo } = harness();
+  const { unmount } = render(<LuminousFlowBackground scrollScene paused />);
+  tick(); loadImages(); tick(); tick();
+  expect(strips).toHaveLength(2);
+  resizeTo({ left: 0, top: 0, width: 900, height: 4000 });
+  tick();
+  const drawnStrips = strips.length;
+  tick(); tick();
+  expect(strips).toHaveLength(drawnStrips);
+  expect(frames.size).toBe(0);
+  loadImages(); tick();
+  expect(strips.at(-1)!.slice(2, 4)[0]).toBe(900);
+  expect(frames.size).toBe(1);
+  unmount();
+  expect(frames.size).toBe(0);
 });
 
 it('StrictMode와 unmount에서 observer와 RAF가 겹치거나 남지 않는다', () => {
