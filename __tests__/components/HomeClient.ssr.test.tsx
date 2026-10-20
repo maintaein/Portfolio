@@ -82,6 +82,22 @@ it('ships no curtain and no greeting paragraph in SSR', () => {
   expect(html).toMatch(/data-testid="wordmark"[^>]*><span class="inline-block">KIM TAEIN<\/span><\/button>/);
 });
 
+// Task 5. JS가 없거나 오기 전에도 이름은 Hero 자리(CSS 배치)에 크게 선다. 빈 띠도, nav에서 뛰어내리는 첫 그림도 없다.
+it('ships the one name button in its Hero rest state inside the Hero name slot', () => {
+  const html = renderToString(<HomeClient />);
+  const hero = html.slice(html.indexOf('id="overview"'), html.indexOf('data-section="about"'));
+  expect(hero).toMatch(/data-motion-anchor="hero-name"[^>]*><button[^>]*data-testid="wordmark"[^>]*data-wordmark-mode="hero"/);
+  expect(html.match(/data-testid="wordmark"/g)).toHaveLength(1);
+  expect(html.match(/data-wordmark-mode=/g)).toHaveLength(1);
+  const nav = html.slice(html.indexOf('<nav'), html.indexOf('</nav>'));
+  expect(nav).toMatch(/data-motion-anchor="nav-name"[^>]*><\/div>/);
+  const css = readFileSync('styles/design-tokens.css', 'utf8');
+  expect(css).toMatch(/\.site-name\[data-wordmark-mode='hero'\] \{[^}]*position: absolute;[^}]*left: 0; right: 0; margin-inline: auto; width: max-content; font-size: var\(--hero-name-size\);/);
+  expect(css).toMatch(/\.site-name\[data-wordmark-mode='nav'\] \{ position: fixed; z-index: 51; \}/);
+  // 쉬는 자리에는 transform이 없다. 누르는 상자가 보이는 글자 줄이다.
+  expect(css).not.toMatch(/\.site-name[^{]*\{[^}]*(transform|scale)/);
+});
+
 // 최종 리뷰 I2. JS가 없거나 하이드레이션 전, 본 번들이 실패해도 About의 활성 chapter는 읽혀야 한다.
 // 숨긴 출발점은 HomeClient가 하이드레이션 뒤에 켜는 main[data-route-resolved="true"] 아래에서만 건다.
 it('About의 BASICS chapter와 단어는 서버 상태에서 CSS로 숨지 않는다', () => {

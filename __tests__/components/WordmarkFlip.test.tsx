@@ -5,22 +5,25 @@ it('one static wordmark; the intro animates only its inner span, never the butto
   const home = readFileSync('components/sections/HomeClient/index.tsx', 'utf8');
   const nav = readFileSync('components/blocks/Navigation/index.tsx', 'utf8');
   const boot = readFileSync('components/sections/BootSequence/index.tsx', 'utf8');
-  expect(nav.match(/data-testid="wordmark"/g)).toHaveLength(1);
-  expect(nav).toMatch(/tracking-widest"><span className="inline-block">\{PERSONAL_INFO\.NAME_EN\}<\/span><\/button>/);
+  expect(home.match(/data-testid="wordmark"/g)).toHaveLength(1);
+  expect(nav).not.toContain('data-testid="wordmark"');
+  expect(home).toMatch(/tracking-widest"><span className="inline-block">\{PERSONAL_INFO\.NAME_EN\}<\/span><\/button>/);
   expect(home).toContain('wordmark = wordmarkRef.current?.firstElementChild');
   expect(home).toContain('<BootSequence'); expect(home).not.toContain('Flip.from'); expect(home).not.toContain('onStart');
   expect(boot).not.toMatch(/ParticleText|Flip|wordmarkRef/);
 });
-// 이름 자리는 경계 모듈(motion.ts)이 hero-name과 nav-name 사이에서 옮긴다. nav의 active로
-// 배치를 바꾸면 스크롤 도중 CSS와 GSAP이 같은 버튼을 서로 덮는다.
+// 이름의 두 쉬는 자리는 경계 모듈(motion.ts)만 data-wordmark-mode로 바꾼다. nav의 active로
+// 배치를 바꾸면 CSS와 GSAP이 같은 버튼을 서로 덮는다. React는 서버 상태(hero)만 그린다.
 it('the name channel moves the one wordmark; nav active only highlights', () => {
   const home = readFileSync('components/sections/HomeClient/index.tsx', 'utf8');
   const nav = readFileSync('components/blocks/Navigation/index.tsx', 'utf8');
   const motion = readFileSync('components/sections/HomeClient/motion.ts', 'utf8');
   expect(nav).not.toMatch(/active === ['"]overview['"]/);
-  expect(nav).not.toMatch(/data-wordmark-mode=\{/);
-  expect(home).toContain('wordmarkRef={wordmarkRef}');
+  expect(home).not.toMatch(/data-wordmark-mode=\{/);
+  expect(home).toContain('data-wordmark-mode="hero"');
   expect(home.match(/data-motion-anchor="hero-name"/g)).toHaveLength(1);
-  expect(motion).toContain('data-motion-anchor="${');
-  expect(motion).toContain('wordmark.style.transform');
+  expect(nav.match(/data-motion-anchor="nav-name"/g)).toHaveLength(1);
+  expect(motion).toContain('wordmark.dataset.wordmarkMode = side');
+  // 넘을 때만 재생한다. 스크롤마다 이름을 긁는 쓰기와 광휘 변수는 없다.
+  expect(motion).not.toMatch(/--name-glow|--hero-lean|onUpdate: render\b/);
 });

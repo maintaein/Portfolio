@@ -374,20 +374,29 @@
    두 줄 인사는 원문 개행으로 나눈다(pre-line). 단어로 나뉘는 진입 동안에도 같은 자리에서 끊긴다. */
 .portfolio-hero { --hero-name-size: clamp(56px, 6.5vw, 128px); display: flex; flex-direction: column; justify-content: center; gap: 30px; padding: 4rem max(1.5rem, 8vw); }
 .portfolio-hero h1 { max-width: 44rem; margin-top: 1.5rem; font-size: var(--font-size-t1); line-height: 1.35; font-weight: 500; word-break: keep-all; white-space: pre-line; }
-/* 큰 이름의 빈 자리. 경계(motion.ts)가 nav의 이름 버튼을 이 높이의 글자 줄(nav 글자 줄 높이 1.5배)로 키워 Hero 가로 가운데에 놓는다.
-   폭이 좁으면 자리 폭에 맞춰 줄인다. 흰 광휘는 글자 그림자이고 nav에 닿으면 경계가 --name-glow로 끈다.
-   가운데 이름은 배경 광선 위를 지난다. 글자 뒤 부드러운 검은 판이 광선을 눌러 글자 가장자리 대비를 4.5:1 위로 지킨다(광휘 포함 실측 5.9 이상). */
-.hero-name { height: calc(var(--hero-name-size) * 1.5); }
-[data-motion-anchor='nav-name'] button { position: relative; isolation: isolate; text-shadow: 0 0 .2em rgb(255 255 255 / calc(.4 * var(--name-glow, 0))), 0 0 .6em rgb(255 255 255 / calc(.2 * var(--name-glow, 0))); }
-[data-motion-anchor='nav-name'] button::before { content: ''; position: absolute; inset: 0 -.6em; z-index: -1; pointer-events: none; background: radial-gradient(closest-side, rgb(0 0 0 / calc(.85 * var(--name-glow, 0))) 60%, transparent); }
+/* 큰 이름의 자리. 이름 버튼 하나가 두 쉬는 자리(data-wordmark-mode)를 CSS 배치로 오간다. 서버 HTML은 Hero 자리다.
+   Hero: 이 자리 높이의 글자 줄(1.5em)로 Hero 가로 가운데에 선다. absolute라 가로는 Hero 상자(left/right 0)로,
+   세로는 정적 위치라 이 flex 자리의 가운데로 정해진다. 자리와 고리에 맞춘 크기는 경계(motion.ts)가 잰다.
+   nav: nav-name 앵커에 fixed로 선다(좌표는 경계가 잰다). 넘을 때만 경계가 0.5초 FLIP으로 옮기고 쉬는 동안 transform이 없다.
+   흰 광휘는 Hero 자리의 글자 그림자이고 FLIP 동안 사라진다. 글자 뒤 판은 두지 않는다(사용자 결정 2026-10-20). */
+.hero-name { display: flex; align-items: center; height: calc(var(--hero-name-size) * 1.5); }
+.site-name { line-height: 1.5; text-shadow: 0 0 .2em rgb(255 255 255 / 0), 0 0 .6em rgb(255 255 255 / 0); transition: text-shadow 500ms cubic-bezier(0.22, 1, 0.36, 1); }
+/* tracking-widest의 끝 자간을 버튼 폭에서 빼 보이는 글자가 가운데에 온다. */
+.site-name > span { margin-right: -.1em; }
+.site-name[data-wordmark-mode='hero'] { position: absolute; z-index: 1; left: 0; right: 0; margin-inline: auto; width: max-content; font-size: var(--hero-name-size); text-shadow: 0 0 .2em rgb(255 255 255 / .4), 0 0 .6em rgb(255 255 255 / .2); }
+.site-name[data-wordmark-mode='nav'] { position: fixed; z-index: 51; }
+@media (prefers-reduced-motion: reduce) { .site-name { transition: none; } }
 .hero-copy { min-width: 0; }
 .hero-object { position: relative; flex: none; width: min(112px, 16svh); aspect-ratio: 1 / 1; }
 @media (min-width: 1024px) {
-  .portfolio-hero { flex-direction: row; align-items: center; justify-content: space-between; gap: 48px; }
+  /* 이름 크기는 고리 상자(오브젝트 왼쪽 18%) 16px 앞에서 멈춘다. motion.ts가 잰 값과 같은 식이라 JS 전·JS 없이도 고리에 닿지 않는다.
+     shortcut: 0.82(= 1 - RING_INSET.left)와 보이는 글자 폭 5.67em(÷ 2.835)을 옮겨 적었다. 로고·글꼴이 바뀌면 motion.ts와 함께 고친다. */
+  .portfolio-hero { --hero-object-size: min(clamp(260px, 31vw, 400px), 55svh); --hero-name-size: min(clamp(56px, 6.5vw, 128px), calc((42vw - .82 * var(--hero-object-size) - 16px) / 2.835)); flex-direction: row; align-items: center; justify-content: space-between; gap: 48px; }
   /* 이름 자리가 글 칸 전체 폭을 써야 이름이 짧은 인사 폭에 묶이지 않는다. */
   .hero-copy { flex: 1; }
-  .portfolio-hero h1 { font-size: var(--font-size-d3); line-height: var(--line-height-d3); }
-  .hero-object { width: min(clamp(260px, 31vw, 400px), 55svh); }
+  /* 1024–1535px은 큰 이름이 고리 앞에서 멈춰 문장보다 크게 읽히도록 문장을 줄인다(사용자 결정 2026-10-20). */
+  .portfolio-hero h1 { font-size: 2.25rem; line-height: var(--line-height-d3); }
+  .hero-object { width: var(--hero-object-size); }
 }
 @media (min-width: 1536px) {
   .portfolio-hero { gap: 72px; }
@@ -407,12 +416,12 @@
 /* 첫 진입. 그리기 전 판정(lib/introGate.ts)이 html[data-intro]를 붙인 경우에만 첫 페인트부터 출발 상태로 숨긴다.
    JS가 없거나 해시·모션 감소로 들어오면 붙지 않아 완성된 첫 화면이 바로 보인다.
    문장은 단어로 나뉘면(aria-label) 단어마다 인라인 출발 상태를 받으므로 그때 숨김을 넘긴다. */
-html[data-intro] [data-motion-anchor='nav-name'] button > span,
+html[data-intro] .site-name > span,
 html[data-intro] .portfolio-hero h1:not([aria-label]),
 html[data-intro] .hero-object .about-electric-static { opacity: 0; }
 /* Hero 정적 실루엣은 GL 궤도와 같은 휴식 자세(motion.ts REST_X/Y_DEG, perspective 900)로 눕는다.
-   경계가 --hero-lean을 1에서 0으로 내려 정면으로 돌린다. 진입 동안은 inline opacity 트윈이 전환에 끌리지 않게 끈다. */
-.hero-object-tilt { width: 100%; height: 100%; transform: perspective(900px) rotateX(calc(56deg * var(--hero-lean, 1))) rotateY(calc(-24deg * var(--hero-lean, 1))); }
+   진입 동안은 inline opacity 트윈이 전환에 끌리지 않게 끈다. */
+.hero-object-tilt { width: 100%; height: 100%; transform: perspective(900px) rotateX(56deg) rotateY(-24deg); }
 html[data-intro] .hero-object .about-electric-static { transition: none; }
 .site-footer { min-height: 120px; padding-bottom: max(2rem, env(safe-area-inset-bottom, 0px)); }
 

@@ -505,13 +505,13 @@ describe('AboutSection', () => {
     const wheel = (deltaY: number, at: number) => stamp(new WheelEvent('wheel', { deltaY, cancelable: true }), at);
     const key = (name: string, at: number) => stamp(new KeyboardEvent('keydown', { key: name, cancelable: true }), at);
     const scrollAt = (top: number, at: number) => { documentY = top; stamp(new Event('scroll'), at); };
-    const mount = (top: number, initial: { navigationPending?: boolean; obscured?: boolean } = {}) => {
+    const mount = (top: number, initial: { navigationPending?: boolean; obscured?: boolean; logoLanded?: boolean } = {}) => {
       documentY = top;
       const handle = createRef<AboutSectionHandle>();
       const onChapterChange = vi.fn();
-      const view = ({ navigationPending = false, obscured = false }: typeof initial) => (
+      const view = ({ navigationPending = false, obscured = false, logoLanded = true }: typeof initial) => (
         <SectionActivityProvider obscured={obscured} pageVisible routeResolved motionReady reducedMotion={matchMedia('(prefers-reduced-motion: reduce)').matches}>
-          <AboutSection ref={handle} onChapterChange={onChapterChange} navigationPending={navigationPending} />
+          <AboutSection ref={handle} onChapterChange={onChapterChange} navigationPending={navigationPending} logoLanded={logoLanded} />
         </SectionActivityProvider>
       );
       const utils = render(view(initial));
@@ -541,6 +541,31 @@ describe('AboutSection', () => {
       expect(isLocked(container)).toBe(true);
       expect(window.scrollTo).toHaveBeenLastCalledWith({ top: START, behavior: 'instant' });
       expect(chapter(container)).toBe('TEAMWORK');
+    });
+
+    // Task 5. 공유 로고가 About 자리로 날아가는 동안에는 잠그지 않는다. 그사이 잠금 자리에 닿으면 입력은 막지 않고, 내려앉을 때 잠근다.
+    it('로고가 날아가는 동안 잠금 자리에 닿으면 입력을 막지 않고 기다렸다가 내려앉을 때 BASICS로 잠근다', () => {
+      const { container, update } = mount(900, { logoLanded: false });
+      expect(wheel(60, 20_000).defaultPrevented).toBe(false);
+      documentY = 960;
+      expect(wheel(120, 20_016).defaultPrevented).toBe(false);
+      expect(key('PageDown', 20_100).defaultPrevented).toBe(false);
+      scrollAt(1080, 20_120);
+      expect(isLocked(container)).toBe(false);
+      expect(window.scrollTo).not.toHaveBeenCalled();
+      update({ logoLanded: true });
+      expect(isLocked(container)).toBe(true);
+      expect(window.scrollTo).toHaveBeenLastCalledWith({ top: START, behavior: 'instant' });
+      expect(chapter(container)).toBe('BASICS');
+    });
+
+    it('로고가 날아가는 동안 반 화면 넘게 지나쳤으면 내려앉아도 끌어오지 않는다', () => {
+      const { container, update } = mount(960, { logoLanded: false });
+      wheel(120, 20_000);
+      scrollAt(START + 800, 20_400);
+      update({ logoLanded: true });
+      expect(isLocked(container)).toBe(false);
+      expect(window.scrollTo).not.toHaveBeenCalled();
     });
 
     it('진입 제스처는 BASICS에 세우기만 하고 남은 관성은 chapter를 넘기지 않는다', () => {

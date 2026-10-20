@@ -3,17 +3,18 @@ import { expect, it, vi } from 'vitest';
 import Navigation from '@/components/blocks/Navigation';
 import { NAV_ITEMS, PERSONAL_INFO } from '@/lib/constants';
 import { findTailwindPaletteColorUtilities } from '@/__tests__/helpers/tailwindPalette';
-it('keeps a single wordmark and all navigation items with current state', () => {
+// 이름 버튼은 Hero에 산다(HomeClient). nav에는 경계가 옮겨 올 빈 앵커만 둔다.
+it('keeps an empty name anchor and all navigation items with current state', () => {
   const ref = { current: null as HTMLElement | null }; const navigate = vi.fn();
   const { container } = render(<Navigation items={NAV_ITEMS} active="projects" onNavigate={navigate} headerRef={ref} />);
-  expect(screen.getAllByText(PERSONAL_INFO.NAME_EN)).toHaveLength(1);
+  expect(screen.queryByText(PERSONAL_INFO.NAME_EN)).toBeNull();
+  expect(container.querySelector('[data-motion-anchor="nav-name"]')!.childElementCount).toBe(0);
   expect(ref.current).toBe(container.querySelector('[data-scroll-header]'));
   expect(screen.getByRole('button', { name: 'Projects' })).toHaveAttribute('aria-current', 'page');
   fireEvent.click(screen.getByRole('button', { name: 'Projects' }), { detail: 1 });
   expect(navigate).toHaveBeenCalledWith('projects', { focus: true, behavior: 'smooth' });
   fireEvent.click(screen.getByRole('button', { name: 'Skills' }), { detail: 0 });
   expect(navigate).toHaveBeenLastCalledWith('skills', { focus: true, behavior: 'auto' });
-  fireEvent.click(screen.getByLabelText('개요로 이동')); expect(navigate).toHaveBeenLastCalledWith('overview', expect.any(Object));
 });
 it('closes its mobile menu on selection and Escape', () => {
   render(<Navigation items={NAV_ITEMS} active="about" onNavigate={vi.fn()} reducedMotion />);

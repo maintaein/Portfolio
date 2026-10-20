@@ -81,7 +81,7 @@ describe('BootSequence 진입 SSR·접근성', () => {
 
   // 진입할 방문은 첫 페인트부터 출발 상태여야 완성된 첫 화면이 한 번 비치지 않는다. JS 없는 방문은 표시가 붙지 않는다.
   it('그리기 전 판정이 있을 때만 이름·나뉘기 전 문장·오브젝트 껍질·배경 안개를 첫 페인트부터 숨긴다', () => {
-    expect(CSS).toMatch(/html\[data-intro\] \[data-motion-anchor='nav-name'\] button > span,\nhtml\[data-intro\] \.portfolio-hero h1:not\(\[aria-label\]\),\nhtml\[data-intro\] \.hero-object \.about-electric-static \{ opacity: 0; \}/);
+    expect(CSS).toMatch(/html\[data-intro\] \.site-name > span,\nhtml\[data-intro\] \.portfolio-hero h1:not\(\[aria-label\]\),\nhtml\[data-intro\] \.hero-object \.about-electric-static \{ opacity: 0; \}/);
     expect(FLOW_CSS).toMatch(/:global\(html\[data-intro\]\) \.sourceHaze \{ opacity: 0; \}/);
   });
 

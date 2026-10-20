@@ -134,64 +134,111 @@ test.describe('Native motion activity', () => {
     await expect(wordmark).toHaveAttribute('data-e2e-mark', 'same');
     await expect(page.getByRole('button', { name: 'START' })).toHaveCount(0);
   });
-  test('Hero→About 경계는 이름 버튼 하나와 로고 host 하나를 실제 앵커 사이로 옮기고 되감으면 돌려놓는다', async ({ page }) => {
+  test('Hero→About 경계는 지점을 넘을 때 이름 버튼 하나와 로고 host 하나를 실제 앵커 사이로 한 번 옮기고 되넘으면 돌려놓는다', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await enter(page, 'overview');
     const name = page.getByTestId('wordmark');
-    const box = async (selector: string) => (await page.locator(selector).boundingBox())!;
+    const owner = page.locator('.portfolio-document');
     const singles = () => page.evaluate(() => [document.querySelectorAll('[data-testid="wordmark"]').length, document.querySelectorAll('[data-logo-host]').length]);
-    // nav: 왼쪽 끝과 세로 가운데가 앵커에 맞는다.
-    const offAnchor = async (selector: string) => {
-      const [a, b] = [await box(selector), (await name.boundingBox())!];
-      return Math.max(Math.abs(a.x - b.x), Math.abs(a.y + a.height / 2 - b.y - b.height / 2));
-    };
-    // Hero: 세로 가운데는 이름 자리에, 가로 가운데는 Hero에 맞는다. 버튼 상자는 끝 자간(0.1em × 배율)의 절반만큼 오른쪽으로 비켜 있다.
-    const offHero = async () => {
-      const [a, hero, b] = [await box('[data-motion-anchor="hero-name"]'), await box('#overview'), (await name.boundingBox())!];
-      return Math.max(Math.abs(a.y + a.height / 2 - b.y - b.height / 2), Math.abs(hero.x + hero.width / 2 - b.x - b.width / 2) - 10);
-    };
-    const offLogo = async () => {
-      const [a, b] = [await box('[data-motion-anchor="about-logo"]'), await box('[data-logo-host]')];
-      return Math.max(Math.abs(a.x + a.width / 2 - b.x - b.width / 2), Math.abs(a.y + a.height / 2 - b.y - b.height / 2));
+    const scrollTo = (top: number) => page.evaluate(y => window.scrollTo({ top: y, behavior: 'instant' }), top);
+    // 상자들은 한 번의 evaluate로 같은 프레임에서 읽는다. 소프트웨어 GL에서는 프레임이 1초 가까이 걸려 따로 읽으면 사이에 화면이 바뀐다.
+    const offsets = () => page.evaluate(() => {
+      const r = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
+      const [name, slot, hero, nav, about, host] = ['[data-testid="wordmark"]', '[data-motion-anchor="hero-name"]', '#overview', '[data-motion-anchor="nav-name"]', '[data-motion-anchor="about-logo"]', '[data-logo-host]'].map(r);
+      const centre = (a: DOMRect) => [a.left + a.width / 2, a.top + a.height / 2];
+      const [nx, ny] = centre(name);
+      return {
+        // Hero: 세로 가운데는 이름 자리에, 가로 가운데는 Hero에 맞는다. 끝 자간은 버튼 폭에서 빠져 있다.
+        hero: Math.max(Math.abs(centre(slot)[1] - ny), Math.abs(centre(hero)[0] - nx)),
+        // nav: 왼쪽 끝과 세로 가운데가 앵커에 맞는다.
+        nav: Math.max(Math.abs(nav.left - name.left), Math.abs(centre(nav)[1] - ny)),
+        logo: Math.max(Math.abs(centre(about)[0] - centre(host)[0]), Math.abs(centre(about)[1] - centre(host)[1])),
+        width: Math.abs(about.width - host.width),
+      };
+    });
+    const offHero = async () => (await offsets()).hero;
+    const offNav = async () => (await offsets()).nav;
+    const offLogo = async () => (await offsets()).logo;
+    // 재생은 시간으로 간다. 소프트웨어 GL의 긴 프레임에는 GSAP 지연 보정이 프레임마다 33ms만 흘려 0.5초가 수십 초가 될 수 있다.
+    // 그래서 쉬는 자리를 기다리는 상한을 넉넉히 둔다. 성공 조건이 아니라 실패 상한이고, 실제 재생 시간은 헤드 Chrome에서 잰다.
+    const settled = { timeout: 20_000 };
+    const atRest = async (mode: 'hero' | 'nav') => {
+      await expect(name).toHaveAttribute('data-wordmark-mode', mode, settled);
+      await expect(name).toHaveCSS('transform', 'none', settled);
     };
     // /#overview 첫 방문은 진입을 돌고 GL 로고는 그 뒤에 뜬다. 이 검사는 경계만 보므로 아무 키로 진입을 끝낸다.
     await page.keyboard.press('Shift');
     await expect(page.locator('html')).not.toHaveAttribute('data-intro', { timeout: 30_000 });
-    await expect.poll(offHero).toBeLessThan(1.5);
-    await expect(page.locator('.portfolio-document')).toHaveAttribute('data-logo-owner', 'hero', { timeout: 20_000 });
-    // 첫 GL 그림(문맥 생성)이 끝난 뒤에 스크롤한다. 그 사이 프레임이 멈춰 경계가 늦게 따라온다.
-    await expect(page.locator('.portfolio-document')).toHaveAttribute('data-logo-live', '', { timeout: 30_000 });
+    await atRest('hero');
+    await expect.poll(offHero, settled).toBeLessThan(1.5);
+    // 쉬는 Hero 자리의 누르는 상자는 보이는 글자 줄이다. 왼쪽 문장을 덮지 않는다.
+    const [rest, headline] = [(await name.boundingBox())!, (await page.getByRole('heading', { level: 1 }).boundingBox())!];
+    expect(rest.y + rest.height).toBeLessThanOrEqual(headline.y);
+    await expect(owner).toHaveAttribute('data-logo-owner', 'hero', { timeout: 20_000 });
+    // 첫 GL 그림(문맥 생성)이 끝난 뒤에 스크롤한다. 그 사이 프레임이 멈춰 재생이 늦게 따라온다.
+    await expect(owner).toHaveAttribute('data-logo-live', '', { timeout: 30_000 });
     expect(await singles()).toEqual([1, 1]);
 
-    // 경계 한가운데: 이름은 nav에 닿았고 로고는 아직 떠나는 중이다.
-    const end = await page.evaluate(() => { const about = document.querySelector<HTMLElement>('[data-section="about"]')!; return about.getBoundingClientRect().top + scrollY - parseFloat(getComputedStyle(about).scrollMarginTop); });
-    await page.evaluate(top => window.scrollTo({ top, behavior: 'instant' }), Math.round(end * .6));
-    await waitFrames(page, 4);
-    await expect.poll(() => offAnchor('[data-motion-anchor="nav-name"]')).toBeLessThan(1.5);
-    await expect(page.locator('.portfolio-document')).toHaveAttribute('data-logo-owner', 'boundary');
+    // 휠 두 칸(200px): 이름만 nav로 간다. 로고 지점(About 머리가 화면 70%)은 아직이다.
+    await scrollTo(200);
+    await atRest('nav');
+    await expect.poll(offNav, settled).toBeLessThan(1.5);
+    await expect(owner).toHaveAttribute('data-logo-owner', 'hero');
+    // 한 칸 올라오면 Hero로 돌아온다.
+    await scrollTo(100);
+    await atRest('hero');
+    await expect.poll(offHero, settled).toBeLessThan(1.5);
     expect(await singles()).toEqual([1, 1]);
+
+    // 로고 지점을 넘고 멈추면 한 번 재생해 About 앵커에 내려앉는다. 스크롤을 더 하지 않아도 끝까지 간다.
+    // 이 자리에서는 About 레일이 아직 등장 transform(24px 아래) 중이라 앵커는 transform을 뺀 레이아웃 자리로 잰다.
+    const logoAt = await page.evaluate(() => document.querySelector('[data-section="about"]')!.getBoundingClientRect().top + scrollY - innerHeight * .7);
+    await scrollTo(Math.round(logoAt) + 40);
+    await expect(owner).toHaveAttribute('data-logo-owner', 'about', settled);
+    await expect.poll(() => page.evaluate(() => {
+      let [x, y] = [0, 0];
+      const anchor = document.querySelector<HTMLElement>('[data-motion-anchor="about-logo"]')!;
+      for (let node: HTMLElement | null = anchor; node; node = node.offsetParent as HTMLElement | null) { x += node.offsetLeft; y += node.offsetTop; }
+      const host = document.querySelector('[data-logo-host]')!.getBoundingClientRect();
+      return Math.max(Math.abs(x + anchor.offsetWidth / 2 - host.left - host.width / 2), Math.abs(y + anchor.offsetHeight / 2 - scrollY - host.top - host.height / 2));
+    }), settled).toBeLessThan(1.5);
+    await atRest('nav');
+    expect(await singles()).toEqual([1, 1]);
+    // 되넘으면 Hero 앵커로 돌아간다.
+    await scrollTo(Math.round(logoAt) - 40);
+    await expect(owner).toHaveAttribute('data-logo-owner', 'hero', settled);
 
     await navButton(page, 'About').click(); await expectActive(page, 'about');
-    await expect(page.locator('.portfolio-document')).toHaveAttribute('data-logo-owner', 'about');
-    await expect.poll(offLogo).toBeLessThan(1.5);
+    await expect(owner).toHaveAttribute('data-logo-owner', 'about', settled);
+    await expect.poll(offLogo, settled).toBeLessThan(1.5);
     expect(await singles()).toEqual([1, 1]);
 
     // 창이 줄면 host도 줄어든 앵커를 따라간다.
     await page.setViewportSize({ width: 1100, height: 760 });
-    await expect.poll(async () => {
-      const [a, b] = [await box('[data-motion-anchor="about-logo"]'), await box('[data-logo-host]')];
-      return Math.abs(a.width - b.width);
-    }).toBeLessThan(1.5);
+    // 재생 없이 다시 재는 일이라 기본 상한(5초)에 든다. 앵커를 지켜보므로 main 크기 변화를 기다리지 않는다.
+    await expect.poll(async () => (await offsets()).width).toBeLessThan(1.5);
     await page.setViewportSize({ width: 1440, height: 900 });
 
-    await navButton(page, '개요로 이동').click(); await expectActive(page, 'overview');
-    await expect(page.locator('.portfolio-document')).toHaveAttribute('data-logo-owner', 'hero');
-    await expect.poll(offHero).toBeLessThan(1.5);
+    await name.click(); await expectActive(page, 'overview');
+    await expect(owner).toHaveAttribute('data-logo-owner', 'hero', settled);
+    await atRest('hero');
+    await expect.poll(offHero, settled).toBeLessThan(1.5);
     expect(await singles()).toEqual([1, 1]);
+  });
+  test('문턱 아래로 바로 온 해시는 처음부터 이름이 nav, 로고가 About 자리이고 재생하지 않는다', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await enter(page, 'about');
+    const name = page.getByTestId('wordmark');
+    await expect(name).toHaveAttribute('data-wordmark-mode', 'nav');
+    await expect(name).toHaveCSS('transform', 'none');
+    const [a, b] = [(await page.locator('[data-motion-anchor="nav-name"]').boundingBox())!, (await name.boundingBox())!];
+    expect(Math.abs(a.x - b.x)).toBeLessThan(1.5);
+    await expect(page.locator('.portfolio-document')).not.toHaveAttribute('data-logo-owner', /hero|boundary/, { timeout: 20_000 });
   });
   test('첫 방문은 커튼 없이 바로 진입해 완성된 첫 화면으로 끝나고 큰 이름은 Hero 가운데에 있다', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/');
+    // load를 기다리면 진입이 이미 끝났을 수 있다. 문서가 오자마자 표시를 본다.
+    await page.goto('/', { waitUntil: 'commit' });
     await expect(page.locator('html')).toHaveAttribute('data-intro', /^(playing)?$/);
     await expect(page.locator('.intro-curtain, .intro-greeting')).toHaveCount(0);
     await expect(page.locator('html')).not.toHaveAttribute('data-intro', { timeout: 30_000 });
@@ -201,12 +248,12 @@ test.describe('Native motion activity', () => {
     const [anchor, hero, name] = [(await page.locator('[data-motion-anchor="hero-name"]').boundingBox())!, (await page.locator('#overview').boundingBox())!, (await page.getByTestId('wordmark').boundingBox())!];
     expect(Math.abs(anchor.y + anchor.height / 2 - name.y - name.height / 2)).toBeLessThan(1.5);
     expect(Math.abs(hero.x + hero.width / 2 - name.x - name.width / 2)).toBeLessThan(10);
-    // 자리 높이는 이름 글자 크기의 1.5배다. 왼쪽 문장(48px)의 1.5배를 넘는다.
-    expect(anchor.height / 1.5).toBeGreaterThan(48 * 1.5);
+    // 자리 높이는 이름 글자 크기의 1.5배다. 왼쪽 문장(1440에서 36px)의 1.5배를 넘는다.
+    expect(anchor.height / 1.5).toBeGreaterThan(36 * 1.5);
     await expect(page.getByTestId('wordmark').locator('span')).toHaveCSS('opacity', '1');
     // 다시 위로 와도 진입은 돌지 않는다.
     await navButton(page, 'About').click(); await expectActive(page, 'about');
-    await navButton(page, '개요로 이동').click(); await expectActive(page, 'overview');
+    await page.getByRole('button', { name: '개요로 이동' }).click(); await expectActive(page, 'overview');
     await expect(page.locator('html')).not.toHaveAttribute('data-intro');
   });
   test('직접 해시와 첫 휠은 진입을 기다리지 않는다', async ({ page }) => {
@@ -222,10 +269,24 @@ test.describe('Native motion activity', () => {
     await expect(page.locator('html')).not.toHaveAttribute('data-intro');
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
   });
-  test('reduced motion leaves the name in the navigation and mounts no GL logo', async ({ page }) => {
+  test('reduced motion switches the name at the same point without playing and mounts no GL logo', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' }); await page.setViewportSize({ width: 1440, height: 900 });
     await enter(page, 'overview');
-    await expect(page.getByTestId('wordmark')).toHaveCSS('transform', 'none');
+    const name = page.getByTestId('wordmark');
+    await expect(name).toHaveAttribute('data-wordmark-mode', 'hero');
+    await expect(page.locator('main')).toHaveAttribute('data-motion-ready', 'true');
+    // 재생이 없으니 바뀐 다음 프레임에 이미 nav 자리다.
+    const switched = await page.evaluate(() => new Promise<string[]>(resolve => {
+      const button = document.querySelector<HTMLElement>('[data-testid="wordmark"]')!;
+      const until = performance.now() + 5000;
+      window.scrollTo({ top: 300, behavior: 'instant' });
+      const check = () => button.dataset.wordmarkMode === 'nav' || performance.now() > until
+        ? requestAnimationFrame(() => resolve([button.dataset.wordmarkMode!, getComputedStyle(button).transform]))
+        : requestAnimationFrame(check);
+      check();
+    }));
+    expect(switched).toEqual(['nav', 'none']);
+    await expect(name).toHaveCSS('transform', 'none');
     await expect(page.locator('[data-logo-host]')).toHaveCount(1);
     await expect(page.locator('[data-logo-host] canvas')).toHaveCount(0);
     await expect(page.locator('[data-motion-anchor="hero-object"] .about-electric-static')).toBeVisible();

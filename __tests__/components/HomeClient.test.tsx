@@ -6,7 +6,7 @@ import { HOME_SECTION_CONFIG } from '@/lib/constants';
 import { coreValues } from '@/lib/data';
 const flags = vi.hoisted(() => ({ obscured: false, pageVisible: true, reduced: false, wide: false, ready: true }));
 const motion = vi.hoisted(() => ({
-  create: vi.fn(), destroy: vi.fn(), setPaused: vi.fn(), refresh: vi.fn(), settleProjects: vi.fn(),
+  create: vi.fn(), destroy: vi.fn(), setPaused: vi.fn(), setLogo: vi.fn(), refresh: vi.fn(), settleProjects: vi.fn(),
   owner: null as ((owner: 'hero' | 'about' | 'boundary' | 'none') => void) | null,
 }));
 vi.mock('@/hooks/useProjectModalObscured', () => ({ useProjectModalObscured: () => flags.obscured }));
@@ -26,11 +26,11 @@ vi.mock('@/components/sections/BootSequence', async () => {
     default: forwardRef<unknown, BootProps>(function Boot(props, ref) { boot.props = props; useImperativeHandle(ref, () => ({ finish: boot.finish }), []); return null; }),
   };
 });
-vi.mock('@/components/sections', () => ({ AboutSection: ({ onChapterChange }: { onChapterChange: (index: number) => void }) => <p onClick={() => onChapterChange(2)}>About original body</p>, ProjectsSection: () => <p>Projects original body</p>, ExperienceSection: () => <p>Experience original body</p>, SkillsSection: () => <p>Skills original body</p>, AwardAndCertificateSection: () => <p>Awards original body</p>, Footer: () => <footer>Contacts</footer> }));
+vi.mock('@/components/sections', () => ({ AboutSection: ({ onChapterChange, logoLanded }: { onChapterChange: (index: number) => void; logoLanded: boolean }) => <p data-logo-landed={logoLanded} onClick={() => onChapterChange(2)}>About original body</p>, ProjectsSection: () => <p>Projects original body</p>, ExperienceSection: () => <p>Experience original body</p>, SkillsSection: () => <p>Skills original body</p>, AwardAndCertificateSection: () => <p>Awards original body</p>, Footer: () => <footer>Contacts</footer> }));
 vi.mock('@/components/sections/HomeClient/motion', () => ({
   createPortfolioMotion: (options: { onLogoOwnerChange: (owner: 'hero' | 'about' | 'boundary' | 'none') => void }) => {
     motion.create(options); motion.owner = options.onLogoOwnerChange;
-    return { destroy: motion.destroy, setPaused: motion.setPaused, refresh: motion.refresh, settleProjects: motion.settleProjects };
+    return { destroy: motion.destroy, setPaused: motion.setPaused, setLogo: motion.setLogo, refresh: motion.refresh, settleProjects: motion.settleProjects };
   },
 }));
 // App Router 빌드는 next/dynamic을 app-dynamic으로 바꿔 ref를 실제 컴포넌트까지 넘긴다.
@@ -82,22 +82,40 @@ it('keeps one name button, one GL host and one Hero h1; anchors hold no readable
   expect(container.querySelectorAll('[data-logo-host]')).toHaveLength(1);
   expect(container.querySelectorAll('[data-logo-host] [data-electric-src]')).toHaveLength(1);
   expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-  for (const name of ['hero-name', 'hero-object']) {
-    const anchor = container.querySelector(`#overview [data-motion-anchor="${name}"]`)!;
-    expect(anchor).toHaveAttribute('aria-hidden', 'true');
-    expect(anchor.textContent).toBe('');
-    expect(anchor.querySelector('a, button')).toBeNull();
-  }
-  expect(container.querySelector('[data-motion-anchor="nav-name"] [data-testid="wordmark"]')).not.toBeNull();
+  const objectAnchor = container.querySelector('#overview [data-motion-anchor="hero-object"]')!;
+  expect(objectAnchor).toHaveAttribute('aria-hidden', 'true');
+  expect(objectAnchor.textContent).toBe('');
+  expect(objectAnchor.querySelector('a, button')).toBeNull();
+  // 이름 버튼은 서버 HTML부터 Hero 자리에 산다. nav의 이름 앵커는 경계가 옮겨 갈 빈 자리다.
+  const nameAnchor = container.querySelector('#overview [data-motion-anchor="hero-name"]')!;
+  expect(nameAnchor.querySelectorAll('button')).toEqual(expect.objectContaining({ length: 1 }));
+  expect(nameAnchor.querySelector('button')).toBe(screen.getByTestId('wordmark'));
+  expect(screen.getByTestId('wordmark')).toHaveAttribute('data-wordmark-mode', 'hero');
+  expect(screen.getByTestId('wordmark')).toHaveClass('site-name', 'min-h-11');
+  const navAnchor = container.querySelector('nav [data-motion-anchor="nav-name"]')!;
+  expect(navAnchor.childElementCount).toBe(0);
+  expect(navAnchor).toHaveClass('min-h-11');
 });
 
-it('loads the boundary module after the route resolves and connects the real anchors and the GL handle', async () => {
+it('the name button goes to the overview, smooth for a pointer click and instant for a keyboard click', () => {
+  render(<HomeClient />);
+  fireEvent.click(screen.getByTestId('wordmark'), { detail: 1 });
+  expect(window.scrollTo).toHaveBeenLastCalledWith(expect.objectContaining({ behavior: 'smooth' }));
+  window.history.replaceState(null, '', '/#about');
+  fireEvent.click(screen.getByTestId('wordmark'), { detail: 0 });
+  expect(window.scrollTo).toHaveBeenLastCalledWith(expect.objectContaining({ behavior: 'auto' }));
+  expect(location.hash).toBe('#overview');
+});
+
+it('loads the boundary module after the route resolves, connects the real anchors and hands the GL handle over separately', async () => {
   flags.wide = true;
   const { container } = render(<HomeClient />); await flush();
+  expect(motion.create).toHaveBeenCalledTimes(1);
   expect(motion.create).toHaveBeenLastCalledWith(expect.objectContaining({
     root: screen.getByRole('main'), header: container.querySelector('nav'), wordmark: screen.getByTestId('wordmark'),
-    logoHost: container.querySelector('[data-logo-host]'), logo: handle,
+    logoHost: container.querySelector('[data-logo-host]'), reduced: false,
   }));
+  expect(motion.setLogo).toHaveBeenLastCalledWith(handle);
   expect(motion.setPaused).toHaveBeenLastCalledWith(false);
 });
 
@@ -105,16 +123,41 @@ it('connects only the name channel when the GL logo is not mounted (narrow scree
   const { container } = render(<HomeClient />); await flush();
   expect(container.querySelector('[data-electric-src]')).toBeNull();
   expect(motion.create).toHaveBeenCalledTimes(1);
-  expect(motion.create).toHaveBeenLastCalledWith(expect.objectContaining({ logo: null }));
+  expect(motion.setLogo).toHaveBeenLastCalledWith(null);
 });
 
-it('reduced motion creates no motion context and no GL logo; static anchors stay', async () => {
+// 모션 감소도 같은 지점에서 이름 자리를 바꾼다. 재생은 없고 GL 로고도 없다.
+it('reduced motion creates a reduced motion context and no GL logo; static anchors stay', async () => {
   flags.reduced = true; flags.wide = true;
   const { container } = render(<HomeClient />); await flush();
-  expect(motion.create).not.toHaveBeenCalled();
+  expect(motion.create).toHaveBeenCalledTimes(1);
+  expect(motion.create).toHaveBeenLastCalledWith(expect.objectContaining({ reduced: true }));
+  expect(motion.setLogo).toHaveBeenLastCalledWith(null);
   expect(container.querySelector('[data-electric-src]')).toBeNull();
   expect(container.querySelector('.portfolio-document')).not.toHaveAttribute('data-logo-live');
   expect(screen.getByTestId('wordmark').style.transform).toBe('');
+});
+
+// GL 로고는 쉬는 자리에서만 정적 실루엣과 바뀐다. 날아가는 동안 준비돼도 내려앉은 뒤에 드러나고, 이미 드러났으면 날아가는 동안 그대로다.
+// About은 로고가 내려앉은 뒤에만 잠근다.
+it('the GL logo turns live only at rest and About is told whether the logo has landed', async () => {
+  flags.wide = true;
+  const { container } = render(<HomeClient />); await flush();
+  const documentRoot = container.querySelector('.portfolio-document')!;
+  const about = screen.getByText('About original body');
+  act(() => motion.owner!('hero'));
+  act(() => motion.owner!('boundary'));
+  expect(about).toHaveAttribute('data-logo-landed', 'false');
+  fireEvent.click(container.querySelector('[data-signal-ready]')!);
+  expect(documentRoot).not.toHaveAttribute('data-logo-live');
+  act(() => motion.owner!('about'));
+  expect(documentRoot).toHaveAttribute('data-logo-live');
+  expect(about).toHaveAttribute('data-logo-landed', 'true');
+  act(() => motion.owner!('boundary'));
+  expect(documentRoot).toHaveAttribute('data-logo-live');
+  act(() => motion.owner!('hero'));
+  expect(documentRoot).toHaveAttribute('data-logo-live');
+  expect(motion.create).toHaveBeenCalledTimes(1);
 });
 
 it('the shared logo follows the selected chapter at About and shows BASICS React on the first screen', async () => {
@@ -180,22 +223,28 @@ it('lays the Hero out as name, sentence, then object, and the object shrinks fir
   const order = [...container.querySelectorAll('#overview [data-motion-anchor], #overview h1')].map(el => el.getAttribute('data-motion-anchor') ?? el.tagName);
   expect(order).toEqual(['hero-name', 'H1', 'hero-object']);
   expect(container.querySelector('#overview [data-motion-anchor="hero-name"]')).toHaveClass('hero-name');
-  expect(css).toMatch(/\n\.hero-name \{[^}]*height: calc\(var\(--hero-name-size\) \* 1\.5\);/);
+  expect(css).toMatch(/\n\.hero-name \{[^}]*display: flex; align-items: center; height: calc\(var\(--hero-name-size\) \* 1\.5\);/);
   expect(css).toMatch(/\.portfolio-hero h1 \{[^}]*white-space: pre-line;/);
   expect(css).toMatch(/\.portfolio-hero h1 \{[^}]*font-size: var\(--font-size-t1\)/);
-  expect(css).toMatch(/@media \(min-width: 1024px\) \{[^@]*\.portfolio-hero \{[^}]*flex-direction: row;[^@]*\.portfolio-hero h1 \{ font-size: var\(--font-size-d3\)/);
+  // 1024–1535px은 큰 이름이 문장보다 크게 읽히도록 문장을 36px로 줄인다(사용자 결정 2026-10-20).
+  expect(css).toMatch(/@media \(min-width: 1024px\) \{[^@]*\.portfolio-hero \{[^}]*flex-direction: row;[^@]*\.portfolio-hero h1 \{ font-size: 2\.25rem;/);
   expect(css).toMatch(/@media \(min-width: 1536px\) \{[^@]*\.portfolio-hero h1 \{ font-size: var\(--font-size-d2\)/);
-  expect(css).toMatch(/\.hero-object \{[^}]*width: min\([^}]*svh\)/);
+  expect(css).toMatch(/--hero-object-size: min\([^;]*svh\);/);
+  expect(css).toMatch(/\.hero-object \{ width: var\(--hero-object-size\); \}/);
+  // JS 전·JS 없이도 큰 이름은 CSS만으로 고리 앞에서 멈춘다(motion.ts의 고리 상한과 같은 식).
+  expect(css).toMatch(/--hero-name-size: min\(clamp\(56px, 6\.5vw, 128px\), calc\(\(42vw - \.82 \* var\(--hero-object-size\) - 16px\) \/ 2\.835\)\);/);
   expect(css).not.toMatch(/\.portfolio-hero (p|h1) \{[^}]*svh/);
   expect(css).toMatch(/\.logo-host \{[^}]*z-index: 2;/);
 });
 
 // 리뷰 Important 2. 인트로와 GL 교대 전후에 오브젝트가 같은 기울어진 궤도 자세여야 한다(스펙 5.2의 5).
-it('the Hero static symbol rests in the GL orbit tilt at every width and the boundary owns its lean', async () => {
+// Task 5: 경계는 더 긁지 않으므로 정적 실루엣은 늘 쉬는 자세다. GL 로고만 About으로 날아가며 정면으로 돈다.
+it('the Hero static symbol rests in the GL orbit tilt at every width', async () => {
   const { readFileSync } = await import('node:fs');
   const css = readFileSync('styles/design-tokens.css', 'utf8');
   const motionSource = readFileSync('components/sections/HomeClient/motion.ts', 'utf8');
-  expect(css).toMatch(/\n\.hero-object-tilt \{[^}]*transform: perspective\(900px\) rotateX\(calc\(56deg \* var\(--hero-lean, 1\)\)\) rotateY\(calc\(-24deg \* var\(--hero-lean, 1\)\)\);/);
+  expect(css).toMatch(/\n\.hero-object-tilt \{[^}]*transform: perspective\(900px\) rotateX\(56deg\) rotateY\(-24deg\);/);
+  expect(css).not.toContain('--hero-lean');
   expect(motionSource).toMatch(/const REST_X_DEG = 56;\s*const REST_Y_DEG = -24;/);
   expect(motionSource).toMatch(/const PERSPECTIVE_PX = 900;/);
   expect(css).toMatch(/html\[data-intro\] \.hero-object \.about-electric-static \{ transition: none; \}/);
@@ -235,7 +284,7 @@ it.each([['wide', true], ['narrow', false]] as const)('first visit (%s): the bac
   expect(boot.props).not.toHaveProperty('onRevealStart');
   await flush();
   expect(motion.create).toHaveBeenCalledTimes(1);
-  expect(motion.create).toHaveBeenLastCalledWith(expect.objectContaining({ logo: null }));
+  expect(motion.setLogo).toHaveBeenLastCalledWith(null);
   const targets = boot.props!.targets!;
   expect(targets.wordmark).toBe(screen.getByTestId('wordmark').firstElementChild);
   expect(targets.headline).toBe(screen.getByRole('heading', { level: 1 }));
@@ -251,8 +300,10 @@ it.each([['wide', true], ['narrow', false]] as const)('first visit (%s): the bac
   await flush();
   if (wide) {
     expect(container.querySelector('[data-electric-src]')).not.toBeNull();
-    expect(motion.create).toHaveBeenLastCalledWith(expect.objectContaining({ logo: handle }));
+    expect(motion.setLogo).toHaveBeenLastCalledWith(handle);
   } else expect(container.querySelector('[data-electric-src]')).toBeNull();
+  // GL 손잡이가 와도 경계를 다시 만들지 않는다. 날던 이름·로고가 끊기지 않는다.
+  expect(motion.create).toHaveBeenCalledTimes(1);
 });
 
 // 헤드 Chrome에서 잡혔다. 준비 전 기본값 reduced: true가 첫 레이아웃에서 인트로를 끝냈다.

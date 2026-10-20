@@ -16,6 +16,8 @@ export interface AboutSectionHandle { release(): void }
 export interface AboutSectionProps {
   onChapterChange: (index: number) => void;
   navigationPending: boolean;
+  // 공유 로고가 About 자리에 내려앉았는지. 날아가는 동안에는 잠그지 않고, 그사이 잠금 자리에 닿으면 내려앉을 때 잠근다.
+  logoLanded?: boolean;
 }
 
 const GESTURE_IDLE_MS = 220;
@@ -31,7 +33,7 @@ const TRANSITION_MS = ELECTRIC_LOGO_MORPH_SECONDS * 1000;
 // 오면 문서 스크롤로 돌려준다. 잠금은 About 위에서만 capture wheel·touchmove를
 // 막는다. 시안에 있던 "마운트 때 About 아래면 About으로 되돌린다"는 직접 해시와
 // 명시적 이동을 끌어오므로 옮기지 않았다.
-export default function AboutSection({ ref, onChapterChange, navigationPending }: AboutSectionProps & { ref?: Ref<AboutSectionHandle> }) {
+export default function AboutSection({ ref, onChapterChange, navigationPending, logoLanded = true }: AboutSectionProps & { ref?: Ref<AboutSectionHandle> }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [locked, setLocked] = useState(false);
   const [revealed, setRevealed] = useState(false);
@@ -40,12 +42,18 @@ export default function AboutSection({ ref, onChapterChange, navigationPending }
   const selectRef = useRef<(index: number) => void>(() => {});
   const releaseRef = useRef(() => {});
   const enterRef = useRef(() => {});
+  const landedRef = useRef(logoLanded);
+  const landRef = useRef(() => {});
   const { reducedMotion, motionReady, pageVisible, obscured } = useSectionActivity();
   const { ref: sectionRef, visible } = useSectionVisibility<HTMLElement>();
   const active = visible && motionReady && pageVisible && !obscured;
 
   useImperativeHandle(ref, () => ({ release: () => releaseRef.current() }), []);
   useEffect(() => { onChapterChange(activeIndex); }, [activeIndex, onChapterChange]);
+  useEffect(() => {
+    landedRef.current = logoLanded;
+    if (logoLanded) landRef.current();
+  }, [logoLanded]);
 
   // 스크림 포털 대상. 서버 렌더에는 document가 없어 마운트 뒤에 정한다.
   // .portfolio-document 안에 붙여야 배경과 같은 쌓임 맥락에 놓인다.
@@ -73,6 +81,8 @@ export default function AboutSection({ ref, onChapterChange, navigationPending }
     let touchY = 0;
     let touchConsumed = false;
     let lastNativeInput = -Infinity;
+    // 로고가 날아가는 동안 미룬 잠금의 방향(아래에서 왔는지). 없으면 null.
+    let held: boolean | null = null;
     const setPhase = (next: typeof phase) => {
       phase = next;
       setLocked(phase === 'locked');
@@ -97,6 +107,8 @@ export default function AboutSection({ ref, onChapterChange, navigationPending }
       else if (phase === 'locked' && !disabled) window.scrollTo({ top: start, behavior: 'instant' });
     };
     const lock = (fromBelow: boolean, time: number) => {
+      held = landedRef.current ? null : fromBelow;
+      if (held !== null) return;
       setPhase('locked'); lastInput = time; lastStep = time;
       pendingGesture = false;
       choose(fromBelow ? 2 : 0);
@@ -110,7 +122,8 @@ export default function AboutSection({ ref, onChapterChange, navigationPending }
         const y = window.scrollY;
         const entering = phase === 'before' && delta > 0 && y + delta >= start;
         const returning = phase === 'after' && delta < 0 && y >= start && y + delta <= start;
-        if (entering || returning) { lock(returning, time); return true; }
+        // 미룬 잠금은 입력을 막지 않는다.
+        if (entering || returning) { lock(returning, time); return held === null; }
         return false;
       }
       const newGesture = fresh || time - lastInput > GESTURE_IDLE_MS;
@@ -202,7 +215,10 @@ export default function AboutSection({ ref, onChapterChange, navigationPending }
         return;
       }
       if (Math.abs(offset) <= 1) {
-        if (phase !== 'locked' && !blocked) { setPhase('locked'); lastInput = -Infinity; lastStep = -Infinity; }
+        if (phase !== 'locked' && !blocked) {
+          if (!landedRef.current) held = phase === 'after';
+          else { setPhase('locked'); lastInput = -Infinity; lastStep = -Infinity; }
+        }
       } else if (phase !== 'locked' || Math.abs(offset) > 2) {
         // 잠금 밖에서는 위치로 앞뒤를 다시 정해 스크롤바로 건너뛴 뒤에도 돌아오는 방향을 안다.
         const next = offset > 0 ? 'after' : 'before';
@@ -217,8 +233,14 @@ export default function AboutSection({ ref, onChapterChange, navigationPending }
     // Tab으로 chapter 단어에 닿으면 진입 제스처처럼 잠근다. 위에서 오면 BASICS, 아래에서 오면 TEAMWORK다.
     // 마우스 클릭의 포커스는 거르고 클릭 선택에 맡긴다. 안 그러면 누르는 순간 다른 chapter로 한 번 넘어간다.
     enterRef.current = () => { if (!disabled && !blocked && phase !== 'locked') lock(window.scrollY > start, performance.now()); };
+    // 내려앉으면 미룬 잠금을 건다. 그사이 반 화면 넘게 지나쳤으면 끌어오지 않는다.
+    landRef.current = () => {
+      const fromBelow = held;
+      held = null;
+      if (fromBelow !== null && !disabled && !blocked && phase !== 'locked' && Math.abs(window.scrollY - start) < window.innerHeight / 2) lock(fromBelow, performance.now());
+    };
     releaseRef.current = () => {
-      closeOvershoot(); pendingGesture = false;
+      closeOvershoot(); pendingGesture = false; held = null;
       if (phase === 'locked') setPhase(window.scrollY > start ? 'after' : 'before');
     };
     measure();
@@ -245,6 +267,7 @@ export default function AboutSection({ ref, onChapterChange, navigationPending }
       short.removeEventListener('change', measure);
       releaseRef.current = () => {};
       enterRef.current = () => {};
+      landRef.current = () => {};
     };
   }, [sectionRef, reducedMotion, navigationPending, obscured]);
 

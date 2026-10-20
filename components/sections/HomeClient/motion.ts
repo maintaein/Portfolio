@@ -1,29 +1,32 @@
 import type { ElectricLogoHandle } from '@/components/blocks/ElectricLogo';
-import { gsap, registerScrollTrigger, ScrollTrigger } from '@/lib/gsap';
+import { gsap, registerScrollTrigger, ScrollTrigger, SITE_EASE } from '@/lib/gsap';
 
 export type LogoOwner = 'hero' | 'about' | 'boundary' | 'none';
 
 export interface PortfolioMotion {
   refresh(): void;
   setPaused(paused: boolean): void;
+  setLogo(logo: ElectricLogoHandle | null): void;
   settleProjects(): void;
   destroy(): void;
 }
 
-// Hero→About 경계의 시안 비율이다. 실제 문서 거리 위의 진행도 p에 건다.
-const POINTER_END = .2;
-const NAME_START = .2;
-const NAME_END = .5;
-const TURN_END = .85;
-// 85% 지점에 남겨 둔 거리. 마지막 15%에 BASICS 자리로 내려앉는다.
-const SETTLE_SHARE = .08;
+// 경계는 스크롤을 따라 긁지 않는다. 지점을 넘으면 정해진 시간 동안 끝까지 돌고, 되넘으면 거꾸로 돈다(사용자 결정 2026-10-20).
+// 이름: 휠 두 칸(200px)이면 nav로 간다. 120px 위로 올라와야 돌아와 문턱에서 떨지 않는다.
+const NAME_DOWN = 180;
+const NAME_UP = 120;
+// 옛 Hyperspeed 워드마크 Flip과 같은 길이다.
+const NAME_SECONDS = .5;
+// 이름 글자 줄 높이(design-tokens.css .site-name line-height). Hero 자리 높이가 글자 크기의 이 배수다.
+const NAME_LINE = 1.5;
+// 로고: About 머리가 화면 높이의 70%를 지나면 About 자리로 간다.
+const LOGO_AT = .7;
+const LOGO_SECONDS = .9;
 const TILT_DEG = 8;
 const SHIFT_PX = 12;
 // Hero에서는 원자 궤도처럼 눕혀 보인다. 평면 캔버스라 크게 눕혀야 기울기가 읽힌다(cos 56° = .56).
 const REST_X_DEG = 56;
 const REST_Y_DEG = -24;
-// 85%에 남는 기울기 비율. 정면에 가깝게 다가간 뒤 마지막 15%에 정면이 된다.
-const NEAR_FRONT = .12;
 const PERSPECTIVE_PX = 900;
 // 눕힌 React 궤도의 보이는 고리가 Hero 앵커 상자 안에서 차지하는 자리(상자 비율). 1024–1440에서 픽셀로 잰 값이다.
 // shortcut: 쉬는 자세의 React 로고 한 장에서 잰 고정 비율, Hero 로고·마스크·기울기가 바뀌면 다시 잰다.
@@ -36,8 +39,7 @@ const EMPTY: Box = { x: 0, y: 0, w: 0, h: 0 };
 const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value));
 const lerp = (from: number, to: number, t: number) => from + (to - from) * t;
 
-// transform을 뺀 레이아웃 좌표. About 레일의 등장 transform이나 이름 이동이 잰 값을 흔들지 않는다.
-// fixed 조상에서 사슬이 끝나므로 nav 안의 요소는 화면 좌표가 된다.
+// transform을 뺀 레이아웃 좌표. About 레일의 등장 transform이 잰 값을 흔들지 않는다.
 function layoutBox(element: Element | null): Box {
   if (!(element instanceof HTMLElement)) return EMPTY;
   let x = 0;
@@ -56,24 +58,23 @@ const rectBox = (element: Element | null, scroll = 0): Box => {
   return { x: rect.left, y: rect.top + scroll, w: rect.width, h: rect.height };
 };
 
-// 섹션 경계는 About 잠금·해시 이동과 같은 식(rect + scrollY, 반올림)으로 재야 도착 자리가 1px도 어긋나지 않는다.
-const documentTop = (element: Element | null) => element ? Math.round(element.getBoundingClientRect().top + window.scrollY) : 0;
-
-export function createPortfolioMotion({ root, header, wordmark, logoHost, logo, onLogoOwnerChange }: {
-  root: HTMLElement; header: HTMLElement; wordmark: HTMLButtonElement;
-  logoHost: HTMLElement; logo: ElectricLogoHandle | null;
+export function createPortfolioMotion({ root, header, wordmark, logoHost, reduced, onLogoOwnerChange }: {
+  root: HTMLElement; header: HTMLElement; wordmark: HTMLButtonElement; logoHost: HTMLElement; reduced: boolean;
   onLogoOwnerChange: (owner: LogoOwner) => void;
 }): PortfolioMotion {
   registerScrollTrigger();
   const inner = logoHost.firstElementChild instanceof HTMLElement ? logoHost.firstElementChild : null;
+  const label = wordmark.firstElementChild instanceof HTMLElement ? wordmark.firstElementChild : wordmark;
   const anchor = (name: string) => root.querySelector(`[data-motion-anchor="${name}"]`);
-  // Hero 정적 실루엣의 기울기. GL이 없는 폭과 GL이 뜨기 전에도 같은 비율로 정면을 향한다.
-  const heroTilt = root.querySelector<HTMLElement>('[data-motion-anchor="hero-object"] .hero-object-tilt');
-  const nameEase = gsap.parseEase('power2.inOut');
-  const turnEase = gsap.parseEase('power2.inOut');
-  const settleEase = gsap.parseEase('power2.out');
-  // 이름: Hero에서 커지는 배율, 그때 보이는 글자 가운데가 올 Hero 가로 가운데, 배율 원점(버튼 가운데)과 거기서 본 글자 가운데.
-  let m = { start: 0, end: 0, name: EMPTY, scale: 1, centreX: 0, pivot: { x: 0, y: 0 }, glyph: { x: 0, y: 0 }, hero: EMPTY, about: EMPTY, origin: EMPTY };
+  // Hero 이름 글자 크기(0이면 CSS 값), nav 자리(화면 좌표), 로고가 떠나는 스크롤 지점, 두 로고 앵커(문서 좌표).
+  let m = { nameSize: 0, nav: EMPTY, logoAt: Infinity, hero: EMPTY, about: EMPTY, origin: EMPTY };
+  let side: 'hero' | 'nav' = 'hero';
+  let flip: gsap.core.Tween | null = null;
+  // 로고 진행도 t: 0 Hero, 1 About. 시간으로만 움직이고 goal은 지금 스크롤이 가리키는 쪽이다.
+  const pose = { t: 0 };
+  let goal = 0;
+  let travel: gsap.core.Tween | null = null;
+  let logo: ElectricLogoHandle | null = null;
   let owner: LogoOwner | null = null;
   let paused = false;
   let alive = true;
@@ -82,43 +83,33 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, logo, 
   const pointer = { x: 0, y: 0 };
   const centre = { x: 0, y: 0, r: 0 };
   let tilt: ((x: number, y: number) => void) | null = null;
-  let trigger: ScrollTrigger | null = null;
 
   const measure = () => {
     const hero = root.querySelector('[data-section="overview"]');
     const about = root.querySelector('[data-section="about"]');
-    const heroBox = hero?.getBoundingClientRect();
-    // 떠나는 Hero의 끝이 화면 아래에 닿을 때 시작한다.
-    const start = Math.max(0, heroBox ? Math.round(heroBox.bottom + window.scrollY) - window.innerHeight : 0);
-    // 도착하는 About이 헤더 아래에 닿을 때 끝난다. 여유는 해시 이동·About 잠금이 쓰는 scroll-margin-top과 같다.
-    const margin = about ? parseFloat(getComputedStyle(about).scrollMarginTop) || header.offsetHeight : 0;
     const heroObject = layoutBox(anchor('hero-object'));
     const aboutLogo = layoutBox(anchor('about-logo'));
-    const name = rectBox(anchor('hero-name'), window.scrollY);
-    // 이름 버튼과 안쪽 글자(진입이 y를 쓴다)의 transform을 잠깐 걷고 잰다. 같은 동기 구간에서 되돌려 그려지지 않는다.
-    const label = wordmark.firstElementChild instanceof HTMLElement ? wordmark.firstElementChild : wordmark;
-    const saved = [wordmark.style.transform, label.style.transform];
-    wordmark.style.transform = label.style.transform = '';
-    const button = rectBox(wordmark);
-    const text = rectBox(label);
-    [wordmark.style.transform, label.style.transform] = saved;
-    // 자리 높이에 글자 줄을 맞추되 자리 폭을 넘지 않는다. tracking-widest의 끝 자간은 가운데에서 뺀다.
-    const trail = parseFloat(getComputedStyle(label).letterSpacing) || 0;
+    const slot = rectBox(anchor('hero-name'), window.scrollY);
+    // 글자 폭은 글자 크기에 비례한다. em 단위로 재 두면 어느 쪽 자리에서 재도 같다. tracking-widest의 끝 자간은 보이는 폭에서 뺀다.
+    const style = getComputedStyle(label);
+    const font = parseFloat(style.fontSize) || 0;
+    const width = font ? label.getBoundingClientRect().width / font : 0;
+    const glyph = width - (font ? (parseFloat(style.letterSpacing) || 0) / font : 0);
     const heroLayout = rectBox(hero);
     const centreX = heroLayout.x + heroLayout.w / 2;
     // 이름 자리와 같은 높이에 오른쪽 고리가 있으면(넓고 낮은 화면) 글자 오른쪽 끝이 고리 상자 앞에서 멈추게 줄인다.
     const ring = { x: heroObject.x + heroObject.w * RING_INSET.left, top: heroObject.y + heroObject.h * RING_INSET.top, bottom: heroObject.y + heroObject.h * (1 - RING_INSET.bottom) };
-    const besideRing = heroObject.w > 0 && ring.x > centreX && name.y < ring.bottom && name.y + name.h > ring.top;
-    const ringRoom = besideRing && text.w > trail ? 2 * (ring.x - RING_GAP - centreX) / (text.w - trail) : Infinity;
-    const scale = text.h && text.w ? Math.max(1, Math.min(name.h / text.h, name.w / text.w, ringRoom)) : 1;
-    const pivot = { x: button.x + button.w / 2, y: button.y + button.h / 2 };
+    const besideRing = heroObject.w > 0 && ring.x > centreX && slot.y < ring.bottom && slot.y + slot.h > ring.top;
+    const ringRoom = besideRing && glyph > 0 ? 2 * (ring.x - RING_GAP - centreX) / glyph : Infinity;
+    // 자리 높이(글자 줄)와 자리 폭에 맞추되 고리에 닿지 않는다. 잴 수 없으면 CSS 크기를 둔다.
+    const size = width > 0 ? Math.max(1, Math.min(slot.h / NAME_LINE, slot.w / width, ringRoom)) : 0;
+    const aboutTop = about ? about.getBoundingClientRect().top + window.scrollY : Infinity;
     m = {
-      start, end: Math.max(start, documentTop(about) - margin),
-      name, scale, centreX,
-      pivot, glyph: { x: text.x + (text.w - trail) / 2 - pivot.x, y: text.y + text.h / 2 - pivot.y },
+      nameSize: size, nav: rectBox(header.querySelector('[data-motion-anchor="nav-name"]')),
+      logoAt: aboutTop - window.innerHeight * LOGO_AT,
       hero: heroObject, about: aboutLogo.w ? aboutLogo : heroObject, origin: layoutBox(logoHost.offsetParent),
     };
-    if (logo && m.about.w) {
+    if (m.about.w) {
       logoHost.style.width = `${m.about.w}px`;
       logoHost.style.height = `${m.about.h}px`;
     }
@@ -132,53 +123,99 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, logo, 
 
   const aim = () => tilt?.(pointer.x * weight, pointer.y * weight);
 
-  const render = () => {
-    if (paused || !alive) return;
-    const scroll = window.scrollY;
-    const length = m.end - m.start;
-    // 거리가 없으면 나누지 않고 도착 상태로 둔다. 1px 안쪽은 About 잠금 자리와 같은 도착이다.
-    const p = length < 1 || scroll > m.end - 1 ? 1 : clamp((scroll - m.start) / length);
-    const span = (from: number, to: number) => clamp((p - from) / (to - from));
+  // 이름의 두 쉬는 자리는 CSS 배치(data-wordmark-mode)다. Hero는 자리 안 가운데, nav는 nav-name 앵커에 fixed로 선다.
+  // 쉬는 동안 transform이 없어 누르는 상자가 보이는 글자 줄 상자다.
+  const applyName = () => {
+    wordmark.dataset.wordmarkMode = side;
+    wordmark.style.fontSize = side === 'hero' && m.nameSize ? `${m.nameSize}px` : '';
+    wordmark.style.left = side === 'nav' ? `${m.nav.x}px` : '';
+    wordmark.style.top = side === 'nav' ? `${m.nav.y}px` : '';
+  };
+  const stopName = () => {
+    flip?.kill();
+    flip = null;
+    gsap.set(wordmark, { clearProps: 'transform,transformOrigin,zIndex' });
+  };
+  // 넘을 때만 0.5초 동안 옮긴다(FLIP). 버튼 상자는 nav의 44px 최소 높이 때문에 두 자리의 가로세로 비가 달라
+  // 상자끼리 맞추면 글자가 눌린다. 그래서 글자 줄 상자로 한 배율을 잰다. 도중에 되넘으면 지금 보이는 자리에서 다시 출발한다.
+  const placeName = (next: 'hero' | 'nav', animate: boolean) => {
+    const from = animate && !reduced && next !== side ? label.getBoundingClientRect() : null;
+    stopName();
+    side = next;
+    applyName();
+    if (!from) return;
+    const to = label.getBoundingClientRect();
+    const box = wordmark.getBoundingClientRect();
+    const scale = to.height ? from.height / to.height : 1;
+    gsap.set(wordmark, { zIndex: 51 });
+    flip = gsap.fromTo(wordmark,
+      { x: from.left - box.left - scale * (to.left - box.left), y: from.top - box.top - scale * (to.top - box.top), scale, transformOrigin: '0 0' },
+      { x: 0, y: 0, scale: 1, duration: NAME_SECONDS, ease: SITE_EASE, onComplete: stopName });
+  };
 
-    const named = nameEase(span(NAME_START, NAME_END));
-    const { name, pivot, glyph } = m;
-    // 0–20%는 이름이 Hero와 함께 흐르고 20–50%에 줄어들며 nav 자리로 간다. 배율은 버튼 가운데를 원점으로 건다.
-    // 보이는 글자 가운데가 Hero 가로 가운데·자리 세로 가운데에서 nav 자리로 곧게 간다. 흰 광휘도 nav에 닿으며 꺼진다.
-    const grow = lerp(m.scale, 1, named);
-    const nameX = lerp(m.centreX, pivot.x + glyph.x, named) - pivot.x - grow * glyph.x;
-    const nameY = lerp(name.y + name.h / 2 - scroll, pivot.y + glyph.y, named) - pivot.y - grow * glyph.y;
-    wordmark.style.transform = named >= 1 ? '' : `translate3d(${nameX}px, ${nameY}px, 0) scale(${grow})`;
-    wordmark.style.setProperty('--name-glow', named >= 1 ? '' : String(1 - named));
-
-    const settled = settleEase(span(TURN_END, 1));
-    const lean = (1 - (1 - NEAR_FRONT) * turnEase(span(NAME_END, TURN_END))) * (1 - settled);
-    heroTilt?.style.setProperty('--hero-lean', String(lean));
+  // 문서 좌표의 두 앵커 사이를 진행도로 잇는다. host가 문서 좌표에 살아 재생 중에 스크롤이 움직여도 About 앵커에 정확히 내려앉는다.
+  const renderLogo = () => {
     if (!logo) {
       report('none');
       return;
     }
-    // 20%부터 About 로고 자리로 향하고, 50–85%에 정면으로 돌며 다가가 마지막 15%에 내려앉는다.
-    const travel = (1 - SETTLE_SHARE) * turnEase(span(NAME_START, TURN_END)) + SETTLE_SHARE * settled;
+    const { t } = pose;
     const { hero, about, origin } = m;
-    // 20%까지는 화면에 붙어 있다. 문서 좌표라 경계 밖에서는 앵커와 함께 흐른다.
-    const pinned = hero.y + clamp(scroll, m.start, m.end) - m.start;
-    const x = lerp(hero.x + hero.w / 2, about.x + about.w / 2, travel);
-    const y = lerp(pinned + hero.h / 2, about.y + about.h / 2, travel);
-    const scale = lerp(hero.w, about.w, travel) / (about.w || 1);
+    const x = lerp(hero.x + hero.w / 2, about.x + about.w / 2, t);
+    const y = lerp(hero.y + hero.h / 2, about.y + about.h / 2, t);
+    const scale = lerp(hero.w, about.w, t) / (about.w || 1);
+    const lean = 1 - t;
     logoHost.style.transform = `translate3d(${x - about.w / 2 - origin.x}px, ${y - about.h / 2 - origin.y}px, 0) perspective(${PERSPECTIVE_PX}px) rotateX(${REST_X_DEG * lean}deg) rotateY(${REST_Y_DEG * lean}deg) scale(${scale})`;
-    Object.assign(centre, { x, y: y - scroll, r: about.w * scale / 2 });
-
-    const nextWeight = 1 - span(0, POINTER_END);
-    if (nextWeight !== weight) {
-      weight = nextWeight;
+    Object.assign(centre, { x, y: y - window.scrollY, r: about.w * scale / 2 });
+    // 포인터 반응은 Hero에서만 산다. 떠나며 잦아든다.
+    if (lean !== weight) {
+      weight = lean;
       aim();
     }
-    report(p <= 0 ? 'hero' : p >= 1 ? 'about' : 'boundary');
+    report(travel ? 'boundary' : t >= 1 ? 'about' : 'hero');
+  };
+
+  const moveLogo = (target: number, animate: boolean) => {
+    if (target === goal) return;
+    goal = target;
+    travel?.kill();
+    travel = null;
+    if (!logo || !animate || reduced) pose.t = target;
+    else {
+      // 되돌아갈 때는 남은 거리만큼의 시간만 쓴다.
+      travel = gsap.to(pose, {
+        t: target, duration: LOGO_SECONDS * Math.abs(target - pose.t), ease: SITE_EASE, onUpdate: renderLogo,
+        onComplete: () => { travel = null; renderLogo(); },
+      });
+    }
+    renderLogo();
+  };
+
+  // 지금 스크롤이 가리키는 쪽. 이름은 두 문턱 사이에서 지금 자리를 지킨다.
+  const nameSide = () => window.scrollY >= NAME_DOWN ? 'nav' : window.scrollY <= NAME_UP ? 'hero' : side;
+  const logoSide = () => window.scrollY >= m.logoAt ? 1 : 0;
+
+  const decide = () => {
+    if (paused || !alive) return;
+    const name = nameSide();
+    if (name !== side) placeName(name, true);
+    moveLogo(logoSide(), true);
+  };
+
+  // 크기·폰트가 바뀌면 앵커를 다시 재고 지금 쪽의 쉬는 자리에 둔다. 재생하지 않는다.
+  const settle = () => {
+    if (!alive) return;
+    // 날던 이름의 배율이 측정에 섞이지 않게 먼저 내려놓는다.
+    stopName();
+    measure();
+    placeName(nameSide(), false);
+    goal = -1;
+    moveLogo(logoSide(), false);
   };
 
   // 포인터는 host의 로컬 좌표로 바꿔 안쪽만 기울인다. host 이동과 같은 transform을 쓰지 않아 서로 덮지 않는다.
   const onPointer = (event: PointerEvent) => {
-    if (event.pointerType === 'touch' || !centre.r) return;
+    if (event.pointerType === 'touch' || !logo || !centre.r) return;
     pointer.x = clamp((event.clientX - centre.x) / centre.r, -1, 1);
     pointer.y = clamp((event.clientY - centre.y) / centre.r, -1, 1);
     if (!paused) aim();
@@ -190,7 +227,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, logo, 
   };
 
   const context = gsap.context(() => {
-    if (logo && inner) {
+    if (inner && !reduced) {
       gsap.set(inner, { transformPerspective: PERSPECTIVE_PX });
       const options = { duration: .6, ease: 'power3' };
       const rx = gsap.quickTo(inner, 'rotationX', options);
@@ -199,38 +236,46 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, logo, 
       const ty = gsap.quickTo(inner, 'y', options);
       tilt = (x, y) => { rx(-y * TILT_DEG); ry(x * TILT_DEG); tx(x * SHIFT_PX); ty(y * SHIFT_PX); };
     }
-    measure();
-    // 문서 꼭대기부터 도착까지 본다. 키가 큰 Hero에서는 경계 전에도 이름이 Hero와 함께 흘러야 한다.
-    // scrub: true와 같이 매끄럽게 하지 않고 실제 스크롤 위치를 그대로 쓴다.
-    trigger = ScrollTrigger.create({
-      start: 0,
-      end: () => { measure(); return Math.max(1, m.end); },
-      onUpdate: render,
-      onRefresh: render,
+    // 지점 검출만 맡긴다. 새로 고침 중의 갱신은 넘음이 아니다.
+    ScrollTrigger.create({
+      start: 0, end: 'max',
+      // isRefreshing은 런타임에 있지만 타입 선언에 빠져 있다.
+      onUpdate: () => { if (!(ScrollTrigger as unknown as { isRefreshing?: boolean }).isRefreshing) decide(); },
+      onRefresh: settle,
     });
   });
-  render();
+  // 처음 자리는 재생 없이 정한다. 문턱 아래로 바로 온 해시는 곧장 nav·About이다.
+  settle();
 
-  const refresh = () => {
-    if (!alive) return;
-    trigger?.refresh();
-    render();
-  };
-  // 폰트, About 정적 배치 전환 같은 레이아웃 변화도 앵커를 옮긴다. 다음 프레임에 한 번만 잰다.
-  const queue = () => { if (!queued) queued = requestAnimationFrame(() => { queued = 0; refresh(); }); };
+  // 폰트, 창 크기, About 정적 배치 전환이 앵커를 옮긴다. main만 보면 크기가 같은 채 움직인 앵커를 놓친다. 다음 프레임에 한 번만 잰다.
+  const queue = () => { if (!queued) queued = requestAnimationFrame(() => { queued = 0; settle(); }); };
   const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(queue);
-  resize?.observe(root);
+  for (const element of [root, header, anchor('hero-name'), anchor('hero-object'), anchor('about-logo')]) if (element) resize?.observe(element);
   document.fonts?.ready.then(queue);
-  if (logo) {
+  if (!reduced) {
     window.addEventListener('pointermove', onPointer, { passive: true });
     document.documentElement.addEventListener('pointerleave', onLeave);
   }
 
   return {
-    refresh,
+    refresh: settle,
     setPaused: (next) => {
       paused = next;
-      if (!next) render();
+      if (next || !alive) return;
+      // 멈춘 사이 넘은 지점은 재생하지 않고 그쪽 자리에 둔다.
+      if (nameSide() !== side) placeName(nameSide(), false);
+      moveLogo(logoSide(), false);
+    },
+    // GL 손잡이가 오거나 떠날 때. 진행도는 그대로 두고 지금 자리에 놓는다.
+    setLogo: (next) => {
+      logo = next;
+      if (!next) {
+        travel?.kill();
+        travel = null;
+        pose.t = goal;
+        logoHost.style.transform = '';
+      }
+      renderLogo();
     },
     // M4가 Projects 경계를 붙이기 전까지는 할 일이 없다.
     settleProjects: () => {},
@@ -240,10 +285,12 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, logo, 
       resize?.disconnect();
       window.removeEventListener('pointermove', onPointer);
       document.documentElement.removeEventListener('pointerleave', onLeave);
+      travel?.kill();
+      stopName();
       context.revert();
-      wordmark.style.transform = '';
-      wordmark.style.removeProperty('--name-glow');
-      heroTilt?.style.removeProperty('--hero-lean');
+      side = 'hero';
+      m.nameSize = 0;
+      applyName();
       logoHost.style.transform = '';
       logoHost.style.width = '';
       logoHost.style.height = '';

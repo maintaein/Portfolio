@@ -13,7 +13,7 @@ import { useMotionPreference } from '@/hooks/useMotionPreference';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useProjectModalObscured } from '@/hooks/useProjectModalObscured';
 import { useSectionNav } from '@/hooks/useSectionNav';
-import { HOME_SECTION_CONFIG, NAV_ITEMS, SECTION_IDS, type HomeSectionId } from '@/lib/constants';
+import { HOME_SECTION_CONFIG, NAV_ITEMS, PERSONAL_INFO, SECTION_IDS, type HomeSectionId } from '@/lib/constants';
 import { coreValues } from '@/lib/data';
 import type { LogoOwner, PortfolioMotion } from './motion';
 
@@ -54,13 +54,14 @@ export default function HomeClient() {
   const [logo, setLogo] = useState<ElectricLogoHandle | null>(null);
   const [logoOwner, setLogoOwner] = useState<LogoOwner>('none');
   const [logoReady, setLogoReady] = useState(false);
+  // GL 로고는 쉬는 자리(hero·about)에서만 드러난다. 날아가는 도중에 준비돼도 내려앉은 뒤에 정적 실루엣과 바뀐다.
+  const [logoLive, setLogoLive] = useState(false);
   const motionRef = useRef<PortfolioMotion | null>(null);
   // 명시적 이동 직전에 About의 읽기 잠금을 풀어 목적지로 가는 스크롤을 붙잡지 않는다.
   const { active, routeResolved, navigationTarget, navigate } = useSectionNav({ rootRef, headerRef, blocked: obscured, reducedMotion, onBeforeNavigate: () => { bootRef.current?.finish(); aboutRef.current?.release(); } });
   const motionReady = routeResolved && preferenceReady;
   // About 레일과 같이 1024px부터만 WebGL 로고를 띄운다. 그 아래와 모션 감소는 앵커의 정적 실루엣이다.
   const glLogo = wideScreen && preferenceReady && !reducedMotion && !introPending;
-  const logoLive = logoReady && logoOwner !== 'none';
   const activeLabel = HOME_SECTION_CONFIG.find(section => section.id === active)?.label ?? 'Overview';
   const [announcement, setAnnouncement] = useState('');
   // 명시적 이동이 도착해 목적지에 포커스가 간 때만 알린다. 수동으로 읽어 넘긴 섹션은 알리지 않는다.
@@ -77,22 +78,27 @@ export default function HomeClient() {
     query.addEventListener('change', update);
     return () => query.removeEventListener('change', update);
   }, []);
-  // 경계 모듈은 GSAP·ScrollTrigger를 품어 First Load 밖에서 늦게 부른다. 모션 감소는 부르지 않는다.
+  // 경계 모듈은 GSAP·ScrollTrigger를 품어 First Load 밖에서 늦게 부른다. 모션 감소도 같은 지점에서 이름 자리를 바꾸므로 부른다.
   useEffect(() => {
-    if (!motionReady || reducedMotion) return;
+    if (!motionReady) return;
     let alive = true;
     import('./motion').then(module => { if (alive) setMotionModule(module); });
     return () => { alive = false; };
-  }, [motionReady, reducedMotion]);
-  // 모듈 준비와 GL 손잡이 등록·해제 때만 다시 잇는다. chapter 로고의 onReady는 건드리지 않는다.
+  }, [motionReady]);
+  // 모듈 준비와 모션 감소 전환 때만 다시 잇는다. GL 손잡이는 날던 이름·로고를 끊지 않게 따로 넘긴다.
   useEffect(() => {
     const root = rootRef.current, header = headerRef.current, wordmark = wordmarkRef.current, logoHost = logoHostRef.current;
-    if (!motionModule || reducedMotion || !root || !header || !wordmark || !logoHost) return;
-    const motion = motionModule.createPortfolioMotion({ root, header, wordmark, logoHost, logo, onLogoOwnerChange: setLogoOwner });
+    if (!motionModule || !root || !header || !wordmark || !logoHost) return;
+    const motion = motionModule.createPortfolioMotion({ root, header, wordmark, logoHost, reduced: reducedMotion, onLogoOwnerChange: setLogoOwner });
     motionRef.current = motion;
     return () => { motion.destroy(); motionRef.current = null; setLogoOwner('none'); };
-  }, [motionModule, logo, reducedMotion]);
-  useEffect(() => { motionRef.current?.setPaused(obscured || !pageVisible); }, [obscured, pageVisible, motionModule, logo, reducedMotion]);
+  }, [motionModule, reducedMotion]);
+  useEffect(() => { motionRef.current?.setLogo(logo); }, [logo, motionModule, reducedMotion]);
+  useEffect(() => { motionRef.current?.setPaused(obscured || !pageVisible); }, [obscured, pageVisible, motionModule, reducedMotion]);
+  useEffect(() => {
+    if (!logoReady || logoOwner === 'none') setLogoLive(false);
+    else if (logoOwner !== 'boundary') setLogoLive(true);
+  }, [logoReady, logoOwner]);
   // 진입 대상은 경계가 이름을 Hero 자리에 놓은 뒤에 넘긴다. 숨긴 이름이 nav에서 나타나 뛰어내리지 않는다.
   // 오브젝트는 Hero 앵커 안 정적 실루엣의 껍질이다. 경계가 재는 앵커 상자는 건드리지 않는다.
   // 경계 모듈이 오지 않으면 대상도 없고, BootSequence가 제한 시간 뒤 정적 첫 화면을 준다.
@@ -110,15 +116,20 @@ export default function HomeClient() {
     <div className="portfolio-document" data-logo-owner={logoOwner} data-logo-live={logoLive ? '' : undefined}>
       <LuminousFlowBackground ref={setBackground} scrollScene paused={!pageVisible || !motionReady || reducedMotion || obscured} />
       <div inert={obscured} data-obscured={obscured ? '' : undefined}>
-        <Navigation items={NAV_ITEMS} active={active} onNavigate={navigate} reducedMotion={reducedMotion} headerRef={headerRef} wordmarkRef={wordmarkRef} />
+        <Navigation items={NAV_ITEMS} active={active} onNavigate={navigate} reducedMotion={reducedMotion} headerRef={headerRef} />
       </div>
       <main ref={rootRef} className="section-stage" inert={obscured}
         data-route-resolved={routeResolved} data-motion-ready={motionReady} data-reduced-motion={reducedMotion}
         data-navigation-target={navigationTarget ?? undefined} data-active-section={active}>
         <section id="overview" data-section="overview" role="region" aria-label="Overview" tabIndex={-1} className="document-section portfolio-hero">
           <div className="hero-copy">
-            {/* 이름 버튼은 nav에 하나뿐이다. 여기는 경계가 그 버튼을 크게 키워 옮겨 오는 빈 자리다. */}
-            <div data-motion-anchor="hero-name" aria-hidden="true" className="hero-name" />
+            {/* 이름 버튼은 문서에 하나뿐이다. 서버 HTML부터 이 자리(Hero)에 크게 서고, 경계가 지점을 넘으면 nav 자리로 옮긴다.
+                버튼 transform은 경계가, 안쪽 span의 opacity·자세는 인트로가 쓴다. 키보드로 누른 클릭(detail 0)은 smooth 없이 바로 간다. */}
+            <div data-motion-anchor="hero-name" className="hero-name">
+              <button ref={wordmarkRef} data-testid="wordmark" data-wordmark-mode="hero" aria-label="개요로 이동"
+                onClick={event => navigate('overview', { focus: true, behavior: reducedMotion || event.detail === 0 ? 'auto' : 'smooth' })}
+                className="site-name min-h-11 text-left text-t6 font-bold tracking-widest"><span className="inline-block">{PERSONAL_INFO.NAME_EN}</span></button>
+            </div>
             <h1 ref={headlineRef}>{'안녕하세요.\nSW개발자 김태인입니다.'}</h1>
           </div>
           {/* 공유 로고가 앉는 자리. GL이 없거나 준비 전, 모션 감소에서는 정적 실루엣이 대신한다.
@@ -135,7 +146,7 @@ export default function HomeClient() {
         {HOME_SECTION_CONFIG.map(({ id, label }) => {
           const Section = id === SECTION_IDS.ABOUT ? null : SECTION_COMPONENTS[id];
           return <div key={id} data-section={id} role="region" aria-label={label} tabIndex={-1} className="document-section">
-            {Section ? <Section /> : <AboutSection ref={aboutRef} onChapterChange={setAboutChapter} navigationPending={navigationTarget !== null} />}
+            {Section ? <Section /> : <AboutSection ref={aboutRef} onChapterChange={setAboutChapter} navigationPending={navigationTarget !== null} logoLanded={logoOwner !== 'boundary'} />}
           </div>;
         })}
         {/* 공유 로고 host. About의 원형 마스크와 overflow-x: clip 밖, 문서 좌표에 산다.

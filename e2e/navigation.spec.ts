@@ -53,7 +53,8 @@ test('native document scroll exposes the next original section without hiding si
 });
 test('manual reading replaces hash without stealing focus or losing history fields', async ({ page }) => {
   await enter(page, 'about');
-  await page.evaluate(() => { history.replaceState({ ...history.state, projectModalId: 'preserved', custom: 'next' }, ''); document.querySelector<HTMLButtonElement>('nav button')!.focus(); });
+  // 이름 버튼은 Hero에 살고 nav 자리에는 fixed로 선다. 그 버튼에 둔 포커스를 읽기 스크롤이 빼앗지 않는지 본다.
+  await page.evaluate(() => { history.replaceState({ ...history.state, projectModalId: 'preserved', custom: 'next' }, ''); document.querySelector<HTMLButtonElement>('[data-testid="wordmark"]')!.focus(); });
   const length = await historyLength(page);
   await page.locator('[data-section="experience"]').evaluate(el => window.scrollTo(0, el.getBoundingClientRect().top + scrollY - 80));
   await expectActive(page, 'experience'); expect(page.url()).toContain('#experience');
