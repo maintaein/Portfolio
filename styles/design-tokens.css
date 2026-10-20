@@ -72,9 +72,6 @@
   --color-hairline: rgb(3 179 195 / 0.35);
   --color-elevation-near: rgb(3 179 195 / 0.6);
   --color-elevation-far: rgb(3 179 195 / 0.15);
-  /* 첫 진입 인트로(통합 설계 6 추천 A). 아이보리 면 위 인사말 15.75:1. 커튼 경계도 같은 아이보리다. */
-  --color-intro-ivory: #f5f2eb;
-  --color-intro-ink: #17191c;
 
   /* Skills 아이콘 호버/포커스 글로우(계획 5 T3 브리프). cyan-core·cyan-hi와는
      다른 값이다. 컨트롤러가 브라우저에서 여러 번 확정했다. 그라데이션의
@@ -374,13 +371,21 @@
 /* Hero(D5-A). 1024px부터 왼쪽 문장·오른쪽 오브젝트, 그 아래는 이름·문장·오브젝트 순서로 쌓는다.
    소개 문장(h1)은 t1(30px)에서 1024px부터 d3(48px), 1536px부터 d2(72px). 줄 수는 폭에 맡긴다.
    낮은 화면에서는 오브젝트가 svh로 먼저 줄고 문장은 줄지 않는다. 넘치면 첫 화면이 내용만큼 늘어난다.
-   네 인사말은 인트로 커튼으로 옮겼다(.intro-greeting). */
-.portfolio-hero { display: flex; flex-direction: column; justify-content: center; gap: 30px; padding: 4rem max(1.5rem, 8vw); }
-.portfolio-hero h1 { max-width: 44rem; margin-top: 1.5rem; font-size: var(--font-size-t1); line-height: 1.35; font-weight: 500; word-break: keep-all; }
+   두 줄 인사는 원문 개행으로 나눈다(pre-line). 단어로 나뉘는 진입 동안에도 같은 자리에서 끊긴다. */
+.portfolio-hero { --hero-name-size: clamp(56px, 6.5vw, 128px); display: flex; flex-direction: column; justify-content: center; gap: 30px; padding: 4rem max(1.5rem, 8vw); }
+.portfolio-hero h1 { max-width: 44rem; margin-top: 1.5rem; font-size: var(--font-size-t1); line-height: 1.35; font-weight: 500; word-break: keep-all; white-space: pre-line; }
+/* 큰 이름의 빈 자리. 경계(motion.ts)가 nav의 이름 버튼을 이 높이의 글자 줄(nav 글자 줄 높이 1.5배)로 키워 Hero 가로 가운데에 놓는다.
+   폭이 좁으면 자리 폭에 맞춰 줄인다. 흰 광휘는 글자 그림자이고 nav에 닿으면 경계가 --name-glow로 끈다.
+   가운데 이름은 배경 광선 위를 지난다. 글자 뒤 부드러운 검은 판이 광선을 눌러 글자 가장자리 대비를 4.5:1 위로 지킨다(광휘 포함 실측 5.9 이상). */
+.hero-name { height: calc(var(--hero-name-size) * 1.5); }
+[data-motion-anchor='nav-name'] button { position: relative; isolation: isolate; text-shadow: 0 0 .2em rgb(255 255 255 / calc(.4 * var(--name-glow, 0))), 0 0 .6em rgb(255 255 255 / calc(.2 * var(--name-glow, 0))); }
+[data-motion-anchor='nav-name'] button::before { content: ''; position: absolute; inset: 0 -.6em; z-index: -1; pointer-events: none; background: radial-gradient(closest-side, rgb(0 0 0 / calc(.85 * var(--name-glow, 0))) 60%, transparent); }
 .hero-copy { min-width: 0; }
 .hero-object { position: relative; flex: none; width: min(112px, 16svh); aspect-ratio: 1 / 1; }
 @media (min-width: 1024px) {
   .portfolio-hero { flex-direction: row; align-items: center; justify-content: space-between; gap: 48px; }
+  /* 이름 자리가 글 칸 전체 폭을 써야 이름이 짧은 인사 폭에 묶이지 않는다. */
+  .hero-copy { flex: 1; }
   .portfolio-hero h1 { font-size: var(--font-size-d3); line-height: var(--line-height-d3); }
   .hero-object { width: min(clamp(260px, 31vw, 400px), 55svh); }
 }
@@ -399,19 +404,16 @@
 [data-logo-live] [data-motion-anchor] .about-electric-static { opacity: 0; }
 /* 가려진 실루엣의 충전 애니메이션도 멈춘다. GL과 겹쳐 돌면 첫 화면 프레임을 계속 다시 그린다(인트로 뒤 GL이 뜨면서 드러났다). */
 [data-logo-live] [data-motion-anchor] .about-electric-static-shape { animation: none; }
-/* 첫 진입 인트로. 그리기 전 판정(lib/introGate.ts)이 html[data-intro]를 붙인 경우에만 덮는다.
+/* 첫 진입. 그리기 전 판정(lib/introGate.ts)이 html[data-intro]를 붙인 경우에만 첫 페인트부터 출발 상태로 숨긴다.
    JS가 없거나 해시·모션 감소로 들어오면 붙지 않아 완성된 첫 화면이 바로 보인다.
-   입력은 막지 않는다(pointer-events: none). 첫 스크롤·탐색이 아래 문서로 그대로 가고 인트로는 끝난다. */
-.intro-curtain { display: none; }
+   문장은 단어로 나뉘면(aria-label) 단어마다 인라인 출발 상태를 받으므로 그때 숨김을 넘긴다. */
+html[data-intro] [data-motion-anchor='nav-name'] button > span,
+html[data-intro] .portfolio-hero h1:not([aria-label]),
+html[data-intro] .hero-object .about-electric-static { opacity: 0; }
 /* Hero 정적 실루엣은 GL 궤도와 같은 휴식 자세(motion.ts REST_X/Y_DEG, perspective 900)로 눕는다.
-   경계가 --hero-lean을 1에서 0으로 내려 정면으로 돌린다. 인트로 동안은 inline opacity 트윈이 전환에 끌리지 않게 끈다. */
+   경계가 --hero-lean을 1에서 0으로 내려 정면으로 돌린다. 진입 동안은 inline opacity 트윈이 전환에 끌리지 않게 끈다. */
 .hero-object-tilt { width: 100%; height: 100%; transform: perspective(900px) rotateX(calc(56deg * var(--hero-lean, 1))) rotateY(calc(-24deg * var(--hero-lean, 1))); }
 html[data-intro] .hero-object .about-electric-static { transition: none; }
-html[data-intro] .intro-curtain { display: block; position: fixed; inset: 0; z-index: 100; pointer-events: none; }
-.intro-curtain svg { position: absolute; inset: 0; width: 100%; height: 100%; fill: var(--color-intro-ivory); }
-.intro-greeting { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; padding: 0 1.5rem; color: var(--color-intro-ink); font-size: var(--font-size-t2); font-weight: 600; letter-spacing: -0.01em; text-align: center; }
-.intro-greeting ~ .intro-greeting { opacity: 0; }
-@media (min-width: 1024px) { .intro-greeting { font-size: var(--font-size-t1); } }
 .site-footer { min-height: 120px; padding-bottom: max(2rem, env(safe-area-inset-bottom, 0px)); }
 
   /* ProjectModal이 열리면 헤더가 흐려지며 물러난다. 필터는 nav 자신에

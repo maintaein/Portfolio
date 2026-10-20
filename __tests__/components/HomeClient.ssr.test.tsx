@@ -64,20 +64,20 @@ describe('HomeClient 실제 섹션 SSR 상주', () => {
 
 it('keeps the approved static Hero text and real future name destinations in SSR', () => {
   const html = renderToString(<HomeClient />);
-  expect(html).toContain('탄탄한 기본기를 바탕으로 꾸준히 개선하고, 협업으로 함께 성장하는 개발자.');
+  expect(html).toMatch(/<h1[^>]*>안녕하세요.\nSW개발자 김태인입니다.<\/h1>/);
+  expect(html).not.toContain('탄탄한 기본기를');
   expect(html).toContain('data-motion-anchor="hero-name"');
   expect(html).toContain('data-motion-anchor="nav-name"');
   expect(html).not.toContain('section-hidden');
 });
 
-// 커튼은 서버 HTML에 있지만 CSS가 html[data-intro]일 때만 보인다. JS가 없으면 표시가 붙지 않아 완성된 첫 화면이다.
-it('ships the curtain hidden by default and the greetings once for readers in SSR', () => {
+// 사용자 결정(2026-10-20). 커튼과 네 인사말이 없다. JS가 없으면 표시가 붙지 않아 완성된 첫 화면이다.
+it('ships no curtain and no greeting paragraph in SSR', () => {
   const html = renderToString(<HomeClient />);
-  expect(html).toContain('class="intro-curtain" aria-hidden="true"');
+  expect(html).not.toMatch(/intro-curtain|intro-greeting|잘부탁드립니다/);
   expect(html).not.toContain('data-intro=');
   const hero = html.slice(html.indexOf('id="overview"'), html.indexOf('data-section="about"'));
-  expect(hero).toContain('<p class="sr-only">안녕하세요. SW개발자. 김태인입니다. 잘부탁드립니다.</p>');
-  expect(hero.match(/<p/g)).toHaveLength(1);
+  expect(hero).not.toContain('<p');
   // 이름 버튼은 안쪽 span 하나를 품는다. 인트로는 그 span만, 경계는 버튼만 움직인다.
   expect(html).toMatch(/data-testid="wordmark"[^>]*><span class="inline-block">KIM TAEIN<\/span><\/button>/);
 });
@@ -113,7 +113,7 @@ describe('그리기 전 인트로 판정(lib/introGate.ts)', () => {
   };
   afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); document.documentElement.removeAttribute('data-intro'); });
 
-  it('첫 방문 / 와 #overview만 커튼을 건다', () => {
+  it('첫 방문 / 와 #overview만 진입 출발 상태를 건다', () => {
     expect(run({})).toBe(true);
     expect(run({ hash: '#overview' })).toBe(true);
     expect(run({ type: 'reload', saved: 0 })).toBe(true);
@@ -125,11 +125,11 @@ describe('그리기 전 인트로 판정(lib/introGate.ts)', () => {
     ['저장된 읽기 위치가 있는 새로고침', { type: 'reload', saved: 900 }],
     // 최종 리뷰 triage. 다른 경로에 표시가 남으면 load 뒤 3초 안의 클라이언트 이동으로 / 에서 인트로가 시작된다.
     ['/ 밖의 경로', { path: '/background-preview' }],
-  ] as const)('%s는 커튼 없이 바로 간다', (_, options) => {
+  ] as const)('%s는 완성된 첫 화면으로 바로 간다', (_, options) => {
     expect(run(options)).toBe(false);
   });
   // 리뷰 Important 3. 시간을 나눠 도는 하이드레이션이 load 뒤 1초를 넘길 수 있다.
-  it('본 번들이 인트로를 맡지 못하면 load 3초 뒤 커튼을 걷고, 맡으면 손대지 않는다', () => {
+  it('본 번들이 진입을 맡지 못하면 load 3초 뒤 숨긴 출발 상태를 걷고, 맡으면 손대지 않는다', () => {
     vi.useFakeTimers();
     run({});
     window.dispatchEvent(new Event('load'));

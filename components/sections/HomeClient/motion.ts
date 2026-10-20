@@ -44,6 +44,13 @@ function layoutBox(element: Element | null): Box {
   return { x, y, w: element.offsetWidth, h: element.offsetHeight };
 }
 
+// 소수점까지 잰 상자. 이름은 여섯 배 가까이 커져 정수로 반올림된 offset의 0.5px이 3px로 벌어진다.
+const rectBox = (element: Element | null, scroll = 0): Box => {
+  if (!element) return EMPTY;
+  const rect = element.getBoundingClientRect();
+  return { x: rect.left, y: rect.top + scroll, w: rect.width, h: rect.height };
+};
+
 // 섹션 경계는 About 잠금·해시 이동과 같은 식(rect + scrollY, 반올림)으로 재야 도착 자리가 1px도 어긋나지 않는다.
 const documentTop = (element: Element | null) => element ? Math.round(element.getBoundingClientRect().top + window.scrollY) : 0;
 
@@ -60,7 +67,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, logo, 
   const nameEase = gsap.parseEase('power2.inOut');
   const turnEase = gsap.parseEase('power2.inOut');
   const settleEase = gsap.parseEase('power2.out');
-  let m = { start: 0, end: 0, name: EMPTY, button: EMPTY, hero: EMPTY, about: EMPTY, origin: EMPTY };
+  // 이름: Hero에서 커지는 배율, 그때 보이는 글자 가운데가 올 Hero 가로 가운데, 배율 원점(버튼 가운데)과 거기서 본 글자 가운데.
+  let m = { start: 0, end: 0, name: EMPTY, scale: 1, centreX: 0, pivot: { x: 0, y: 0 }, glyph: { x: 0, y: 0 }, hero: EMPTY, about: EMPTY, origin: EMPTY };
   let owner: LogoOwner | null = null;
   let paused = false;
   let alive = true;
@@ -81,9 +89,23 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, logo, 
     const margin = about ? parseFloat(getComputedStyle(about).scrollMarginTop) || header.offsetHeight : 0;
     const heroObject = layoutBox(anchor('hero-object'));
     const aboutLogo = layoutBox(anchor('about-logo'));
+    const name = rectBox(anchor('hero-name'), window.scrollY);
+    // 이름 버튼과 안쪽 글자(진입이 y를 쓴다)의 transform을 잠깐 걷고 잰다. 같은 동기 구간에서 되돌려 그려지지 않는다.
+    const label = wordmark.firstElementChild instanceof HTMLElement ? wordmark.firstElementChild : wordmark;
+    const saved = [wordmark.style.transform, label.style.transform];
+    wordmark.style.transform = label.style.transform = '';
+    const button = rectBox(wordmark);
+    const text = rectBox(label);
+    [wordmark.style.transform, label.style.transform] = saved;
+    // 자리 높이에 글자 줄을 맞추되 자리 폭을 넘지 않는다. tracking-widest의 끝 자간은 가운데에서 뺀다.
+    const scale = text.h && text.w ? Math.min(name.h / text.h, name.w / text.w) : 1;
+    const trail = parseFloat(getComputedStyle(label).letterSpacing) || 0;
+    const heroLayout = rectBox(hero);
+    const pivot = { x: button.x + button.w / 2, y: button.y + button.h / 2 };
     m = {
       start, end: Math.max(start, documentTop(about) - margin),
-      name: layoutBox(anchor('hero-name')), button: layoutBox(wordmark),
+      name, scale, centreX: heroLayout.x + heroLayout.w / 2,
+      pivot, glyph: { x: text.x + (text.w - trail) / 2 - pivot.x, y: text.y + text.h / 2 - pivot.y },
       hero: heroObject, about: aboutLogo.w ? aboutLogo : heroObject, origin: layoutBox(logoHost.offsetParent),
     };
     if (logo && m.about.w) {
@@ -109,9 +131,14 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, logo, 
     const span = (from: number, to: number) => clamp((p - from) / (to - from));
 
     const named = nameEase(span(NAME_START, NAME_END));
-    const { name, button } = m;
-    // 0–20%는 이름이 Hero와 함께 흐르고 20–50%에 nav 자리로 간다.
-    wordmark.style.transform = named >= 1 ? '' : `translate3d(${(name.x - button.x) * (1 - named)}px, ${(name.y + name.h / 2 - scroll - button.y - button.h / 2) * (1 - named)}px, 0)`;
+    const { name, pivot, glyph } = m;
+    // 0–20%는 이름이 Hero와 함께 흐르고 20–50%에 줄어들며 nav 자리로 간다. 배율은 버튼 가운데를 원점으로 건다.
+    // 보이는 글자 가운데가 Hero 가로 가운데·자리 세로 가운데에서 nav 자리로 곧게 간다. 흰 광휘도 nav에 닿으며 꺼진다.
+    const grow = lerp(m.scale, 1, named);
+    const nameX = lerp(m.centreX, pivot.x + glyph.x, named) - pivot.x - grow * glyph.x;
+    const nameY = lerp(name.y + name.h / 2 - scroll, pivot.y + glyph.y, named) - pivot.y - grow * glyph.y;
+    wordmark.style.transform = named >= 1 ? '' : `translate3d(${nameX}px, ${nameY}px, 0) scale(${grow})`;
+    wordmark.style.setProperty('--name-glow', named >= 1 ? '' : String(1 - named));
 
     const settled = settleEase(span(TURN_END, 1));
     const lean = (1 - (1 - NEAR_FRONT) * turnEase(span(NAME_END, TURN_END))) * (1 - settled);
@@ -205,6 +232,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, logo, 
       document.documentElement.removeEventListener('pointerleave', onLeave);
       context.revert();
       wordmark.style.transform = '';
+      wordmark.style.removeProperty('--name-glow');
       heroTilt?.style.removeProperty('--hero-lean');
       logoHost.style.transform = '';
       logoHost.style.width = '';

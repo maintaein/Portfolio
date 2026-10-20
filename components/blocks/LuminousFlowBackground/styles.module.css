@@ -19,6 +19,9 @@
 
 .scrollScene .sourceHaze { height: 100svh; }
 
+/* Home's first-visit entrance (lib/introGate.ts) starts at reveal 0, where the haze is off. Before JS draws, only this rule can hide it. */
+:global(html[data-intro]) .sourceHaze { opacity: 0; }
+
 .atmosphere { transform: translateZ(0); }
 
 .grain {

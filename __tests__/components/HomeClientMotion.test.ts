@@ -17,7 +17,7 @@ function place(element: HTMLElement, { x, y, w, h }: Box, parent: HTMLElement | 
 let documentY = 0;
 let viewport = 900;
 const handle = { beginBoundary: vi.fn(() => true), setBoundaryTarget: vi.fn(), seekBoundary: vi.fn(), endBoundary: vi.fn() } satisfies ElectricLogoHandle;
-let root: HTMLElement; let header: HTMLElement; let wordmark: HTMLButtonElement; let host: HTMLElement; let inner: HTMLElement;
+let root: HTMLElement; let header: HTMLElement; let wordmark: HTMLButtonElement; let label: HTMLElement; let host: HTMLElement; let inner: HTMLElement;
 let heroName: HTMLElement; let heroObject: HTMLElement; let aboutLogo: HTMLElement; let hero: HTMLElement; let about: HTMLElement;
 let motion: PortfolioMotion | null = null;
 const owners: LogoOwner[] = [];
@@ -25,13 +25,13 @@ const owners: LogoOwner[] = [];
 // Hero는 76~900, About은 900부터. 도착은 헤더 아래 16px 여유(scroll-margin-top 92) 자리 808이다.
 function build() {
   document.body.innerHTML = `
-    <nav><div data-motion-anchor="nav-name"><button>KIM TAEIN</button></div></nav>
+    <nav><div data-motion-anchor="nav-name"><button><span>KIM TAEIN</span></button></div></nav>
     <main>
       <section data-section="overview"><div data-motion-anchor="hero-object"><div><div class="hero-object-tilt"></div></div></div><div data-motion-anchor="hero-name"></div></section>
       <div data-section="about"><div data-motion-anchor="about-logo"></div></div>
       <div data-logo-host><div></div></div>
     </main>`;
-  header = document.querySelector('nav')!; wordmark = document.querySelector('button')!; root = document.querySelector('main')!;
+  header = document.querySelector('nav')!; wordmark = document.querySelector('button')!; label = wordmark.querySelector('span')!; root = document.querySelector('main')!;
   host = document.querySelector('[data-logo-host]')!; inner = host.firstElementChild as HTMLElement;
   hero = document.querySelector('[data-section="overview"]')!; about = document.querySelector('[data-section="about"]')!;
   heroName = document.querySelector('[data-motion-anchor="hero-name"]')!;
@@ -39,10 +39,13 @@ function build() {
   aboutLogo = document.querySelector('[data-motion-anchor="about-logo"]')!;
   place(header, { x: 0, y: 0, w: 1440, h: 76 });
   place(wordmark, { x: 24, y: 16, w: 120, h: 44 }, header);
+  // 글자 줄 상자는 버튼 세로 가운데에 있다.
+  place(label, { x: 24, y: 27, w: 120, h: 22 }, header);
   place(root, { x: 0, y: 0, w: 1440, h: 5000 });
   place(hero, { x: 0, y: 76, w: 1440, h: 824 });
   place(about, { x: 0, y: 900, w: 1440, h: 900 });
-  place(heroName, { x: 600, y: 200, w: 300, h: 44 });
+  // 큰 이름의 줄 높이만큼 비운 자리. 6배(132/22)가 폭(800/120)보다 먼저 닿는다.
+  place(heroName, { x: 100, y: 200, w: 800, h: 132 });
   // D5-A: 1024px부터 오브젝트는 문장 오른쪽에 있다.
   place(heroObject, { x: 960, y: 300, w: 360, h: 360 });
   place(aboutLogo, { x: 140, y: 1100, w: 360, h: 360 });
@@ -55,7 +58,11 @@ const create = (logo: ElectricLogoHandle | null = handle) => {
 };
 const scrollAt = (y: number) => { documentY = y; window.dispatchEvent(new Event('scroll')); ScrollTrigger.update(); };
 const numbers = (value: string) => (value.replace('translate3d', '').match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+// translate3d(x, y, 0) scale(s). 버튼 가운데를 원점으로 커진다.
 const name = () => numbers(wordmark.style.transform).slice(0, 2);
+const nameScale = () => numbers(wordmark.style.transform)[3];
+// 글자 가운데를 Hero 가로 가운데 720, 자리 세로 가운데 266(200+66)에 놓는다. 원점 (84, 38).
+const HERO_NAME = [636, 228];
 // translate3d(x, y, 0) perspective(...) rotateX rotateY scale
 const logo = () => { const [x, y, , , rx, ry, scale] = numbers(host.style.transform); return { x, y, rx, ry, scale }; };
 
@@ -75,8 +82,10 @@ afterEach(() => { motion?.destroy(); motion = null; vi.restoreAllMocks(); vi.uns
 describe('Hero→About 경계', () => {
   it('Hero에서는 이름이 hero-name 앵커에, 로고가 hero-object 앵커에 비스듬히 앉는다', () => {
     create();
-    // 이름: 왼쪽 끝을 맞추고 세로 가운데를 맞춘다. (600-24, 222-38)
-    expect(name()).toEqual([576, 184]);
+    // 이름: Hero 가로 가운데, 자리 높이만큼 커진 글자 줄이 자리 세로 가운데에 온다.
+    expect(name()).toEqual(HERO_NAME);
+    expect(nameScale()).toBe(6);
+    expect(wordmark.style.getPropertyValue('--name-glow')).toBe('1');
     expect(logo()).toMatchObject({ x: 960, y: 300, scale: 1 });
     // 원자 궤도처럼 눕힌 자세. 평면 캔버스라 눈에 띄려면 크게 눕혀야 한다.
     expect(logo().rx).toBeGreaterThanOrEqual(45);
@@ -87,12 +96,16 @@ describe('Hero→About 경계', () => {
   it('0–20%는 이름이 문서와 함께 흐르고, 20–50%에 nav에 닿는다', () => {
     create();
     scrollAt(808 * .2);
-    expect(name()[0]).toBe(576);
-    expect(name()[1]).toBeCloseTo(184 - 161.6, 1);
+    expect(name()[0]).toBe(HERO_NAME[0]);
+    expect(name()[1]).toBeCloseTo(HERO_NAME[1] - 161.6, 1);
+    expect(nameScale()).toBe(6);
     scrollAt(808 * .35);
-    expect(name()[0]).toBeGreaterThan(0); expect(name()[0]).toBeLessThan(576);
+    expect(name()[0]).toBeGreaterThan(0); expect(name()[0]).toBeLessThan(HERO_NAME[0]);
+    expect(nameScale()).toBeGreaterThan(1); expect(nameScale()).toBeLessThan(6);
+    expect(Number(wordmark.style.getPropertyValue('--name-glow'))).toBeCloseTo(1 - (nameScale() - 6) / (1 - 6), 5);
     scrollAt(808 * .5);
     expect(wordmark.style.transform).toBe('');
+    expect(wordmark.style.getPropertyValue('--name-glow')).toBe('');
     expect(owners).toEqual(['hero', 'boundary']);
   });
 
@@ -121,7 +134,7 @@ describe('Hero→About 경계', () => {
     expect(wordmark.style.transform).toBe('');
     scrollAt(100); expect(logo()).toMatchObject({ x: 960, y: 400 });
     scrollAt(0);
-    expect(name()).toEqual([576, 184]);
+    expect(name()).toEqual(HERO_NAME);
     expect(logo()).toMatchObject({ x: 960, y: 300 });
     expect(owners).toEqual(['hero', 'about', 'boundary', 'hero']);
   });
@@ -131,7 +144,7 @@ describe('Hero→About 경계', () => {
     place(aboutLogo, { x: 140, y: 1500, w: 360, h: 360 });
     create();
     scrollAt(200);
-    expect(name()).toEqual([576, -16]);
+    expect(name()).toEqual([HERO_NAME[0], HERO_NAME[1] - 200]);
     expect(logo()).toMatchObject({ x: 960, y: 300 });
     expect(owners).toEqual(['hero']);
     // 시작 400, 도착 1208.
@@ -162,7 +175,7 @@ describe('Hero→About 경계', () => {
     create();
     motion!.setPaused(true);
     scrollAt(808);
-    expect(name()).toEqual([576, 184]);
+    expect(name()).toEqual(HERO_NAME);
     motion!.setPaused(false);
     expect(wordmark.style.transform).toBe('');
     expect(logo()).toMatchObject({ x: 140, y: 1100 });
@@ -170,7 +183,7 @@ describe('Hero→About 경계', () => {
 
   it('GL 손잡이가 없으면 로고 host는 건드리지 않고 이름 채널만 돈다', () => {
     create(null);
-    expect(name()).toEqual([576, 184]);
+    expect(name()).toEqual(HERO_NAME);
     expect(host.style.transform).toBe('');
     expect(owners).toEqual(['none']);
   });
@@ -196,12 +209,37 @@ describe('Hero→About 경계', () => {
 
   it('destroy는 이름과 host를 정적 자리로 돌려놓고 더는 쓰지 않는다', () => {
     create();
-    scrollAt(404);
+    scrollAt(250);
     motion!.destroy(); motion = null;
     expect(wordmark.style.transform).toBe('');
+    expect(wordmark.style.getPropertyValue('--name-glow')).toBe('');
     expect(host.style.transform).toBe('');
     scrollAt(0);
     expect(wordmark.style.transform).toBe('');
+  });
+
+  // 390px에서 넘치지 않는다. 자리 폭이 좁으면 높이 대신 폭에 맞춰 줄이고 세로 가운데는 그대로다.
+  it('이름 자리 폭이 좁으면 폭에 맞춰 줄인다', () => {
+    place(heroName, { x: 24, y: 200, w: 300, h: 132 });
+    create();
+    expect(nameScale()).toBe(2.5);
+    expect(name()).toEqual(HERO_NAME);
+  });
+
+  // tracking-widest는 마지막 글자 뒤에도 자간을 남긴다. 그만큼 빼야 보이는 글자가 가운데에 온다.
+  it('끝 자간을 빼고 보이는 글자의 가운데를 맞춘다', () => {
+    label.style.letterSpacing = '12px';
+    create();
+    expect(name()).toEqual([HERO_NAME[0] + 6 * 6, HERO_NAME[1]]);
+  });
+
+  // 흰 광휘는 글자 그림자다. 배경 흐림·화면 전체 빛이 아니고, nav에서는 경계가 꺼 둔다.
+  it('이름의 흰 광휘는 --name-glow에 걸린 text-shadow뿐이다', async () => {
+    const { readFileSync } = await import('node:fs');
+    const css = readFileSync('styles/design-tokens.css', 'utf8');
+    const rule = css.match(/\[data-motion-anchor='nav-name'\] button \{[^}]*\}/)![0];
+    expect(rule).toMatch(/text-shadow:[^;]*rgb\(255 255 255 \/ calc\([^;]*var\(--name-glow, 0\)/);
+    expect(rule).not.toMatch(/filter|blur\(/);
   });
 
   it('chapter 로고가 바뀌어도 경계는 손잡이를 다시 부르지 않는다', () => {

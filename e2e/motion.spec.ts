@@ -140,19 +140,24 @@ test.describe('Native motion activity', () => {
     const name = page.getByTestId('wordmark');
     const box = async (selector: string) => (await page.locator(selector).boundingBox())!;
     const singles = () => page.evaluate(() => [document.querySelectorAll('[data-testid="wordmark"]').length, document.querySelectorAll('[data-logo-host]').length]);
-    // 이름: 왼쪽 끝과 세로 가운데가 앵커에 맞는다.
+    // nav: 왼쪽 끝과 세로 가운데가 앵커에 맞는다.
     const offAnchor = async (selector: string) => {
       const [a, b] = [await box(selector), (await name.boundingBox())!];
       return Math.max(Math.abs(a.x - b.x), Math.abs(a.y + a.height / 2 - b.y - b.height / 2));
+    };
+    // Hero: 세로 가운데는 이름 자리에, 가로 가운데는 Hero에 맞는다. 버튼 상자는 끝 자간(0.1em × 배율)의 절반만큼 오른쪽으로 비켜 있다.
+    const offHero = async () => {
+      const [a, hero, b] = [await box('[data-motion-anchor="hero-name"]'), await box('#overview'), (await name.boundingBox())!];
+      return Math.max(Math.abs(a.y + a.height / 2 - b.y - b.height / 2), Math.abs(hero.x + hero.width / 2 - b.x - b.width / 2) - 10);
     };
     const offLogo = async () => {
       const [a, b] = [await box('[data-motion-anchor="about-logo"]'), await box('[data-logo-host]')];
       return Math.max(Math.abs(a.x + a.width / 2 - b.x - b.width / 2), Math.abs(a.y + a.height / 2 - b.y - b.height / 2));
     };
-    // /#overview 첫 방문은 인트로를 돌고 GL 로고는 그 뒤에 뜬다. 이 검사는 경계만 보므로 아무 키로 인트로를 끝낸다.
+    // /#overview 첫 방문은 진입을 돌고 GL 로고는 그 뒤에 뜬다. 이 검사는 경계만 보므로 아무 키로 진입을 끝낸다.
     await page.keyboard.press('Shift');
-    await expect(page.locator('.intro-curtain')).toHaveCount(0, { timeout: 30_000 });
-    await expect.poll(() => offAnchor('[data-motion-anchor="hero-name"]')).toBeLessThan(1.5);
+    await expect(page.locator('html')).not.toHaveAttribute('data-intro', { timeout: 30_000 });
+    await expect.poll(offHero).toBeLessThan(1.5);
     await expect(page.locator('.portfolio-document')).toHaveAttribute('data-logo-owner', 'hero', { timeout: 20_000 });
     // 첫 GL 그림(문맥 생성)이 끝난 뒤에 스크롤한다. 그 사이 프레임이 멈춰 경계가 늦게 따라온다.
     await expect(page.locator('.portfolio-document')).toHaveAttribute('data-logo-live', '', { timeout: 30_000 });
@@ -181,41 +186,40 @@ test.describe('Native motion activity', () => {
 
     await navButton(page, '개요로 이동').click(); await expectActive(page, 'overview');
     await expect(page.locator('.portfolio-document')).toHaveAttribute('data-logo-owner', 'hero');
-    await expect.poll(() => offAnchor('[data-motion-anchor="hero-name"]')).toBeLessThan(1.5);
+    await expect.poll(offHero).toBeLessThan(1.5);
     expect(await singles()).toEqual([1, 1]);
   });
-  test('첫 방문은 아이보리 커튼의 인사말에서 완성된 첫 화면으로 끝나고 이름은 Hero 자리에서만 나타난다', async ({ page }) => {
+  test('첫 방문은 커튼 없이 바로 진입해 완성된 첫 화면으로 끝나고 큰 이름은 Hero 가운데에 있다', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
-    const curtain = page.locator('.intro-curtain');
-    await expect(curtain).toBeVisible();
-    await expect(page.locator('.intro-greeting').first()).toHaveText('안녕하세요.');
-    await expect(curtain.locator('path')).toHaveCSS('fill', 'rgb(245, 242, 235)');
-    await expect(curtain).toHaveCount(0, { timeout: 30_000 });
-    await expect(page.locator('html')).not.toHaveAttribute('data-intro');
+    await expect(page.locator('html')).toHaveAttribute('data-intro', /^(playing)?$/);
+    await expect(page.locator('.intro-curtain, .intro-greeting')).toHaveCount(0);
+    await expect(page.locator('html')).not.toHaveAttribute('data-intro', { timeout: 30_000 });
     const headline = page.getByRole('heading', { level: 1 });
-    await expect(headline).toHaveText('탄탄한 기본기를 바탕으로 꾸준히 개선하고, 협업으로 함께 성장하는 개발자.');
+    await expect(headline).toHaveText('안녕하세요. SW개발자 김태인입니다.');
     expect(await headline.evaluate(el => el.children.length)).toBe(0);
-    const [anchor, name] = [(await page.locator('[data-motion-anchor="hero-name"]').boundingBox())!, (await page.getByTestId('wordmark').boundingBox())!];
-    expect(Math.abs(anchor.x - name.x)).toBeLessThan(1.5);
+    const [anchor, hero, name] = [(await page.locator('[data-motion-anchor="hero-name"]').boundingBox())!, (await page.locator('#overview').boundingBox())!, (await page.getByTestId('wordmark').boundingBox())!];
+    expect(Math.abs(anchor.y + anchor.height / 2 - name.y - name.height / 2)).toBeLessThan(1.5);
+    expect(Math.abs(hero.x + hero.width / 2 - name.x - name.width / 2)).toBeLessThan(10);
+    // 자리 높이는 이름 글자 크기의 1.5배다. 왼쪽 문장(48px)의 1.5배를 넘는다.
+    expect(anchor.height / 1.5).toBeGreaterThan(48 * 1.5);
     await expect(page.getByTestId('wordmark').locator('span')).toHaveCSS('opacity', '1');
-    // 다시 위로 와도 인트로는 돌지 않는다.
+    // 다시 위로 와도 진입은 돌지 않는다.
     await navButton(page, 'About').click(); await expectActive(page, 'about');
     await navButton(page, '개요로 이동').click(); await expectActive(page, 'overview');
-    await expect(curtain).toHaveCount(0);
+    await expect(page.locator('html')).not.toHaveAttribute('data-intro');
   });
-  test('직접 해시와 첫 휠은 인트로를 기다리지 않는다', async ({ page }) => {
+  test('직접 해시와 첫 휠은 진입을 기다리지 않는다', async ({ page }) => {
     await page.goto('/#projects');
     await expect(page.locator('html')).not.toHaveAttribute('data-intro');
-    await expect(page.locator('.intro-curtain')).toBeHidden();
     await enter(page, 'projects');
     await page.goto('about:blank');
     await page.goto('/');
-    await expect(page.locator('main')).toHaveAttribute('data-route-resolved', 'true', { timeout: 20_000 });
-    await expect(page.locator('.intro-curtain')).toBeVisible();
+    // React가 진입을 맡은 직후에 휠을 보낸다. 진입이 끝나도 휠은 그대로 문서를 내린다.
+    await page.locator('html[data-intro="playing"]').waitFor({ state: 'attached', timeout: 20_000 });
     await page.mouse.move(700, 450);
     await page.mouse.wheel(0, 400);
-    await expect(page.locator('.intro-curtain')).toHaveCount(0);
+    await expect(page.locator('html')).not.toHaveAttribute('data-intro');
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
   });
   test('reduced motion leaves the name in the navigation and mounts no GL logo', async ({ page }) => {

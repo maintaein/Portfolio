@@ -23,7 +23,6 @@ const boot = vi.hoisted(() => ({ props: null as null | BootProps, finish: vi.fn(
 vi.mock('@/components/sections/BootSequence', async () => {
   const { forwardRef, useImperativeHandle } = await import('react');
   return {
-    INTRO_GREETINGS: ['안녕하세요.', 'SW개발자.', '김태인입니다.', '잘부탁드립니다.'],
     default: forwardRef<unknown, BootProps>(function Boot(props, ref) { boot.props = props; useImperativeHandle(ref, () => ({ finish: boot.finish }), []); return null; }),
   };
 });
@@ -173,12 +172,16 @@ it('the shared logo host lives outside clipping ancestors and can shrink with it
 
 // D5-A: 1024px부터 왼쪽 문장·오른쪽 오브젝트, 그 아래는 이름·문장·오브젝트 순서. 크기는 소개 문장(h1)에 걸고
 // 낮은 화면에서는 오브젝트가 먼저 준다. 로고는 날아가는 동안 chapter 단어 줄(z 3) 아래로 지나간다.
+// 이름 자리는 큰 이름의 줄 높이만큼 비워 둔다. 두 줄 인사는 원문 개행으로 나눈다.
 it('lays the Hero out as name, sentence, then object, and the object shrinks first on low screens', async () => {
   const { readFileSync } = await import('node:fs');
   const css = readFileSync('styles/design-tokens.css', 'utf8');
   const { container } = render(<HomeClient />);
   const order = [...container.querySelectorAll('#overview [data-motion-anchor], #overview h1')].map(el => el.getAttribute('data-motion-anchor') ?? el.tagName);
   expect(order).toEqual(['hero-name', 'H1', 'hero-object']);
+  expect(container.querySelector('#overview [data-motion-anchor="hero-name"]')).toHaveClass('hero-name');
+  expect(css).toMatch(/\n\.hero-name \{[^}]*height: calc\(var\(--hero-name-size\) \* 1\.5\);/);
+  expect(css).toMatch(/\.portfolio-hero h1 \{[^}]*white-space: pre-line;/);
   expect(css).toMatch(/\.portfolio-hero h1 \{[^}]*font-size: var\(--font-size-t1\)/);
   expect(css).toMatch(/@media \(min-width: 1024px\) \{[^@]*\.portfolio-hero \{[^}]*flex-direction: row;[^@]*\.portfolio-hero h1 \{ font-size: var\(--font-size-d3\)/);
   expect(css).toMatch(/@media \(min-width: 1536px\) \{[^@]*\.portfolio-hero h1 \{ font-size: var\(--font-size-d2\)/);
@@ -202,14 +205,14 @@ it('the Hero static symbol rests in the GL orbit tilt at every width and the bou
   expect(container.querySelectorAll('#overview [data-motion-anchor="hero-object"] .hero-object-tilt')).toHaveLength(1);
 });
 
-// 네 인사말은 인트로 커튼에서만 보인다. 첫 화면에는 이름·소개·오브젝트만 보이고, 인사말은 보조기기용으로 한 번 남는다.
-it('the Hero shows no visible greetings; they stay readable once for assistive tech', () => {
+// 사용자 결정(2026-10-20). 인사말 교대와 커튼이 없다. Hero 왼쪽 두 줄 인사가 유일한 h1이고 옛 소개 문장은 없다.
+it('the Hero text is the two-line greeting h1; no greeting paragraph and no old intro sentence', () => {
   const { container } = render(<HomeClient />);
   const hero = container.querySelector('#overview')!;
-  const greeting = hero.querySelectorAll('p');
-  expect(greeting).toHaveLength(1);
-  expect(greeting[0]).toHaveClass('sr-only');
-  expect(greeting[0].textContent).toBe('안녕하세요. SW개발자. 김태인입니다. 잘부탁드립니다.');
+  expect(hero.querySelectorAll('p')).toHaveLength(0);
+  expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+  expect(hero.querySelector('h1')!.textContent).toBe('안녕하세요.\nSW개발자 김태인입니다.');
+  expect(container.textContent).not.toContain('탄탄한 기본기를');
 });
 
 it('without the pre-paint gate (hash, revisit, reduced, no JS) the intro is disabled and nothing is held back', async () => {
@@ -222,29 +225,28 @@ it('without the pre-paint gate (hash, revisit, reduced, no JS) the intro is disa
   expect(container.querySelector('[data-electric-src]')).toHaveAttribute('data-electric-active', 'true');
 });
 
-// 헤드 Chrome에서 WebGL 문맥 생성이 메인 스레드를 1.4–2.3초 막아 인사말과 커튼을 멈춰 세웠다. GL 로고는 인트로 뒤에 뜬다.
-it.each([['wide', true], ['narrow', false]] as const)('first visit (%s): the background waits under the curtain, targets come after the boundary placed the name, and the GL logo mounts only after the intro', async (_, wide) => {
+// 헤드 Chrome에서 WebGL 문맥 생성이 메인 스레드를 1.4–2.3초 막았다. GL 로고는 진입 뒤에 뜬다.
+// 배경은 기다리지 않고 바로 돈다. 공개값 0은 대상보다 먼저 배경 손잡이에 건다.
+it.each([['wide', true], ['narrow', false]] as const)('first visit (%s): the background runs at once with its handle passed before the targets, targets come after the boundary placed the name, and the GL logo mounts only after the entrance', async (_, wide) => {
   flags.wide = wide;
   document.documentElement.setAttribute('data-intro', '');
   const { container } = render(<HomeClient />);
-  expect(boot.props).toMatchObject({ enabled: true, targets: null });
+  expect(boot.props).toMatchObject({ enabled: true, targets: null, background: flow });
+  expect(boot.props).not.toHaveProperty('onRevealStart');
   await flush();
   expect(motion.create).toHaveBeenCalledTimes(1);
   expect(motion.create).toHaveBeenLastCalledWith(expect.objectContaining({ logo: null }));
   const targets = boot.props!.targets!;
   expect(targets.wordmark).toBe(screen.getByTestId('wordmark').firstElementChild);
   expect(targets.headline).toBe(screen.getByRole('heading', { level: 1 }));
-  expect(targets.background).toBe(flow);
-  // 오브젝트는 Hero 앵커 안 정적 실루엣의 껍질이다. 경계가 재는 앵커 상자와 기울기 껍질은 인트로가 쓰지 않는다(리뷰 Minor 2).
+  expect(targets).not.toHaveProperty('background');
+  // 오브젝트는 Hero 앵커 안 정적 실루엣의 껍질이다. 경계가 재는 앵커 상자와 기울기 껍질은 진입이 쓰지 않는다(리뷰 Minor 2).
   const anchor = container.querySelector('#overview [data-motion-anchor="hero-object"]')!;
   expect(targets.heroObject).toBe(anchor.querySelector(':scope > .about-electric-static'));
   expect(targets.heroObject).not.toBe(anchor);
   expect((targets.heroObject as HTMLElement).querySelector(':scope > .hero-object-tilt > .about-electric-static-shape')).not.toBeNull();
   expect(container.querySelector('[data-electric-src]')).toBeNull();
-  expect(screen.getByTestId('flow')).toHaveAttribute('data-paused', 'true');
-  act(() => boot.props!.onRevealStart());
   expect(screen.getByTestId('flow')).toHaveAttribute('data-paused', 'false');
-  expect(container.querySelector('[data-electric-src]')).toBeNull();
   act(() => boot.props!.onComplete());
   await flush();
   if (wide) {
