@@ -166,19 +166,6 @@
      실기기에서 다가오는 느낌이 약하면 여기만 고친다. */
   --tunnel-vanishing-x: 53%;
   --tunnel-vanishing-y: 52%;
-
-  /* 부팅 화면 중앙 정렬. 이름(Navigation 워드마크)과 캡션(BootSequence
-     역할·START)은 서로 다른 컴포넌트라 DOM은 합칠 수 없지만, 뷰포트 50%
-     지점을 공유 기준점으로 삼는다. 이름은 top:50%에서 -translate-y-full로
-     자기 높이만큼 위로 올라가 바닥이 항상 50% 선에 닿고, 캡션은 top:50%에서
-     이 간격만큼 margin-top으로 내려가 시작한다 — 겹침이 폰트 크기·
-     브레이크포인트와 무관하게 구조적으로 불가능해진다(계획 3 boot-composition
-     브리프, "구멍 3"). */
-  /* 96px 이름 아래에선 고정값이 붙어 보인다(부팅 안무 브리프). 이름과 함께
-     자라도록 clamp로 바꾼다. 겹침 방지 계약(위 주석)은 유지된다: 이름의
-     바닥은 여전히 정확히 50%에 붙고, 캡션은 이 gap만큼 그 아래에서
-     시작하므로 값이 얼마든 겹침은 구조적으로 불가능하다. */
-  --boot-caption-gap: clamp(1.25rem, 4vh, 2.75rem);
 }
 
 /* ============================================ */
@@ -281,39 +268,6 @@
 
   .duration-slow {
     transition-duration: 500ms !important;
-  }
-
-  /* START 클릭 반짝임. 클릭 링(이전 .animate-ripple/@keyframes
-     ripple-expand)을 터널 진입 브리프(3차) 사용자 판단으로 대체했다.
-     "에너지가 차오르듯이" — 글자 색이 text-primary에서 cyan-hi로
-     차올랐다(40% 지점) text-primary로 돌아온다. 1회성(infinite가 아니다)
-     이고 BootSequence가 클릭마다 span을 key로 재마운트해야만 재생된다 —
-     상시 루프가 아니라 클릭 반응이라는 계약을 CSS 쪽에서도 지킨다.
-     파티클 이음매 브리프(5차) — ClickSpark(캔버스 스파크)를 걷어내고 이
-     키프레임에 광휘를 더했다. 아래 .boot-start:hover와 같은 기법이지만
-     반경을 2배로 키워 "더 강하게"를 만족한다(호버 6px/2px → 클릭 12px/5px).
-     :hover 의사 클래스와 무관한 독립 클래스라 모바일에서 hover 없이도
-     그대로 발동한다. 파티클 잔소음 브리프(6차)에서 광휘를 filter(drop-shadow)
-     에서 text-shadow로 옮겼다(아래 .boot-start:hover 주석에 이유). 글자만
-     감싸는 요소라 두 기법의 보이는 결과 차이가 없고, 호버와 같은 기법을
-     써야 둘이 갈라지지 않는다. */
-  @keyframes boot-start-flash {
-    0% {
-      color: var(--color-text-primary);
-      text-shadow: none;
-    }
-    40% {
-      color: var(--color-cyan-hi);
-      text-shadow: 0 0 38px var(--color-cyan-hi), 0 0 15px var(--color-cyan-core);
-    }
-    100% {
-      color: var(--color-text-primary);
-      text-shadow: none;
-    }
-  }
-
-  .boot-start-flash {
-    animation: boot-start-flash 0.42s ease-out;
   }
 
   /* ============================================ */
@@ -459,84 +413,6 @@ html[data-intro] .intro-curtain { display: block; position: fixed; inset: 0; z-i
 .intro-greeting ~ .intro-greeting { opacity: 0; }
 @media (min-width: 1024px) { .intro-greeting { font-size: var(--font-size-t1); } }
 .site-footer { min-height: 120px; padding-bottom: max(2rem, env(safe-area-inset-bottom, 0px)); }
-
-/* 부팅 캡션(역할·START) 은닉. content-visibility를 쓰지 않는다. 쓰면
-     paint containment가 fixed 캡션을 뷰포트가 아니라 컨테이닝 박스
-     기준으로 옮겨 아래로 튄다. opacity+visibility로만 감춘다. */
-  .boot-caption-hidden {
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-    transition:
-      opacity var(--animate-duration-slow) cubic-bezier(0.22, 1, 0.36, 1),
-      visibility 0s linear var(--animate-duration-slow);
-  }
-
-  .boot-caption-visible {
-    opacity: 1;
-    visibility: visible;
-    transition: opacity var(--animate-duration-slow) cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .boot-caption-hidden,
-    .boot-caption-visible {
-      transition: none;
-    }
-  }
-
-  /* BootSequence의 역할 라벨·START pre-boot 상태. JS의 낙관적 boolean이
-     아니라 이 미디어쿼리가 소유한다(계획 3 Task 6, "구멍 6"). 기본 규칙은
-     최종 상태(보임)다. 모션을 허용하는 사용자에게만 미디어쿼리가 pre-boot
-     은닉 상태로 덮어써서, BootSequence의 GSAP 타임라인이 1.4초 스윕 뒤
-     같은 값(opacity 0, translateY(8px))에서 이어받아 드러낸다. reduce에서는
-     이 오버라이드가 아예 적용되지 않으므로 최초 페인트부터 최종 위치이고,
-     JS가 뒤늦게 숨겼다가 다시 보여주는 역방향 플래시가 없다. */
-  .boot-role {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  .boot-start {
-    opacity: 1;
-    transform: translateY(0);
-    /* 기본 상태의 광휘. 밑줄을 걷어내면서 모바일에서 START가 누를 수
-       있는 것임을 알리던 정지 신호가 사라졌고, 처음에는 반짝이는 루프로
-       대신했는데 사용자가 주기를 빼고 상시 발현으로 바꿨다. 미디어쿼리
-       밖에 두는 이유는 이것이 모션이 아니라 정지 상태이기 때문이다.
-       reduce에서도 이 신호는 그대로 필요하다. 아래 no-preference의
-       transition이 호버로 올라갈 때만 세기를 보간한다. */
-    text-shadow:
-      0 0 8px var(--color-cyan-hi),
-      0 0 2px var(--color-cyan-core);
-  }
-
-  /* 워드마크(이름)의 pre-boot opacity. data-wordmark-mode는 Navigation이
-     이미 붙이는 속성이라 별도 클래스·matchMedia 없이 재사용한다. 기본
-     규칙(모션 비허용 포함)은 항상 보인다. opacity — 터널 진입 브리프(3차)가
-     "opacity: 0으로 시작하지 않는다" LCP 계약을 사용자 판단으로 폐기하며
-     추가됐다: "광선을 타고 가다가 이름에 닿는다"를 위해 no-preference에서는
-     이제 이름도 도착 전까지 아예 페인트되지 않는다(아래 오버라이드).
-     blur를 통한 "멀리서 도착"하는 원경감은 파티클 형성 브리프(4차, 3차
-     실기기 피드백 "멀리서 드러나는 효과 제거")로 걷어냈다 — 그 자리는
-     흩어진 파티클이 뭉쳐 이름이 되는 캔버스 연출(ParticleText,
-     components/blocks/ParticleText)이 대신한다. scale도 같은 이유로
-     .wordmark-scale-wrapper에서 걷어냈다 — 그 클래스 자체는 Navigation의
-     hero 포지셔닝(fixed 배치)을 위해 남아 있지만 더 이상 애니메이션되지
-     않는다. */
-  [data-wordmark-mode='hero'] {
-    opacity: 1;
-  }
-
-  /* Navigation이 이 클래스를 hero 포지셔닝(fixed 배치)용으로 여전히 쓴다.
-     예전에는 BootSequence의 GSAP 타임라인이 여기 scale을 걸었지만(원경감,
-     이제 파티클 형성으로 대체) 더 이상 어떤 코드도 이 노드의 transform을
-     건드리지 않는다 — 이 규칙은 그 사실을 명시적으로 못박는 불변식이다.
-     FLIP이 나중에 워드마크 버튼을 absolute:true로 붙잡을 때 조상의
-     containing block이 예기치 않게 바뀌지 않도록 항상 'none'을 유지한다. */
-  .wordmark-scale-wrapper {
-    transform: none;
-  }
 
   /* ProjectModal이 열리면 헤더가 흐려지며 물러난다. 필터는 nav 자신에
      건다. 감싸는 div에 걸면 그 div가 fixed nav의 containing block이 돼
@@ -909,8 +785,8 @@ html[data-intro] .intro-curtain { display: block; position: fixed; inset: 0; z-i
     );
   }
 
-  /* 광휘. START 버튼과 같은 어법이다. 그쪽은 text-shadow로 글자 둘레에
-     은은하게 번지는데, 아이콘은 글자가 아니라서 같은 일을 drop-shadow가
+  /* 광휘. 옛 START 버튼과 같은 어법이다. 그쪽은 text-shadow로 글자 둘레에
+     은은하게 번졌는데, 아이콘은 글자가 아니라서 같은 일을 drop-shadow가
      한다. 알파에서 뽑아 흐린 사본을 겹치므로 번짐이 로고 모양을 대충
      따라가되 윤곽을 그대로 베끼지는 않는다.
 
@@ -1015,69 +891,6 @@ html[data-intro] .intro-curtain { display: block; position: fixed; inset: 0; z-i
     [data-detail],
     [data-about-scrim] {
       transition: none;
-    }
-  }
-
-  @media (prefers-reduced-motion: no-preference) {
-    .boot-role {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-
-    /* transition: text-shadow. 아래 .boot-start:hover 전기 충전
-       이펙트(광휘)의 차오름·방전을 이 한 줄이 처리한다(호버 진입·이탈 둘 다
-       대칭 0.5s로 보간된다). 이전 라운드는 color 전환도 같은 줄에 묶어
-       광휘와 색이 함께 바뀌게 했지만, 사용자가 "광휘 효과만 남기도록"
-       정정했다. hover에서 글자 색은 더 이상 바뀌지 않고 광휘만 차오른다.
-       파티클 잔소음 브리프(6차)에서 filter를 text-shadow로 옮겼다(아래
-       .boot-start:hover 주석에 이유). none↔다중 shadow 전환은 브라우저가
-       빈 목록을 투명·길이 0인 항목으로 채워 보간하므로(shadow list
-       interpolation) filter와 마찬가지로 0.5s 동안 매끄럽게 보간된다. */
-    .boot-start {
-      opacity: 0;
-      transform: translateY(8px);
-      transition: text-shadow 0.5s ease-out;
-    }
-
-    [data-wordmark-mode='hero'] {
-      /* opacity: 0. LCP 계약 변경(터널 진입 브리프 3절). BootSequence의
-         GSAP 타임라인이 핸드오프 시각(NAME_HANDOFF_AT)에 1로 열거나,
-         타임라인이 돌지 않는 모든 경로(청크 실패·타임아웃·언마운트 등)에서
-         revealFinalState()가 인라인으로 강제 노출한다 — 그러지 않으면
-         이름이 영원히 안 보인다. */
-      opacity: 0;
-    }
-
-    /* START 호버. 전기 충전 이펙트(HERO 재순서 브리프 4절, Magnet을
-       대체한다. "호버 시 전기적 에너지가 글씨에 충전되는듯한" 사용자
-       요청). 광휘가 위 .boot-start의 transition(0.5s)을 타고 0에서
-       최대로 차오르고, 호버를 벗어나면 같은 transition이 대칭으로
-       되감아 방전되듯 잦아든다(즉시 꺼지지 않는다). 시작의 미세한
-       깜빡임은 opacity에 거는 짧은 1회성 animation(0.18s)으로 겹쳐
-       축전기 느낌을 낸다. transform·opacity·text-shadow만 쓴다. 호버
-       상태에만 걸리므로 위 .boot-start 기본 규칙(이 셀렉터 블록 밖,
-       animation 없음)의 "글자 상시 맥동 금지"와 충돌하지 않는다 — 이건
-       호버 반응이지 idle 루프가 아니다.
-
-       파티클 잔소음 브리프(6차)에서 filter(drop-shadow)를 text-shadow로
-       옮겼다. drop-shadow는 요소를 오프스크린 텍스처로 그린 뒤 알파를
-       블러하는데, 체인된 두 개를 0.5초 전환 내내 매 프레임 다시
-       계산했다. "호버 끊김"으로 느껴진 원인이다. text-shadow는 그런
-       텍스처 없이 글리프 자체에 그림자 사본을 겹쳐 그리는 것뿐이라
-       똑같이 비싼 재계산이 없다. 이 요소는 텍스트만 담고 있어(글자
-       주위로 삐져나가는 도형이 없다) 두 기법이 만드는 광휘의 보이는
-       결과 차이는 실질적으로 없다. 반지름 값(6px/2px)은 그대로 옮겼다.
-
-       그 라운드에서 깜빡임(boot-start-charge-flicker)은 남겼는데, opacity
-       하나만 바꾸는 합성 전용 애니메이션이라 저렴하다는 것이 근거였다.
-       실기기에서 증상이 그대로였다. 비용이 아니라 연출 자체가 문제였다.
-       호버할 때마다 글자 전체가 0.55까지 흐려졌다 돌아오니 사용자에게는
-       "재렌더링 되는 느낌"으로 읽혔다. 걷어냈다. 호버는 광휘가 매끄럽게
-       차오르고 매끄럽게 빠지는 것 하나면 된다. */
-    .boot-start:hover {
-      text-shadow:
-        0 0 24px var(--color-cyan-hi),
-        0 0 9px var(--color-cyan-core);
     }
   }
 
