@@ -10,7 +10,8 @@
 /* 숨긴 출발점은 하이드레이션 뒤(HomeClient의 data-route-resolved)에만 건다. JS가 없거나 번들이 실패해도 활성 chapter는 읽힌다. */
 main[data-route-resolved="true"] .stage[data-entered="false"] .rail { opacity: 0; transform: translate3d(0, 24px, 0) scale(.96); }
 main[data-route-resolved="true"] .stage[data-entered="false"] .articles { opacity: 0; transform: translate3d(0, 24px, 0); }
-.articles::before { content: ''; position: absolute; inset: -40px; pointer-events: none; background: radial-gradient(ellipse, rgb(0 0 0 / .94), rgb(0 0 0 / .68) 60%, transparent 85%); }
+/* closest-side라 상자 가장자리에서 0이 된다. 판 가장자리가 직사각형으로 보이지 않고, 넓힌 안쪽이 본문 대비를 지킨다. */
+.articles::before { content: ''; position: absolute; inset: -120px; pointer-events: none; background: radial-gradient(closest-side, rgb(0 0 0 / .94) 55%, rgb(0 0 0 / .68) 75%, transparent); }
 .panelViewport { display: grid; perspective: 1400px; padding-block: 96px; margin-block: -96px; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, transparent, black 40px, black calc(100% - 40px), transparent); mask-image: linear-gradient(to bottom, transparent, black 40px, black calc(100% - 40px), transparent); }
 /* Keep the spherical arc close to the reading area; blur before it leaves. */
 .panel { grid-area: 1 / 1; position: relative; opacity: 0; filter: blur(8px); transform: rotateX(-25deg); transform-origin: 50% 50% calc(0px - var(--reading-orbit-radius)); transition: opacity calc(var(--chapter-transition) * .45) ease, filter calc(var(--chapter-transition) * .6) ease, transform var(--chapter-transition) cubic-bezier(.77, 0, .175, 1); transition-delay: calc(var(--chapter-transition) * .375), calc(var(--chapter-transition) * .3), 0ms; }
