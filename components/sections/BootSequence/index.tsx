@@ -70,8 +70,8 @@ const BootSequence = forwardRef<BootSequenceHandle, BootSequenceProps>(function 
   callbacks.current = { onRevealStart, onComplete };
   // 배경 공개값. 인트로가 켜져 있으면 0에서 출발하고, 늦게 붙은 배경 ref도 이 현재값을 받는다.
   const reveal = useRef({ value: enabled && !reducedMotion ? 0 : 1 });
-  const run = useRef<{ timeline: gsap.core.Timeline | null; split: ReturnType<typeof splitWords> | null; limit: ReturnType<typeof setTimeout> | undefined; revealed: boolean; completed: boolean }>(
-    { timeline: null, split: null, limit: undefined, revealed: false, completed: false });
+  const run = useRef<{ timeline: gsap.core.Timeline | null; split: ReturnType<typeof splitWords> | null; limit: ReturnType<typeof setTimeout> | undefined; revealed: boolean; completed: boolean; claimed: boolean }>(
+    { timeline: null, split: null, limit: undefined, revealed: false, completed: false, claimed: false });
 
   const applyReveal = (value: number) => {
     reveal.current.value = value;
@@ -112,10 +112,14 @@ const BootSequence = forwardRef<BootSequenceHandle, BootSequenceProps>(function 
 
   // 페인트 전에 인트로를 맡는다. 판정 스크립트의 안전장치가 커튼을 걷지 않게 표시를 바꾼다.
   // 하이드레이션이 늦어 안전장치가 이미 커튼을 걷었다면 다시 덮지 않고 정적 첫 화면으로 끝낸다.
+  // 안전장치는 'playing'을 걷지 않는다. 맡은 뒤 표시가 없으면 StrictMode의 가짜 언마운트가 지운 것이라 다시 맡는다.
   useLayoutEffect(() => {
     const html = document.documentElement;
-    if (!enabled || reducedMotion || !html.hasAttribute('data-intro')) settle();
-    else if (!run.current.completed) html.setAttribute('data-intro', 'playing');
+    if (!enabled || reducedMotion || !(html.hasAttribute('data-intro') || run.current.claimed)) settle();
+    else if (!run.current.completed) {
+      html.setAttribute('data-intro', 'playing');
+      run.current.claimed = true;
+    }
   }, [enabled, reducedMotion, settle]);
   // 배경 ref가 늦게 붙어도 지금의 공개값을 준다. 이미 진행한 값을 0으로 되감지 않는다.
   const background = targets?.background ?? null;
@@ -124,7 +128,7 @@ const BootSequence = forwardRef<BootSequenceHandle, BootSequenceProps>(function 
   useEffect(() => {
     if (!playing) return;
     let alive = true;
-    run.current.limit = setTimeout(settle, LOAD_LIMIT_MS);
+    const limit = run.current.limit = setTimeout(settle, LOAD_LIMIT_MS);
     import('@/lib/gsap').then(module => { if (alive) setGsapModule(module); }).catch(() => { if (alive) settle(); });
     // 안쪽 스크롤러(가로 목록 등)의 초기화 스크롤은 사용자 입력이 아니다. 문서 스크롤만 본다.
     const onInput = (event: Event) => { if (event.type !== 'scroll' || event.target === document) settle(); };
@@ -132,6 +136,7 @@ const BootSequence = forwardRef<BootSequenceHandle, BootSequenceProps>(function 
     INPUTS.forEach(type => window.addEventListener(type, onInput, options));
     return () => {
       alive = false;
+      clearTimeout(limit);
       INPUTS.forEach(type => window.removeEventListener(type, onInput, options));
     };
   }, [playing, settle]);

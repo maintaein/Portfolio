@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { createRef } from 'react';
+import { createRef, StrictMode } from 'react';
 import { renderToString } from 'react-dom/server';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
@@ -325,6 +325,22 @@ describe('BootSequence 중단 경로: 공개값 1·원문·원래 입력 유지'
     expect(lastReveal(background)).toBe(1);
   });
 
+  it('시간표 도중 언마운트하면 원문·자세를 되돌리고 표시를 지운다', async () => {
+    const { targets } = makeTargets();
+    const { view } = mount({ targets });
+    const seek = await captureTimeline();
+    await seek(2.6);
+    expect(words(targets.headline).length).toBeGreaterThan(1);
+    expect(opacity(targets.wordmark)).toBeLessThan(1);
+    view.unmount();
+    expect(targets.headline.innerHTML).toBe(SENTENCE);
+    expect(targets.headline).not.toHaveAttribute('aria-label');
+    expect(targets.headline.style.width).toBe('');
+    expect(targets.wordmark.style.opacity + targets.wordmark.style.transform).toBe('');
+    expect(targets.heroObject.style.opacity + targets.heroObject.style.transform).toBe('');
+    expect(html).not.toHaveAttribute('data-intro');
+  });
+
   it('문서 스크롤은 인트로를 끝내지만 안쪽 스크롤러의 스크롤은 끝내지 않는다', async () => {
     const { targets } = makeTargets();
     const { onComplete } = mount({ targets });
@@ -335,5 +351,42 @@ describe('BootSequence 중단 경로: 공개값 1·원문·원래 입력 유지'
     expect(onComplete).not.toHaveBeenCalled();
     act(() => { document.dispatchEvent(new Event('scroll')); });
     expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+});
+
+// 최종 리뷰 I1. next dev의 StrictMode는 마운트 직후 효과를 한 번 걷었다 다시 건다. 그 정리가 표시를 지워 인트로가 바로 끝났다.
+describe('BootSequence StrictMode', () => {
+  const strict = (targets: IntroTargets) => {
+    const onRevealStart = vi.fn();
+    const onComplete = vi.fn();
+    render(<StrictMode><BootSequence enabled reducedMotion={false} targets={targets} onRevealStart={onRevealStart} onComplete={onComplete} /></StrictMode>);
+    return { onRevealStart, onComplete };
+  };
+
+  it('가짜 언마운트 뒤에도 인트로가 돌고 끝에서 한 번만 끝난다', async () => {
+    const { targets } = makeTargets();
+    const { onRevealStart, onComplete } = strict(targets);
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(html).toHaveAttribute('data-intro', 'playing');
+    expect(document.querySelector('.intro-curtain')).not.toBeNull();
+    const seek = await captureTimeline();
+    await seek(2);
+    expect(onRevealStart).not.toHaveBeenCalled();
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(html).toHaveAttribute('data-intro', 'playing');
+    await seek(INTRO_TIMING.reveal + INTRO_TIMING.object);
+    expect(onRevealStart).toHaveBeenCalledTimes(1);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(html).not.toHaveAttribute('data-intro');
+    expect(targets.headline.innerHTML).toBe(SENTENCE);
+  });
+
+  it('판정 스크립트가 이미 걷은 커튼은 StrictMode에서도 다시 덮지 않는다', () => {
+    html.removeAttribute('data-intro');
+    const { targets } = makeTargets();
+    const { onComplete } = strict(targets);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(html).not.toHaveAttribute('data-intro');
+    expect(document.querySelector('.intro-curtain')).toBeNull();
   });
 });
