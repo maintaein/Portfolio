@@ -35,8 +35,9 @@ export default function Navigation({ items, active, onNavigate, reducedMotion = 
     <nav ref={headerRef} data-scroll-header aria-label="메인 네비게이션"
       className={cn('fixed inset-x-0 top-0 z-50 bg-[var(--color-ink)] px-6 py-4', className)}>
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 lg:gap-8">
+        {/* 버튼 transform은 경계(motion.ts)가, 안쪽 span의 opacity·자세는 인트로가 쓴다. */}
         <div ref={wordmarkScaleRef} data-motion-anchor="nav-name" className="shrink-0"><button ref={wordmarkRef} data-flip-id="site-wordmark" data-testid="wordmark" data-wordmark-mode="compact" onClick={event => navigate('overview', event)}
-          aria-label="개요로 이동" className="min-h-11 text-left text-t6 font-bold tracking-widest">{PERSONAL_INFO.NAME_EN}</button></div>
+          aria-label="개요로 이동" className="min-h-11 text-left text-t6 font-bold tracking-widest"><span className="inline-block">{PERSONAL_INFO.NAME_EN}</span></button></div>
         <button ref={toggleRef} type="button" aria-expanded={open} aria-controls="navigation-items" onClick={() => setOpen(!open)} className="min-h-11 min-w-11 lg:hidden">메뉴</button>
         <div id="navigation-items" data-testid="nav-strip" className={cn('absolute inset-x-0 top-full w-full flex-col gap-2 bg-[var(--color-ink)] px-6 pb-4 lg:static lg:flex lg:w-auto lg:flex-row lg:gap-6 lg:p-0', open ? 'flex' : 'hidden')}>
           {items.map(item => <button key={item.id} onClick={event => navigate(item.id, event)} aria-current={active === item.id ? 'page' : undefined}

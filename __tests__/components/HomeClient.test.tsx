@@ -4,15 +4,29 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import HomeClient from '@/components/sections/HomeClient';
 import { HOME_SECTION_CONFIG } from '@/lib/constants';
 import { coreValues } from '@/lib/data';
-const flags = vi.hoisted(() => ({ obscured: false, pageVisible: true, reduced: false, wide: false }));
+const flags = vi.hoisted(() => ({ obscured: false, pageVisible: true, reduced: false, wide: false, ready: true }));
 const motion = vi.hoisted(() => ({
   create: vi.fn(), destroy: vi.fn(), setPaused: vi.fn(), refresh: vi.fn(), settleProjects: vi.fn(),
   owner: null as ((owner: 'hero' | 'about' | 'boundary' | 'none') => void) | null,
 }));
 vi.mock('@/hooks/useProjectModalObscured', () => ({ useProjectModalObscured: () => flags.obscured }));
 vi.mock('@/hooks/usePageVisibility', () => ({ usePageVisibility: () => flags.pageVisible }));
-vi.mock('@/hooks/useMotionPreference', () => ({ useMotionPreference: () => ({ ready: true, reduced: flags.reduced }) }));
-vi.mock('@/components/blocks/LuminousFlowBackground', () => ({ default: ({ paused }: { paused: boolean }) => <aside data-testid="flow" data-paused={paused} /> }));
+vi.mock('@/hooks/useMotionPreference', () => ({ useMotionPreference: () => ({ ready: flags.ready, reduced: flags.reduced }) }));
+const flow = vi.hoisted(() => ({ setRevealProgress: () => {} }));
+vi.mock('@/components/blocks/LuminousFlowBackground', async () => {
+  const { forwardRef, useImperativeHandle } = await import('react');
+  return { default: forwardRef<typeof flow, { paused: boolean }>(function Flow({ paused }, ref) { useImperativeHandle(ref, () => flow, []); return <aside data-testid="flow" data-paused={paused} />; }) };
+});
+// 인트로 자체는 BootSequence 테스트가 본다. 여기서는 셸이 무엇을 넘기는지만 잡는다.
+type BootProps = import('@/components/sections/BootSequence').BootSequenceProps;
+const boot = vi.hoisted(() => ({ props: null as null | BootProps, finish: vi.fn() }));
+vi.mock('@/components/sections/BootSequence', async () => {
+  const { forwardRef, useImperativeHandle } = await import('react');
+  return {
+    INTRO_GREETINGS: ['안녕하세요.', 'SW개발자.', '김태인입니다.', '잘부탁드립니다.'],
+    default: forwardRef<unknown, BootProps>(function Boot(props, ref) { boot.props = props; useImperativeHandle(ref, () => ({ finish: boot.finish }), []); return null; }),
+  };
+});
 vi.mock('@/components/sections', () => ({ AboutSection: ({ onChapterChange }: { onChapterChange: (index: number) => void }) => <p onClick={() => onChapterChange(2)}>About original body</p>, ProjectsSection: () => <p>Projects original body</p>, ExperienceSection: () => <p>Experience original body</p>, SkillsSection: () => <p>Skills original body</p>, AwardAndCertificateSection: () => <p>Awards original body</p>, Footer: () => <footer>Contacts</footer> }));
 vi.mock('@/components/sections/HomeClient/motion', () => ({
   createPortfolioMotion: (options: { onLogoOwnerChange: (owner: 'hero' | 'about' | 'boundary' | 'none') => void }) => {
@@ -34,9 +48,10 @@ vi.mock('@/components/blocks/ElectricLogo', () => ({
   }),
 }));
 beforeEach(() => {
-  flags.obscured = false; flags.pageVisible = true; flags.reduced = false; flags.wide = false;
+  flags.obscured = false; flags.pageVisible = true; flags.reduced = false; flags.wide = false; flags.ready = true;
   Object.values(motion).forEach(value => typeof value === 'function' && 'mockClear' in value && value.mockClear());
   motion.owner = null;
+  boot.props = null; boot.finish.mockClear(); document.documentElement.removeAttribute('data-intro');
   window.history.replaceState(null, '', '/'); vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
   vi.stubGlobal('matchMedia', vi.fn((query: string) => ({ matches: query === '(min-width: 1024px)' && flags.wide, media: query, addEventListener: () => {}, removeEventListener: () => {} })));
 });
@@ -170,4 +185,70 @@ it('lays the Hero out as name, sentence, then object, and the object shrinks fir
   expect(css).toMatch(/\.hero-object \{[^}]*width: min\([^}]*svh\)/);
   expect(css).not.toMatch(/\.portfolio-hero (p|h1) \{[^}]*svh/);
   expect(css).toMatch(/\.logo-host \{[^}]*z-index: 2;/);
+});
+
+// 네 인사말은 인트로 커튼에서만 보인다. 첫 화면에는 이름·소개·오브젝트만 보이고, 인사말은 보조기기용으로 한 번 남는다.
+it('the Hero shows no visible greetings; they stay readable once for assistive tech', () => {
+  const { container } = render(<HomeClient />);
+  const hero = container.querySelector('#overview')!;
+  const greeting = hero.querySelectorAll('p');
+  expect(greeting).toHaveLength(1);
+  expect(greeting[0]).toHaveClass('sr-only');
+  expect(greeting[0].textContent).toBe('안녕하세요. SW개발자. 김태인입니다. 잘부탁드립니다.');
+});
+
+it('without the pre-paint gate (hash, revisit, reduced, no JS) the intro is disabled and nothing is held back', async () => {
+  flags.wide = true;
+  const { container } = render(<HomeClient />); await flush();
+  expect(boot.props).toMatchObject({ enabled: false, reducedMotion: false, targets: null });
+  expect(screen.getByTestId('flow')).toHaveAttribute('data-paused', 'false');
+  expect(container.querySelector('[data-electric-src]')).toHaveAttribute('data-electric-active', 'false');
+  act(() => motion.owner!('hero'));
+  expect(container.querySelector('[data-electric-src]')).toHaveAttribute('data-electric-active', 'true');
+});
+
+// 헤드 Chrome에서 WebGL 문맥 생성이 메인 스레드를 1.4–2.3초 막아 인사말과 커튼을 멈춰 세웠다. GL 로고는 인트로 뒤에 뜬다.
+it.each([['wide', true], ['narrow', false]] as const)('first visit (%s): the background waits under the curtain, targets come after the boundary placed the name, and the GL logo mounts only after the intro', async (_, wide) => {
+  flags.wide = wide;
+  document.documentElement.setAttribute('data-intro', '');
+  const { container } = render(<HomeClient />);
+  expect(boot.props).toMatchObject({ enabled: true, targets: null });
+  await flush();
+  expect(motion.create).toHaveBeenCalledTimes(1);
+  expect(motion.create).toHaveBeenLastCalledWith(expect.objectContaining({ logo: null }));
+  const targets = boot.props!.targets!;
+  expect(targets.wordmark).toBe(screen.getByTestId('wordmark').firstElementChild);
+  expect(targets.headline).toBe(screen.getByRole('heading', { level: 1 }));
+  expect(targets.background).toBe(flow);
+  // 오브젝트는 Hero 앵커다. 경계는 앵커를 재기만 하고 host만 옮기므로 인트로의 opacity·크기와 겹치지 않는다.
+  expect(targets.heroObject).toBe(container.querySelector('#overview [data-motion-anchor="hero-object"]'));
+  expect(container.querySelector('[data-electric-src]')).toBeNull();
+  expect(screen.getByTestId('flow')).toHaveAttribute('data-paused', 'true');
+  act(() => boot.props!.onRevealStart());
+  expect(screen.getByTestId('flow')).toHaveAttribute('data-paused', 'false');
+  expect(container.querySelector('[data-electric-src]')).toBeNull();
+  act(() => boot.props!.onComplete());
+  await flush();
+  if (wide) {
+    expect(container.querySelector('[data-electric-src]')).not.toBeNull();
+    expect(motion.create).toHaveBeenLastCalledWith(expect.objectContaining({ logo: handle }));
+  } else expect(container.querySelector('[data-electric-src]')).toBeNull();
+});
+
+// 헤드 Chrome에서 잡혔다. 준비 전 기본값 reduced: true가 첫 레이아웃에서 인트로를 끝냈다.
+it('the pre-ready preference default does not end the intro; a resolved reduce does', () => {
+  document.documentElement.setAttribute('data-intro', '');
+  flags.ready = false; flags.reduced = true;
+  const view = render(<HomeClient />);
+  expect(boot.props).toMatchObject({ enabled: true, reducedMotion: false });
+  flags.ready = true; view.rerender(<HomeClient />);
+  expect(boot.props).toMatchObject({ reducedMotion: true });
+});
+
+it('a nav click during the intro finishes it first and keeps the navigation', async () => {
+  document.documentElement.setAttribute('data-intro', '');
+  render(<HomeClient />); await flush();
+  fireEvent.click(screen.getAllByRole('button', { name: HOME_SECTION_CONFIG[1].label })[0]);
+  expect(boot.finish).toHaveBeenCalledTimes(1);
+  expect(location.hash).toBe(`#${HOME_SECTION_CONFIG[1].id}`);
 });

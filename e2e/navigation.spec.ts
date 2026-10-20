@@ -126,6 +126,16 @@ test('keyboard steps About chapters while End and programmatic scroll leave with
   await waitFrames(page, 20);
   expect(Math.abs(await page.evaluate(() => window.scrollY) - top)).toBeLessThanOrEqual(1);
 });
+test('a nav click during the first-visit intro ends it and still arrives at its destination', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('main')).toHaveAttribute('data-route-resolved', 'true', { timeout: 20_000 });
+  await expect(page.locator('.intro-curtain')).toBeVisible();
+  await navButton(page, 'Projects').click();
+  await expect(page.locator('.intro-curtain')).toHaveCount(0);
+  await expectActive(page, 'projects');
+  await expect(page.locator('[data-section="projects"]')).toBeFocused();
+  expect(page.url()).toContain('#projects');
+});
 test('direct hash below About opens at its destination', async ({ page }) => {
   await enter(page, 'projects'); await waitFrames(page, 20);
   await expectActive(page, 'projects'); await expect(locked(page)).toHaveCount(0);

@@ -179,6 +179,40 @@ test.describe('Native motion activity', () => {
     await expect.poll(() => offAnchor('[data-motion-anchor="hero-name"]')).toBeLessThan(1.5);
     expect(await singles()).toEqual([1, 1]);
   });
+  test('첫 방문은 아이보리 커튼의 인사말에서 완성된 첫 화면으로 끝나고 이름은 Hero 자리에서만 나타난다', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    const curtain = page.locator('.intro-curtain');
+    await expect(curtain).toBeVisible();
+    await expect(page.locator('.intro-greeting').first()).toHaveText('안녕하세요.');
+    await expect(curtain.locator('path')).toHaveCSS('fill', 'rgb(245, 242, 235)');
+    await expect(curtain).toHaveCount(0, { timeout: 30_000 });
+    await expect(page.locator('html')).not.toHaveAttribute('data-intro');
+    const headline = page.getByRole('heading', { level: 1 });
+    await expect(headline).toHaveText('탄탄한 기본기를 바탕으로 꾸준히 개선하고, 협업으로 함께 성장하는 개발자.');
+    expect(await headline.evaluate(el => el.children.length)).toBe(0);
+    const [anchor, name] = [(await page.locator('[data-motion-anchor="hero-name"]').boundingBox())!, (await page.getByTestId('wordmark').boundingBox())!];
+    expect(Math.abs(anchor.x - name.x)).toBeLessThan(1.5);
+    await expect(page.getByTestId('wordmark').locator('span')).toHaveCSS('opacity', '1');
+    // 다시 위로 와도 인트로는 돌지 않는다.
+    await navButton(page, 'About').click(); await expectActive(page, 'about');
+    await navButton(page, '개요로 이동').click(); await expectActive(page, 'overview');
+    await expect(curtain).toHaveCount(0);
+  });
+  test('직접 해시와 첫 휠은 인트로를 기다리지 않는다', async ({ page }) => {
+    await page.goto('/#projects');
+    await expect(page.locator('html')).not.toHaveAttribute('data-intro');
+    await expect(page.locator('.intro-curtain')).toBeHidden();
+    await enter(page, 'projects');
+    await page.goto('about:blank');
+    await page.goto('/');
+    await expect(page.locator('main')).toHaveAttribute('data-route-resolved', 'true', { timeout: 20_000 });
+    await expect(page.locator('.intro-curtain')).toBeVisible();
+    await page.mouse.move(700, 450);
+    await page.mouse.wheel(0, 400);
+    await expect(page.locator('.intro-curtain')).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  });
   test('reduced motion leaves the name in the navigation and mounts no GL logo', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' }); await page.setViewportSize({ width: 1440, height: 900 });
     await enter(page, 'overview');

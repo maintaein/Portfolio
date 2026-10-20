@@ -72,6 +72,9 @@
   --color-hairline: rgb(3 179 195 / 0.35);
   --color-elevation-near: rgb(3 179 195 / 0.6);
   --color-elevation-far: rgb(3 179 195 / 0.15);
+  /* 첫 진입 인트로(통합 설계 6 추천 A). 아이보리 면 위 인사말 15.75:1. 커튼 경계도 같은 아이보리다. */
+  --color-intro-ivory: #f5f2eb;
+  --color-intro-ink: #17191c;
 
   /* Skills 아이콘 호버/포커스 글로우(계획 5 T3 브리프). cyan-core·cyan-hi와는
      다른 값이다. 컨트롤러가 브라우저에서 여러 번 확정했다. 그라데이션의
@@ -417,9 +420,8 @@
 /* Hero(D5-A). 1024px부터 왼쪽 문장·오른쪽 오브젝트, 그 아래는 이름·문장·오브젝트 순서로 쌓는다.
    소개 문장(h1)은 t1(30px)에서 1024px부터 d3(48px), 1536px부터 d2(72px). 줄 수는 폭에 맡긴다.
    낮은 화면에서는 오브젝트가 svh로 먼저 줄고 문장은 줄지 않는다. 넘치면 첫 화면이 내용만큼 늘어난다.
-   네 인사말은 Task 3의 인트로로 옮겨 가기 전까지 이름보다 크고 문장보다 작게 둔다. */
+   네 인사말은 인트로 커튼으로 옮겼다(.intro-greeting). */
 .portfolio-hero { display: flex; flex-direction: column; justify-content: center; gap: 30px; padding: 4rem max(1.5rem, 8vw); }
-.portfolio-hero p { font-size: var(--font-size-t4); line-height: 1.6; word-break: keep-all; }
 .portfolio-hero h1 { max-width: 44rem; margin-top: 1.5rem; font-size: var(--font-size-t1); line-height: 1.35; font-weight: 500; word-break: keep-all; }
 .hero-copy { min-width: 0; }
 .hero-object { position: relative; flex: none; width: min(112px, 16svh); aspect-ratio: 1 / 1; }
@@ -441,6 +443,15 @@
 .logo-host > div { width: 100%; height: 100%; }
 [data-logo-live] .logo-host { opacity: 1; }
 [data-logo-live] [data-motion-anchor] .about-electric-static { opacity: 0; }
+/* 첫 진입 인트로. 그리기 전 판정(lib/introGate.ts)이 html[data-intro]를 붙인 경우에만 덮는다.
+   JS가 없거나 해시·모션 감소로 들어오면 붙지 않아 완성된 첫 화면이 바로 보인다.
+   입력은 막지 않는다(pointer-events: none). 첫 스크롤·탐색이 아래 문서로 그대로 가고 인트로는 끝난다. */
+.intro-curtain { display: none; }
+html[data-intro] .intro-curtain { display: block; position: fixed; inset: 0; z-index: 100; pointer-events: none; }
+.intro-curtain svg { position: absolute; inset: 0; width: 100%; height: 100%; fill: var(--color-intro-ivory); }
+.intro-greeting { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; padding: 0 1.5rem; color: var(--color-intro-ink); font-size: var(--font-size-t2); font-weight: 600; letter-spacing: -0.01em; text-align: center; }
+.intro-greeting ~ .intro-greeting { opacity: 0; }
+@media (min-width: 1024px) { .intro-greeting { font-size: var(--font-size-t1); } }
 .site-footer { min-height: 120px; padding-bottom: max(2rem, env(safe-area-inset-bottom, 0px)); }
 
 /* 부팅 캡션(역할·START) 은닉. content-visibility를 쓰지 않는다. 쓰면

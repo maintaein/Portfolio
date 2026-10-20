@@ -7,6 +7,7 @@ import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { siteConfig } from '@/lib/siteConfig';
 import { CRITICAL_CSS } from '@/lib/criticalCss';
+import { INTRO_GATE_SCRIPT } from '@/lib/introGate';
 
 // styles/design-tokens.css가 env(safe-area-inset-bottom)으로 .section-stage의
 // 하단 여백과 .site-footer의 높이를 계산한다. 그런데 Next의 기본 viewport에는
@@ -126,11 +127,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ko" className={`${pretendardCore.variable} ${pretendardExtended.variable}`}>
+    // 인트로 판정 스크립트가 하이드레이션 전에 data-intro를 붙인다.
+    <html lang="ko" className={`${pretendardCore.variable} ${pretendardExtended.variable}`} suppressHydrationWarning>
       <head>
         {/* CSS 파일 요청 이전에 배경을 검정으로 확정한다.
             흰 화면이 한 프레임이라도 보이면 부팅 시퀀스의 첫인상이 깨진다. */}
         <style dangerouslySetInnerHTML={{ __html: CRITICAL_CSS }} />
+        <script dangerouslySetInnerHTML={{ __html: INTRO_GATE_SCRIPT }} />
         <meta name="naver-site-verification" content="125d5eedfefaa060cae94d8d07f62f7a9127b907" />
         <JsonLd />
       </head>

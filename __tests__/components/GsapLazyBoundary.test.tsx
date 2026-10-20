@@ -96,4 +96,15 @@ describe('GSAP 동적 경계 — First Load JS 표제 계약', () => {
     expect(analyzeGsapImports(motion).hasValueImport).toBe(true);
     expect(readFileSync(motion, 'utf8')).toContain('registerScrollTrigger()');
   });
+
+  // 인트로는 첫 화면부터 렌더되므로 BootSequence는 정적으로 실린다. 그 안의 값 import는 react뿐이어야
+  // GSAP이나 옛 파티클 부팅이 First Load로 따라오지 않는다.
+  it('the intro ships in First Load with react only; GSAP comes through its dynamic import', () => {
+    const boot = ts.createSourceFile('boot.tsx', readFileSync(TARGET_FILES[0], 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const valueImports = boot.statements.filter(ts.isImportDeclaration)
+      .filter(node => !node.importClause?.isTypeOnly)
+      .map(node => (node.moduleSpecifier as ts.StringLiteral).text);
+    expect(valueImports).toEqual(['react']);
+    expect(analyzeGsapImports(TARGET_FILES[1], '@/components/sections/BootSequence').hasValueImport).toBe(true);
+  });
 });

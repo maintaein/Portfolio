@@ -1,13 +1,14 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useEffect, useRef, useState, type ComponentType, type Ref } from 'react';
+import { useCallback, useEffect, useRef, useState, type ComponentType, type Ref } from 'react';
 import type { ElectricLogoHandle, ElectricLogoProps } from '@/components/blocks/ElectricLogo';
-import LuminousFlowBackground from '@/components/blocks/LuminousFlowBackground';
+import LuminousFlowBackground, { type LuminousFlowBackgroundHandle } from '@/components/blocks/LuminousFlowBackground';
 import Navigation from '@/components/blocks/Navigation';
 import { SectionActivityProvider } from '@/components/common/SectionActivityContext';
 import { AboutSection, AwardAndCertificateSection, ExperienceSection, Footer, ProjectsSection, SkillsSection } from '@/components/sections';
 import type { AboutSectionHandle } from '@/components/sections/AboutSection';
+import BootSequence, { INTRO_GREETINGS, type BootSequenceHandle, type IntroTargets } from '@/components/sections/BootSequence';
 import { useMotionPreference } from '@/hooks/useMotionPreference';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useProjectModalObscured } from '@/hooks/useProjectModalObscured';
@@ -36,6 +37,19 @@ export default function HomeClient() {
   const aboutRef = useRef<AboutSectionHandle>(null);
   const wordmarkRef = useRef<HTMLButtonElement>(null);
   const logoHostRef = useRef<HTMLDivElement>(null);
+  const heroObjectRef = useRef<HTMLDivElement>(null);
+  const headlineRef = useRef<HTMLHeadingElement>(null);
+  const bootRef = useRef<BootSequenceHandle>(null);
+  // 그리기 전 판정 스크립트(lib/introGate.ts)가 붙인 표시를 하이드레이션 때 한 번 읽는다. 마크업에는 쓰지 않는다.
+  const [introEnabled] = useState(() => typeof document !== 'undefined' && document.documentElement.hasAttribute('data-intro'));
+  // 커튼이 덮고 있는 동안은 배경 루프를 돌리지 않는다. 공통 시작에서 연다.
+  const [introCovered, setIntroCovered] = useState(introEnabled);
+  const uncover = useCallback(() => setIntroCovered(false), []);
+  // GL 로고는 인트로가 끝난 뒤에 띄운다. WebGL 문맥 생성이 이 기기에서 메인 스레드를 1.4–2.3초 막아 인사말과 커튼을 멈춰 세웠다.
+  const [introPending, setIntroPending] = useState(introEnabled);
+  const introDone = useCallback(() => { setIntroCovered(false); setIntroPending(false); }, []);
+  const [background, setBackground] = useState<LuminousFlowBackgroundHandle | null>(null);
+  const [introTargets, setIntroTargets] = useState<IntroTargets | null>(null);
   // 공유 로고가 선택한 chapter를 따라가도록 셸이 들고 있는다.
   const [aboutChapter, setAboutChapter] = useState(0);
   const [wideScreen, setWideScreen] = useState(false);
@@ -45,10 +59,10 @@ export default function HomeClient() {
   const [logoReady, setLogoReady] = useState(false);
   const motionRef = useRef<PortfolioMotion | null>(null);
   // 명시적 이동 직전에 About의 읽기 잠금을 풀어 목적지로 가는 스크롤을 붙잡지 않는다.
-  const { active, routeResolved, navigationTarget, navigate } = useSectionNav({ rootRef, headerRef, blocked: obscured, reducedMotion, onBeforeNavigate: () => aboutRef.current?.release() });
+  const { active, routeResolved, navigationTarget, navigate } = useSectionNav({ rootRef, headerRef, blocked: obscured, reducedMotion, onBeforeNavigate: () => { bootRef.current?.finish(); aboutRef.current?.release(); } });
   const motionReady = routeResolved && preferenceReady;
   // About 레일과 같이 1024px부터만 WebGL 로고를 띄운다. 그 아래와 모션 감소는 앵커의 정적 실루엣이다.
-  const glLogo = wideScreen && preferenceReady && !reducedMotion;
+  const glLogo = wideScreen && preferenceReady && !reducedMotion && !introPending;
   const logoLive = logoReady && logoOwner !== 'none';
   const activeLabel = HOME_SECTION_CONFIG.find(section => section.id === active)?.label ?? 'Overview';
   const [announcement, setAnnouncement] = useState('');
@@ -82,11 +96,21 @@ export default function HomeClient() {
     return () => { motion.destroy(); motionRef.current = null; setLogoOwner('none'); };
   }, [motionModule, logo, reducedMotion]);
   useEffect(() => { motionRef.current?.setPaused(obscured || !pageVisible); }, [obscured, pageVisible, motionModule, logo, reducedMotion]);
+  // 인트로 대상은 경계가 이름을 Hero 자리에 놓은 뒤에 넘긴다. 커튼이 걷힐 때 이름이 nav에서 뛰어내리지 않는다.
+  // 오브젝트는 Hero 앵커의 정적 실루엣이다. 경계는 앵커를 재기만 하고 옮기지 않으므로 인트로 자세와 겹치지 않는다.
+  // 경계 모듈이 오지 않으면 대상도 없고, BootSequence가 제한 시간 뒤 커튼을 걷어 정적 첫 화면을 준다.
+  useEffect(() => {
+    const wordmark = wordmarkRef.current?.firstElementChild, headline = headlineRef.current, heroObject = heroObjectRef.current;
+    if (!introEnabled || !motionModule || !(wordmark instanceof HTMLElement) || !headline || !heroObject) return;
+    setIntroTargets({ wordmark, headline, heroObject, background });
+  }, [introEnabled, motionModule, background]);
   useEffect(() => { if (!logo) setLogoReady(false); }, [logo]);
 
   return <SectionActivityProvider pageVisible={pageVisible} routeResolved={routeResolved} motionReady={motionReady} reducedMotion={reducedMotion} obscured={obscured}>
+    {/* 준비 전 기본값(reduced: true)으로 인트로를 끝내지 않는다. 그리기 전 판정이 이미 모션 감소를 걸렀다. */}
+    <BootSequence ref={bootRef} enabled={introEnabled} reducedMotion={preferenceReady && reducedMotion} targets={introTargets} onRevealStart={uncover} onComplete={introDone} />
     <div className="portfolio-document" data-logo-owner={logoOwner} data-logo-live={logoLive ? '' : undefined}>
-      <LuminousFlowBackground scrollScene paused={!pageVisible || !motionReady || reducedMotion || obscured} />
+      <LuminousFlowBackground ref={setBackground} scrollScene paused={!pageVisible || !motionReady || reducedMotion || obscured || introCovered} />
       <div inert={obscured} data-obscured={obscured ? '' : undefined}>
         <Navigation items={NAV_ITEMS} active={active} onNavigate={navigate} reducedMotion={reducedMotion} headerRef={headerRef} wordmarkRef={wordmarkRef} />
       </div>
@@ -97,12 +121,13 @@ export default function HomeClient() {
           <div className="hero-copy">
             {/* 이름 버튼은 nav에 하나뿐이다. 여기는 경계가 그 버튼을 옮겨 오는 빈 자리다. */}
             <div data-motion-anchor="hero-name" aria-hidden="true" className="h-11" />
-            <p>안녕하세요.</p><p>SW개발자.</p><p>김태인입니다.</p><p>잘부탁드립니다.</p>
-            <h1>탄탄한 기본기를 바탕으로 꾸준히 개선하고, 협업으로 함께 성장하는 개발자.</h1>
+            {/* 네 인사말은 인트로 커튼에서만 보인다. 커튼이 없는 진입(해시·모션 감소·JS 없음)과 보조기기도 한 번은 읽는다. */}
+            <p className="sr-only">{INTRO_GREETINGS.join(' ')}</p>
+            <h1 ref={headlineRef}>탄탄한 기본기를 바탕으로 꾸준히 개선하고, 협업으로 함께 성장하는 개발자.</h1>
           </div>
           {/* 공유 로고가 앉는 자리. GL이 없거나 준비 전, 모션 감소에서는 정적 실루엣이 대신한다.
               D5-A: 1024px부터 문장 오른쪽, 그 아래는 이름·문장 다음이다. */}
-          <div data-motion-anchor="hero-object" aria-hidden="true" className="hero-object">
+          <div ref={heroObjectRef} data-motion-anchor="hero-object" aria-hidden="true" className="hero-object">
             <div className={`about-electric-static ${glLogo ? 'about-electric-static-charging' : ''}`}>
               <div className="about-electric-static-shape" style={{ maskImage: `url(${LOGO_SRCS[0]})`, WebkitMaskImage: `url(${LOGO_SRCS[0]})` }} />
             </div>
