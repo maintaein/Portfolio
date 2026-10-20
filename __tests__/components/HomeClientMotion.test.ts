@@ -226,6 +226,21 @@ describe('Hero→About 경계', () => {
     expect(name()).toEqual(HERO_NAME);
   });
 
+  // 리뷰 Important 1. 넓고 낮은 화면(1280x720 실측)에서는 오브젝트 칸이 이름 높이까지 올라온다.
+  // 눕힌 궤도의 보이는 고리는 앵커 상자 안쪽(왼쪽 18%, 위 28%, 아래 24%)에 있다. 이름은 그 상자에 닿지 않게 줄어든다.
+  it('넓고 낮은 화면에서 이름 상자가 보이는 궤도 상자와 겹치지 않게 줄어든다', () => {
+    place(heroObject, { x: 780, y: 150, w: 360, h: 360 });
+    create();
+    const ring = { l: 780 + .18 * 360, t: 150 + .28 * 360, b: 510 - .24 * 360 };
+    const s = nameScale();
+    // 글자 줄 상자: Hero 가로 가운데 720, 자리 세로 가운데 266, 글자 폭 120·높이 22.
+    const box = { l: 720 - s * 60, r: 720 + s * 60, t: 266 - s * 11, b: 266 + s * 11 };
+    expect(box.t < ring.b && box.b > ring.t).toBe(true);
+    expect(box.r).toBeLessThanOrEqual(ring.l - 16 + 1e-6);
+    expect(s).toBeGreaterThan(1.5);
+    expect(name()[0]).toBeCloseTo(720 - 84, 5);
+  });
+
   // tracking-widest는 마지막 글자 뒤에도 자간을 남긴다. 그만큼 빼야 보이는 글자가 가운데에 온다.
   it('끝 자간을 빼고 보이는 글자의 가운데를 맞춘다', () => {
     label.style.letterSpacing = '12px';

@@ -25,6 +25,11 @@ const REST_Y_DEG = -24;
 // 85%에 남는 기울기 비율. 정면에 가깝게 다가간 뒤 마지막 15%에 정면이 된다.
 const NEAR_FRONT = .12;
 const PERSPECTIVE_PX = 900;
+// 눕힌 React 궤도의 보이는 고리가 Hero 앵커 상자 안에서 차지하는 자리(상자 비율). 1024–1440에서 픽셀로 잰 값이다.
+// shortcut: 쉬는 자세의 React 로고 한 장에서 잰 고정 비율, Hero 로고·마스크·기울기가 바뀌면 다시 잰다.
+const RING_INSET = { left: .18, top: .28, bottom: .24 };
+// 큰 이름과 고리 상자 사이에 남기는 거리(px).
+const RING_GAP = 16;
 
 type Box = { x: number; y: number; w: number; h: number };
 const EMPTY: Box = { x: 0, y: 0, w: 0, h: 0 };
@@ -98,13 +103,18 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, logo, 
     const text = rectBox(label);
     [wordmark.style.transform, label.style.transform] = saved;
     // 자리 높이에 글자 줄을 맞추되 자리 폭을 넘지 않는다. tracking-widest의 끝 자간은 가운데에서 뺀다.
-    const scale = text.h && text.w ? Math.min(name.h / text.h, name.w / text.w) : 1;
     const trail = parseFloat(getComputedStyle(label).letterSpacing) || 0;
     const heroLayout = rectBox(hero);
+    const centreX = heroLayout.x + heroLayout.w / 2;
+    // 이름 자리와 같은 높이에 오른쪽 고리가 있으면(넓고 낮은 화면) 글자 오른쪽 끝이 고리 상자 앞에서 멈추게 줄인다.
+    const ring = { x: heroObject.x + heroObject.w * RING_INSET.left, top: heroObject.y + heroObject.h * RING_INSET.top, bottom: heroObject.y + heroObject.h * (1 - RING_INSET.bottom) };
+    const besideRing = heroObject.w > 0 && ring.x > centreX && name.y < ring.bottom && name.y + name.h > ring.top;
+    const ringRoom = besideRing && text.w > trail ? 2 * (ring.x - RING_GAP - centreX) / (text.w - trail) : Infinity;
+    const scale = text.h && text.w ? Math.max(1, Math.min(name.h / text.h, name.w / text.w, ringRoom)) : 1;
     const pivot = { x: button.x + button.w / 2, y: button.y + button.h / 2 };
     m = {
       start, end: Math.max(start, documentTop(about) - margin),
-      name, scale, centreX: heroLayout.x + heroLayout.w / 2,
+      name, scale, centreX,
       pivot, glyph: { x: text.x + (text.w - trail) / 2 - pivot.x, y: text.y + text.h / 2 - pivot.y },
       hero: heroObject, about: aboutLogo.w ? aboutLogo : heroObject, origin: layoutBox(logoHost.offsetParent),
     };
