@@ -443,10 +443,16 @@
 .logo-host > div { width: 100%; height: 100%; }
 [data-logo-live] .logo-host { opacity: 1; }
 [data-logo-live] [data-motion-anchor] .about-electric-static { opacity: 0; }
+/* 가려진 실루엣의 충전 애니메이션도 멈춘다. GL과 겹쳐 돌면 첫 화면 프레임을 계속 다시 그린다(인트로 뒤 GL이 뜨면서 드러났다). */
+[data-logo-live] [data-motion-anchor] .about-electric-static-shape { animation: none; }
 /* 첫 진입 인트로. 그리기 전 판정(lib/introGate.ts)이 html[data-intro]를 붙인 경우에만 덮는다.
    JS가 없거나 해시·모션 감소로 들어오면 붙지 않아 완성된 첫 화면이 바로 보인다.
    입력은 막지 않는다(pointer-events: none). 첫 스크롤·탐색이 아래 문서로 그대로 가고 인트로는 끝난다. */
 .intro-curtain { display: none; }
+/* Hero 정적 실루엣은 GL 궤도와 같은 휴식 자세(motion.ts REST_X/Y_DEG, perspective 900)로 눕는다.
+   경계가 --hero-lean을 1에서 0으로 내려 정면으로 돌린다. 인트로 동안은 inline opacity 트윈이 전환에 끌리지 않게 끈다. */
+.hero-object-tilt { width: 100%; height: 100%; transform: perspective(900px) rotateX(calc(56deg * var(--hero-lean, 1))) rotateY(calc(-24deg * var(--hero-lean, 1))); }
+html[data-intro] .hero-object .about-electric-static { transition: none; }
 html[data-intro] .intro-curtain { display: block; position: fixed; inset: 0; z-index: 100; pointer-events: none; }
 .intro-curtain svg { position: absolute; inset: 0; width: 100%; height: 100%; fill: var(--color-intro-ivory); }
 .intro-greeting { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; padding: 0 1.5rem; color: var(--color-intro-ink); font-size: var(--font-size-t2); font-weight: 600; letter-spacing: -0.01em; text-align: center; }

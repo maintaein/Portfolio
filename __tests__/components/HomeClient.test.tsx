@@ -187,6 +187,21 @@ it('lays the Hero out as name, sentence, then object, and the object shrinks fir
   expect(css).toMatch(/\.logo-host \{[^}]*z-index: 2;/);
 });
 
+// 리뷰 Important 2. 인트로와 GL 교대 전후에 오브젝트가 같은 기울어진 궤도 자세여야 한다(스펙 5.2의 5).
+it('the Hero static symbol rests in the GL orbit tilt at every width and the boundary owns its lean', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync('styles/design-tokens.css', 'utf8');
+  const motionSource = readFileSync('components/sections/HomeClient/motion.ts', 'utf8');
+  expect(css).toMatch(/\n\.hero-object-tilt \{[^}]*transform: perspective\(900px\) rotateX\(calc\(56deg \* var\(--hero-lean, 1\)\)\) rotateY\(calc\(-24deg \* var\(--hero-lean, 1\)\)\);/);
+  expect(motionSource).toMatch(/const REST_X_DEG = 56;\s*const REST_Y_DEG = -24;/);
+  expect(motionSource).toMatch(/const PERSPECTIVE_PX = 900;/);
+  expect(css).toMatch(/html\[data-intro\] \.hero-object \.about-electric-static \{ transition: none; \}/);
+  // 가려진 실루엣의 충전 애니메이션이 GL 뒤에서 계속 돌면 첫 화면 프레임이 무거워진다(e2e에서 잡혔다).
+  expect(css).toMatch(/\[data-logo-live\] \[data-motion-anchor\] \.about-electric-static-shape \{ animation: none; \}/);
+  const { container } = render(<HomeClient />);
+  expect(container.querySelectorAll('#overview [data-motion-anchor="hero-object"] .hero-object-tilt')).toHaveLength(1);
+});
+
 // 네 인사말은 인트로 커튼에서만 보인다. 첫 화면에는 이름·소개·오브젝트만 보이고, 인사말은 보조기기용으로 한 번 남는다.
 it('the Hero shows no visible greetings; they stay readable once for assistive tech', () => {
   const { container } = render(<HomeClient />);
@@ -220,8 +235,11 @@ it.each([['wide', true], ['narrow', false]] as const)('first visit (%s): the bac
   expect(targets.wordmark).toBe(screen.getByTestId('wordmark').firstElementChild);
   expect(targets.headline).toBe(screen.getByRole('heading', { level: 1 }));
   expect(targets.background).toBe(flow);
-  // 오브젝트는 Hero 앵커다. 경계는 앵커를 재기만 하고 host만 옮기므로 인트로의 opacity·크기와 겹치지 않는다.
-  expect(targets.heroObject).toBe(container.querySelector('#overview [data-motion-anchor="hero-object"]'));
+  // 오브젝트는 Hero 앵커 안 정적 실루엣의 껍질이다. 경계가 재는 앵커 상자와 기울기 껍질은 인트로가 쓰지 않는다(리뷰 Minor 2).
+  const anchor = container.querySelector('#overview [data-motion-anchor="hero-object"]')!;
+  expect(targets.heroObject).toBe(anchor.querySelector(':scope > .about-electric-static'));
+  expect(targets.heroObject).not.toBe(anchor);
+  expect((targets.heroObject as HTMLElement).querySelector(':scope > .hero-object-tilt > .about-electric-static-shape')).not.toBeNull();
   expect(container.querySelector('[data-electric-src]')).toBeNull();
   expect(screen.getByTestId('flow')).toHaveAttribute('data-paused', 'true');
   act(() => boot.props!.onRevealStart());

@@ -149,8 +149,13 @@ test.describe('Native motion activity', () => {
       const [a, b] = [await box('[data-motion-anchor="about-logo"]'), await box('[data-logo-host]')];
       return Math.max(Math.abs(a.x + a.width / 2 - b.x - b.width / 2), Math.abs(a.y + a.height / 2 - b.y - b.height / 2));
     };
+    // /#overview 첫 방문은 인트로를 돌고 GL 로고는 그 뒤에 뜬다. 이 검사는 경계만 보므로 아무 키로 인트로를 끝낸다.
+    await page.keyboard.press('Shift');
+    await expect(page.locator('.intro-curtain')).toHaveCount(0, { timeout: 30_000 });
     await expect.poll(() => offAnchor('[data-motion-anchor="hero-name"]')).toBeLessThan(1.5);
-    await expect(page.locator('.portfolio-document')).toHaveAttribute('data-logo-owner', 'hero');
+    await expect(page.locator('.portfolio-document')).toHaveAttribute('data-logo-owner', 'hero', { timeout: 20_000 });
+    // 첫 GL 그림(문맥 생성)이 끝난 뒤에 스크롤한다. 그 사이 프레임이 멈춰 경계가 늦게 따라온다.
+    await expect(page.locator('.portfolio-document')).toHaveAttribute('data-logo-live', '', { timeout: 30_000 });
     expect(await singles()).toEqual([1, 1]);
 
     // 경계 한가운데: 이름은 nav에 닿았고 로고는 아직 떠나는 중이다.

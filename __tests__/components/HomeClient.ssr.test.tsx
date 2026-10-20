@@ -105,11 +105,14 @@ describe('그리기 전 인트로 판정(lib/introGate.ts)', () => {
   ] as const)('%s는 커튼 없이 바로 간다', (_, options) => {
     expect(run(options)).toBe(false);
   });
-  it('본 번들이 인트로를 맡지 못하면 load 1초 뒤 커튼을 걷고, 맡으면 손대지 않는다', () => {
+  // 리뷰 Important 3. 시간을 나눠 도는 하이드레이션이 load 뒤 1초를 넘길 수 있다.
+  it('본 번들이 인트로를 맡지 못하면 load 3초 뒤 커튼을 걷고, 맡으면 손대지 않는다', () => {
     vi.useFakeTimers();
     run({});
     window.dispatchEvent(new Event('load'));
-    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(2999);
+    expect(document.documentElement.hasAttribute('data-intro')).toBe(true);
+    vi.advanceTimersByTime(1);
     expect(document.documentElement.hasAttribute('data-intro')).toBe(false);
     run({});
     document.documentElement.setAttribute('data-intro', 'playing');

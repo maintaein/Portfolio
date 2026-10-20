@@ -111,9 +111,11 @@ const BootSequence = forwardRef<BootSequenceHandle, BootSequenceProps>(function 
   useImperativeHandle(ref, () => ({ finish: settle }), [settle]);
 
   // 페인트 전에 인트로를 맡는다. 판정 스크립트의 안전장치가 커튼을 걷지 않게 표시를 바꾼다.
+  // 하이드레이션이 늦어 안전장치가 이미 커튼을 걷었다면 다시 덮지 않고 정적 첫 화면으로 끝낸다.
   useLayoutEffect(() => {
-    if (!enabled || reducedMotion) settle();
-    else if (!run.current.completed) document.documentElement.setAttribute('data-intro', 'playing');
+    const html = document.documentElement;
+    if (!enabled || reducedMotion || !html.hasAttribute('data-intro')) settle();
+    else if (!run.current.completed) html.setAttribute('data-intro', 'playing');
   }, [enabled, reducedMotion, settle]);
   // 배경 ref가 늦게 붙어도 지금의 공개값을 준다. 이미 진행한 값을 0으로 되감지 않는다.
   const background = targets?.background ?? null;

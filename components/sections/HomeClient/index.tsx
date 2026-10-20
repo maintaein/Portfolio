@@ -37,7 +37,7 @@ export default function HomeClient() {
   const aboutRef = useRef<AboutSectionHandle>(null);
   const wordmarkRef = useRef<HTMLButtonElement>(null);
   const logoHostRef = useRef<HTMLDivElement>(null);
-  const heroObjectRef = useRef<HTMLDivElement>(null);
+  const heroStaticRef = useRef<HTMLDivElement>(null);
   const headlineRef = useRef<HTMLHeadingElement>(null);
   const bootRef = useRef<BootSequenceHandle>(null);
   // 그리기 전 판정 스크립트(lib/introGate.ts)가 붙인 표시를 하이드레이션 때 한 번 읽는다. 마크업에는 쓰지 않는다.
@@ -97,10 +97,10 @@ export default function HomeClient() {
   }, [motionModule, logo, reducedMotion]);
   useEffect(() => { motionRef.current?.setPaused(obscured || !pageVisible); }, [obscured, pageVisible, motionModule, logo, reducedMotion]);
   // 인트로 대상은 경계가 이름을 Hero 자리에 놓은 뒤에 넘긴다. 커튼이 걷힐 때 이름이 nav에서 뛰어내리지 않는다.
-  // 오브젝트는 Hero 앵커의 정적 실루엣이다. 경계는 앵커를 재기만 하고 옮기지 않으므로 인트로 자세와 겹치지 않는다.
+  // 오브젝트는 Hero 앵커 안 정적 실루엣의 껍질이다. 경계가 재는 앵커 상자는 건드리지 않는다.
   // 경계 모듈이 오지 않으면 대상도 없고, BootSequence가 제한 시간 뒤 커튼을 걷어 정적 첫 화면을 준다.
   useEffect(() => {
-    const wordmark = wordmarkRef.current?.firstElementChild, headline = headlineRef.current, heroObject = heroObjectRef.current;
+    const wordmark = wordmarkRef.current?.firstElementChild, headline = headlineRef.current, heroObject = heroStaticRef.current;
     if (!introEnabled || !motionModule || !(wordmark instanceof HTMLElement) || !headline || !heroObject) return;
     setIntroTargets({ wordmark, headline, heroObject, background });
   }, [introEnabled, motionModule, background]);
@@ -127,9 +127,12 @@ export default function HomeClient() {
           </div>
           {/* 공유 로고가 앉는 자리. GL이 없거나 준비 전, 모션 감소에서는 정적 실루엣이 대신한다.
               D5-A: 1024px부터 문장 오른쪽, 그 아래는 이름·문장 다음이다. */}
-          <div ref={heroObjectRef} data-motion-anchor="hero-object" aria-hidden="true" className="hero-object">
-            <div className={`about-electric-static ${glLogo ? 'about-electric-static-charging' : ''}`}>
-              <div className="about-electric-static-shape" style={{ maskImage: `url(${LOGO_SRCS[0]})`, WebkitMaskImage: `url(${LOGO_SRCS[0]})` }} />
+          <div data-motion-anchor="hero-object" aria-hidden="true" className="hero-object">
+            {/* 바깥 껍질은 인트로의 opacity·크기, 안쪽은 GL 궤도와 같은 기울기(경계가 정면으로 돌린다)다. */}
+            <div ref={heroStaticRef} className={`about-electric-static ${glLogo ? 'about-electric-static-charging' : ''}`}>
+              <div className="hero-object-tilt">
+                <div className="about-electric-static-shape" style={{ maskImage: `url(${LOGO_SRCS[0]})`, WebkitMaskImage: `url(${LOGO_SRCS[0]})` }} />
+              </div>
             </div>
           </div>
         </section>

@@ -27,7 +27,7 @@ function build() {
   document.body.innerHTML = `
     <nav><div data-motion-anchor="nav-name"><button>KIM TAEIN</button></div></nav>
     <main>
-      <section data-section="overview"><div data-motion-anchor="hero-object"></div><div data-motion-anchor="hero-name"></div></section>
+      <section data-section="overview"><div data-motion-anchor="hero-object"><div><div class="hero-object-tilt"></div></div></div><div data-motion-anchor="hero-name"></div></section>
       <div data-section="about"><div data-motion-anchor="about-logo"></div></div>
       <div data-logo-host><div></div></div>
     </main>`;
@@ -173,6 +173,25 @@ describe('Hero→About 경계', () => {
     expect(name()).toEqual([576, 184]);
     expect(host.style.transform).toBe('');
     expect(owners).toEqual(['none']);
+  });
+
+  // 리뷰 Important 2. GL이 없는 폭(1024 미만)과 GL이 뜨기 전에는 Hero 정적 실루엣이 같은 비율로 정면을 향한다.
+  it.each([['GL 손잡이 있음', handle], ['GL 손잡이 없음', null]] as const)('%s: Hero 정적 실루엣의 기울기 비율이 GL 궤도와 같이 1에서 정면 0으로 간다', (_, withLogo) => {
+    create(withLogo);
+    const tilt = heroObject.querySelector<HTMLElement>('.hero-object-tilt')!;
+    const lean = () => Number(tilt.style.getPropertyValue('--hero-lean'));
+    expect(lean()).toBe(1);
+    scrollAt(404);
+    expect(lean()).toBeCloseTo(1, 5);
+    scrollAt(808 * .85);
+    expect(lean()).toBeCloseTo(.12, 3);
+    if (withLogo) expect(logo().rx).toBeCloseTo(56 * lean(), 2);
+    scrollAt(808);
+    expect(lean()).toBe(0);
+    scrollAt(0);
+    expect(lean()).toBe(1);
+    motion!.destroy(); motion = null;
+    expect(tilt.style.getPropertyValue('--hero-lean')).toBe('');
   });
 
   it('destroy는 이름과 host를 정적 자리로 돌려놓고 더는 쓰지 않는다', () => {

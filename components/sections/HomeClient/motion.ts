@@ -55,6 +55,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, logo, 
   registerScrollTrigger();
   const inner = logoHost.firstElementChild instanceof HTMLElement ? logoHost.firstElementChild : null;
   const anchor = (name: string) => root.querySelector(`[data-motion-anchor="${name}"]`);
+  // Hero 정적 실루엣의 기울기. GL이 없는 폭과 GL이 뜨기 전에도 같은 비율로 정면을 향한다.
+  const heroTilt = root.querySelector<HTMLElement>('[data-motion-anchor="hero-object"] .hero-object-tilt');
   const nameEase = gsap.parseEase('power2.inOut');
   const turnEase = gsap.parseEase('power2.inOut');
   const settleEase = gsap.parseEase('power2.out');
@@ -111,14 +113,15 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, logo, 
     // 0–20%는 이름이 Hero와 함께 흐르고 20–50%에 nav 자리로 간다.
     wordmark.style.transform = named >= 1 ? '' : `translate3d(${(name.x - button.x) * (1 - named)}px, ${(name.y + name.h / 2 - scroll - button.y - button.h / 2) * (1 - named)}px, 0)`;
 
+    const settled = settleEase(span(TURN_END, 1));
+    const lean = (1 - (1 - NEAR_FRONT) * turnEase(span(NAME_END, TURN_END))) * (1 - settled);
+    heroTilt?.style.setProperty('--hero-lean', String(lean));
     if (!logo) {
       report('none');
       return;
     }
-    const settled = settleEase(span(TURN_END, 1));
     // 20%부터 About 로고 자리로 향하고, 50–85%에 정면으로 돌며 다가가 마지막 15%에 내려앉는다.
     const travel = (1 - SETTLE_SHARE) * turnEase(span(NAME_START, TURN_END)) + SETTLE_SHARE * settled;
-    const lean = (1 - (1 - NEAR_FRONT) * turnEase(span(NAME_END, TURN_END))) * (1 - settled);
     const { hero, about, origin } = m;
     // 20%까지는 화면에 붙어 있다. 문서 좌표라 경계 밖에서는 앵커와 함께 흐른다.
     const pinned = hero.y + clamp(scroll, m.start, m.end) - m.start;
@@ -202,6 +205,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, logo, 
       document.documentElement.removeEventListener('pointerleave', onLeave);
       context.revert();
       wordmark.style.transform = '';
+      heroTilt?.style.removeProperty('--hero-lean');
       logoHost.style.transform = '';
       logoHost.style.width = '';
       logoHost.style.height = '';

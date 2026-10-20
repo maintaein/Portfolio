@@ -110,7 +110,7 @@ describe('BootSequence 인트로 SSR·접근성', () => {
   });
 });
 
-describe('BootSequence 시간표 — 실제 GSAP timeline을 seek로 전진시킨다', () => {
+describe('BootSequence 시간표: 실제 GSAP timeline을 seek로 전진시킨다', () => {
   it('0 / .40 / .80 / 1.25초에 네 인사말, 1.70에 정리, 1.85–2.45에 커튼이 양끝부터 걷힌다', async () => {
     const { targets } = makeTargets();
     mount({ targets });
@@ -229,7 +229,7 @@ describe('BootSequence 시간표 — 실제 GSAP timeline을 seek로 전진시�
 });
 
 // 헤드 Chrome에서 잡혔다. 커튼 아래 배경의 첫 래스터가 프레임을 1–2초 멈춰 인사말 리듬이 끊겼다.
-describe('BootSequence 시작 게이트 — 프레임이 고를 때 시간표를 시작한다', () => {
+describe('BootSequence 시작 게이트: 프레임이 고를 때 시간표를 시작한다', () => {
   it('긴 프레임 공백 뒤 SETTLE_MS 동안 고른 프레임이 와야 timeline을 만들고, 그 전에는 첫 인사가 머문다', async () => {
     const queue: FrameRequestCallback[] = [];
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => { queue.push(callback); return queue.length; });
@@ -250,7 +250,7 @@ describe('BootSequence 시작 게이트 — 프레임이 고를 때 시간표를
   });
 });
 
-describe('BootSequence 중단 경로 — 공개값 1·원문·원래 입력 유지', () => {
+describe('BootSequence 중단 경로: 공개값 1·원문·원래 입력 유지', () => {
   it.each([
     ['직접 해시·비활성 인트로', { enabled: false }],
     ['모션 감소', { reducedMotion: true }],
@@ -269,6 +269,22 @@ describe('BootSequence 중단 경로 — 공개값 1·원문·원래 입력 유�
     // 비활성 인트로는 경계가 놓은 이름 자리를 덮어쓰지 않는다.
     expect(button.style.transform).toBe('translate3d(10px, 300px, 0)');
     expect(targets.wordmark.getAttribute('style')).toBeNull();
+    expect(targets.headline.innerHTML).toBe(SENTENCE);
+  });
+
+  // 리뷰 Important 3. 하이드레이션이 늦어 판정 스크립트의 안전장치가 먼저 커튼을 걷은 순서다.
+  it('켜진 인트로라도 마운트 전에 표시가 이미 걷혔으면 커튼을 다시 덮지 않고 정적 첫 화면으로 끝낸다', async () => {
+    html.removeAttribute('data-intro');
+    const { targets, background } = makeTargets();
+    const { onRevealStart, onComplete } = mount({ targets });
+    expect(html).not.toHaveAttribute('data-intro');
+    expect(document.querySelector('.intro-curtain')).toBeNull();
+    expect(background.setRevealProgress).not.toHaveBeenCalledWith(0);
+    expect(lastReveal(background)).toBe(1);
+    expect(onRevealStart).toHaveBeenCalledTimes(1);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
+    expect(timeline).not.toHaveBeenCalled();
     expect(targets.headline.innerHTML).toBe(SENTENCE);
   });
 
