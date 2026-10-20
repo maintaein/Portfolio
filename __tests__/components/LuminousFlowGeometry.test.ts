@@ -73,7 +73,8 @@ describe('buildFlowGeometry', () => {
     [[0, 0, 0], [1440, 0, 10], [0, 4000, 3000], [1440, 4000, 1]].forEach(([width, height, finaleTop]) => {
       expect(numbers(buildFlowGeometry(width, height, finaleTop)).every(Number.isFinite)).toBe(true);
     });
-  });
+    // 형상을 열두 번 만든다. 기본 워커 수의 전체 실행 부하에서 기본 5초를 넘긴 적이 있다.
+  }, 20_000);
 
   it('0 크기 입력에서도 NaN이나 무한값을 만들지 않는다', () => {
     [[0, 0], [0, 4000], [1440, 0]].forEach(([width, height]) => {

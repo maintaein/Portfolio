@@ -242,7 +242,8 @@ it('resize는 루프를 겹치지 않고 새 크기의 형상을 만들며 정�
   expect(shapes().at(-1)!.width).toBe(900);
   expect(phase()).toBe(paused);
   expect(frames.size).toBe(0);
-});
+  // 형상을 세 번 새로 만든다. 기본 워커 수의 전체 실행 부하에서 기본 5초를 넘긴 적이 있다.
+}, 20_000);
 
 it('Contacts 표지의 위쪽 끝을 장면 좌표로 재어 형상에 넘기고 크기가 바뀌면 다시 잰다', () => {
   const { drawn, tick, resizeTo, shapes } = harness({ rect: { left: 0, top: -700, width: 1200, height: 4000 } });
