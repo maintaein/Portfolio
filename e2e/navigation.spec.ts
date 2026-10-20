@@ -79,6 +79,9 @@ test('mobile menu closes on selection and Escape', async ({ page }) => {
   const menu = page.getByRole('button', { name: '메뉴' }); await menu.click(); await expect(menu).toHaveAttribute('aria-expanded', 'true');
   await navButton(page, 'Skills').click(); await expect(menu).toHaveAttribute('aria-expanded', 'false'); await expectActive(page, 'skills');
   await menu.click(); await page.keyboard.press('Escape'); await expect(menu).toHaveAttribute('aria-expanded', 'false'); await expect(menu).toBeFocused();
+  // 이름 버튼은 nav 자리에 서지만 Hero에 산다. 눌러도 열린 메뉴가 닫혀야 한다.
+  await menu.click(); await expect(menu).toHaveAttribute('aria-expanded', 'true');
+  await page.getByTestId('wordmark').click(); await expect(menu).toHaveAttribute('aria-expanded', 'false'); await expectActive(page, 'overview');
 });
 test('two adjacent sections can occupy the viewport together', async ({ page }) => {
   await enter(page, 'about');

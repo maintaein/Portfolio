@@ -23,6 +23,20 @@ it('closes its mobile menu on selection and Escape', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Projects' })); expect(menu).toHaveAttribute('aria-expanded', 'false');
   fireEvent.click(menu); menu.focus(); fireEvent.keyDown(menu, { key: 'Escape' }); expect(menu).toHaveFocus(); expect(menu).toHaveAttribute('aria-expanded', 'false');
 });
+// 리뷰 Important 2. 이름 버튼이 Hero로 옮겨 가 nav의 navigate가 메뉴를 닫지 못했다. 메뉴 밖을 누르거나 포커스가 나가면 닫는다.
+it('closes its mobile menu when a pointer goes down or focus moves outside the nav, not inside it', () => {
+  const { container } = render(<><Navigation items={NAV_ITEMS} active="about" onNavigate={vi.fn()} /><button type="button">개요로 이동</button></>);
+  const menu = screen.getByRole('button', { name: '메뉴' }); const name = screen.getByRole('button', { name: '개요로 이동' });
+  fireEvent.click(menu);
+  fireEvent.pointerDown(container.querySelector('#navigation-items')!);
+  fireEvent.focusIn(screen.getByRole('button', { name: 'Skills' }));
+  expect(menu).toHaveAttribute('aria-expanded', 'true');
+  fireEvent.pointerDown(name);
+  expect(menu).toHaveAttribute('aria-expanded', 'false');
+  fireEvent.click(menu);
+  fireEvent.focusIn(name);
+  expect(menu).toHaveAttribute('aria-expanded', 'false');
+});
 it('Escape acts only while the menu is open, including when focus is outside the nav', () => {
   render(<Navigation items={NAV_ITEMS} active="about" onNavigate={vi.fn()} />);
   const menu = screen.getByRole('button', { name: '메뉴' }); const item = screen.getByRole('button', { name: 'Skills' });

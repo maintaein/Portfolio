@@ -19,9 +19,9 @@ const NAME_UP = 120;
 const NAME_SECONDS = .5;
 // 이름 글자 줄 높이(design-tokens.css .site-name line-height). Hero 자리 높이가 글자 크기의 이 배수다.
 const NAME_LINE = 1.5;
-// 로고: About 머리가 화면 높이의 70%를 지나면 About 자리로 간다.
-const LOGO_AT = .7;
 const LOGO_SECONDS = .9;
+// 로고 지점에서 멈춰도 내려앉은 로고 아래에 남는 여유(px).
+const LOGO_MARGIN = 16;
 const TILT_DEG = 8;
 const SHIFT_PX = 12;
 // Hero에서는 원자 궤도처럼 눕혀 보인다. 평면 캔버스라 크게 눕혀야 기울기가 읽힌다(cos 56° = .56).
@@ -103,11 +103,16 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, reduce
     const ringRoom = besideRing && glyph > 0 ? 2 * (ring.x - RING_GAP - centreX) / glyph : Infinity;
     // 자리 높이(글자 줄)와 자리 폭에 맞추되 고리에 닿지 않는다. 잴 수 없으면 CSS 크기를 둔다.
     const size = width > 0 ? Math.max(1, Math.min(slot.h / NAME_LINE, slot.w / width, ringRoom)) : 0;
-    const aboutTop = about ? about.getBoundingClientRect().top + window.scrollY : Infinity;
+    const target = aboutLogo.w ? aboutLogo : heroObject;
+    // 로고 지점: 그 자리에서 멈춰도 내려앉은 About 로고가 화면 안에 다 드는 첫 스크롤. 크기마다 앵커로 다시 잰다.
+    // 두 로고 앵커 사이가 화면 높이만큼 멀어 두 끝을 함께 다 보일 수는 없다. 1440x900에서 About 머리가 화면 3분의 1쯤일 때다.
+    // 이름 문턱보다 아래, About 잠금 자리보다 위에 둔다.
+    const landed = target.y + target.h + LOGO_MARGIN - window.innerHeight;
+    const lock = about ? about.getBoundingClientRect().top + window.scrollY - (parseFloat(getComputedStyle(about).scrollMarginTop) || header.offsetHeight) : Infinity;
     m = {
       nameSize: size, nav: rectBox(header.querySelector('[data-motion-anchor="nav-name"]')),
-      logoAt: aboutTop - window.innerHeight * LOGO_AT,
-      hero: heroObject, about: aboutLogo.w ? aboutLogo : heroObject, origin: layoutBox(logoHost.offsetParent),
+      logoAt: Math.min(lock - 1, Math.max(NAME_DOWN, landed)),
+      hero: heroObject, about: target, origin: layoutBox(logoHost.offsetParent),
     };
     if (m.about.w) {
       logoHost.style.width = `${m.about.w}px`;

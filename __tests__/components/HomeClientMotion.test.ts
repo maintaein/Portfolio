@@ -44,7 +44,7 @@ function visual(which: 'button' | 'label'): Box {
   return { x: button.x + x + s * (box.x - button.x), y: button.y + y + s * (box.y - button.y), w: s * box.w, h: s * box.h };
 }
 
-// Hero는 76~900, About은 900부터. 로고는 About 머리가 화면 70%(900 - 630 = 270)를 지날 때 떠난다.
+// Hero는 76~900, About은 900부터. 로고 지점은 About 로고(1100~1460)가 아래 여유 16px까지 화면(900)에 다 드는 576이다.
 function build() {
   document.body.innerHTML = `
     <nav><div data-motion-anchor="nav-name"></div></nav>
@@ -272,13 +272,13 @@ describe('이름: 지점을 넘으면 0.5초 FLIP', () => {
   });
 });
 
-describe('로고: About 머리가 화면 70%를 지나면 0.9초 이동', () => {
-  it('Hero에서는 hero-object 앵커에 비스듬히, 지점(270)을 넘으면 0.9초 동안 About 앵커로 가며 정면으로 돈다', () => {
+describe('로고: 내려앉을 자리가 다 보이는 지점을 넘으면 0.9초 이동', () => {
+  it('Hero에서는 hero-object 앵커에 비스듬히, 지점(576)을 넘으면 0.9초 동안 About 앵커로 가며 정면으로 돈다', () => {
     create();
     expect(logo()).toEqual(HERO_LOGO);
-    scrollAt(260);
+    scrollAt(574);
     expect(logo()).toEqual(HERO_LOGO);
-    scrollAt(300);
+    scrollAt(600);
     expect(owners.at(-1)).toBe('boundary');
     advance(.45);
     const mid = logo();
@@ -289,22 +289,43 @@ describe('로고: About 머리가 화면 70%를 지나면 0.9초 이동', () => 
     expect(owners).toEqual(['none', 'hero', 'boundary', 'about']);
   });
 
+  // 리뷰 Important 1. 화면 비율 고정값(70%)은 About이 보이기도 전에 떠나 내려앉는 자리가 화면 밖이었다. 지점은 About 앵커로 잰다.
+  it('지점은 앵커에서 다시 재고, 이름 문턱 아래·About 잠금 자리 위로 묶는다', () => {
+    place(aboutLogo, { x: 140, y: 1300, w: 360, h: 360 });
+    create();
+    // 1300 + 360 + 16 - 900 = 776.
+    scrollAt(774); expect(owners.at(-1)).toBe('hero');
+    scrollAt(778); expect(owners.at(-1)).toBe('boundary');
+    motion!.destroy(); owners.length = 0; documentY = 0;
+    // 두 앵커가 가까우면 이름 문턱(180)보다 먼저 떠나지 않는다.
+    place(aboutLogo, { x: 140, y: 300, w: 360, h: 360 });
+    create();
+    scrollAt(179); expect(owners.at(-1)).toBe('hero');
+    scrollAt(181); expect(owners.at(-1)).toBe('boundary');
+    motion!.destroy(); owners.length = 0; documentY = 0;
+    // 멀면 About 잠금 자리(900 - 76 = 824)에 닿기 전에 떠난다.
+    place(aboutLogo, { x: 140, y: 2400, w: 360, h: 360 });
+    create();
+    scrollAt(822); expect(owners.at(-1)).toBe('hero');
+    scrollAt(823); expect(owners.at(-1)).toBe('boundary');
+  });
+
   it('재생 중에 스크롤이 계속 움직여도 About 앵커(문서 좌표)에 정확히 내려앉는다', () => {
     create();
-    scrollAt(300); advance(.3);
-    scrollAt(600); advance(.2);
+    scrollAt(600); advance(.3);
+    scrollAt(700); advance(.2);
     scrollAt(808); advance(1);
     expect(logo()).toEqual(ABOUT_LOGO);
   });
 
   it('되넘으면 남은 거리만큼 거꾸로 돌고, 도중의 되넘음은 지금 자리에서 이어 간다', () => {
     create();
-    scrollAt(300); advance(1);
-    scrollAt(200);
+    scrollAt(600); advance(1);
+    scrollAt(500);
     expect(owners.at(-1)).toBe('boundary');
     advance(.3);
     const mid = logo();
-    scrollAt(300);
+    scrollAt(600);
     expect(logo()).toEqual(mid);
     advance(1);
     expect(logo()).toEqual(ABOUT_LOGO);
@@ -384,7 +405,7 @@ describe('pointer 반응', () => {
     move(1500, 0, 'mouse');
     settle();
     // 이동이 끝나는 프레임에 기울기 0을 걸고, 그 quickTo가 다음 시간에 닿는다.
-    scrollAt(300); settle(); settle();
+    scrollAt(600); settle(); settle();
     expect(tilt()).toMatchObject({ rx: 0, ry: 0, x: 0, y: 0 });
   });
 

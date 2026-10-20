@@ -179,7 +179,7 @@ test.describe('Native motion activity', () => {
     await expect(owner).toHaveAttribute('data-logo-live', '', { timeout: 30_000 });
     expect(await singles()).toEqual([1, 1]);
 
-    // 휠 두 칸(200px): 이름만 nav로 간다. 로고 지점(About 머리가 화면 70%)은 아직이다.
+    // 휠 두 칸(200px): 이름만 nav로 간다. 로고 지점(내려앉을 About 로고가 화면에 다 드는 스크롤)은 아직이다.
     await scrollTo(200);
     await atRest('nav');
     await expect.poll(offNav, settled).toBeLessThan(1.5);
@@ -192,9 +192,17 @@ test.describe('Native motion activity', () => {
 
     // 로고 지점을 넘고 멈추면 한 번 재생해 About 앵커에 내려앉는다. 스크롤을 더 하지 않아도 끝까지 간다.
     // 이 자리에서는 About 레일이 아직 등장 transform(24px 아래) 중이라 앵커는 transform을 뺀 레이아웃 자리로 잰다.
-    const logoAt = await page.evaluate(() => document.querySelector('[data-section="about"]')!.getBoundingClientRect().top + scrollY - innerHeight * .7);
-    await scrollTo(Math.round(logoAt) + 40);
+    const logoAt = await page.evaluate(() => {
+      let y = 0;
+      const anchor = document.querySelector<HTMLElement>('[data-motion-anchor="about-logo"]')!;
+      for (let node: HTMLElement | null = anchor; node; node = node.offsetParent as HTMLElement | null) y += node.offsetTop;
+      return y + anchor.offsetHeight + 16 - innerHeight;
+    });
+    // 지점 바로 아래에서 멈춰도 내려앉은 로고가 nav 아래 화면 안에 다 든다(리뷰 Important 1).
+    await scrollTo(Math.round(logoAt) + 4);
     await expect(owner).toHaveAttribute('data-logo-owner', 'about', settled);
+    const landed = await page.evaluate(() => { const r = document.querySelector('[data-logo-host]')!.getBoundingClientRect(); return [r.top, r.bottom, innerHeight]; });
+    expect(landed[0]).toBeGreaterThanOrEqual(76); expect(landed[1]).toBeLessThanOrEqual(landed[2]);
     await expect.poll(() => page.evaluate(() => {
       let [x, y] = [0, 0];
       const anchor = document.querySelector<HTMLElement>('[data-motion-anchor="about-logo"]')!;

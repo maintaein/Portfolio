@@ -26,7 +26,7 @@ vi.mock('@/components/sections/BootSequence', async () => {
     default: forwardRef<unknown, BootProps>(function Boot(props, ref) { boot.props = props; useImperativeHandle(ref, () => ({ finish: boot.finish }), []); return null; }),
   };
 });
-vi.mock('@/components/sections', () => ({ AboutSection: ({ onChapterChange, logoLanded }: { onChapterChange: (index: number) => void; logoLanded: boolean }) => <p data-logo-landed={logoLanded} onClick={() => onChapterChange(2)}>About original body</p>, ProjectsSection: () => <p>Projects original body</p>, ExperienceSection: () => <p>Experience original body</p>, SkillsSection: () => <p>Skills original body</p>, AwardAndCertificateSection: () => <p>Awards original body</p>, Footer: () => <footer>Contacts</footer> }));
+vi.mock('@/components/sections', () => ({ AboutSection: ({ onChapterChange, logoOwner }: { onChapterChange: (index: number) => void; logoOwner: string }) => <p data-logo-owner-prop={logoOwner} onClick={() => onChapterChange(2)}>About original body</p>, ProjectsSection: () => <p>Projects original body</p>, ExperienceSection: () => <p>Experience original body</p>, SkillsSection: () => <p>Skills original body</p>, AwardAndCertificateSection: () => <p>Awards original body</p>, Footer: () => <footer>Contacts</footer> }));
 vi.mock('@/components/sections/HomeClient/motion', () => ({
   createPortfolioMotion: (options: { onLogoOwnerChange: (owner: 'hero' | 'about' | 'boundary' | 'none') => void }) => {
     motion.create(options); motion.owner = options.onLogoOwnerChange;
@@ -147,12 +147,12 @@ it('the GL logo turns live only at rest and About is told whether the logo has l
   const about = screen.getByText('About original body');
   act(() => motion.owner!('hero'));
   act(() => motion.owner!('boundary'));
-  expect(about).toHaveAttribute('data-logo-landed', 'false');
+  expect(about).toHaveAttribute('data-logo-owner-prop', 'boundary');
   fireEvent.click(container.querySelector('[data-signal-ready]')!);
   expect(documentRoot).not.toHaveAttribute('data-logo-live');
   act(() => motion.owner!('about'));
   expect(documentRoot).toHaveAttribute('data-logo-live');
-  expect(about).toHaveAttribute('data-logo-landed', 'true');
+  expect(about).toHaveAttribute('data-logo-owner-prop', 'about');
   act(() => motion.owner!('boundary'));
   expect(documentRoot).toHaveAttribute('data-logo-live');
   act(() => motion.owner!('hero'));

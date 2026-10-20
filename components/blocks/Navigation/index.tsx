@@ -26,8 +26,16 @@ export default function Navigation({ items, active, onNavigate, reducedMotion = 
       // 포커스가 nav 안에 있을 때만 토글로 돌린다. 바깥 포커스는 빼앗지 않는다.
       if (toggleRef.current?.closest('nav')?.contains(document.activeElement)) toggleRef.current.focus();
     };
+    // 메뉴 밖을 누르거나 포커스가 밖으로 나가면 닫는다. 이름 버튼은 Hero에 살아 nav 밖이라 이 길로 닫힌다.
+    const leave = (event: Event) => { if (!toggleRef.current?.closest('nav')?.contains(event.target as Node)) setOpen(false); };
     document.addEventListener('keydown', close);
-    return () => document.removeEventListener('keydown', close);
+    document.addEventListener('pointerdown', leave);
+    document.addEventListener('focusin', leave);
+    return () => {
+      document.removeEventListener('keydown', close);
+      document.removeEventListener('pointerdown', leave);
+      document.removeEventListener('focusin', leave);
+    };
   }, [open]);
   return (
     <nav ref={headerRef} data-scroll-header aria-label="메인 네비게이션"
