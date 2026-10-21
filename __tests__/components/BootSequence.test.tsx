@@ -262,15 +262,76 @@ describe('BootSequence 중단 경로: 공개값 1·원문·원래 입력 유지'
     ['keydown', () => new KeyboardEvent('keydown', { key: 'PageDown', cancelable: true })],
     ['pointerdown', () => new Event('pointerdown', { cancelable: true })],
     ['touchstart', () => new Event('touchstart', { cancelable: true })],
-  ] as const)('초기 %s는 진입을 끝내고 입력을 막지 않는다', async (_, make) => {
+  ] as const)('초기 %s는 표시를 바로 걷고 남은 진입을 마저 돌린 뒤 끝내며 입력을 막지 않는다', async (_, make) => {
     const { targets, background } = makeTargets();
     const { onComplete } = mount({ targets, background: asHandle(background) });
     await captureTimeline();
     const event = make();
     act(() => { window.dispatchEvent(event); });
     expect(event.defaultPrevented).toBe(false);
+    expect(html).not.toHaveAttribute('data-intro');
+    // 한 번에 1로 건너뛰지 않는다. 완료 신호(GL host 마운트)는 마저 돌린 뒤다.
+    expect(lastReveal(background)).toBeLessThan(1);
+    expect(onComplete).not.toHaveBeenCalled();
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    expect(lastReveal(background)).toBe(1);
+    expect(targets.headline.innerHTML).toBe(SENTENCE);
+  });
+
+  // 최종 리뷰 I-1. 배경이 2.9초라 첫 휠이 진입 한가운데 떨어지기 쉽다. 남은 진입을 .35초 감속으로 마저 돌린다.
+  it.each([1, 2])('%d초에 온 입력은 남은 진입을 약 .35초 안에 단조롭게 마치고, 두 번째 입력은 다시 시작하지 않는다', async at => {
+    const { targets, background } = makeTargets();
+    const { onComplete } = mount({ targets, background: asHandle(background) });
+    const seek = await captureTimeline();
+    await seek(at);
+    const before = lastReveal(background);
+    const from = background.setRevealProgress.mock.calls.length;
+    const tl = timeline.mock.results[0].value as gsap.core.Timeline;
+    const started = performance.now();
+    act(() => { window.dispatchEvent(new WheelEvent('wheel', { deltaY: 120 })); });
+    const [fast] = gsap.getTweensOf(tl);
+    expect(fast).toBeDefined();
+    act(() => { document.dispatchEvent(new Event('scroll')); window.dispatchEvent(new WheelEvent('wheel', { deltaY: 120 })); });
+    expect(gsap.getTweensOf(tl)).toEqual([fast]);
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    const elapsed = (performance.now() - started) / 1000;
+    expect(elapsed).toBeGreaterThanOrEqual(.3);
+    expect(elapsed).toBeLessThan(1);
+    const values = background.setRevealProgress.mock.calls.slice(from).map(([value]) => value as number);
+    expect(values.length).toBeGreaterThan(2);
+    expect(values[0]).toBeGreaterThanOrEqual(before);
+    expect(values[0]).toBeLessThan(1);
+    values.forEach((value, index) => expect(value).toBeGreaterThanOrEqual(values[index - 1] ?? before));
+    expect(values.at(-1)).toBe(1);
+  });
+
+  it('마저 돌리는 도중 언마운트하면 더 쓰지 않고 원문·자세를 되돌린다', async () => {
+    const { targets, background } = makeTargets();
+    const { view } = mount({ targets, background: asHandle(background) });
+    const seek = await captureTimeline();
+    await seek(.2);
+    act(() => { window.dispatchEvent(new WheelEvent('wheel', { deltaY: 120 })); });
+    view.unmount();
+    const calls = background.setRevealProgress.mock.calls.length;
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 500)); });
+    expect(background.setRevealProgress.mock.calls.length).toBe(calls);
+    expect(targets.headline.innerHTML).toBe(SENTENCE);
+    expect(targets.wordmark.style.opacity + targets.wordmark.style.transform).toBe('');
+    expect(targets.heroObject.style.opacity + targets.heroObject.style.transform).toBe('');
+  });
+
+  it('마저 돌리는 도중 명시적 이동(finish)은 바로 끝낸다', async () => {
+    const { targets, background } = makeTargets();
+    const { ref, onComplete } = mount({ targets, background: asHandle(background) });
+    const seek = await captureTimeline();
+    await seek(1);
+    act(() => { window.dispatchEvent(new WheelEvent('wheel', { deltaY: 120 })); });
+    act(() => ref.current!.finish());
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(lastReveal(background)).toBe(1);
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 500)); });
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(background.setRevealProgress.mock.calls.slice(-1)).toEqual([[1]]);
   });
 
   it('시간표 도중 언마운트하면 원문·자세를 되돌리고 표시를 지운다', async () => {
@@ -298,7 +359,8 @@ describe('BootSequence 중단 경로: 공개값 1·원문·원래 입력 유지'
     act(() => { scroller.dispatchEvent(new Event('scroll')); });
     expect(onComplete).not.toHaveBeenCalled();
     act(() => { document.dispatchEvent(new Event('scroll')); });
-    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(html).not.toHaveAttribute('data-intro');
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1), { timeout: 2000 });
   });
 });
 

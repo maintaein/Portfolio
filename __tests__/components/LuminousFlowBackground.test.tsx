@@ -19,10 +19,10 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Object
 
 type DrawnFrame = { dashes: number[]; paths: number[][][]; arcs: number; clips: number; glow: number; rims: number[][]; erases: number[] };
 // RAF callback map, fake clock and Canvas/IO mocks. They see frame scheduling, canvas calls and the geometry passed in.
-function harness({ reduced = false, rect = { left: 0, top: 0, width: 1200, height: 4000 } } = {}) {
+function harness({ reduced = false, rect = { left: 0, top: 0, width: 1200, height: 4000 }, screen = 0 } = {}) {
   // A viewport as tall as the document keeps every segment inside the drawn crop.
   const viewport = (height: number) => Object.defineProperty(window, 'innerHeight', { configurable: true, writable: true, value: height || 768 });
-  viewport(rect.height);
+  viewport(screen || rect.height);
   const frames = new Map<number, FrameRequestCallback>(); let id = 0; let clock = 1000;
   vi.spyOn(performance, 'now').mockImplementation(() => clock);
   vi.stubGlobal('requestAnimationFrame', vi.fn(callback => { frames.set(++id, callback); return id; }));
@@ -133,8 +133,8 @@ it('외부 pause 뒤 새 프레임을 예약하지 않고 재개 시 누적 시�
 });
 
 // The texture fills a strip per frame; 20 frames cover this scene's 17 strips.
-function revealScene() {
-  const scene = harness();
+function revealScene(options?: Parameters<typeof harness>[0]) {
+  const scene = harness(options);
   const ref = createRef<LuminousFlowBackgroundHandle>();
   const view = render(<LuminousFlowBackground ref={ref} scrollScene />);
   scene.tick(); scene.loadImages();
@@ -209,6 +209,30 @@ it('reveal은 가닥마다 제 시간표의 길이까지 자르고, 광휘는 �
   expect(container.firstElementChild!.firstElementChild).toBe(haze);
   expect(container.querySelector('canvas')).toBe(canvas);
   expect(shapes()).toHaveLength(1);
+});
+
+// Task 8 review gap 8, final review I-1: the real page is taller than the screen, so the schedule runs on the first
+// screen's crossing (fold), not on the whole-path fallback, and an entrance finished quickly from mid-way only grows.
+it('문서가 화면보다 길면 첫 화면 아래 끝(fold)으로 시간을 재고, 중간에서 빨리 마쳐도 가닥은 줄지 않으며 안개 전에 모든 머리가 첫 화면을 떠난다', () => {
+  const schedule = vi.mocked(strandReach);
+  const { shapes, reveal } = revealScene({ screen: 900 });
+  const [shape] = shapes();
+  const entry = shape.center.find(point => point.y >= 0)!.s;
+  const fold = shape.center.find(point => point.y >= 900)!.s;
+  expect(fold).toBeGreaterThan(entry);
+  expect(fold).toBeLessThan(shape.length / 2);
+  const spans = () => schedule.mock.calls.slice(-28).map(([, , span]) => span);
+  let previous = strandSegments(reveal(1 / 2.9));
+  expect(spans()).toEqual(Array(28).fill(fold - entry));
+  for (const progress of [.45, .6, .75, .9, .99]) {
+    const next = strandSegments(reveal(progress));
+    next.forEach((count, strand) => expect(count, `strand ${strand} at ${progress}`).toBeGreaterThanOrEqual(previous[strand]));
+    previous = next;
+  }
+  reveal(HAZE_FROM);
+  schedule.mock.results.slice(-28).forEach(({ value }) => expect(value).toBeGreaterThanOrEqual((fold - entry) * .999));
+  const done = strandSegments(reveal(1));
+  done.forEach((count, strand) => expect(count).toBeGreaterThanOrEqual(previous[strand]));
 });
 
 it('입자와 광휘는 가닥이 자란 곳에만 있다: 한 가닥만 다 자라면 그 가닥의 입자만 보이고 광휘는 없다', () => {

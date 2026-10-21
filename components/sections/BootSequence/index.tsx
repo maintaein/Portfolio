@@ -20,6 +20,9 @@ export const INTRO_TIMING = { name: .6, words: .9, word: .35, object: 1.2, backg
 const LOAD_LIMIT_MS = 3000;
 // 첫 입력은 막지 않는다. 진입만 끝내고 원래 동작(스크롤·탐색)이 그대로 이어진다.
 const INPUTS = ['wheel', 'touchstart', 'pointerdown', 'keydown', 'scroll'] as const;
+// 진입 도중 첫 입력은 남은 진입(가닥별 배경과 덜 끝난 이름·문장·오브젝트)을 이만큼(초) 감속으로 마저 돌린다.
+// 배경이 2.9초라 첫 휠이 한가운데 떨어지기 쉽고, 한 번에 끝내면 배경 전체가 툭 바뀐다(최종 리뷰 I-1).
+const FAST_FINISH = .35;
 
 export const introWordStagger = (count: number) =>
   count > 1 ? (INTRO_TIMING.words - INTRO_TIMING.word) / (count - 1) : 0;
@@ -57,8 +60,8 @@ const BootSequence = forwardRef<BootSequenceHandle, BootSequenceProps>(function 
   completeRef.current = onComplete;
   // 배경 공개값. 진입이 켜져 있으면 0에서 출발하고, 늦게 붙은 배경 ref도 이 현재값을 받는다.
   const reveal = useRef({ value: enabled && !reducedMotion ? 0 : 1 });
-  const run = useRef<{ timeline: gsap.core.Timeline | null; play: (() => void) | null; split: ReturnType<typeof splitWords> | null; limit: ReturnType<typeof setTimeout> | undefined; completed: boolean; claimed: boolean }>(
-    { timeline: null, play: null, split: null, limit: undefined, completed: false, claimed: false });
+  const run = useRef<{ timeline: gsap.core.Timeline | null; fast: gsap.core.Tween | null; play: (() => void) | null; split: ReturnType<typeof splitWords> | null; limit: ReturnType<typeof setTimeout> | undefined; completed: boolean; claimed: boolean }>(
+    { timeline: null, fast: null, play: null, split: null, limit: undefined, completed: false, claimed: false });
 
   const applyReveal = (value: number) => {
     reveal.current.value = value;
@@ -70,6 +73,8 @@ const BootSequence = forwardRef<BootSequenceHandle, BootSequenceProps>(function 
     const built = state.timeline !== null;
     if (state.play) gsapModule?.gsap.ticker.remove(state.play);
     state.play = null;
+    state.fast?.kill();
+    state.fast = null;
     state.timeline?.kill();
     state.timeline = null;
     state.split?.revert();
@@ -94,6 +99,19 @@ const BootSequence = forwardRef<BootSequenceHandle, BootSequenceProps>(function 
     completeRef.current();
   }, []);
   useImperativeHandle(ref, () => ({ finish: settle }), [settle]);
+  // 입력이 오면 숨김 표시는 바로 걷고 남은 진입만 마저 돌린다. 완료 신호(GL host 마운트)는 그 뒤라 문맥 생성이 이 사이에 끼지 않는다.
+  // 시간표가 아직 없으면 돌릴 것이 없으니 바로 끝낸다. 명시적 이동(finish)은 지금처럼 바로 끝낸다.
+  const hurry = () => {
+    const state = run.current, tl = state.timeline;
+    if (state.completed || state.fast) return;
+    if (!tl || !gsapModule) return settle();
+    document.documentElement.removeAttribute('data-intro');
+    if (state.play) gsapModule.gsap.ticker.remove(state.play);
+    state.play = null;
+    state.fast = tl.tweenTo(tl.duration(), { duration: FAST_FINISH, ease: 'power2.out', onComplete: settle });
+  };
+  const hurryRef = useRef(hurry);
+  hurryRef.current = hurry;
 
   // 페인트 전에 진입을 맡는다. 판정 스크립트의 안전장치가 숨긴 출발 상태를 걷지 않게 표시를 바꾼다.
   // 하이드레이션이 늦어 안전장치가 이미 걷었다면 다시 숨기지 않고 정적 첫 화면으로 끝낸다.
@@ -115,7 +133,7 @@ const BootSequence = forwardRef<BootSequenceHandle, BootSequenceProps>(function 
     const limit = run.current.limit = setTimeout(settle, LOAD_LIMIT_MS);
     import('@/lib/gsap').then(module => { if (alive) setGsapModule(module); }).catch(() => { if (alive) settle(); });
     // 안쪽 스크롤러(가로 목록 등)의 초기화 스크롤은 사용자 입력이 아니다. 문서 스크롤만 본다.
-    const onInput = (event: Event) => { if (event.type !== 'scroll' || event.target === document) settle(); };
+    const onInput = (event: Event) => { if (event.type !== 'scroll' || event.target === document) hurryRef.current(); };
     const options = { capture: true, passive: true };
     INPUTS.forEach(type => window.addEventListener(type, onInput, options));
     return () => {
