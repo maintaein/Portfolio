@@ -1,11 +1,12 @@
 import { act, cleanup, render } from '@testing-library/react';
 import { createRef } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { BALL_ICONS, FIELD_GLSL, fieldPoint, iconStyle } from '@/components/blocks/CrystalizedBall/field';
+import { BALL_ICONS, FIELD_GLSL, driftPoint, fieldPoint, iconStyle, type Vec3 } from '@/components/blocks/CrystalizedBall/field';
+import { STIR_GLSL, stiffness, stirStep } from '@/components/blocks/CrystalizedBall/stir';
 
 // The GL mock records the uniforms of every draw and the shader sources; nothing is rasterised.
 type Drawn = Record<string, number | number[]>;
-const gpu = vi.hoisted(() => ({ drawn: [] as Record<string, number | number[]>[], vertex: [] as string[], lost: 0, webgl2: true, fail: false, renderer: null as null | { dpr: number; width: number; height: number } }));
+const gpu = vi.hoisted(() => ({ drawn: [] as Record<string, number | number[]>[], vertex: [] as string[], fragment: [] as string[], targets: [] as { color: number; type: number }[], lost: 0, webgl2: true, fail: false, floatTargets: true, renderer: null as null | { dpr: number; width: number; height: number } }));
 vi.mock('ogl', () => {
   class Renderer {
     dpr = 1; isWebgl2 = gpu.webgl2; width = 0; height = 0;
@@ -13,7 +14,8 @@ vi.mock('ogl', () => {
     constructor() {
       if (gpu.fail) throw new TypeError('no webgl');
       gpu.renderer = this;
-      this.gl = { canvas: document.createElement('canvas'), POINTS: 0, ONE: 1, clearColor() {}, getExtension: (name: string) => name === 'WEBGL_lose_context' ? { loseContext: () => { gpu.lost++; } } : null };
+      this.gl = { canvas: document.createElement('canvas'), POINTS: 0, ONE: 1, FLOAT: 5126, HALF_FLOAT: 5131, RGBA: 6408, RGBA32F: 34836, RGBA16F: 34842, NEAREST: 9728, clearColor() {},
+        getExtension: (name: string) => name === 'WEBGL_lose_context' ? { loseContext: () => { gpu.lost++; } } : name === 'EXT_color_buffer_float' && gpu.floatTargets ? {} : null };
     }
     setSize(width: number, height: number) {
       this.width = width; this.height = height;
@@ -30,6 +32,7 @@ vi.mock('ogl', () => {
     constructor(public gl: unknown, { vertex, fragment, uniforms }: { vertex: string; fragment: string; uniforms: unknown }) {
       this.uniforms = uniforms;
       gpu.vertex.push(vertex);
+      gpu.fragment.push(fragment);
       (this as unknown as { setShaders: (s: object) => void }).setShaders({ vertex, fragment });
     }
     setShaders() {}
@@ -38,7 +41,12 @@ vi.mock('ogl', () => {
   class Mesh { program: unknown; constructor(_gl: unknown, { program }: { program: unknown }) { this.program = program; } }
   class Geometry { constructor(_gl: unknown, public attributes: unknown) {} }
   class Triangle {}
-  return { Renderer, Program, Mesh, Geometry, Triangle };
+  class Texture { constructor(_gl: unknown, public options: unknown) {} }
+  class RenderTarget {
+    textures: Texture[];
+    constructor(gl: unknown, { color = 1, type }: { color?: number; type: number }) { gpu.targets.push({ color, type }); this.textures = Array.from({ length: color }, () => new Texture(gl, {})); }
+  }
+  return { Renderer, Program, Mesh, Geometry, Triangle, Texture, RenderTarget };
 });
 
 import CrystalizedBall from '@/components/blocks/CrystalizedBall';
@@ -47,7 +55,7 @@ let clock = 1000;
 let side = 400;
 const frames = new Map<number, FrameRequestCallback>();
 beforeEach(() => {
-  gpu.drawn.length = 0; gpu.vertex.length = 0; gpu.lost = 0; gpu.webgl2 = true; gpu.fail = false; gpu.renderer = null;
+  gpu.drawn.length = 0; gpu.vertex.length = 0; gpu.fragment.length = 0; gpu.targets.length = 0; gpu.lost = 0; gpu.webgl2 = true; gpu.fail = false; gpu.floatTargets = true; gpu.renderer = null;
   frames.clear(); clock = 1000; side = 400;
   let id = 0;
   vi.spyOn(performance, 'now').mockImplementation(() => clock);
@@ -71,7 +79,19 @@ const tick = (step = 16) => act(() => {
 // jsdom has no PointerEvent; the component reads clientX/Y and pointerType only.
 const pointer = (type: string, clientX = 0, clientY = 0, pointerType = 'mouse') => Object.assign(new MouseEvent(type, { clientX, clientY }), { pointerType });
 const REST = 'scale(0.5)';
-const dustDraw = () => gpu.drawn.filter(draw => 'uBrush' in draw).at(-1) as Drawn & { uTime: number; uTurn: number[]; uBrush: number[] };
+type StirDraw = Drawn & { uTime: number; uTurn: number[]; uBrush: number[]; uBrushPower: number; uDt: number; uReset: number };
+const dustDraw = () => gpu.drawn.filter(draw => 'uStirred' in draw).at(-1) as Drawn & { uTime: number; uTurn: number[]; uStirred: number };
+const stirDraws = () => gpu.drawn.filter(draw => 'uBrushPower' in draw) as StirDraw[];
+// Replays every recorded stir draw through the JS stir equations for each icon: the offsets the icons must show.
+const replay = () => {
+  const state = BALL_ICONS.map(() => ({ o: [0, 0, 0] as Vec3, v: [0, 0, 0] as Vec3 }));
+  for (const draw of stirDraws()) state.forEach((s, index) => {
+    if (draw.uReset > .5) { s.o = [0, 0, 0]; s.v = [0, 0, 0]; return; }
+    const icon = BALL_ICONS[index];
+    stirStep(s.o, s.v, driftPoint(icon.home, icon.seed, draw.uTime, draw.uTurn), stiffness(icon.seed), { t: draw.uTime, dt: draw.uDt, brush: draw.uBrush, power: draw.uBrushPower });
+  });
+  return state.map(s => s.o);
+};
 
 function mount(props: { paused?: boolean; onReady?: () => void } = {}) {
   const icons = createRef<HTMLDivElement>();
@@ -104,51 +124,77 @@ it('draws a frontal ball canvas about 1.34x the anchor, capped at DPR 1.25 and 0
   expect(gpu.renderer!.width * gpu.renderer!.height * gpu.renderer!.dpr ** 2).toBeLessThanOrEqual(4.5e5 + 1);
 });
 
-it('the dust shader moves every particle with the shared fieldPoint formula', () => {
+it('the dust shader places every particle with fieldPoint plus its stir offset, and the stir pass runs the shared stir equations', () => {
   mount();
   const dust = gpu.vertex.find(source => source.includes('gl_PointSize'))!;
   expect(dust).toContain(FIELD_GLSL);
-  expect(dust).toMatch(/fieldPoint\(aHome\.xyz, aSeed\.yzw, uTime, uTurn, uBrush\)/);
+  expect(dust).toMatch(/fieldPoint\(home\.xyz, seed\.yzw, uTime, uTurn, offset\)/);
+  const stir = gpu.fragment.find(source => source.includes('outVelocity'))!;
+  expect(stir).toContain(FIELD_GLSL);
+  expect(stir).toContain(STIR_GLSL);
+  expect(stir).toMatch(/stir\(o, v, driftPoint\(home\.xyz, seed\.yzw, uTime, uTurn\), stiffness\(seed\.yzw\), uTime, uDt, uBrush, uBrushPower\);/);
+  // Offset and velocity state per particle, two ping-pong targets with two attachments each (full float when available).
+  expect(gpu.targets).toEqual([{ color: 2, type: 5126 }, { color: 2, type: 5126 }]);
 });
 
-it('icons sit where fieldPoint puts them with the same time, turn and pointer state as the particles, every frame', () => {
+// Moves the pointer in screen px over `frames` frames of 33 ms, `at` in ball radii from the centre (y up).
+const radius = () => .75 * side / 2;
+const moveTo = (x: number, y: number) => act(() => { window.dispatchEvent(pointer('pointermove', side / 2 + x * radius(), side / 2 - y * radius())); });
+const glide = (from: number[], to: number[], frames: number) => {
+  for (let i = 1; i <= frames; i++) { moveTo(from[0] + (to[0] - from[0]) * i / frames, from[1] + (to[1] - from[1]) * i / frames); tick(33); }
+};
+
+it('icons move with the particles stir equations on the same per-frame inputs: dragged into a wake by a moving cursor, then springing back', () => {
   const { icons } = mount();
   const check = () => {
-    const { uTime, uTurn, uBrush } = dustDraw();
+    const { uTime, uTurn } = dustDraw();
+    const offsets = replay();
     [...icons.current!.children].forEach((element, index) => {
-      const style = iconStyle(fieldPoint(BALL_ICONS[index].home, BALL_ICONS[index].seed, uTime, uTurn, uBrush));
+      const style = iconStyle(fieldPoint(BALL_ICONS[index].home, BALL_ICONS[index].seed, uTime, uTurn, offsets[index]));
       expect((element as HTMLElement).style.transform).toBe(style.transform);
       expect((element as HTMLElement).style.opacity).toBe(String(style.opacity));
     });
+    return offsets;
   };
-  for (let i = 0; i < 10; i++) tick(50);
+  for (let i = 0; i < 10; i++) tick(33);
   check();
-  expect(dustDraw().uTime).toBeGreaterThan(.3);
-  // Hover right next to the first icon: the pointer pushes it and turns the field toward the pointer.
-  const free = dustDraw();
-  const radius = .75 * side / 2;
-  const target = fieldPoint(BALL_ICONS[0].home, BALL_ICONS[0].seed, free.uTime, free.uTurn, [0, 0, 0]);
-  act(() => { window.dispatchEvent(pointer('pointermove', side / 2 + (target[0] - .12) * radius, side / 2 - target[1] * radius)); });
-  for (let i = 0; i < 20; i++) tick(50);
-  const hover = dustDraw();
-  expect(hover.uBrush[2]).toBeGreaterThan(.5);
-  expect(Math.abs(hover.uTurn[0] - .21 * Math.sin(hover.uTime * .23))).toBeGreaterThan(.01);
-  check();
-  const pushed = fieldPoint(BALL_ICONS[0].home, BALL_ICONS[0].seed, hover.uTime, hover.uTurn, hover.uBrush);
-  const unpushed = fieldPoint(BALL_ICONS[0].home, BALL_ICONS[0].seed, hover.uTime, hover.uTurn, [hover.uBrush[0], hover.uBrush[1], 0]);
-  expect(pushed[0] - unpushed[0]).toBeGreaterThan(.02);
-  // Leaving the page lets the push ease out.
-  act(() => { document.documentElement.dispatchEvent(pointer('pointerleave')); });
-  for (let i = 0; i < 30; i++) tick(50);
-  expect(dustDraw().uBrush[2]).toBeLessThan(.02);
-  check();
+  expect(stirDraws()).toHaveLength(0);
+  // Sweep across the React icon.
+  const start = dustDraw();
+  const target = fieldPoint(BALL_ICONS[0].home, BALL_ICONS[0].seed, start.uTime, start.uTurn, [0, 0, 0]);
+  glide([target[0] - .5, target[1]], [target[0] + .5, target[1]], 12);
+  const swept = stirDraws().at(-1)!;
+  expect(swept.uBrushPower).toBeCloseTo(.7, 5);
+  expect(swept.uBrush[2]).toBeGreaterThan(1);
+  const wake = check();
+  expect(Math.hypot(...wake[0])).toBeGreaterThan(.02);
+  // The cursor rests: icons spring back, then (stir energy decays, plus the 7 s settle) the stir resets to exactly zero.
+  for (let i = 0; i < 600; i++) tick(33);
+  expect(Math.hypot(...check()[0])).toBe(0);
+  const settled = stirDraws().length;
+  expect(stirDraws().at(-1)!.uReset).toBe(1);
+  // A resting cursor moves nothing: no stir step runs and the icons sit on the bare field.
+  for (let i = 0; i < 30; i++) tick(33);
+  expect(stirDraws()).toHaveLength(settled);
+  const { uTime, uTurn } = dustDraw();
+  expect((icons.current!.children[0] as HTMLElement).style.transform).toBe(iconStyle(fieldPoint(BALL_ICONS[0].home, BALL_ICONS[0].seed, uTime, uTurn, [0, 0, 0])).transform);
+  expect(dustDraw().uStirred).toBe(0);
 });
 
-it('touch never pushes the particles', () => {
+it('touch never stirs the particles', () => {
   mount();
-  act(() => { window.dispatchEvent(pointer('pointermove', side / 2, side / 2, 'touch')); });
-  for (let i = 0; i < 10; i++) tick(50);
-  expect(dustDraw().uBrush[2]).toBe(0);
+  for (let i = 0; i < 12; i++) { act(() => { window.dispatchEvent(pointer('pointermove', side / 2 + i * 10, side / 2, 'touch')); }); tick(33); }
+  expect(stirDraws()).toHaveLength(0);
+});
+
+it('without float colour buffers the stir is off for particles and icons alike, like the reference', () => {
+  gpu.floatTargets = false;
+  const { icons } = mount();
+  glide([-.6, .1], [.6, .1], 12);
+  expect(gpu.targets).toHaveLength(0);
+  expect(stirDraws()).toHaveLength(0);
+  const { uTime, uTurn } = dustDraw();
+  expect((icons.current!.children[0] as HTMLElement).style.transform).toBe(iconStyle(fieldPoint(BALL_ICONS[0].home, BALL_ICONS[0].seed, uTime, uTurn, [0, 0, 0])).transform);
 });
 
 it('pauses without scheduling frames and resumes from where it stopped', () => {

@@ -1,14 +1,15 @@
 'use client';
 
 // designRefactoring2/CrystalizedBall을 Hero 오브젝트로 줄였다. 뺀 것: 프리셋 8개, light 테마, 런타임 팔레트(Oklab),
-// rise·fall·orbit 먼지와 사각 입자, 테두리 hover heat와 클릭 kick, 펼쳐짐(intro), float 렌더 타깃과 합성 패스,
-// 포인터 휘젓기 패스(float 상태 타깃). 남긴 것: 테두리 가닥 5개와 flare, 테두리 불꽃 4개, 바닥 안개, drift 먼지 5000개,
-// 포인터 응시 회전. 휘젓기 대신 상태 없는 밀어냄(field.ts)을 써서 아이콘이 같은 식으로 따라간다.
+// rise·fall·orbit 먼지와 사각 입자, 테두리 hover heat와 클릭 kick, 펼쳐짐(intro), HDR float 렌더 타깃과 합성 패스.
+// 남긴 것: 테두리 가닥 5개와 flare, 테두리 불꽃 4개, 바닥 안개, drift 먼지 5000개, 포인터 응시 회전,
+// 포인터 휘젓기(입자마다 offset·velocity 상태 타깃). 아이콘은 같은 휘젓기 식(field.ts stirStep)을 JS로 푼다.
 import { useEffect, useRef, type RefObject } from 'react';
-import { Geometry, Mesh, Renderer, Triangle } from 'ogl';
+import { Geometry, Mesh, RenderTarget, Renderer, Texture, Triangle } from 'ogl';
 import { ParallelProgram } from '@/lib/parallelProgram';
 import { CYAN_PALETTE } from '../Hyperspeed/presets';
-import { BALL_ICONS, FIELD_GLSL, HOVER, fieldPoint, iconStyle } from './field';
+import { BALL_ICONS, FIELD_GLSL, HOVER, driftPoint, fieldPoint, iconStyle, type Vec3 } from './field';
+import { STIR, STIR_GLSL, stiffness, stirStep, trackBrush } from './stir';
 
 export interface CrystalizedBallProps {
   // 아이콘 층. 자식 순서가 BALL_ICONS 순서다. 서버 HTML의 쉬는 자리에 서 있다가 GL이 프레임마다 옮긴다.
@@ -35,6 +36,8 @@ const SIZE = 0.75;
 const PAD = `${(-(1 / SIZE - 1) / 2 * 100).toFixed(3)}%`;
 const STRANDS = 5;
 const DUST = 5000;
+// 입자 상태 텍스처 한 줄의 칸 수(참조 STATE_WIDTH). 입자 i는 (i % 256, i / 256) 칸이다.
+const STATE_WIDTH = 256;
 const MAX_ARCS = 4;
 // ElectricLogo와 같은 DPR 상한, 0.45MP 픽셀 예산(연구 2.4).
 const MAX_DPR = 1.25;
@@ -79,9 +82,11 @@ const buildStrands = () => {
 // 먼지: 바닥 그릇과 아래쪽 테두리 띠에 몰린다(참조 분포). home xyz + 톤, seed는 크기·위상·주기·이동.
 const buildDust = () => {
   const random = seeded(1337);
-  const home: number[] = [];
-  const seed: number[] = [];
-  for (let guard = 0; home.length < DUST * 4 && guard < DUST * 80; guard++) {
+  const rows = Math.ceil(DUST / STATE_WIDTH);
+  const home = new Float32Array(STATE_WIDTH * rows * 4);
+  const seed = new Float32Array(STATE_WIDTH * rows * 4);
+  let count = 0;
+  for (let guard = 0; count < DUST && guard < DUST * 80; guard++) {
     let x: number, y: number, tone: number;
     if (random() < 0.28) {
       const angle = random() * Math.PI * 2;
@@ -102,10 +107,11 @@ const buildDust = () => {
       else { const q = random(); tone = q < 0.32 ? 0 : q < 0.52 ? 1 : q < 0.8 ? 2 : 3; }
     }
     const chord = Math.sqrt(Math.max(0, 0.95 - x * x - y * y));
-    home.push(x, y, (random() * 2 - 1) * chord, tone);
-    seed.push(tone === 4 ? 1.8 : random() < 0.22 ? 2.1 : 1.3, random(), 2.5 + random() * 3.5, 0.16 + random() * 0.26);
+    home.set([x, y, (random() * 2 - 1) * chord, tone], count * 4);
+    seed.set([tone === 4 ? 1.8 : random() < 0.22 ? 2.1 : 1.3, random(), 2.5 + random() * 3.5, 0.16 + random() * 0.26], count * 4);
+    count++;
   }
-  return { home: new Float32Array(home), seed: new Float32Array(seed) };
+  return { home, seed, count, rows };
 };
 
 const passVertex = `#version 300 es
@@ -218,32 +224,63 @@ void main() {
 }
 `;
 
-// 먼지 한 알 = 점 하나. 자리는 아이콘과 같은 fieldPoint다. 반짝임과 투명도는 참조가 입자 id 해시로 고르던 것을 seed로 고른다.
+// 먼지 한 알 = 점 하나. 자리는 아이콘과 같은 fieldPoint(표류 + 휘젓기 offset)다. 반짝임과 투명도는 참조가 입자 id 해시로 고르던 것을 seed로 고른다.
 const dustVertex = `#version 300 es
 precision highp float;
-in vec4 aHome;
-in vec4 aSeed;
+in float aIndex;
+uniform sampler2D tHome, tSeed, tOffset;
 uniform vec2 uCenter, uViewport, uTurn;
-uniform vec3 uBrush;
-uniform float uRadius, uDpr, uPointScale, uTime;
+uniform float uRadius, uDpr, uPointScale, uTime, uStirred;
 uniform vec3 uTones[5];
 uniform vec3 uRimTone;
 out vec3 vColor;
 out float vSize;
 ${FIELD_GLSL}
 void main() {
-  float life = sin(3.14159265 * fract(uTime / aSeed.z + aSeed.y));
-  vec3 p = fieldPoint(aHome.xyz, aSeed.yzw, uTime, uTurn, uBrush);
+  ivec2 cell = ivec2(int(mod(aIndex, ${STATE_WIDTH}.0)), int(floor(aIndex / ${STATE_WIDTH}.0)));
+  vec4 home = texelFetch(tHome, cell, 0);
+  vec4 seed = texelFetch(tSeed, cell, 0);
+  vec3 offset = uStirred > 0.5 ? texelFetch(tOffset, cell, 0).xyz : vec3(0.0);
+  float life = sin(3.14159265 * fract(uTime / seed.z + seed.y));
+  vec3 p = fieldPoint(home.xyz, seed.yzw, uTime, uTurn, offset);
   float front = p.z * 0.5 + 0.5;
-  float blink = sin(uTime * (2.0 + 6.0 * fract(aSeed.y * 7.31)) + aSeed.w * 41.0);
-  float alpha = fract(aSeed.y * 13.7) < 0.5 || aHome.w > 3.5 ? 1.0 : 0.6;
-  float px = aSeed.x * uPointScale * (0.35 + 0.95 * life) * (0.82 + 0.36 * front) * uDpr;
+  float blink = sin(uTime * (2.0 + 6.0 * fract(seed.y * 7.31)) + seed.w * 41.0);
+  float alpha = fract(seed.y * 13.7) < 0.5 || home.w > 3.5 ? 1.0 : 0.6;
+  float px = seed.x * uPointScale * (0.35 + 0.95 * life) * (0.82 + 0.36 * front) * uDpr;
   gl_Position = vec4((uCenter + p.xy * uRadius) / uViewport * 2.0 - 1.0, 0.0, 1.0);
   gl_PointSize = px + 2.0;
   vSize = px;
   float rim = smoothstep(0.8, 0.97, length(p.xy));
-  vColor = (uTones[int(aHome.w + 0.5)] + uRimTone * rim * rim * 0.12) * alpha * smoothstep(0.04, 0.12, life)
+  vColor = (uTones[int(home.w + 0.5)] + uRimTone * rim * rim * 0.12) * alpha * smoothstep(0.04, 0.12, life)
     * mix(1.0, smoothstep(-0.9, -0.6, blink), 0.5) * (0.61 + 0.48 * front) * (1.0 - smoothstep(0.955, 0.985, length(p.xy)));
+}
+`;
+
+// 참조 stir 패스: 입자 칸마다 offset·velocity를 한 걸음 푼다(두 출력, ping-pong).
+const stirFragment = `#version 300 es
+precision highp float;
+uniform sampler2D tHome, tSeed, tOffset, tVelocity;
+uniform float uTime, uDt, uReset, uBrushPower;
+uniform vec2 uTurn;
+uniform vec4 uBrush;
+layout(location = 0) out vec4 outOffset;
+layout(location = 1) out vec4 outVelocity;
+${FIELD_GLSL}
+${STIR_GLSL}
+void main() {
+  ivec2 cell = ivec2(gl_FragCoord.xy);
+  if (uReset > 0.5) {
+    outOffset = vec4(0.0);
+    outVelocity = vec4(0.0);
+    return;
+  }
+  vec4 home = texelFetch(tHome, cell, 0);
+  vec4 seed = texelFetch(tSeed, cell, 0);
+  vec3 o = texelFetch(tOffset, cell, 0).xyz;
+  vec3 v = texelFetch(tVelocity, cell, 0).xyz;
+  stir(o, v, driftPoint(home.xyz, seed.yzw, uTime, uTurn), stiffness(seed.yzw), uTime, uDt, uBrush, uBrushPower);
+  outOffset = vec4(o, 1.0);
+  outVelocity = vec4(v, 1.0);
 }
 `;
 
@@ -306,10 +343,32 @@ export default function CrystalizedBall({ icons, paused = false, onReady }: Crys
       uArcs: { value: arcData },
     };
     const turn = [0, 0];
-    const brush = [0, 0, 0];
+    const points = buildDust();
+    const gl2 = gl as unknown as WebGL2RenderingContext;
+    const dataTexture = (image: Float32Array) => new Texture(gl, {
+      image, width: STATE_WIDTH, height: points.rows, type: gl.FLOAT, format: gl.RGBA, internalFormat: gl2.RGBA32F,
+      minFilter: gl.NEAREST, magFilter: gl.NEAREST, generateMipmaps: false, flipY: false,
+    });
+    const homeTexture = dataTexture(points.home);
+    const seedTexture = dataTexture(points.seed);
     const dust = {
       uCenter: field.uCenter, uRadius: field.uRadius, uDpr: field.uDpr, uViewport: { value: [1, 1] }, uPointScale: { value: 1 },
-      uTime: { value: 0 }, uTurn: { value: turn }, uBrush: { value: brush }, uTones: { value: PALETTE.tones }, uRimTone: { value: PALETTE.rim },
+      uTime: { value: 0 }, uTurn: { value: turn }, uTones: { value: PALETTE.tones }, uRimTone: { value: PALETTE.rim },
+      tHome: { value: homeTexture }, tSeed: { value: seedTexture }, tOffset: { value: homeTexture }, uStirred: { value: 0 },
+    };
+    // 휘젓기 상태는 float 색 버퍼에 쓴다. 참조처럼 32비트가 안 되면 16비트, 둘 다 안 되면 휘젓기 없이 돈다(아이콘도 같다).
+    const fullFloat = !!gl.getExtension('EXT_color_buffer_float');
+    const canStir = fullFloat || !!gl.getExtension('EXT_color_buffer_half_float');
+    const stateTarget = () => new RenderTarget(gl, {
+      width: STATE_WIDTH, height: points.rows, color: 2, depth: false, type: fullFloat ? gl.FLOAT : gl2.HALF_FLOAT, format: gl.RGBA,
+      internalFormat: fullFloat ? gl2.RGBA32F : gl2.RGBA16F, minFilter: gl.NEAREST, magFilter: gl.NEAREST,
+    });
+    let read = canStir ? stateTarget() : null;
+    let write = canStir ? stateTarget() : null;
+    const stirBrush = [0, 0, 0, 0];
+    const stirUniforms = {
+      tHome: { value: homeTexture }, tSeed: { value: seedTexture }, tOffset: { value: homeTexture }, tVelocity: { value: homeTexture },
+      uTime: dust.uTime, uTurn: dust.uTurn, uDt: { value: 0 }, uReset: { value: 0 }, uBrush: { value: stirBrush }, uBrushPower: { value: 0 },
     };
     const program = (vertex: string, fragment: string, uniforms: Record<string, unknown>) => {
       const made = new ParallelProgram(gl, { vertex, fragment, uniforms, transparent: true, depthTest: false, depthWrite: false });
@@ -318,12 +377,25 @@ export default function CrystalizedBall({ icons, paused = false, onReady }: Crys
     };
     const fieldProgram = program(passVertex, fieldFragment, field);
     const dustProgram = program(dustVertex, dustFragment, dust);
+    const stirProgram = new ParallelProgram(gl, { vertex: passVertex, fragment: stirFragment, uniforms: stirUniforms, depthTest: false, depthWrite: false });
     const fieldMesh = new Mesh(gl, { geometry, program: fieldProgram });
-    const points = buildDust();
+    const stirMesh = new Mesh(gl, { geometry, program: stirProgram });
     const dustMesh = new Mesh(gl, {
       mode: gl.POINTS, program: dustProgram,
-      geometry: new Geometry(gl, { aHome: { size: 4, data: points.home }, aSeed: { size: 4, data: points.seed } }),
+      geometry: new Geometry(gl, { aIndex: { size: 1, data: new Float32Array(points.count).map((_, i) => i) } }),
     });
+    // 아이콘 여섯의 휘젓기 상태. 입자 한 칸과 같은 offset·velocity다.
+    const iconState = BALL_ICONS.map(icon => ({ k: stiffness(icon.seed), o: [0, 0, 0] as Vec3, v: [0, 0, 0] as Vec3 }));
+    const brush = { x: 0, y: 0, vx: 0, vy: 0, fresh: true };
+    let stirEnergy = 0, stirring = 0, stirDt = 0, stirPower = 0, wasOver = false;
+    const resetStir = () => {
+      if (!read || !write) return;
+      stirUniforms.uReset.value = 1;
+      renderer.render({ scene: stirMesh, target: read, clear: false });
+      renderer.render({ scene: stirMesh, target: write, clear: false });
+      stirUniforms.uReset.value = 0;
+      iconState.forEach(state => { state.o = [0, 0, 0]; state.v = [0, 0, 0]; });
+    };
 
     const random = seeded(913);
     const arcs: { start: number; span: number; curl: number; life: number; duration: number; drift: number }[] = [];
@@ -357,13 +429,22 @@ export default function CrystalizedBall({ icons, paused = false, onReady }: Crys
           arcs[i].start += arcs[i].drift * dt * 2;
           if (arcs[i].life >= arcs[i].duration) arcs.splice(i, 1);
         }
-        // 포인터: 캔버스 위에 있으면 그 자리를 밀고(세기는 0.25초로 차오르고 빠진다) 볼이 그쪽을 바라보게 돈다.
+        // 포인터(참조 프레임 루프): 붓이 포인터 속도를 따라가고, 캔버스 위에서 움직인 만큼 휘젓기 에너지가 쌓인다.
+        // 에너지가 있으면 STIR.settle(7초) 동안 휘젓고, 그 뒤 상태를 0으로 되돌린다. 볼은 포인터 쪽을 바라보게 돈다.
         const rect = container.getBoundingClientRect();
         const bx = (pointer.x - rect.left - rect.width / 2) / radius;
         const by = (rect.top + rect.height / 2 - pointer.y) / radius;
         const over = pointer.on && pointer.x >= rect.left && pointer.x <= rect.right && pointer.y >= rect.top && pointer.y <= rect.bottom;
-        if (over) [brush[0], brush[1]] = [bx, by];
-        brush[2] += ((over ? HOVER * Math.exp(-Math.max(0, Math.hypot(bx, by) - 1) * 6) : 0) - brush[2]) * (1 - Math.exp(-dt / 0.25));
+        if (over && !wasOver) brush.fresh = true;
+        wasOver = over;
+        trackBrush(brush, bx, by, dt);
+        const speed = Math.hypot(brush.vx, brush.vy);
+        const cap = speed > 4 ? 4 / speed : 1;
+        stirPower = over ? HOVER * Math.exp(-Math.max(0, Math.hypot(bx, by) - 1) * 6) : 0;
+        stirEnergy = stirEnergy * Math.exp(-dt / 1.2) + stirPower * Math.min(speed, 4) * dt;
+        if (canStir && stirEnergy > 0.002) stirring = STIR.settle;
+        stirBrush.splice(0, 4, brush.x, brush.y, brush.vx * cap, brush.vy * cap);
+        stirDt = stirring > 0 ? Math.min(dt, STIR.maxStep) : 0;
         const gaze = over ? HOVER : 0;
         look.vx += (40 * (clamp(bx, -1.6, 1.6) * gaze - look.x) - 11 * look.vx) * dt;
         look.vy += (40 * (clamp(by, -1.6, 1.6) * gaze - look.y) - 11 * look.vy) * dt;
@@ -376,7 +457,8 @@ export default function CrystalizedBall({ icons, paused = false, onReady }: Crys
         const arc = arcs[i];
         arcData.splice(i * 4, 4, arc ? arc.start : 0, arc ? arc.span : 0, arc ? arc.curl : 0, arc ? Math.sin((Math.PI * arc.life) / arc.duration) * 0.8 : 0);
       }
-      if (fieldProgram.finish() && dustProgram.finish()) {
+      // 셋 다 링크된 뒤에만 그린다. 휘젓기 걸음은 그리는 프레임에서만 풀어 입자와 아이콘이 같은 걸음을 밟는다.
+      if (fieldProgram.finish() && dustProgram.finish() && stirProgram.finish()) {
         field.uCenter.value = [width / 2, height / 2];
         field.uRadius.value = radius;
         field.uDpr.value = renderer.dpr;
@@ -387,14 +469,33 @@ export default function CrystalizedBall({ icons, paused = false, onReady }: Crys
         dust.uTime.value = time;
         dust.uViewport.value = [width, height];
         dust.uPointScale.value = Math.max(1, radius / 491);
+        if (stirDt > 0 && read && write) {
+          // 입자: stir 패스 한 걸음. 아이콘: 같은 time·dt·turn·붓으로 같은 식 한 걸음.
+          const input = { t: time, dt: stirDt, brush: stirBrush, power: stirPower };
+          stirUniforms.uDt.value = input.dt;
+          stirUniforms.uBrushPower.value = input.power;
+          stirUniforms.tOffset.value = read.textures[0];
+          stirUniforms.tVelocity.value = read.textures[1];
+          renderer.render({ scene: stirMesh, target: write, clear: false });
+          [read, write] = [write, read];
+          iconState.forEach((state, index) => stirStep(state.o, state.v, driftPoint(BALL_ICONS[index].home, BALL_ICONS[index].seed, time, turn), state.k, input));
+          stirring -= dt;
+          stirDt = 0;
+          if (stirring <= 0) {
+            stirring = 0;
+            resetStir();
+          }
+        }
+        dust.uStirred.value = stirring > 0 ? 1 : 0;
+        dust.tOffset.value = read ? read.textures[0] : homeTexture;
         gl.clearColor(0, 0, 0, 0);
         renderer.render({ scene: fieldMesh, clear: true });
         renderer.render({ scene: dustMesh, clear: false });
-        // 아이콘: 먼지와 같은 fieldPoint, 같은 time·turn·brush로 같은 프레임에 transform과 opacity만 쓴다.
+        // 아이콘: 먼지와 같은 fieldPoint(표류 + 휘젓기 offset), 같은 프레임에 transform과 opacity만 쓴다.
         iconElements.forEach((element, index) => {
           const icon = BALL_ICONS[index];
           if (!icon) return;
-          const style = iconStyle(fieldPoint(icon.home, icon.seed, time, turn, brush));
+          const style = iconStyle(fieldPoint(icon.home, icon.seed, time, turn, iconState[index].o));
           element.style.transform = style.transform;
           element.style.opacity = String(style.opacity);
           element.style.zIndex = String(style.zIndex);
@@ -411,7 +512,7 @@ export default function CrystalizedBall({ icons, paused = false, onReady }: Crys
       last = performance.now();
       raf = requestAnimationFrame(frame);
     };
-    // 터치는 hover가 없다. 누른 자리에 밀어냄이 남지 않게 마우스·펜만 본다.
+    // 터치는 hover가 없다. 누른 자리를 휘젓지 않게 마우스·펜만 본다.
     const onMove = (event: PointerEvent) => {
       if (event.pointerType === 'touch') return;
       Object.assign(pointer, { x: event.clientX, y: event.clientY, on: true });
