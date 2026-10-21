@@ -7,9 +7,10 @@ const GSAP_SPECIFIER = '@/lib/gsap';
 const LUMINOUS_MODULE = 'components/blocks/LuminousFlowBackground/index.tsx';
 
 // 예산 상수는 이 한 곳에만 둔다. KB(1024 bytes) 단위다.
-const BUNDLE_BUDGET = {
+// 지연 hard cap 230은 Hero 크리스털 볼을 위한 사용자 결정(2026-10-21)이다. target 180은 warn만 낸다.
+export const BUNDLE_BUDGET = {
   target: { firstLoad: 200, chunk: 180 },
-  hardCap: { firstLoad: 210, chunk: 212 },
+  hardCap: { firstLoad: 210, chunk: 230 },
 };
 
 function readManifest(buildDir, fileName) {

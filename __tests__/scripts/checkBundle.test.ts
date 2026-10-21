@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
-import { checkBudget, gzipSize, resolveBundleMetrics } from '@/scripts/check-bundle.mjs';
+import { BUNDLE_BUDGET, checkBudget, gzipSize, resolveBundleMetrics } from '@/scripts/check-bundle.mjs';
 
 const fixtureRoot = path.resolve(process.cwd(), '__tests__/fixtures/bundle-manifests/valid');
 const scriptPath = path.resolve(process.cwd(), 'scripts/check-bundle.mjs');
@@ -394,10 +394,15 @@ describe('check-bundle CLI', { timeout: 30_000 }, () => {
   });
 });
 
+// 사용자 결정(2026-10-21, Task 9): 크리스털 볼을 위해 지연 hard cap을 212에서 230KB로 올린다. target 180은 그대로(warn만).
+it('지연 청크 hard cap은 230KB, target은 180KB이고 First Load 예산은 그대로다', () => {
+  expect(BUNDLE_BUDGET).toEqual({ target: { firstLoad: 200, chunk: 180 }, hardCap: { firstLoad: 210, chunk: 230 } });
+});
+
 describe('checkBudget', () => {
   const budget = {
     target: { firstLoad: 200, chunk: 180 },
-    hardCap: { firstLoad: 210, chunk: 212 },
+    hardCap: { firstLoad: 210, chunk: 230 },
   };
 
   it('target 안이면 pass', () => {
@@ -417,13 +422,14 @@ describe('checkBudget', () => {
   });
 
   it('두 hard cap을 모두 초과하면 둘 다 보고한다', () => {
-    const r = checkBudget({ firstLoad: 211, chunk: 213 }, budget);
+    const r = checkBudget({ firstLoad: 211, chunk: 231 }, budget);
     expect(r.status).toBe('fail');
     expect(r.violations).toHaveLength(2);
   });
 
   it('target과 정확히 같으면 pass, hard cap과 같으면 warn', () => {
     expect(checkBudget({ firstLoad: 200, chunk: 180 }, budget).status).toBe('pass');
-    expect(checkBudget({ firstLoad: 210, chunk: 212 }, budget).status).toBe('warn');
+    expect(checkBudget({ firstLoad: 210, chunk: 230 }, budget).status).toBe('warn');
+    expect(checkBudget({ firstLoad: 200, chunk: 213 }, budget).status).toBe('warn');
   });
 });
