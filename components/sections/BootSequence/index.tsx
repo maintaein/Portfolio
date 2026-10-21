@@ -13,7 +13,9 @@ export interface BootSequenceProps {
 }
 
 // 통합 설계 5.4의 포트폴리오 제안값(초)이다. 네 진입이 0초에 함께 출발한다.
-export const INTRO_TIMING = { name: .6, words: .9, word: .35, object: 1.2 } as const;
+// 배경은 가닥마다 제 길을 따라 자라므로 더 길다(사용자 결정 2026-10-21). LuminousFlowBackground/entrance.ts의 REVEAL_SECONDS와 같은 값이다.
+// 이 모듈은 react만 값으로 가져온다(First Load 계약). 그래서 가져오지 않고 같은 수를 둔다.
+export const INTRO_TIMING = { name: .6, words: .9, word: .35, object: 1.2, background: 2.9 } as const;
 // 모듈이나 대상이 이 안에 오지 않으면 숨긴 출발 상태를 걷고 완성된 첫 화면을 준다.
 const LOAD_LIMIT_MS = 3000;
 // 첫 입력은 막지 않는다. 진입만 끝내고 원래 동작(스크롤·탐색)이 그대로 이어진다.
@@ -145,8 +147,8 @@ const BootSequence = forwardRef<BootSequenceHandle, BootSequenceProps>(function 
     tl.fromTo(wordmark, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: T.name, ease: SITE_EASE }, 0)
       .fromTo(split.words, { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: T.word, ease: SITE_EASE, stagger: introWordStagger(split.words.length) }, 0)
       .fromTo(heroObject, { opacity: 0, scale: .92 }, { opacity: 1, scale: 1, duration: T.object, ease: SITE_EASE }, 0)
-      // 첫 화면은 경로 앞쪽 일부라 천천히 출발해야 위에서 아래로 뻗는 것이 보인다.
-      .to(reveal.current, { value: 1, duration: T.object, ease: 'power2.in', onUpdate: () => applyReveal(reveal.current.value) }, 0);
+      // 가속과 엇갈림은 배경의 가닥별 시간표가 맡는다. 공개값은 시간 그 자체다.
+      .to(reveal.current, { value: 1, duration: T.background, ease: 'none', onUpdate: () => applyReveal(reveal.current.value) }, 0);
     const play = () => {
       gsap.ticker.remove(play);
       run.current.play = null;

@@ -53,6 +53,9 @@ const distances = design.map(({ coordinates: [x, y] }, index) => {
 // Only the inside of a turn needs a curvature limit; outer branches can fan out.
 export const normalOffset = (offset: number, curvature: number, limit: number) => offset / Math.sqrt(1 + (Math.max(0, offset * curvature) / limit) ** 2);
 
+// Each strand keeps one lane across the band, -.73 to .73 of the half width; the entrance starts the center lanes first.
+export const strandLane = (strand: number) => Math.sin(strand * 2.399963) * .73;
+
 // Design y where the level run after the last turn heads for the exit; a vertical scale change there barely bends the path.
 const FINALE_Y = 1865;
 
@@ -76,7 +79,7 @@ export function buildFlowGeometry(width: number, height: number, finaleTop = 0):
   });
   const strands = Array.from({ length: 28 }, (_, index) => {
     const phase = index * 2.399963;
-    const lane = Math.sin(phase) * .73;
+    const lane = strandLane(index);
     return Array.from({ length: 16 }, (_, frame) => {
       const clock = frame / 16 * Math.PI * 2;
       return frames.map(({ x, y, halfWidth, nx, ny, curvature }, sample) => {

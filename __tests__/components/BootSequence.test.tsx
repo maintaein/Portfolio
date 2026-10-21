@@ -100,7 +100,7 @@ describe('BootSequence 진입 SSR·접근성', () => {
 });
 
 describe('BootSequence 시간표: 실제 GSAP timeline을 seek로 전진시킨다', () => {
-  it('배경 공개값은 레이아웃에서 0이고, 0초에 배경·이름·소개·오브젝트가 함께 시작해 .60 / .90 / 1.20에 끝난다', async () => {
+  it('배경 공개값은 레이아웃에서 0이고, 0초에 배경·이름·소개·오브젝트가 함께 시작해 .60 / .90 / 1.20에 끝나며 배경은 2.90초 동안 선형으로 오른다', async () => {
     const { targets, background } = makeTargets();
     // 대상(경계 모듈)이 오기 전에도 배경은 첫 그림부터 0이다.
     const { onComplete, rerender } = mount({ background: asHandle(background) });
@@ -128,7 +128,9 @@ describe('BootSequence 시간표: 실제 GSAP timeline을 seek로 전진시킨�
     expect(span(word[0])[0]).toBe(0);
     expect(Math.max(...word.map(element => span(element)[1]))).toBe(.9);
     expect(span(targets.heroObject)).toEqual([0, 1.2]);
-    expect(tl.duration()).toBeCloseTo(1.2, 6);
+    // 가닥별 시간표가 곡선을 맡으므로 공개값 자체는 시간에 비례한다.
+    expect(INTRO_TIMING.background).toBe(2.9);
+    expect(tl.duration()).toBeCloseTo(2.9, 6);
     await seek(.3);
     expect(opacity(targets.wordmark)).toBeLessThan(1);
     expect(opacity(word.at(-1)!)).toBe(0);
@@ -137,10 +139,18 @@ describe('BootSequence 시간표: 실제 GSAP timeline을 seek로 전진시킨�
     await seek(.9);
     expect(word.every(element => opacity(element) === 1)).toBe(true);
     expect(opacity(targets.heroObject)).toBeLessThan(1);
-    expect(lastReveal(background)).toBeLessThan(1);
+    expect(lastReveal(background)).toBeCloseTo(.9 / 2.9, 6);
     expect(onComplete).not.toHaveBeenCalled();
 
+    // 오브젝트가 다 나타나도 배경은 아직 자라는 중이다.
     await seek(INTRO_TIMING.object);
+    expect(opacity(targets.heroObject)).toBe(1);
+    expect(lastReveal(background)).toBeCloseTo(1.2 / 2.9, 6);
+    expect(onComplete).not.toHaveBeenCalled();
+    await seek(1.45);
+    expect(lastReveal(background)).toBeCloseTo(.5, 6);
+
+    await seek(INTRO_TIMING.background);
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(lastReveal(background)).toBe(1);
     // 원문이 돌아오고 진입이 쓴 인라인 자세가 남지 않는다.
@@ -241,7 +251,7 @@ describe('BootSequence 중단 경로: 공개값 1·원문·원래 입력 유지'
     expect(opacity(targets.heroObject)).toBe(1);
     expect(onComplete).toHaveBeenCalledTimes(1);
     await seek(.9);
-    await seek(INTRO_TIMING.object);
+    await seek(INTRO_TIMING.background);
     act(() => ref.current!.finish());
     expect(background.setRevealProgress.mock.calls.slice(-1)).toEqual([[1]]);
     expect(onComplete).toHaveBeenCalledTimes(1);
@@ -310,6 +320,8 @@ describe('BootSequence StrictMode', () => {
     expect(onComplete).not.toHaveBeenCalled();
     expect(html).toHaveAttribute('data-intro', 'playing');
     await seek(INTRO_TIMING.object);
+    expect(onComplete).not.toHaveBeenCalled();
+    await seek(INTRO_TIMING.background);
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(html).not.toHaveAttribute('data-intro');
     expect(targets.headline.innerHTML).toBe(SENTENCE);

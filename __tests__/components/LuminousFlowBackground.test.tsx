@@ -7,11 +7,17 @@ vi.mock('@/components/blocks/LuminousFlowBackground/geometry', async original =>
   const actual = await original<typeof import('@/components/blocks/LuminousFlowBackground/geometry')>();
   return { ...actual, buildFlowGeometry: vi.fn(actual.buildFlowGeometry) };
 });
+// The real schedule runs; one test swaps it to grow a single strand.
+vi.mock('@/components/blocks/LuminousFlowBackground/entrance', async original => {
+  const actual = await original<typeof import('@/components/blocks/LuminousFlowBackground/entrance')>();
+  return { ...actual, strandReach: vi.fn(actual.strandReach) };
+});
 import LuminousFlowBackground, { type LuminousFlowBackgroundHandle } from '@/components/blocks/LuminousFlowBackground';
+import { HAZE_FROM, strandReach } from '@/components/blocks/LuminousFlowBackground/entrance';
 import { buildFlowGeometry, type FlowGeometry } from '@/components/blocks/LuminousFlowBackground/geometry';
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Object.defineProperty(window, 'innerHeight', { configurable: true, writable: true, value: 768 }); });
 
-type DrawnFrame = { dashes: number[]; paths: number[][][]; arcs: number; clips: number; glow: number; rims: number[][] };
+type DrawnFrame = { dashes: number[]; paths: number[][][]; arcs: number; clips: number; glow: number; rims: number[][]; erases: number[] };
 // RAF callback map, fake clock and Canvas/IO mocks. They see frame scheduling, canvas calls and the geometry passed in.
 function harness({ reduced = false, rect = { left: 0, top: 0, width: 1200, height: 4000 } } = {}) {
   // A viewport as tall as the document keeps every segment inside the drawn crop.
@@ -39,15 +45,24 @@ function harness({ reduced = false, rect = { left: 0, top: 0, width: 1200, heigh
   const gradient = { addColorStop() {} };
   const helpers = (key: string | symbol) => key === 'createLinearGradient' || key === 'createRadialGradient' ? () => gradient : key === 'createPattern' ? () => ({ setTransform() {} }) : undefined;
   // Only the document canvas is connected; rim, texture and paint canvases are detached.
+  // Fills while compositing destination-out record their alpha: they erase the glow front.
+  let composite = 'source-over', alpha = 1;
   const main = new Proxy({}, {
     get: (_target, key) => helpers(key) ?? (
-      key === 'clearRect' ? () => { current = { dashes: [], paths: [], arcs: 0, clips: 0, glow: 0, rims: [] }; drawn.push(current); }
+      key === 'clearRect' ? () => { current = { dashes: [], paths: [], arcs: 0, clips: 0, glow: 0, rims: [], erases: [] }; drawn.push(current); }
         : key === 'arc' ? () => { current!.arcs++; }
           : key === 'clip' ? () => { current!.clips++; }
-            // The glow texture spans the scene; bend rims are 76 units tall.
-            : key === 'drawImage' ? (...args: number[]) => { if (args[4] > 1000) current!.glow++; else current!.rims.push([args[1] + 45, args[2] + 38]); }
-              : () => {}),
-    set: (_target, key, value) => { if (key === 'lineDashOffset') current?.dashes.push(value); return true; },
+            : key === 'fill' ? () => { if (composite === 'destination-out') current!.erases.push(alpha); }
+              : key === 'restore' ? () => { composite = 'source-over'; }
+                // The glow texture spans the scene; bend rims are 76 units tall.
+                : key === 'drawImage' ? (...args: number[]) => { if (args[4] > 1000) current!.glow++; else current!.rims.push([args[1] + 45, args[2] + 38]); }
+                  : () => {}),
+    set: (_target, key, value) => {
+      if (key === 'lineDashOffset') current?.dashes.push(value);
+      if (key === 'globalCompositeOperation') composite = value;
+      if (key === 'globalAlpha') alpha = value;
+      return true;
+    },
   });
   // Only the glow texture draws an image on a detached canvas: each strip is a clip rect, then the whole image.
   const strips: number[][] = []; let stripRect: number[] = [];
@@ -117,58 +132,99 @@ it('외부 pause 뒤 새 프레임을 예약하지 않고 재개 시 누적 시�
   expect(phase()).toBeCloseTo(beforePause + step, 6);
 });
 
-it('reveal은 공통 중심선의 누적 길이로 줄기·입자·광휘를 함께 자르고 0..1로 고정한다', () => {
-  const { drawn, tick, loadImages, shapes } = harness();
+// The texture fills a strip per frame; 20 frames cover this scene's 17 strips.
+function revealScene() {
+  const scene = harness();
   const ref = createRef<LuminousFlowBackgroundHandle>();
-  const { container } = render(<LuminousFlowBackground ref={ref} scrollScene />);
-  // The texture fills a strip per frame; 20 frames cover this scene's 17 strips.
-  tick(); loadImages();
-  for (let frame = 0; frame < 20; frame++) tick();
+  const view = render(<LuminousFlowBackground ref={ref} scrollScene />);
+  scene.tick(); scene.loadImages();
+  for (let frame = 0; frame < 20; frame++) scene.tick();
+  return { ...scene, ...view, ref, reveal: (progress: number) => { act(() => ref.current!.setRevealProgress(progress)); scene.tick(); return scene.drawn.at(-1)!; } };
+}
+// The first 28 paths of a frame are the strands; the combined rim path follows them.
+const strandSegments = (frame: DrawnFrame) => frame.paths.slice(0, 28).map(segments => segments.length);
+
+it('reveal은 가닥마다 제 시간표의 길이까지 자르고, 광휘는 가장 늦은 가닥에서 alpha 계단으로 사라지며, 0..1로 고정한다', () => {
+  const { drawn, shapes, container, reveal } = revealScene();
   const [shape] = shapes();
   const envelope = container.querySelector('[data-flow-envelope]')!;
   // The source haze is the root's first child; it is Luminous glow, so it follows the reveal too.
   const haze = container.firstElementChild!.firstElementChild as HTMLElement;
   const canvas = container.querySelector('canvas');
   expect(haze.style.opacity).toBe('');
-  // The first 28 paths of a frame are the strands; the combined rim path follows them.
-  const strands = (frame: DrawnFrame) => frame.paths.slice(0, 28).map(segments => segments.length);
   const full = drawn.at(-1)!;
   // Segments above the crop are skipped at the start, so each strand's full count is its own baseline.
-  const counts = strands(full);
+  const counts = strandSegments(full);
   counts.forEach(count => expect(count).toBeGreaterThan(shape.center.length / 2));
-  expect(full.glow).toBe(1); expect(full.clips).toBe(0); expect(full.arcs).toBeGreaterThan(0);
-  expect(envelope.hasAttribute('clip-path')).toBe(false);
+  expect(full.glow).toBe(1); expect(full.clips).toBe(0); expect(full.erases).toEqual([]); expect(full.arcs).toBeGreaterThan(0);
+  expect(envelope.hasAttribute('mask')).toBe(false);
 
-  act(() => ref.current!.setRevealProgress(.5)); tick();
-  const half = drawn.at(-1)!;
-  // Every strand ends inside the same center segment: the first sample past half the path length.
-  const end = shape.center.findIndex(point => point.s > shape.length / 2);
-  expect(strands(half)).toEqual(counts.map(count => count - (shape.center.length - 1 - end)));
+  const half = reveal(.5);
+  // The harness viewport is as tall as the scene, so the first screen holds the whole path below the scene top,
+  // and heads start where the path enters it.
+  const entry = shape.center.find(point => point.y >= 0)!.s;
+  expect(entry).toBeGreaterThan(0);
+  const reach = counts.map((_, strand) => entry + strandReach(strand, .5, shape.length - entry));
+  const end = (cut: number) => shape.center.findIndex(point => point.s > cut);
+  expect(strandSegments(half)).toEqual(counts.map((count, strand) => count - (shape.center.length - 1 - end(reach[strand]))));
+  expect(new Set(strandSegments(half)).size).toBeGreaterThan(5);
   expect(half.glow).toBe(1); expect(half.clips).toBe(1);
   expect(half.arcs).toBeGreaterThan(0); expect(half.arcs).toBeLessThan(full.arcs);
+  // Layer j of the front erases 1/j, so the glow falls to zero in equal steps, never a hard clip edge.
+  const steps = half.erases.length;
+  expect(steps).toBeGreaterThanOrEqual(6);
+  expect([...half.erases].sort((a, b) => b - a)).toEqual(Array.from({ length: steps }, (_, layer) => 1 / (layer + 1)));
+  // The live SVG takes the same front through a mask: the glow up to the slowest strand, then the same erase layers.
+  const maskId = envelope.getAttribute('mask')!.match(/^url\(#(.+)\)$/)![1];
+  const [glow, ...fades] = [...container.querySelectorAll(`[id="${maskId}"] path`)];
+  const points = (path: Element) => path.getAttribute('d')!.match(/-?[\d.]+(e-?\d+)? -?[\d.]+(e-?\d+)?/g)!;
+  const front = (path: Element) => points(path).slice(points(path).length / 2 - 1, points(path).length / 2 + 1);
+  expect(points(glow)).toHaveLength(2 * (end(Math.min(...reach)) + 1));
+  // The same outline also clips the group, so the browser rasterizes only the grown part under the mask.
   const clipId = envelope.getAttribute('clip-path')!.match(/^url\(#(.+)\)$/)![1];
-  expect(container.querySelector(`[id="${clipId}"] path`)!.getAttribute('d')).toMatch(/^M .+ Z$/);
-  // The haze waits until the cut is past the first screen, then fades in up to reveal 1.
+  expect(container.querySelector(`[id="${clipId}"] path`)!.getAttribute('d')).toBe(glow.getAttribute('d'));
+  expect(fades).toHaveLength(steps);
+  fades.forEach((fade, layer) => {
+    expect(Number(fade.getAttribute('fill-opacity'))).toBeCloseTo(1 / (layer + 1), 6);
+    expect(front(fade)).toEqual(front(glow));
+  });
+  // The haze waits until the last strand has left the first screen, then fades in up to reveal 1.
   expect(haze.style.opacity).toBe('0');
-  act(() => ref.current!.setRevealProgress(.75)); tick();
-  expect(haze.style.opacity).toBe('0.5');
+  reveal(HAZE_FROM - .01);
+  expect(haze.style.opacity).toBe('0');
+  reveal((1 + HAZE_FROM) / 2);
+  expect(Number(haze.style.opacity)).toBeCloseTo(.5, 6);
 
-  act(() => ref.current!.setRevealProgress(-1)); tick();
-  const hidden = drawn.at(-1)!;
-  expect(strands(hidden)).toEqual(counts.map(() => 0));
+  const hidden = reveal(-1);
+  expect(strandSegments(hidden)).toEqual(counts.map(() => 0));
   expect(hidden.arcs).toBe(0); expect(hidden.glow).toBe(0);
-  expect(envelope.hasAttribute('clip-path')).toBe(true);
+  expect(envelope.hasAttribute('mask')).toBe(true);
   expect(haze.style.opacity).toBe('0');
 
-  act(() => ref.current!.setRevealProgress(2)); tick();
-  const again = drawn.at(-1)!;
-  expect(strands(again)).toEqual(counts);
-  expect(again.clips).toBe(0); expect(again.glow).toBe(1);
-  expect(envelope.hasAttribute('clip-path')).toBe(false);
+  const again = reveal(2);
+  expect(strandSegments(again)).toEqual(counts);
+  expect(again.clips).toBe(0); expect(again.glow).toBe(1); expect(again.erases).toEqual([]);
+  expect(envelope.hasAttribute('mask')).toBe(false); expect(envelope.hasAttribute('clip-path')).toBe(false);
   expect(haze.style.opacity).toBe('');
   expect(container.firstElementChild!.firstElementChild).toBe(haze);
   expect(container.querySelector('canvas')).toBe(canvas);
   expect(shapes()).toHaveLength(1);
+});
+
+it('입자와 광휘는 가닥이 자란 곳에만 있다: 한 가닥만 다 자라면 그 가닥의 입자만 보이고 광휘는 없다', () => {
+  const schedule = vi.mocked(strandReach);
+  const real = schedule.getMockImplementation()!;
+  // Atoms 0 and 28 ride strand 3, the only strand that grows here.
+  schedule.mockImplementation((strand, progress) => progress >= 1 || strand === 3 ? Infinity : 0);
+  try {
+    const { reveal } = revealScene();
+    const frame = reveal(.5);
+    expect(strandSegments(frame).map(count => count > 0)).toEqual(Array.from({ length: 28 }, (_, strand) => strand === 3));
+    expect(frame.arcs).toBe(2 * 3);
+    expect(frame.glow).toBe(0);
+  } finally {
+    schedule.mockImplementation(real);
+  }
 });
 
 it('reveal 갱신은 형상·캔버스·흐름 시간을 다시 만들지 않고 정지 중에는 한 장만 그린다', () => {

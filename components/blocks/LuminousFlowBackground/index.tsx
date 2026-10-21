@@ -2,6 +2,7 @@
 
 import { forwardRef, useEffect, useId, useImperativeHandle, useRef, type CSSProperties } from 'react';
 import { CYAN_PALETTE } from '../Hyperspeed/presets';
+import { HAZE_FROM, strandReach } from './entrance';
 import { buildFlowGeometry, normalOffset, type FlowGeometry, type FlowPoint } from './geometry';
 import styles from './styles.module.css';
 
@@ -62,11 +63,15 @@ const createEnvelope = ({ width, center }: FlowGeometry) => {
   })));
 };
 const envelopePath = ([left, right]: number[][][]) => `${createCurve(left)}${createCurve([...right].reverse()).replace(/^M/, 'L')} Z`;
-// The outermost glow edges up to the cut, closed straight across the band where the strands end.
-const revealOutline = ([left, right]: number[][][], end: number, t: number) => {
-  const edge = (points: number[][]) => [...points.slice(0, end), points[end - 1].map((value, axis) => value + (points[end][axis] - value) * t)];
+// The outermost glow edges between two path positions [next sample, fraction], closed straight across the band at both ends.
+const bandOutline = ([left, right]: number[][][], [from, a]: number[], [to, b]: number[]) => {
+  const at = (points: number[][], next: number, t: number) => points[next - 1].map((value, axis) => value + (points[next][axis] - value) * t);
+  const edge = (points: number[][]) => [at(points, from, a), ...points.slice(from, to), at(points, to, b)];
   return `M ${[...edge(left), ...edge(right).reverse()].map(point => point.join(' ')).join(' L ')} Z`;
 };
+// The glow fades in behind its front over this share of the first screen's path, in equal alpha steps.
+const GLOW_FADE = .16;
+const GLOW_STEPS = 16;
 // The part of a cubic Bezier before parameter t, along one axis (de Casteljau).
 const bezierHead = (t: number, a: number, b: number, c: number, d: number) => {
   const ab = a + (b - a) * t, bc = b + (c - b) * t, abc = ab + (bc - ab) * t;
@@ -133,6 +138,7 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
       copy.removeAttribute('class');
       // The texture holds the whole glow; the reveal clips it when drawn.
       copy.querySelector('[data-flow-envelope]')?.removeAttribute('clip-path');
+      copy.querySelector('[data-flow-envelope]')?.removeAttribute('mask');
       copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
       copy.setAttribute('width', String(width));
       copy.setAttribute('height', String(height));
@@ -203,9 +209,18 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
     });
     const glowGroup = atmosphere?.querySelector('[data-flow-envelope]');
     const haze = hazeRef.current;
-    const revealShape = atmosphere?.querySelector('clipPath path');
+    // The clip path, then the mask's glow path and its erase layers.
+    const [clipShape, revealShape, ...fadeShapes] = atmosphere?.querySelectorAll('defs path') ?? [];
     let glowOutline: number[][][] = [];
     let revealClip: Path2D | null = null;
+    let glowFade: Path2D[] = [];
+    // Per strand: how far its head has grown along the center path, and where that ends as [next sample, fraction].
+    let reach: number[] = [];
+    let ends: number[][] = [];
+    let glowFront = 0;
+    // Path lengths where the center enters the first screen at its top and leaves it at its bottom.
+    let entry = 0;
+    let fold = 0;
     let appliedReveal = NaN;
     let pausedApplied = pausedRef.current;
     let drawn = false;
@@ -259,6 +274,12 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
         const finale = root.parentElement?.querySelector('[data-flow-finale]')?.getBoundingClientRect().top;
         const shape = buildFlowGeometry(bounds.width * (mobile ? 3 : 1), bounds.height * (scrollScene ? 1 : 2162 / 318), finale === undefined ? undefined : finale - bounds.top);
         geometry = shape;
+        // The entrance is timed against the path inside the first screen; without a crossing, the whole path.
+        // Heads start where the path enters the screen, so no time goes to growing above it.
+        const screenTop = -bounds.top - window.scrollY;
+        entry = (shape.center.find(point => point.y >= screenTop) ?? shape.center[0]).s;
+        fold = (shape.center.find(point => point.y >= screenTop + viewportHeight) ?? shape.center[shape.center.length - 1]).s || shape.length;
+        appliedReveal = NaN;
         bends = BEND_SAMPLES.map(sample => shape.center[sample]);
         interpolated = shape.strands.map(poses => poses[0].map(() => [0, 0]));
         cumulativeLengths = shape.strands.map(poses => new Float64Array(poses[0].length));
@@ -275,7 +296,6 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
           }).join('');
           const layers = createEnvelope(shape);
           glowOutline = layers[0];
-          appliedReveal = NaN;
           if (glowGroup) glowGroup.innerHTML = layers.map(edges => `<path d="${envelopePath(edges)}" opacity=".025"/>`).join('');
           atmosphere.style.position = 'fixed';
           atmosphere.style.inset = 'auto';
@@ -334,32 +354,56 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
       const bottom = Math.min(height / unit, (viewportHeight + overscan - bounds.top) / unit);
       if (!unit || bottom <= top) return;
 
-      // One cut along the shared center length: strands, particles and glow end in the same segment.
+      // Each strand grows along its own path on its own schedule; particles ride only grown strands and the glow trails the slowest head.
       const reveal = revealRef.current;
-      const cut = reveal * length;
-      const end = reveal < 1 ? center.findIndex(point => point.s > cut) : center.length;
-      const partial = end < center.length ? (cut - center[end - 1].s) / (center[end].s - center[end - 1].s) : 1;
       if (appliedReveal !== reveal) {
         appliedReveal = reveal;
-        const outline = reveal < 1 ? revealOutline(glowOutline, end, partial) : null;
+        const position = (cut: number) => {
+          const next = center.findIndex(point => point.s > cut);
+          return next < 0 ? [center.length - 1, 1] : [next, (cut - center[next - 1].s) / (center[next].s - center[next - 1].s)];
+        };
+        reach = strands.map((_, strand) => {
+          const grown = strandReach(strand, reveal, fold - entry);
+          return grown ? Math.min(length, entry + grown) : 0;
+        });
+        ends = reach.map(position);
+        glowFront = Math.min(...reach);
+        const outline = reveal < 1 ? bandOutline(glowOutline, [1, 0], position(glowFront)) : null;
+        // Nested layers from the front back over GLOW_FADE; layer j erases 1/j, so the glow rises from 0 at the front in equal steps.
+        const fades = outline ? Array.from({ length: GLOW_STEPS }, (_, layer) => bandOutline(glowOutline,
+          position(Math.max(0, glowFront - fold * GLOW_FADE * (layer + 1) / GLOW_STEPS)), position(glowFront))) : [];
         revealClip = outline ? new Path2D(outline) : null;
-        // The live SVG shows until the texture loads, so it takes the same cut.
-        revealShape?.setAttribute('d', outline ?? '');
-        if (outline) glowGroup?.setAttribute('clip-path', `url(#${id}-reveal)`);
-        else glowGroup?.removeAttribute('clip-path');
-        // The source haze fills the first screen, which the cut clears by about .2 on the measured pages.
-        // Fading in only after .5 keeps it behind the strands; at 1 it is untouched.
-        // shortcut: assumes the strand cut leaves the first screen before reveal .5 (fails on documents shorter than about two screens), derive the threshold from the cut once such a page uses this background.
-        if (haze) haze.style.opacity = reveal < 1 ? String(Math.max(0, reveal * 2 - 1)) : '';
+        glowFade = fades.map(fade => new Path2D(fade));
+        // The live SVG shows until the texture loads, so its mask takes the same front.
+        // The clip only bounds what the browser rasterizes; a masked group alone is painted whole every frame.
+        [clipShape, revealShape].forEach(shape => shape?.setAttribute('d', outline ?? ''));
+        fadeShapes.forEach((shape, layer) => shape.setAttribute('d', fades[layer] ?? ''));
+        if (outline) {
+          glowGroup?.setAttribute('clip-path', `url(#${id}-clip)`);
+          glowGroup?.setAttribute('mask', `url(#${id}-reveal)`);
+        } else {
+          glowGroup?.removeAttribute('clip-path');
+          glowGroup?.removeAttribute('mask');
+        }
+        // The source haze fills the first screen. It waits until the last head has left it, so it stays behind the strands; at 1 it is untouched.
+        // shortcut: the fold is measured on the center line, so off-center strands cross the screen bottom a little before or after it; measure per strand if the haze ever shows ahead of an edge strand.
+        if (haze) haze.style.opacity = reveal < 1 ? String(Math.max(0, (reveal - HAZE_FROM) / (1 - HAZE_FROM))) : '';
       }
 
-      if (atmosphereTexture && cut) {
+      if (atmosphereTexture && glowFront) {
         context.save();
         // The texture and its reveal outline are in document pixels.
         context.scale(1 / unit, 1 / unit);
         if (revealClip) context.clip(revealClip);
         context.globalAlpha = 1;
         context.drawImage(atmosphereTexture, 0, 0, width, height);
+        // Only the glow is on the canvas yet, so erasing its front leaves strands and particles untouched.
+        context.globalCompositeOperation = 'destination-out';
+        context.fillStyle = '#000';
+        glowFade.forEach((fade, layer) => {
+          context.globalAlpha = 1 / (layer + 1);
+          context.fill(fade);
+        });
         context.restore();
       }
 
@@ -382,6 +426,7 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
         }
         let skippedLength = 0;
         const path = new Path2D();
+        const [end, partial] = ends[index];
         // Skip segments far outside the viewport, including their glow radius.
         let connected = false;
         current.slice(0, -1).forEach((point, sample) => {
@@ -466,7 +511,7 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
         const x = path[sample - 1][0] + (path[sample][0] - path[sample - 1][0]) * mix + (-4 + index % 5 * 2) * bob;
         const y = path[sample - 1][1] + (path[sample][1] - path[sample - 1][1]) * mix + (-5 - index % 4 * 2) * bob;
         const s = center[sample - 1].s + (center[sample].s - center[sample - 1].s) * mix;
-        if (y < top - 15 || y > bottom + 15 || reveal < 1 && s >= cut) return;
+        if (y < top - 15 || y > bottom + 15 || reveal < 1 && s >= reach[strand]) return;
         context.globalAlpha = .4 + index % 4 * .14;
         context.translate(x, y);
         context.fillStyle = atomGlows[index];
@@ -559,7 +604,11 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
       <svg className={styles.atmosphere} focusable="false">
         <defs>
           <linearGradient id={`${id}-envelope`} x1="0" y1="0" x2="0" gradientUnits="userSpaceOnUse" />
-          <clipPath id={`${id}-reveal`}><path /></clipPath>
+          <clipPath id={`${id}-clip`}><path /></clipPath>
+          <mask id={`${id}-reveal`}>
+            <path fill="#fff" />
+            {Array.from({ length: GLOW_STEPS }, (_, layer) => <path key={layer} fillOpacity={1 / (layer + 1)} />)}
+          </mask>
         </defs>
         <g data-flow-envelope="" fill={`url(#${id}-envelope)`} opacity=".45" />
       </svg>
