@@ -413,10 +413,10 @@
 /* min-width: 0. aspect-ratio의 자동 최소 폭이 이전 크기의 캔버스를 붙잡아 줄어든 앵커를 따라가지 못한다.
    z-index 2. 날아가는 동안 About chapter 단어 줄(z 3) 아래로 지나가 BASICS를 덮지 않는다. */
 .logo-host { position: absolute; left: 0; top: 0; z-index: 2; width: clamp(260px, 31vw, 400px); min-width: 0; aspect-ratio: 1 / 1; pointer-events: none; opacity: 0; transition: opacity 250ms ease; }
-.logo-host > div { width: 100%; height: 100%; }
-/* Hero에서 쉬는 동안은 볼만 보인다. 로고가 Hero를 떠나면(boundary·about) 볼이 사라지고 로고가 드러난다. 돌아오면 거꾸로다.
-   Task 10의 볼에서 로고로의 변신 전까지의 임시 교대다. */
-[data-logo-live]:not([data-logo-owner='hero']) .logo-host { opacity: 1; }
+/* 안쪽 불투명도는 경계가 변신 진행도로 쓴다(Hero 0, About 1). 경계가 없으면 숨는다. */
+.logo-host > div { width: 100%; height: 100%; opacity: 0; }
+/* 볼과 로고의 교대는 경계(motion.ts)의 변신이다. 볼이 Hero 앵커째로 작은 고리로 접히고 같은 지름의 Electric 원이 넘겨받아 About으로 간다. */
+[data-logo-live] .logo-host { opacity: 1; }
 [data-logo-live] [data-motion-anchor] .about-electric-static { opacity: 0; }
 /* 가려진 실루엣의 충전 애니메이션도 멈춘다. GL과 겹쳐 돌면 첫 화면 프레임을 계속 다시 그린다(인트로 뒤 GL이 뜨면서 드러났다). */
 [data-logo-live] [data-motion-anchor] .about-electric-static-shape { animation: none; }
@@ -428,10 +428,10 @@ html[data-intro] .portfolio-hero h1:not([aria-label]),
 html[data-intro] .hero-ball { opacity: 0; }
 /* Hero 크리스털 볼. 정면이다(눕힌 평면 캔버스는 원을 누른다). 정적 유리는 JS 없이, 1024px 아래, 모션 감소와 GL 첫 그림 전의 같은 구성이다.
    아이콘 층은 유리 아래에 있고 GL 캔버스가 그 위에 더해진다. 아이콘 z 순서는 층 안에 가둬 캔버스 위로 올라오지 않는다.
-   진입 동안은 inline opacity 트윈이 전환에 끌리지 않게 끈다. */
-.hero-ball { position: absolute; inset: 0; transition: opacity 250ms ease; }
-html[data-intro] .hero-ball { transition: none; }
-[data-logo-owner='boundary'] .hero-ball, [data-logo-owner='about'] .hero-ball { opacity: 0; }
+   GL 캔버스는 첫 그림 뒤에 정적 유리와 같은 길이로 엇갈려 나타난다. 한 프레임에 다 그려진 볼이 툭 튀어나오지 않는다. */
+.hero-ball { position: absolute; inset: 0; }
+.hero-ball canvas { transition: opacity 250ms ease; }
+.hero-ball:not([data-ball-live]) canvas { opacity: 0; }
 .hero-ball-glass { position: absolute; inset: 0; border-radius: 50%; transition: opacity 250ms ease;
   background: radial-gradient(circle at 50% 95%, rgb(3 179 195 / .42), rgb(1 72 78 / .26) 38%, transparent 70%);
   box-shadow: 0 0 0 1.5px #b8eaee, 0 0 6px 2px rgb(3 179 195 / .85), 0 0 22px 4px rgb(3 179 195 / .3), inset 0 0 16px 2px rgb(3 179 195 / .45); }

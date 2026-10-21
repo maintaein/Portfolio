@@ -46,12 +46,13 @@ vi.mock('@/components/blocks/ElectricLogo', () => ({
     return <div data-electric-src={src} data-electric-active={active} data-electric-prewarm={prewarm}><span data-signal-ready onClick={() => onReady?.(src)} /></div>;
   }),
 }));
-const ball = vi.hoisted(() => ({ icons: null as null | { current: HTMLElement | null } }));
+const ball = vi.hoisted(() => ({ icons: null as null | { current: HTMLElement | null }, handle: { setCollapse: () => {} } }));
 vi.mock('@/components/blocks/CrystalizedBall', () => ({
-  default: ({ icons, paused, onReady }: { icons: { current: HTMLElement | null }; paused?: boolean; onReady?: () => void }) => {
+  default: forwardRef<typeof ball.handle, { icons: { current: HTMLElement | null }; paused?: boolean; onReady?: () => void }>(function Ball({ icons, paused, onReady }, ref) {
     ball.icons = icons;
+    useImperativeHandle(ref, () => ball.handle, []);
     return <div data-ball-gl data-ball-paused={String(!!paused)}><span data-ball-ready onClick={() => onReady?.()} /></div>;
-  },
+  }),
 }));
 beforeEach(() => {
   flags.obscured = false; flags.pageVisible = true; flags.reduced = false; flags.wide = false; flags.ready = true;
@@ -128,6 +129,27 @@ it('loads the boundary module after the route resolves, connects the real anchor
   }));
   expect(motion.setLogo).toHaveBeenLastCalledWith(handle);
   expect(motion.setPaused).toHaveBeenLastCalledWith(false);
+  // 볼 손잡이는 ref로 넘겨 경계가 매 프레임 접힘 정도를 쓴다. 볼이 늦게 떠도 다시 잇지 않는다.
+  expect(motion.create.mock.calls[0][0].ball.current).toBe(ball.handle);
+});
+
+// Task 10. 쉬는 자리마다 그리는 GL host는 하나다. Hero에서는 볼만 돌고 Electric 로고는 한 장만 미리 그린 채 멈춰 있다.
+// About에서는 로고만 돌고 볼은 멈춘다. 변신 동안(boundary)만 둘이 함께 그린다.
+it('one GL host draws at each rest; both draw only during the transformation', async () => {
+  flags.wide = true;
+  const { container } = render(<HomeClient />); await flush();
+  const drawing = () => [container.querySelector('[data-ball-gl]')!.getAttribute('data-ball-paused') === 'false', container.querySelector('[data-electric-src]')!.getAttribute('data-electric-active') === 'true'];
+  act(() => motion.owner!('hero'));
+  expect(drawing()).toEqual([true, false]);
+  expect(container.querySelector('[data-electric-src]')).toHaveAttribute('data-electric-prewarm', 'true');
+  act(() => motion.owner!('boundary'));
+  expect(drawing()).toEqual([true, true]);
+  act(() => motion.owner!('about'));
+  expect(drawing()).toEqual([false, true]);
+  act(() => motion.owner!('boundary'));
+  expect(drawing()).toEqual([true, true]);
+  act(() => motion.owner!('hero'));
+  expect(drawing()).toEqual([true, false]);
 });
 
 // Task 9: Hero 오브젝트는 크리스털 볼이다. 정적 유리와 핵심 아이콘 여섯이 서버 HTML부터 쉬는 자리에 서고,
@@ -153,7 +175,7 @@ it('the Hero object is the crystal ball: one icon layer of the six core icons at
 });
 
 // 볼은 GL 로고와 같은 규칙으로 뜬다(1024px부터, 모션 감소가 아니고 진입이 끝난 뒤). 첫 그림 뒤에만 정적 유리가 물러난다.
-// 모달, 숨은 탭, 로고가 Hero를 떠난 동안(볼이 사라진 동안)은 멈춘다.
+// 모달, 숨은 탭, 로고가 About에 내려앉은 동안(볼이 접혀 사라진 동안)은 멈춘다.
 it('the GL ball mounts like the GL logo, hides the static glass after its first frame and pauses on the activity flags', async () => {
   flags.wide = true;
   const view = render(<HomeClient />); await flush();
@@ -164,10 +186,11 @@ it('the GL ball mounts like the GL logo, hides the static glass after its first 
   expect(gl()).toHaveAttribute('data-ball-paused', 'false');
   fireEvent.click(view.container.querySelector('[data-ball-ready]')!);
   expect(shell).toHaveAttribute('data-ball-live');
-  for (const owner of ['boundary', 'about'] as const) {
-    act(() => motion.owner!(owner));
-    expect(gl()).toHaveAttribute('data-ball-paused', 'true');
-  }
+  // 변신 동안 볼은 접히며 돌고, About에 내려앉으면 멈춘다.
+  act(() => motion.owner!('boundary'));
+  expect(gl()).toHaveAttribute('data-ball-paused', 'false');
+  act(() => motion.owner!('about'));
+  expect(gl()).toHaveAttribute('data-ball-paused', 'true');
   act(() => motion.owner!('hero'));
   expect(gl()).toHaveAttribute('data-ball-paused', 'false');
   flags.obscured = true; view.rerender(<HomeClient />);
@@ -308,18 +331,21 @@ it('lays the Hero out as name, sentence, then object, and the object shrinks fir
   expect(css).toMatch(/\.logo-host \{[^}]*z-index: 2;/);
 });
 
-// Task 9: 볼은 정면이다(눕힌 평면 캔버스는 원을 타원으로 누른다). Hero에서 쉬는 동안은 볼만 보이고 Electric 로고 host는 숨는다.
-// 로고가 Hero를 떠나면(boundary·about) 볼이 사라지고 로고 이동이 그대로 돈다. 돌아오면 거꾸로다(Task 10 전의 임시 교대).
-it('the Hero ball is frontal; at Hero rest only the ball shows and it cross-fades with the Electric logo when the logo leaves', async () => {
+// Task 9: 볼은 정면이다(눕힌 평면 캔버스는 원을 타원으로 누른다). Task 10: 볼과 로고의 교대는 CSS 교차 페이드가 아니라
+// 경계(motion.ts)가 진행도로 쓰는 변신이다. host는 GL이 살아 있으면 보이고, 안쪽 불투명도는 경계가 쓴다(Hero에서 0).
+// GL 볼은 첫 그림 뒤에 정적 유리와 같은 길이로 엇갈려 나타난다(Task 9 리뷰 Minor 1: 툭 튀어나왔다).
+it('the Hero ball is frontal; the ball/logo exchange is the boundary transformation, not a CSS cross-fade', async () => {
   const { readFileSync } = await import('node:fs');
   const css = readFileSync('styles/design-tokens.css', 'utf8');
   expect(css).not.toContain('hero-object-tilt');
-  expect(css).toMatch(/\[data-logo-live\]:not\(\[data-logo-owner='hero'\]\) \.logo-host \{ opacity: 1; \}/);
-  expect(css).not.toMatch(/\n\[data-logo-live\] \.logo-host \{/);
-  expect(css).toMatch(/\.hero-ball \{[^}]*transition: opacity 250ms ease;/);
-  expect(css).toMatch(/\[data-logo-owner='boundary'\] \.hero-ball, \[data-logo-owner='about'\] \.hero-ball \{ opacity: 0; \}/);
+  expect(css).toMatch(/\n\[data-logo-live\] \.logo-host \{ opacity: 1; \}/);
+  expect(css).toMatch(/\.logo-host > div \{[^}]*opacity: 0;/);
+  expect(css).not.toMatch(/data-logo-owner='(hero|boundary|about)'/);
+  expect(css).not.toMatch(/\.hero-ball \{[^}]*transition/);
+  expect(css).not.toMatch(/html\[data-intro\] \.hero-ball \{ transition/);
   expect(css).toMatch(/\.hero-ball\[data-ball-live\] \.hero-ball-glass \{ opacity: 0; \}/);
-  expect(css).toMatch(/html\[data-intro\] \.hero-ball \{ transition: none; \}/);
+  expect(css).toMatch(/\.hero-ball:not\(\[data-ball-live\]\) canvas \{ opacity: 0; \}/);
+  expect(css).toMatch(/\.hero-ball canvas \{ transition: opacity 250ms ease; \}/);
   // 가려진 실루엣의 충전 애니메이션이 GL 뒤에서 계속 돌면 첫 화면 프레임이 무거워진다(e2e에서 잡혔다).
   expect(css).toMatch(/\[data-logo-live\] \[data-motion-anchor\] \.about-electric-static-shape \{ animation: none; \}/);
   const { container } = render(<HomeClient />);

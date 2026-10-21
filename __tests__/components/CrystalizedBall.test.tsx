@@ -1,5 +1,5 @@
 import { act, cleanup, render } from '@testing-library/react';
-import { createRef } from 'react';
+import { createRef, type Ref } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { BALL_ICONS, FIELD_GLSL, driftPoint, fieldPoint, iconStyle, type Vec3 } from '@/components/blocks/CrystalizedBall/field';
 import { STIR_GLSL, stiffness, stirStep } from '@/components/blocks/CrystalizedBall/stir';
@@ -49,7 +49,7 @@ vi.mock('ogl', () => {
   return { Renderer, Program, Mesh, Geometry, Triangle, Texture, RenderTarget };
 });
 
-import CrystalizedBall from '@/components/blocks/CrystalizedBall';
+import CrystalizedBall, { PULL, type CrystalizedBallHandle } from '@/components/blocks/CrystalizedBall';
 
 let clock = 1000;
 let side = 400;
@@ -93,11 +93,11 @@ const replay = () => {
   return state.map(s => s.o);
 };
 
-function mount(props: { paused?: boolean; onReady?: () => void } = {}) {
+function mount(props: { paused?: boolean; onReady?: () => void; ref?: Ref<CrystalizedBallHandle> } = {}) {
   const icons = createRef<HTMLDivElement>();
   const markup = (paused = props.paused) => <div>
     <div ref={icons}>{BALL_ICONS.map(icon => <span key={icon.name} style={{ transform: REST, opacity: 0.5 }} />)}</div>
-    <CrystalizedBall icons={icons} paused={paused} onReady={props.onReady} />
+    <CrystalizedBall ref={props.ref} icons={icons} paused={paused} onReady={props.onReady} />
   </div>;
   const view = render(markup());
   return { ...view, icons, update: (paused: boolean) => view.rerender(markup(paused)) };
@@ -208,6 +208,47 @@ it('pauses without scheduling frames and resumes from where it stopped', () => {
   expect(frames.size).toBe(1);
   tick(16);
   expect(dustDraw().uTime).toBeCloseTo(time + .016, 5);
+});
+
+// Task 10. The Hero -> About transformation folds the ball into a small bright core: the boundary passes a collapse
+// amount (0 resting ball, 1 small ring) every frame. Dust and icons draw inward by the same pull; the icons fade out.
+it('setCollapse draws the dust and the icons inward by the same pull, fades the icons out, and repaints once while paused', () => {
+  const ball = createRef<CrystalizedBallHandle>();
+  const { icons, update } = mount({ ref: ball });
+  tick(); tick();
+  expect(dustDraw().uCollapse).toBe(0);
+  const dust = gpu.vertex.find(source => source.includes('gl_PointSize'))!;
+  expect(dust).toContain(`const float PULL = ${PULL.toFixed(4)};`);
+  expect(dust).toMatch(/vec3 p = fieldPoint\(home\.xyz, seed\.yzw, uTime, uTurn, offset\) \* \(1\.0 - PULL \* uCollapse\);/);
+  const children = () => [...icons.current!.children] as HTMLElement[];
+  const rest = (index: number, c: number) => {
+    const { uTime, uTurn } = dustDraw();
+    const icon = BALL_ICONS[index];
+    return iconStyle(fieldPoint(icon.home, icon.seed, uTime, uTurn, [0, 0, 0]).map(v => v * (1 - PULL * c)) as Vec3);
+  };
+  act(() => ball.current!.setCollapse(.5));
+  tick();
+  expect(dustDraw().uCollapse).toBe(.5);
+  children().forEach((element, index) => {
+    expect(element.style.transform).toBe(rest(index, .5).transform);
+    expect(Number(element.style.opacity)).toBeGreaterThan(0);
+    expect(Number(element.style.opacity)).toBeLessThan(rest(index, .5).opacity);
+  });
+  update(true);
+  tick();
+  expect(frames.size).toBe(0);
+  act(() => ball.current!.setCollapse(1));
+  expect(frames.size).toBe(1);
+  tick();
+  expect(frames.size).toBe(0);
+  expect(dustDraw().uCollapse).toBe(1);
+  children().forEach((element, index) => {
+    expect(element.style.transform).toBe(rest(index, 1).transform);
+    expect(element.style.opacity).toBe('0');
+  });
+  act(() => ball.current!.setCollapse(0));
+  tick();
+  children().forEach((element, index) => expect(element.style.opacity).toBe(String(rest(index, 0).opacity)));
 });
 
 it('unmount stops the loop, drops the context and the canvas, restores the icons and stops listening', () => {

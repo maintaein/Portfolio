@@ -178,13 +178,23 @@ test.describe('Native motion activity', () => {
     // 첫 GL 그림(문맥 생성)이 끝난 뒤에 스크롤한다. 그 사이 프레임이 멈춰 재생이 늦게 따라온다.
     await expect(owner).toHaveAttribute('data-logo-live', '', { timeout: 30_000 });
     expect(await singles()).toEqual([1, 1]);
-    // Task 9: Hero에서 쉬는 동안은 볼(GL 캔버스 하나)만 보이고 Electric 로고 host는 숨어 있다.
-    const ball = page.locator('#overview .hero-ball');
+    // Task 9·10: Hero에서 쉬는 동안은 볼(GL 캔버스 하나)만 보이고 Electric 로고는 숨어 있다(안쪽 불투명도 0).
+    const ball = page.locator('#overview [data-motion-anchor="hero-object"]');
+    const logoInner = page.locator('[data-logo-host] > div');
     await expect(page.locator('#overview [data-motion-anchor="hero-object"] canvas')).toHaveCount(1, settled);
-    await expect(page.locator('[data-logo-host]')).toHaveCSS('opacity', '0');
+    await expect(logoInner).toHaveCSS('opacity', '0');
     await expect(ball).toHaveCSS('opacity', '1');
+    await expect(ball).toHaveCSS('transform', 'none');
 
-    // 휠 두 칸(200px): 이름만 nav로 간다. 로고 지점(내려앉을 About 로고가 화면에 다 드는 스크롤)은 아직이다.
+    // 로고 지점(Task 10): About 본문이 나타나기 시작하는 R(잠금 자리 - 화면 절반)보다 화면 높이의 12% 앞, 이름 문턱(180) 아래로는 가지 않는다.
+    const points = await page.evaluate(() => {
+      const about = document.querySelector<HTMLElement>('[data-section="about"]')!;
+      const lock = about.getBoundingClientRect().top + scrollY - parseFloat(getComputedStyle(about).scrollMarginTop);
+      const reveal = lock - innerHeight / 2;
+      return { reveal, start: Math.max(180, reveal - .12 * innerHeight) };
+    });
+    // 휠 두 칸(200px): 이름만 nav로 간다. 로고 지점은 아직이다(1440x900에서 250).
+    expect(points.start).toBeGreaterThan(200);
     await scrollTo(200);
     await atRest('nav');
     await expect.poll(offNav, settled).toBeLessThan(1.5);
@@ -195,22 +205,28 @@ test.describe('Native motion activity', () => {
     await expect.poll(offHero, settled).toBeLessThan(1.5);
     expect(await singles()).toEqual([1, 1]);
 
-    // 로고 지점을 넘고 멈추면 한 번 재생해 About 앵커에 내려앉는다. 스크롤을 더 하지 않아도 끝까지 간다.
-    // 이 자리에서는 About 레일이 아직 등장 transform(24px 아래) 중이라 앵커는 transform을 뺀 레이아웃 자리로 잰다.
-    const logoAt = await page.evaluate(() => {
-      let y = 0;
-      const anchor = document.querySelector<HTMLElement>('[data-motion-anchor="about-logo"]')!;
-      for (let node: HTMLElement | null = anchor; node; node = node.offsetParent as HTMLElement | null) y += node.offsetTop;
-      return y + anchor.offsetHeight + 16 - innerHeight;
-    });
-    // 지점 바로 아래에서 멈춰도 내려앉은 로고가 nav 아래 화면 안에 다 든다(리뷰 Important 1).
-    await scrollTo(Math.round(logoAt) + 4);
-    await expect(owner).toHaveAttribute('data-logo-owner', 'about', settled);
-    // 로고가 떠나면 볼은 사라지고 로고가 드러난다(Task 10 전의 임시 교대).
+    // 지점을 넘으면 한 번 재생해 About 앵커에 내려앉는다. 스크롤을 더 하지 않아도 끝까지 간다.
+    // 바로 본문 등장 자리(R)까지 굴려도 본문은 로고가 내려앉은 뒤에 나타난다. 입력은 막지 않는다.
+    const entered = page.locator('#about [data-motion-layout="reading"]');
+    // 매 프레임 두 표시를 같이 읽어, 날아가는 동안 본문이 한 번이라도 나타났는지 센다.
+    const gate = page.evaluate(() => new Promise<{ flying: number; early: number }>(resolve => {
+      const counts = { flying: 0, early: 0 };
+      const read = () => {
+        const owner = document.querySelector('.portfolio-document')!.getAttribute('data-logo-owner');
+        const shown = document.querySelector('#about [data-motion-layout="reading"]')!.getAttribute('data-entered') === 'true';
+        if (owner === 'boundary') { counts.flying++; if (shown) counts.early++; }
+        if (owner === 'about') resolve(counts); else requestAnimationFrame(read);
+      };
+      read();
+    }));
+    await scrollTo(Math.round(points.reveal) + 10);
+    const seen = await gate;
+    expect(seen.flying).toBeGreaterThan(0);
+    expect(seen.early).toBe(0);
+    await expect(entered).toHaveAttribute('data-entered', 'true');
+    // 볼은 작은 고리로 접혀 사라지고 로고가 다 드러난다. 이 자리에서는 About 레일이 등장 transform 중이라 앵커는 레이아웃 자리로 잰다.
     await expect(ball).toHaveCSS('opacity', '0', settled);
-    await expect(page.locator('[data-logo-host]')).toHaveCSS('opacity', '1', settled);
-    const landed = await page.evaluate(() => { const r = document.querySelector('[data-logo-host]')!.getBoundingClientRect(); return [r.top, r.bottom, innerHeight]; });
-    expect(landed[0]).toBeGreaterThanOrEqual(76); expect(landed[1]).toBeLessThanOrEqual(landed[2]);
+    await expect(logoInner).toHaveCSS('opacity', '1', settled);
     await expect.poll(() => page.evaluate(() => {
       let [x, y] = [0, 0];
       const anchor = document.querySelector<HTMLElement>('[data-motion-anchor="about-logo"]')!;
@@ -220,11 +236,15 @@ test.describe('Native motion activity', () => {
     }), settled).toBeLessThan(1.5);
     await atRest('nav');
     expect(await singles()).toEqual([1, 1]);
-    // 되넘으면 Hero 앵커로 돌아간다.
-    await scrollTo(Math.round(logoAt) - 40);
+    // 되돌아오는 문턱은 지점 60px 위다. 그 사이에서는 About에 머문다.
+    await scrollTo(Math.round(points.start) - 40);
+    await expect(owner).toHaveAttribute('data-logo-owner', 'about');
+    // 넘으면 로고가 원으로 접혀 돌아가고 볼이 다시 펼쳐진다.
+    await scrollTo(Math.round(points.start) - 64);
     await expect(owner).toHaveAttribute('data-logo-owner', 'hero', settled);
     await expect(ball).toHaveCSS('opacity', '1', settled);
-    await expect(page.locator('[data-logo-host]')).toHaveCSS('opacity', '0', settled);
+    await expect(ball).toHaveCSS('transform', 'none', settled);
+    await expect(logoInner).toHaveCSS('opacity', '0', settled);
 
     await navButton(page, 'About').click(); await expectActive(page, 'about');
     await expect(owner).toHaveAttribute('data-logo-owner', 'about', settled);

@@ -559,6 +559,21 @@ describe('AboutSection', () => {
       expect(chapter(container)).toBe('BASICS');
     });
 
+    // Task 10(사용자 결정 2026-10-21). 본문이 나타날 때 로고는 이미 About에 내려앉아 있다. 날아가는 동안에는 본문이 기다리고 입력은 막지 않는다.
+    it('본문 등장은 로고 착지에 묶인다: 날아가는 동안 등장 자리에 와도 기다렸다가 내려앉으면 나타나고, 되돌아가면 다시 숨는다', () => {
+      const entered = (container: HTMLElement) => container.querySelector('[data-entered]')!.getAttribute('data-entered');
+      const { container, update } = mount(START - 300, { logoOwner: 'boundary' });
+      expect(entered(container)).toBe('false');
+      expect(wheel(60, 20_000).defaultPrevented).toBe(false);
+      expect(screen.getByRole('button', { name: 'BASICS' }).closest('[data-entered]')).toHaveAttribute('data-entered', 'false');
+      update({ logoOwner: 'about' });
+      expect(entered(container)).toBe('true');
+      update({ logoOwner: 'boundary' });
+      expect(entered(container)).toBe('false');
+      update({ logoOwner: 'none' });
+      expect(entered(container)).toBe('true');
+    });
+
     it('로고가 날아가는 동안 반 화면 넘게 지나쳤으면 내려앉아도 끌어오지 않는다', () => {
       const { container, update } = mount(960, { logoOwner: 'boundary' });
       wheel(120, 20_000);

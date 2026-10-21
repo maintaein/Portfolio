@@ -4,18 +4,22 @@
 // rise·fall·orbit 먼지와 사각 입자, 테두리 hover heat와 클릭 kick, 펼쳐짐(intro), HDR float 렌더 타깃과 합성 패스.
 // 남긴 것: 테두리 가닥 5개와 flare, 테두리 불꽃 4개, 바닥 안개, drift 먼지 5000개, 포인터 응시 회전,
 // 포인터 휘젓기(입자마다 offset·velocity 상태 타깃). 아이콘은 같은 휘젓기 식(field.ts stirStep)을 JS로 푼다.
-import { useEffect, useRef, type RefObject } from 'react';
+import { useEffect, useImperativeHandle, useRef, type Ref, type RefObject } from 'react';
 import { Geometry, Mesh, RenderTarget, Renderer, Texture, Triangle } from 'ogl';
 import { ParallelProgram } from '@/lib/parallelProgram';
 import { CYAN_PALETTE } from '../Hyperspeed/presets';
 import { BALL_ICONS, FIELD_GLSL, HOVER, driftPoint, fieldPoint, iconStyle, type Vec3 } from './field';
 import { STIR, STIR_GLSL, stiffness, stirStep, trackBrush } from './stir';
 
+// Hero -> About 변신(HomeClient motion.ts)이 매 프레임 접힘 정도를 넘긴다. 0 쉬는 볼, 1 작은 고리.
+export interface CrystalizedBallHandle { setCollapse(value: number): void }
+
 export interface CrystalizedBallProps {
   // 아이콘 층. 자식 순서가 BALL_ICONS 순서다. 서버 HTML의 쉬는 자리에 서 있다가 GL이 프레임마다 옮긴다.
   icons: RefObject<HTMLElement | null>;
   paused?: boolean;
   onReady?: () => void;
+  ref?: Ref<CrystalizedBallHandle>;
 }
 
 type Rgb = [number, number, number];
@@ -44,6 +48,8 @@ const MAX_DPR = 1.25;
 const PIXEL_BUDGET = 4.5e5;
 const clamp = (v: number, a: number, b: number) => Math.min(Math.max(v, a), b);
 const smooth = (a: number, b: number, v: number) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+// 접힐 때 먼지와 아이콘이 가운데로 끌려드는 몫. 볼 자체는 경계가 CSS로 줄이고, 안쪽은 그보다 더 모여 밝은 심이 된다.
+export const PULL = 0.85;
 
 const seeded = (start: number) => {
   let state = start >>> 0;
@@ -123,7 +129,7 @@ void main() { gl_Position = vec4(position, 0.0, 1.0); }
 const fieldFragment = `#version 300 es
 precision highp float;
 uniform vec2 uCenter;
-uniform float uRadius, uDpr, uLine, uRimTime, uFrame, uBins;
+uniform float uRadius, uDpr, uLine, uRimTime, uFrame, uBins, uCollapse;
 uniform vec3 uRim, uRimHot, uRimMid, uRimDeep, uSpark, uSparkGlow, uHazeColor, uEdgeColor;
 uniform vec4 uHarmonics[${STRANDS}], uRates[${STRANDS}], uPhases[${STRANDS}], uFlareHarmonics[${STRANDS}], uFlareRates[${STRANDS}], uFlarePhases[${STRANDS}], uArcs[${MAX_ARCS}];
 out vec4 fragColor;
@@ -131,6 +137,7 @@ uint scramble(uint v) { v = v * 747796405u + 2891336453u; uint w = ((v >> ((v >>
 float random(uint v) { return float(scramble(v)) * (1.0 / 4294967295.0); }
 const float PI = 3.14159265;
 const float TAU = 6.28318531;
+const float PULL = ${PULL.toFixed(4)};
 const vec4 AMPS = vec4(0.35, 0.3, 0.22, 0.13);
 const float CRACKLE = 0.6;
 const float GLOW = 0.8;
@@ -149,8 +156,10 @@ void main() {
   float topDim = 1.0 - 0.35 * pow(max(p.y / max(r, 1e-3), 0.0), 1.5);
   vec3 col = vec3(0.0);
   uint frame = uint(uFrame);
-  if (r < R) {
-    vec2 q = p / R;
+  // 접히면 안개도 먼지와 같은 몫만큼 가운데로 모인다.
+  float core = R * (1.0 - PULL * uCollapse);
+  if (r < core) {
+    vec2 q = p / core;
     col += uHazeColor * pool(q) * (0.55 + 0.45 * sqrt(max(1.0 - dot(q, q), 0.0))) * HAZE;
     col += uEdgeColor * 0.5 * pow(smoothstep(0.62, 1.0, length(q - vec2(0.0, 0.2)) / 1.2), 1.4) * (0.5 + 0.5 * HAZE);
   }
@@ -230,11 +239,12 @@ precision highp float;
 in float aIndex;
 uniform sampler2D tHome, tSeed, tOffset;
 uniform vec2 uCenter, uViewport, uTurn;
-uniform float uRadius, uDpr, uPointScale, uTime, uStirred;
+uniform float uRadius, uDpr, uPointScale, uTime, uStirred, uCollapse;
 uniform vec3 uTones[5];
 uniform vec3 uRimTone;
 out vec3 vColor;
 out float vSize;
+const float PULL = ${PULL.toFixed(4)};
 ${FIELD_GLSL}
 void main() {
   ivec2 cell = ivec2(int(mod(aIndex, ${STATE_WIDTH}.0)), int(floor(aIndex / ${STATE_WIDTH}.0)));
@@ -242,7 +252,7 @@ void main() {
   vec4 seed = texelFetch(tSeed, cell, 0);
   vec3 offset = uStirred > 0.5 ? texelFetch(tOffset, cell, 0).xyz : vec3(0.0);
   float life = sin(3.14159265 * fract(uTime / seed.z + seed.y));
-  vec3 p = fieldPoint(home.xyz, seed.yzw, uTime, uTurn, offset);
+  vec3 p = fieldPoint(home.xyz, seed.yzw, uTime, uTurn, offset) * (1.0 - PULL * uCollapse);
   float front = p.z * 0.5 + 0.5;
   float blink = sin(uTime * (2.0 + 6.0 * fract(seed.y * 7.31)) + seed.w * 41.0);
   float alpha = fract(seed.y * 13.7) < 0.5 || home.w > 3.5 ? 1.0 : 0.6;
@@ -252,7 +262,7 @@ void main() {
   vSize = px;
   float rim = smoothstep(0.8, 0.97, length(p.xy));
   vColor = (uTones[int(home.w + 0.5)] + uRimTone * rim * rim * 0.12) * alpha * smoothstep(0.04, 0.12, life)
-    * mix(1.0, smoothstep(-0.9, -0.6, blink), 0.5) * (0.61 + 0.48 * front) * (1.0 - smoothstep(0.955, 0.985, length(p.xy)));
+    * mix(1.0, smoothstep(-0.9, -0.6, blink), 0.5) * (0.61 + 0.48 * front) * (1.0 - smoothstep(0.955, 0.985, length(p.xy))) * (1.0 + uCollapse);
 }
 `;
 
@@ -297,12 +307,22 @@ void main() {
 }
 `;
 
-export default function CrystalizedBall({ icons, paused = false, onReady }: CrystalizedBallProps) {
+export default function CrystalizedBall({ icons, paused = false, onReady, ref }: CrystalizedBallProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pausedRef = useRef(paused);
   const onReadyRef = useRef(onReady);
   const wakeRef = useRef<(() => void) | null>(null);
+  const collapseRef = useRef(0);
   onReadyRef.current = onReady;
+
+  // 멈춘 동안에 바뀌어도 한 장 다시 그려 보이는 접힘이 값과 같다.
+  useImperativeHandle(ref, () => ({
+    setCollapse: (value) => {
+      if (value === collapseRef.current) return;
+      collapseRef.current = value;
+      wakeRef.current?.();
+    },
+  }), []);
 
   useEffect(() => {
     pausedRef.current = paused;
@@ -335,7 +355,7 @@ export default function CrystalizedBall({ icons, paused = false, onReady }: Crys
     const strands = buildStrands();
     const arcData = new Array(MAX_ARCS * 4).fill(0);
     const field = {
-      uCenter: { value: [0, 0] }, uRadius: { value: 1 }, uDpr: { value: 1 }, uLine: { value: 0.6 }, uRimTime: { value: 0 }, uFrame: { value: 0 }, uBins: { value: 420 },
+      uCenter: { value: [0, 0] }, uRadius: { value: 1 }, uDpr: { value: 1 }, uLine: { value: 0.6 }, uRimTime: { value: 0 }, uFrame: { value: 0 }, uBins: { value: 420 }, uCollapse: { value: 0 },
       uRim: { value: PALETTE.rim }, uRimHot: { value: PALETTE.rimHot }, uRimMid: { value: PALETTE.rimMid }, uRimDeep: { value: PALETTE.rimDeep },
       uSpark: { value: PALETTE.spark }, uSparkGlow: { value: PALETTE.sparkGlow }, uHazeColor: { value: PALETTE.haze }, uEdgeColor: { value: PALETTE.edge },
       uHarmonics: { value: strands.harmonics }, uRates: { value: strands.rates }, uPhases: { value: strands.phases },
@@ -354,7 +374,7 @@ export default function CrystalizedBall({ icons, paused = false, onReady }: Crys
     const dust = {
       uCenter: field.uCenter, uRadius: field.uRadius, uDpr: field.uDpr, uViewport: { value: [1, 1] }, uPointScale: { value: 1 },
       uTime: { value: 0 }, uTurn: { value: turn }, uTones: { value: PALETTE.tones }, uRimTone: { value: PALETTE.rim },
-      tHome: { value: homeTexture }, tSeed: { value: seedTexture }, tOffset: { value: homeTexture }, uStirred: { value: 0 },
+      tHome: { value: homeTexture }, tSeed: { value: seedTexture }, tOffset: { value: homeTexture }, uStirred: { value: 0 }, uCollapse: field.uCollapse,
     };
     // 휘젓기 상태는 float 색 버퍼에 쓴다. 참조처럼 32비트가 안 되면 16비트, 둘 다 안 되면 휘젓기 없이 돈다(아이콘도 같다).
     const fullFloat = !!gl.getExtension('EXT_color_buffer_float');
@@ -467,6 +487,7 @@ export default function CrystalizedBall({ icons, paused = false, onReady }: Crys
         field.uFrame.value = Math.floor(time * 48) % 100000;
         field.uBins.value = clamp(Math.round((Math.PI * 2 * radius) / 2.6), 240, 900);
         dust.uTime.value = time;
+        field.uCollapse.value = collapseRef.current;
         dust.uViewport.value = [width, height];
         dust.uPointScale.value = Math.max(1, radius / 491);
         if (stirDt > 0 && read && write) {
@@ -491,13 +512,16 @@ export default function CrystalizedBall({ icons, paused = false, onReady }: Crys
         gl.clearColor(0, 0, 0, 0);
         renderer.render({ scene: fieldMesh, clear: true });
         renderer.render({ scene: dustMesh, clear: false });
-        // 아이콘: 먼지와 같은 fieldPoint(표류 + 휘젓기 offset), 같은 프레임에 transform과 opacity만 쓴다.
+        // 아이콘: 먼지와 같은 fieldPoint(표류 + 휘젓기 offset)와 같은 접힘 몫, 같은 프레임에 transform과 opacity만 쓴다.
+        // 접히는 동안 아이콘은 심에 닿기 전에 사라진다(.35–.8).
+        const pull = 1 - PULL * collapseRef.current;
+        const fade = 1 - smooth(0.35, 0.8, collapseRef.current);
         iconElements.forEach((element, index) => {
           const icon = BALL_ICONS[index];
           if (!icon) return;
-          const style = iconStyle(fieldPoint(icon.home, icon.seed, time, turn, iconState[index].o));
+          const style = iconStyle(fieldPoint(icon.home, icon.seed, time, turn, iconState[index].o).map(v => v * pull) as Vec3);
           element.style.transform = style.transform;
-          element.style.opacity = String(style.opacity);
+          element.style.opacity = String(fade === 1 ? style.opacity : Math.round(style.opacity * fade * 1000) / 1000);
           element.style.zIndex = String(style.zIndex);
         });
         if (!ready) {

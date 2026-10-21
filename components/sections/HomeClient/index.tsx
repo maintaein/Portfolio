@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useRef, useState, type ComponentType, type Ref } from 'react';
+import type { CrystalizedBallHandle } from '@/components/blocks/CrystalizedBall';
 import { BALL_ICONS, ICON_SIZE, fieldPoint, iconStyle } from '@/components/blocks/CrystalizedBall/field';
 import type { ElectricLogoHandle, ElectricLogoProps } from '@/components/blocks/ElectricLogo';
 import LuminousFlowBackground, { type LuminousFlowBackgroundHandle } from '@/components/blocks/LuminousFlowBackground';
@@ -44,6 +45,7 @@ export default function HomeClient() {
   const logoHostRef = useRef<HTMLDivElement>(null);
   const heroStaticRef = useRef<HTMLDivElement>(null);
   const ballIconsRef = useRef<HTMLDivElement>(null);
+  const ballRef = useRef<CrystalizedBallHandle>(null);
   const headlineRef = useRef<HTMLHeadingElement>(null);
   const bootRef = useRef<BootSequenceHandle>(null);
   // 그리기 전 판정 스크립트(lib/introGate.ts)가 붙인 표시를 하이드레이션 때 한 번 읽는다. 마크업에는 쓰지 않는다.
@@ -71,7 +73,8 @@ export default function HomeClient() {
   const motionReady = routeResolved && preferenceReady;
   // About 레일과 같이 1024px부터만 WebGL 로고와 볼을 띄운다. 그 아래와 모션 감소는 앵커의 정적 실루엣과 정적 볼이다.
   const glLogo = wideScreen && preferenceReady && !reducedMotion && !introPending;
-  // 로고가 Hero를 떠나면(boundary·about) 볼은 사라진 채 멈춘다. Task 10의 변신 전까지의 임시 교대다.
+  // 쉬는 자리마다 그리는 GL host는 하나다. Hero에서는 볼이 돌고 로고는 한 장만 미리 그린 채 멈춘다.
+  // About에서는 로고가 돌고 볼은 접혀 사라진 채 멈춘다. 변신 동안(boundary)만 둘이 함께 그린다.
   const heroResting = logoOwner === 'hero' || logoOwner === 'none';
   const activeLabel = HOME_SECTION_CONFIG.find(section => section.id === active)?.label ?? 'Overview';
   const [announcement, setAnnouncement] = useState('');
@@ -100,7 +103,7 @@ export default function HomeClient() {
   useEffect(() => {
     const root = rootRef.current, header = headerRef.current, wordmark = wordmarkRef.current, logoHost = logoHostRef.current;
     if (!motionModule || !root || !header || !wordmark || !logoHost) return;
-    const motion = motionModule.createPortfolioMotion({ root, header, wordmark, logoHost, reduced: reducedMotion, onLogoOwnerChange: setLogoOwner });
+    const motion = motionModule.createPortfolioMotion({ root, header, wordmark, logoHost, ball: ballRef, reduced: reducedMotion, onLogoOwnerChange: setLogoOwner });
     motionRef.current = motion;
     return () => { motion.destroy(); motionRef.current = null; setLogoOwner('none'); };
   }, [motionModule, reducedMotion]);
@@ -156,7 +159,7 @@ export default function HomeClient() {
                   <span style={{ maskImage: `url(/icons-mono/${name}.svg)`, WebkitMaskImage: `url(/icons-mono/${name}.svg)` }} />
                 </span>)}
               </div>
-              {glLogo ? <DynamicCrystalizedBall icons={ballIconsRef} paused={!heroResting || !motionReady || !pageVisible || obscured} onReady={ballDone} /> : null}
+              {glLogo ? <DynamicCrystalizedBall ref={ballRef} icons={ballIconsRef} paused={logoOwner === 'about' || !motionReady || !pageVisible || obscured} onReady={ballDone} /> : null}
             </div>
           </div>
         </section>
@@ -167,10 +170,10 @@ export default function HomeClient() {
           </div>;
         })}
         {/* 공유 로고 host. About의 원형 마스크와 overflow-x: clip 밖, 문서 좌표에 산다.
-            바깥은 경계가 옮기고 안쪽은 포인터만 기울인다. */}
+            바깥은 경계가 옮기고, 안쪽 불투명도는 변신 진행도(Hero에서 0)다. */}
         <div ref={logoHostRef} data-logo-host aria-hidden="true" className="logo-host">
           <div>
-            {/* Hero에서 쉬는 동안 host는 숨어 돌지 않는다. 한 장만 미리 그려 준비를 알리고 Hero를 떠날 때 돈다. */}
+            {/* Hero에서 쉬는 동안 host는 숨어 돌지 않는다. 한 장만 미리 그려 준비를 알리고 변신이 시작되면 돈다. */}
             {glLogo ? <DynamicElectricLogo ref={setLogo} src={LOGO_SRCS[logoOwner === 'about' ? aboutChapter : 0]} active={!heroResting && motionReady && pageVisible && !obscured}
               prewarm preloadSrcs={LOGO_SRCS} onReady={() => setLogoReady(true)} color="#7fe3ee" glowColor="#03b3c3"
               intensity={0.65} glow={0.3} speed={1.1} flicker={0.25} interactive={false} /> : null}

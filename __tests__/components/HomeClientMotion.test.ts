@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { gsap, ScrollTrigger } from '@/lib/gsap';
 import type { ElectricLogoHandle } from '@/components/blocks/ElectricLogo';
-import { createPortfolioMotion, type LogoOwner, type PortfolioMotion } from '@/components/sections/HomeClient/motion';
+import { CORE, LOGO_SECONDS, ORBIT, createPortfolioMotion, logoPhases, type LogoOwner, type PortfolioMotion } from '@/components/sections/HomeClient/motion';
 
 // jsdom에는 레이아웃이 없어 실제 브라우저가 줄 offset 값을 요소마다 심는다.
 type Box = { x: number; y: number; w: number; h: number };
@@ -75,19 +75,26 @@ function build() {
   place(host, { x: 0, y: 0, w: 360, h: 360 }, root);
 }
 
+// 크리스털 볼 손잡이. 경계가 접힘 정도(0 쉬는 볼 ~ 1 작은 고리)를 프레임마다 넘긴다.
+const ball = { setCollapse: vi.fn() };
 const create = (options: { logo?: ElectricLogoHandle | null; reduced?: boolean } = {}) => {
-  motion = createPortfolioMotion({ root, header, wordmark, logoHost: host, reduced: options.reduced ?? false, onLogoOwnerChange: owner => owners.push(owner) });
+  motion = createPortfolioMotion({ root, header, wordmark, logoHost: host, ball: { current: ball }, reduced: options.reduced ?? false, onLogoOwnerChange: owner => owners.push(owner) });
   motion.setLogo(options.logo === undefined ? handle : options.logo);
   return motion;
 };
 const scrollAt = (y: number) => { documentY = y; window.dispatchEvent(new Event('scroll')); ScrollTrigger.update(); };
 // 루트 시간을 지금에서 앞으로 민다. 재생은 시간으로만 간다. 테스트 사이 rAF 틱이 루트를 되돌려도 지금 기준이다.
 const advance = (seconds: number) => gsap.updateRoot(gsap.globalTimeline.time() + seconds);
-const numbers = (value: string) => (value.replace('translate3d', '').match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
-// translate3d(x, y, 0) perspective(...) rotateX rotateY scale
-const logo = () => { const [x, y, , , rx, ry, scale] = numbers(host.style.transform); return { x, y, rx, ry, scale }; };
-const HERO_LOGO = { x: 960, y: 300, rx: 56, ry: -24, scale: 1 };
-const ABOUT_LOGO = { x: 140, y: 1100, rx: 0, ry: 0, scale: 1 };
+const numbers = (value: string) => (value.replace(/translate3d|translate/, '').match(/-?\d+(\.\d+)?(e-?\d+)?/g) ?? []).map(Number);
+// host: translate3d(x, y, 0). 크기는 About 앵커 그대로이고 기울지 않는다(Hero에서는 숨는다).
+const logo = () => { const [x, y, z] = numbers(host.style.transform); return { x, y, z }; };
+const HERO_LOGO = { x: 960, y: 300, z: 0 };
+const ABOUT_LOGO = { x: 140, y: 1100, z: 0 };
+// 볼(hero-object 앵커): translate(dx, dy) scale(s). Hero 앵커 가운데 (1140, 480), About 앵커 가운데 (320, 1280).
+const orb = () => { const [dx, dy, scale] = numbers(heroObject.style.transform); return { dx: dx ?? 0, dy: dy ?? 0, scale: scale ?? 1, opacity: heroObject.style.opacity }; };
+const lastCall = (fn: { mock: { calls: unknown[][] } }) => fn.mock.calls.at(-1)?.[0];
+// 로고 지점: About 본문이 나타나기 시작하는 R(잠금 824 - 화면 절반 450 = 374)에서 화면 높이의 12% 앞, 266. 되돌아오는 문턱은 60 위 206.
+const START = 266;
 const expectNameAt = (mode: 'hero' | 'nav') => {
   expect(wordmark.dataset.wordmarkMode).toBe(mode);
   expect(wordmark.style.transform).toBe('');
@@ -96,6 +103,7 @@ const expectNameAt = (mode: 'hero' | 'nav') => {
 
 beforeEach(() => {
   documentY = 0; viewport = 900; letterSpacing = 0; owners.length = 0; observed = [];
+  for (const fn of [...Object.values(handle), ball.setCollapse]) fn.mockClear();
   Object.defineProperty(window, 'scrollY', { configurable: true, get: () => documentY });
   Object.defineProperty(window, 'pageYOffset', { configurable: true, get: () => documentY });
   Object.defineProperty(window, 'innerHeight', { configurable: true, get: () => viewport });
@@ -193,6 +201,11 @@ describe('이름: 지점을 넘으면 0.5초 FLIP', () => {
     expectNameAt('nav');
     expect(logo()).toEqual(ABOUT_LOGO);
     expect(owners).toEqual(['none', 'about']);
+    // 변신도 끝난 자리다: 로고는 다 보이고, 볼은 About 자리에서 작은 고리로 접혀 사라져 있다.
+    expect(inner.style.opacity).toBe('1');
+    expect(orb()).toEqual({ dx: -820, dy: 800, scale: .22, opacity: '0' });
+    expect(lastCall(ball.setCollapse)).toBe(1);
+    expect(handle.beginBoundary).not.toHaveBeenCalled();
   });
 
   it('refresh는 재생하지 않고 다시 잰 지금 쪽 자리에 둔다. 날던 이름도 내려놓는다', () => {
@@ -224,7 +237,7 @@ describe('이름: 지점을 넘으면 0.5초 FLIP', () => {
     motion!.destroy(); motion = null;
     expectNameAt('hero');
     expect(wordmark.style.fontSize + wordmark.style.left + wordmark.style.top).toBe('');
-    expect(host.style.transform).toBe('');
+    expect(host.style.transform + inner.style.opacity + heroObject.style.transform + heroObject.style.opacity).toBe('');
     scrollAt(0); scrollAt(300);
     expectNameAt('hero');
   });
@@ -281,73 +294,184 @@ describe('이름: 지점을 넘으면 0.5초 FLIP', () => {
   });
 });
 
-describe('로고: 내려앉을 자리가 다 보이는 지점을 넘으면 0.9초 이동', () => {
-  it('Hero에서는 hero-object 앵커에 비스듬히, 지점(576)을 넘으면 0.9초 동안 About 앵커로 가며 정면으로 돈다', () => {
-    create();
-    expect(logo()).toEqual(HERO_LOGO);
-    scrollAt(574);
-    expect(logo()).toEqual(HERO_LOGO);
-    scrollAt(600);
-    expect(owners.at(-1)).toBe('boundary');
-    advance(.45);
-    const mid = logo();
-    expect(mid.x).toBeLessThan(960); expect(mid.x).toBeGreaterThan(140);
-    expect(mid.rx).toBeGreaterThan(0); expect(mid.rx).toBeLessThan(56);
-    advance(.5);
-    expect(logo()).toEqual(ABOUT_LOGO);
-    expect(owners).toEqual(['none', 'hero', 'boundary', 'about']);
+// Task 10(사용자 결정 2026-10-21, background_good.mp4 0–2초). 볼이 제자리에서 작은 고리로 접히고(줄기), 같은 지름의 Electric 원이
+// 넘겨받아 About으로 날아가(이동), 그 자리에서 React 로고로 풀린다(펼침). 진행도 하나를 1.2초 동안 시간으로 돌리고
+// 모든 값이 진행도의 함수라 어느 지점에서든 같은 길을 거꾸로 밟는다.
+describe('변신 시간표', () => {
+  const at = logoPhases;
+  const scale = (p: number) => 1 - (1 - CORE) * at(p).contract;
+
+  it('끝점: 0은 쉬는 볼, 1은 내려앉은 로고이고 전체는 1.2초다', () => {
+    expect(at(0)).toEqual({ contract: 0, ball: 1, logo: 0, travel: 0, grow: 0, boundary: 1 });
+    expect(at(1)).toEqual({ contract: 1, ball: 0, logo: 1, travel: 1, grow: 1, boundary: 0 });
+    expect(LOGO_SECONDS).toBe(1.2);
+    expect([CORE, ORBIT]).toEqual([.22, .7]);
   });
 
-  // 리뷰 Important 1. 화면 비율 고정값(70%)은 About이 보이기도 전에 떠나 내려앉는 자리가 화면 밖이었다. 지점은 About 앵커로 잰다.
-  it('지점은 앵커에서 다시 재고, 이름 문턱 아래·About 잠금 자리 위로 묶는다', () => {
-    place(aboutLogo, { x: 140, y: 1300, w: 360, h: 360 });
+  it('줄기 0–.42, 이동 .36–.8, 펼침 .68–1. 앞 구간 끝에 다음 구간이 조금씩 겹친다', () => {
+    expect(at(.42).contract).toBe(1);
+    expect(at(.21).contract).toBeCloseTo(.5, 5);
+    expect(at(.36).travel).toBe(0);
+    expect(at(.58).travel).toBeCloseTo(.5, 5);
+    expect(at(.8).travel).toBe(1);
+    expect(at(.68)).toMatchObject({ grow: 0, boundary: 1 });
+    expect(at(.84).boundary).toBeCloseTo(.5, 5);
+    // 떠날 때 볼은 이미 작은 고리다.
+    expect(at(.36).contract).toBeGreaterThan(.95);
+  });
+
+  it('인계: Electric 원은 .2–.36에 나타나고 볼은 .28–.42에 사라진다. 원이 나타나기 시작할 때 볼은 0.7배 아래로 줄어 있다', () => {
+    expect(at(.2).logo).toBe(0);
+    expect(at(.36).logo).toBe(1);
+    expect(at(.28).ball).toBe(1);
+    expect(at(.42).ball).toBe(0);
+    expect(scale(.2)).toBeLessThan(.7);
+  });
+
+  it('모든 값은 진행도에 대해 한쪽으로만 움직여 되감기가 같은 길을 거꾸로 밟는다', () => {
+    let last = at(0);
+    for (let i = 1; i <= 400; i++) {
+      const now = at(i / 400);
+      for (const key of ['contract', 'logo', 'travel', 'grow'] as const) expect(now[key]).toBeGreaterThanOrEqual(last[key]);
+      for (const key of ['ball', 'boundary'] as const) expect(now[key]).toBeLessThanOrEqual(last[key]);
+      last = now;
+    }
+  });
+});
+
+describe('로고: About 본문보다 먼저 내려앉게 떠나는 변신', () => {
+  it('Hero에서 쉬는 동안 host는 Hero 앵커 가운데에 숨어 있고 볼은 그대로다', () => {
     create();
-    // 1300 + 360 + 16 - 900 = 776.
-    scrollAt(774); expect(owners.at(-1)).toBe('hero');
-    scrollAt(778); expect(owners.at(-1)).toBe('boundary');
+    expect(logo()).toEqual(HERO_LOGO);
+    expect(inner.style.opacity).toBe('0');
+    expect(heroObject.style.transform + heroObject.style.opacity).toBe('');
+    expect(lastCall(ball.setCollapse)).toBe(0);
+    expect(owners).toEqual(['none', 'hero']);
+  });
+
+  it('지점은 About 본문이 나타나는 R에서 화면 높이의 12% 앞이고 이름 문턱 아래·잠금 자리 위로 묶는다. 되돌아오는 문턱은 60 위다', () => {
+    create();
+    scrollAt(START - 1); expect(owners.at(-1)).toBe('hero');
+    scrollAt(START); expect(owners.at(-1)).toBe('boundary');
+    advance(2); expect(owners.at(-1)).toBe('about');
+    scrollAt(START - 59); expect(owners.at(-1)).toBe('about');
+    scrollAt(START - 60); expect(owners.at(-1)).toBe('boundary');
+    advance(2); expect(owners.at(-1)).toBe('hero');
+    scrollAt(START - 1); expect(owners.at(-1)).toBe('hero');
     motion!.destroy(); owners.length = 0; documentY = 0;
-    // 두 앵커가 가까우면 이름 문턱(180)보다 먼저 떠나지 않는다.
-    place(aboutLogo, { x: 140, y: 300, w: 360, h: 360 });
+    // 1280x720: R = 824 - 360 = 464, 지점 464 - 86.4 = 377.6.
+    viewport = 720;
+    create();
+    scrollAt(377); expect(owners.at(-1)).toBe('hero');
+    scrollAt(378); expect(owners.at(-1)).toBe('boundary');
+    motion!.destroy(); owners.length = 0; documentY = 0; viewport = 900;
+    // About이 가까우면 이름 문턱(180)보다 먼저 떠나지 않는다.
+    place(about, { x: 0, y: 500, w: 1440, h: 900 });
     create();
     scrollAt(179); expect(owners.at(-1)).toBe('hero');
     scrollAt(181); expect(owners.at(-1)).toBe('boundary');
     motion!.destroy(); owners.length = 0; documentY = 0;
-    // 멀면 About 잠금 자리(900 - 76 = 824)에 닿기 전에 떠난다.
-    place(aboutLogo, { x: 140, y: 2400, w: 360, h: 360 });
+    // 그래도 About 잠금 자리(200 - 76 = 124)에 닿기 전에 떠난다.
+    place(about, { x: 0, y: 200, w: 1440, h: 900 });
     create();
-    scrollAt(822); expect(owners.at(-1)).toBe('hero');
-    scrollAt(823); expect(owners.at(-1)).toBe('boundary');
+    scrollAt(122); expect(owners.at(-1)).toBe('hero');
+    scrollAt(123); expect(owners.at(-1)).toBe('boundary');
+  });
+
+  it('줄기: 볼이 제자리에서 접히고 같은 지름의 Electric 원(반지름 = 반변)이 넘겨받는다. 경계는 가장 큰 원으로 한 번만 시작한다', () => {
+    create();
+    scrollAt(START);
+    expect(handle.beginBoundary).toHaveBeenCalledTimes(1);
+    expect(handle.beginBoundary).toHaveBeenCalledWith({ width: 360, height: 360, radius: 180 });
+    advance(.3 * 1.2);
+    const { contract } = logoPhases(.3);
+    expect(lastCall(ball.setCollapse)).toBeCloseTo(contract, 2);
+    expect(orb().scale).toBeCloseTo(1 - (1 - CORE) * contract, 2);
+    expect(orb().dx + orb().dy).toBe(0);
+    const ring = 360 * orb().scale;
+    const target = lastCall(handle.setBoundaryTarget) as { width: number; height: number; radius: number };
+    expect(target.width).toBeCloseTo(ring, 3);
+    expect(target.height).toBeCloseTo(ring, 3);
+    expect(target.radius).toBeCloseTo(ring / 2, 3);
+    expect(lastCall(handle.seekBoundary)).toBe(1);
+    // 인계 한가운데: 둘 다 반쯤 보인다.
+    expect(Number(orb().opacity)).toBeGreaterThan(0); expect(Number(orb().opacity)).toBeLessThan(1);
+    expect(Number(inner.style.opacity)).toBeGreaterThan(0); expect(Number(inner.style.opacity)).toBeLessThan(1);
+    expect(logo()).toEqual(HERO_LOGO);
+    expect(handle.beginBoundary).toHaveBeenCalledTimes(1);
+  });
+
+  it('이동과 펼침: 작은 원이 문서 좌표로 About 앵커에 가서 React 로고로 풀리고, 1.2초에 정확히 내려앉는다', () => {
+    create();
+    scrollAt(START);
+    advance(.6 * 1.2);
+    const mid = logo();
+    expect(mid.x).toBeLessThan(960); expect(mid.x).toBeGreaterThan(140);
+    expect(mid.y).toBeGreaterThan(300); expect(mid.y).toBeLessThan(1100);
+    expect((lastCall(handle.setBoundaryTarget) as { width: number }).width).toBeCloseTo(360 * CORE, 3);
+    expect(lastCall(handle.seekBoundary)).toBe(1);
+    expect(inner.style.opacity).toBe('1');
+    expect(orb().opacity).toBe('0');
+    // 사라진 볼도 같은 길에 있다(host 가운데 = Hero 앵커 가운데 + 볼 이동).
+    expect(1140 + orb().dx).toBeCloseTo(mid.x + 180, 3);
+    expect(480 + orb().dy).toBeCloseTo(mid.y + 180, 3);
+    advance(.24 * 1.2 - .01);
+    expect(owners.at(-1)).toBe('boundary');
+    expect(lastCall(handle.seekBoundary) as number).toBeGreaterThan(.4);
+    expect(lastCall(handle.seekBoundary) as number).toBeLessThan(.6);
+    advance(.16 * 1.2 - .01);
+    expect(owners.at(-1)).toBe('boundary');
+    advance(.03);
+    expect(logo()).toEqual(ABOUT_LOGO);
+    expect(lastCall(handle.seekBoundary)).toBe(0);
+    expect(lastCall(handle.setBoundaryTarget)).toEqual({ width: 360 * ORBIT, height: 360 * ORBIT, radius: 180 * ORBIT });
+    expect(handle.endBoundary).toHaveBeenCalledTimes(1);
+    expect(owners).toEqual(['none', 'hero', 'boundary', 'about']);
   });
 
   it('재생 중에 스크롤이 계속 움직여도 About 앵커(문서 좌표)에 정확히 내려앉는다', () => {
     create();
-    scrollAt(600); advance(.3);
-    scrollAt(700); advance(.2);
+    scrollAt(START); advance(.3);
+    scrollAt(500); advance(.2);
     scrollAt(808); advance(1);
     expect(logo()).toEqual(ABOUT_LOGO);
   });
 
-  it('되넘으면 남은 거리만큼 거꾸로 돌고, 도중의 되넘음은 지금 자리에서 이어 간다', () => {
+  it('도중에 되넘으면 보이는 그대로에서 거꾸로 돌아 볼로 펼쳐지고 지난 진행도만큼의 시간만 쓴다. About에서 돌아가는 길도 같다', () => {
     create();
-    scrollAt(600); advance(1);
-    scrollAt(500);
+    scrollAt(START); advance(.5 * 1.2);
+    const seen = () => ({ host: host.style.transform, orb: heroObject.style.transform + heroObject.style.opacity, inner: inner.style.opacity,
+      seek: lastCall(handle.seekBoundary), target: lastCall(handle.setBoundaryTarget), collapse: lastCall(ball.setCollapse) });
+    const before = seen();
+    scrollAt(START - 60);
     expect(owners.at(-1)).toBe('boundary');
-    advance(.3);
-    const mid = logo();
-    scrollAt(600);
-    expect(logo()).toEqual(mid);
-    advance(1);
-    expect(logo()).toEqual(ABOUT_LOGO);
-    scrollAt(0); advance(1);
-    expect(logo()).toEqual(HERO_LOGO);
+    expect(seen()).toEqual(before);
+    advance(.5 * 1.2 - .02);
+    expect(owners.at(-1)).toBe('boundary');
+    advance(.04);
     expect(owners.at(-1)).toBe('hero');
+    expect(logo()).toEqual(HERO_LOGO);
+    expect(heroObject.style.transform + heroObject.style.opacity).toBe('');
+    expect(inner.style.opacity).toBe('0');
+    expect(lastCall(ball.setCollapse)).toBe(0);
+    expect(handle.beginBoundary).toHaveBeenCalledTimes(1);
+    expect(handle.endBoundary).toHaveBeenCalledTimes(1);
+    scrollAt(START); advance(2);
+    scrollAt(0);
+    expect(handle.beginBoundary).toHaveBeenCalledTimes(3);
+    // 로고가 원으로 접혀 가는 중(p = .84).
+    advance(.16 * 1.2);
+    expect(lastCall(handle.seekBoundary) as number).toBeCloseTo(.5, 1);
+    advance(2);
+    expect(owners.at(-1)).toBe('hero');
+    expect(handle.endBoundary).toHaveBeenCalledTimes(3);
   });
 
   it('refresh는 Hero에 있는 동안 About 자리를 쓰지 않고, About에서는 다시 잰 앵커에 바로 둔다', () => {
     create();
     motion!.refresh();
     expect(logo()).toEqual(HERO_LOGO);
-    scrollAt(808); advance(1);
+    scrollAt(808); advance(2);
     place(aboutLogo, { x: 180, y: 1140, w: 300, h: 300 });
     motion!.refresh();
     expect(logo()).toEqual({ ...ABOUT_LOGO, x: 180, y: 1140 });
@@ -362,73 +486,54 @@ describe('로고: 내려앉을 자리가 다 보이는 지점을 넘으면 0.9�
   it('GL 손잡이가 없으면 host를 건드리지 않고, 오면 지금 쪽 자리에서 받아들인다', () => {
     create({ logo: null });
     scrollAt(808);
-    expect(host.style.transform).toBe('');
+    // 볼도 Hero에 그대로 남는다. GL 없이 접혀 사라지면 대신 설 것이 없다.
+    expect(host.style.transform + heroObject.style.transform + heroObject.style.opacity).toBe('');
     expect(owners).toEqual(['none']);
     motion!.setLogo(handle);
     expect(logo()).toEqual(ABOUT_LOGO);
     expect(owners).toEqual(['none', 'about']);
     motion!.setLogo(null);
-    expect(host.style.transform).toBe('');
+    expect(host.style.transform + heroObject.style.transform + heroObject.style.opacity).toBe('');
     expect(owners.at(-1)).toBe('none');
   });
 
-  it('모션 감소는 바로 그쪽 자리로 바뀐다', () => {
+  it('날아가는 도중에 GL 손잡이가 떠나면 경계를 닫으려 부르지 않고 볼을 Hero 쉬는 자리에 돌려놓는다', () => {
+    create();
+    scrollAt(START); advance(.5);
+    motion!.setLogo(null);
+    expect(handle.endBoundary).not.toHaveBeenCalled();
+    expect(heroObject.style.transform + heroObject.style.opacity).toBe('');
+    advance(2);
+    expect(owners.at(-1)).toBe('none');
+  });
+
+  it('모션 감소는 재생 없이 바로 그쪽 쉬는 자리로 바뀐다', () => {
     create({ reduced: true });
     scrollAt(808);
     expect(logo()).toEqual(ABOUT_LOGO);
     expect(owners).toEqual(['none', 'hero', 'about']);
+    expect(orb().opacity).toBe('0');
+    expect(inner.style.opacity).toBe('1');
+    scrollAt(0);
+    expect(heroObject.style.transform + heroObject.style.opacity).toBe('');
+    expect(inner.style.opacity).toBe('0');
+    expect(handle.beginBoundary).not.toHaveBeenCalled();
   });
 
-  it('chapter 로고가 바뀌어도 경계는 손잡이를 다시 부르지 않는다', () => {
+  it('내려앉은 뒤에는 chapter 로고가 바뀌어도 경계 손잡이를 다시 부르지 않는다', () => {
     create();
-    scrollAt(404); advance(1); scrollAt(808);
-    expect(handle.beginBoundary).not.toHaveBeenCalled();
-    expect(handle.seekBoundary).not.toHaveBeenCalled();
+    scrollAt(START); advance(2);
+    const calls = Object.values(handle).map(fn => fn.mock.calls.length);
+    scrollAt(808); advance(1);
+    expect(Object.values(handle).map(fn => fn.mock.calls.length)).toEqual(calls);
   });
 });
 
-describe('pointer 반응', () => {
-  // jsdom에는 PointerEvent가 없다.
-  const move = (clientX: number, clientY: number, pointerType: string) =>
-    window.dispatchEvent(Object.assign(new MouseEvent('pointermove', { clientX, clientY }), { pointerType }));
-  // quickTo(0.6초)가 끝나도록 루트 시간을 앞으로 민다.
-  const settle = () => advance(5);
-  const tilt = () => ({ rx: Number(gsap.getProperty(inner, 'rotationX')), ry: Number(gsap.getProperty(inner, 'rotationY')), x: Number(gsap.getProperty(inner, 'x')), y: Number(gsap.getProperty(inner, 'y')) });
-
-  it('host 로컬 좌표로 바꾼 포인터에 안쪽만 ±8°·12px 기울고 문장은 그대로다', () => {
-    create();
-    const outer = host.style.transform;
-    // host 가운데(1140, 480)에서 오른쪽 끝·위쪽 끝을 넘어간 자리.
-    move(1500, 0, 'mouse');
-    settle();
-    expect(tilt()).toMatchObject({ rx: 8, ry: 8, x: 12, y: -12 });
-    expect(host.style.transform).toBe(outer);
-    expect(heroName.style.transform).toBe('');
-    move(1230, 480, 'mouse');
-    settle();
-    expect(tilt().ry).toBeCloseTo(4, 3);
-  });
-
-  it('Hero를 떠나는 이동 동안 포인터 반응이 잦아들어 About에는 남지 않는다', () => {
-    create();
-    move(1500, 0, 'mouse');
-    settle();
-    // 이동이 끝나는 프레임에 기울기 0을 걸고, 그 quickTo가 다음 시간에 닿는다.
-    scrollAt(600); settle(); settle();
-    expect(tilt()).toMatchObject({ rx: 0, ry: 0, x: 0, y: 0 });
-  });
-
-  it('모션 감소는 포인터에 기울지 않는다', () => {
-    create({ reduced: true });
-    move(1500, 0, 'mouse');
-    settle();
-    expect(tilt().ry).toBe(0);
-  });
-
-  it('터치는 기울이지 않는다', () => {
-    create();
-    move(1500, 0, 'touch');
-    settle();
-    expect(tilt().ry).toBe(0);
-  });
+// Task 9 리뷰 Minor 5. Hero에서는 로고 host가 숨어 있으니 포인터로 기울일 것이 없다. About에서도 기울지 않았다.
+it('로고 host는 포인터에 기울지 않는다', () => {
+  create();
+  window.dispatchEvent(Object.assign(new MouseEvent('pointermove', { clientX: 1500, clientY: 0 }), { pointerType: 'mouse' }));
+  advance(5);
+  expect(inner.style.transform).toBe('');
+  expect(gsap.getTweensOf(inner)).toHaveLength(0);
 });
