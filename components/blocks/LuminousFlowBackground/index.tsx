@@ -158,8 +158,9 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
           if (textureUrl === url) textureUrl = null;
         };
         if (!paint) return finish();
-        // 한 번에 그리면 이 기기에서 GPU가 1초 넘게 묶여 첫 화면이 멈춘다. 프레임마다 띠 하나씩 채운다.
-        // 띠는 같은 변환을 잘라 그리고 높이는 8줄의 배수다. 그래디언트 디더 위상이 맞아 한 번에 그린 것과 2/255 안에서 같다.
+        // Drawn in one go, this tied up the GPU for over a second on the dev machine and froze the first screen, so one strip fills per frame.
+        // Each strip clips the same transform and is a multiple of 8 rows, which keeps the gradient dither in phase: within 2/255 of a single draw.
+        // shortcut: the 8-row phase and the 2/255 match were measured on Chrome/ANGLE D3D11 only; re-measure on new GPUs or browsers before trusting the seams.
         const rows = Math.max(8, Math.floor(25e4 / texture.width / 8) * 8);
         let top = 0;
         const drawStrip = () => {
