@@ -204,6 +204,27 @@ it('the GL ball mounts like the GL logo, hides the static glass after its first 
   expect(narrow.container.querySelectorAll('.hero-ball-icons > span')).toHaveLength(6);
 });
 
+// Task 10 리뷰 Minor 2. GL 볼도 로고처럼 Hero에서 쉬는 동안에만 정적 유리와 바뀐다. 변신 중(boundary)이나 About에서 준비돼도
+// 접히는 정적 볼을 그대로 두고, Hero에 돌아와 쉴 때 바꾼다. 한 번 바뀐 뒤에는 변신 동안에도 그대로다.
+it('the GL ball replaces the static glass only while it rests at the Hero, never during a flight', async () => {
+  flags.wide = true;
+  const view = render(<HomeClient />); await flush();
+  const shell = view.container.querySelector('.hero-ball')!;
+  act(() => motion.owner!('boundary'));
+  fireEvent.click(view.container.querySelector('[data-ball-ready]')!);
+  expect(shell).not.toHaveAttribute('data-ball-live');
+  act(() => motion.owner!('about'));
+  expect(shell).not.toHaveAttribute('data-ball-live');
+  act(() => motion.owner!('boundary'));
+  expect(shell).not.toHaveAttribute('data-ball-live');
+  act(() => motion.owner!('hero'));
+  expect(shell).toHaveAttribute('data-ball-live');
+  for (const owner of ['boundary', 'about', 'boundary'] as const) {
+    act(() => motion.owner!(owner));
+    expect(shell).toHaveAttribute('data-ball-live');
+  }
+});
+
 it('connects only the name channel when the GL logo is not mounted (narrow screens)', async () => {
   const { container } = render(<HomeClient />); await flush();
   expect(container.querySelector('[data-electric-src]')).toBeNull();

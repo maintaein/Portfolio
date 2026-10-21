@@ -66,6 +66,8 @@ export default function HomeClient() {
   const [logoLive, setLogoLive] = useState(false);
   // GL 볼이 첫 그림을 그린 뒤에만 정적 유리가 물러난다.
   const [ballReady, setBallReady] = useState(false);
+  // GL 볼도 로고처럼 쉬는 자리에서만 정적 유리와 바뀐다. 접히거나 펼쳐지는 도중에 준비돼도 Hero에 돌아와 쉴 때 바꾼다.
+  const [ballLive, setBallLive] = useState(false);
   const ballDone = useCallback(() => setBallReady(true), []);
   const motionRef = useRef<PortfolioMotion | null>(null);
   // 명시적 이동 직전에 About의 읽기 잠금을 풀어 목적지로 가는 스크롤을 붙잡지 않는다.
@@ -123,6 +125,10 @@ export default function HomeClient() {
   }, [introEnabled, motionModule]);
   useEffect(() => { if (!logo) setLogoReady(false); }, [logo]);
   useEffect(() => { if (!glLogo) setBallReady(false); }, [glLogo]);
+  useEffect(() => {
+    if (!glLogo || !ballReady) setBallLive(false);
+    else if (logoOwner === 'hero' || logoOwner === 'none') setBallLive(true);
+  }, [glLogo, ballReady, logoOwner]);
 
   return <SectionActivityProvider pageVisible={pageVisible} routeResolved={routeResolved} motionReady={motionReady} reducedMotion={reducedMotion} obscured={obscured}>
     {/* 준비 전 기본값(reduced: true)으로 진입을 끝내지 않는다. 그리기 전 판정이 이미 모션 감소를 걸렀다.
@@ -152,7 +158,7 @@ export default function HomeClient() {
           <div data-motion-anchor="hero-object" aria-hidden="true" className="hero-object">
             {/* 껍질은 인트로의 opacity·크기와 로고와의 교대를 받는다. 아이콘 층은 하나뿐이고 유리(캔버스) 아래에 있다.
                 기술 이름은 Skills에 있어 아이콘은 장식이다. */}
-            <div ref={heroStaticRef} className="hero-ball" data-ball-live={glLogo && ballReady ? '' : undefined}>
+            <div ref={heroStaticRef} className="hero-ball" data-ball-live={ballLive ? '' : undefined}>
               <div className="hero-ball-glass" />
               <div ref={ballIconsRef} className="hero-ball-icons">
                 {BALL_REST.map(({ name, transform, opacity, zIndex }) => <span key={name} style={{ width: `${ICON_SIZE * 100}%`, transform, opacity, zIndex }}>

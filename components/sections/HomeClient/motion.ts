@@ -48,13 +48,15 @@ const inOut = (t: number) => t < .5 ? 4 * t * t * t : 1 - (2 - 2 * t) ** 3 / 2;
 const out = (t: number) => 1 - (1 - t) ** 3;
 
 // 진행도 p(0 Hero의 쉬는 볼, 1 About에 내려앉은 로고)의 세 구간. 모든 값이 p만의 함수라 어디서 되돌아도 같은 길을 거꾸로 밟는다.
-// 줄기 0–.42: 볼이 제자리에서 작은 고리로 접힌다(안의 먼지·아이콘이 가운데로). 참조 1.23–1.70초, 판이 작은 타일로 줄어든다.
-// 인계 .2–.42: 같은 지름의 Electric 원이 나타나고 볼이 사라진다. 참조 1.67–1.77초, 타일의 채움이 빠지고 기호만 남는다.
+// 줄기 0–.42: 볼이 채워진 한 덩이로 제자리에서 작게 준다. 참조 1.23–1.70초, 판이 속까지 함께 작은 타일로 줄어든다.
+// 빠짐 .3–.42: 그 끝에서만 속(먼지·안개·아이콘)이 고리 가운데로 빠진다. 참조 1.67–1.77초, 타일의 채움이 빠지고 기호만 남는다.
+// 인계 .2–.42: 같은 지름의 Electric 원이 나타나고 볼이 사라진다.
 // 이동 .36–.8: 작은 원이 About 앵커로 간다. 참조 1.77–1.97초. 펼침 .68–1: 원이 React 궤도로 풀리며 About 크기로 큰다. 참조 1.93–2.03초와 0.47–0.80초.
 export function logoPhases(p: number) {
   const unfold = span(.68, 1, p);
   return {
     contract: inOut(span(0, .42, p)),
+    drain: smooth(span(.3, .42, p)),
     ball: 1 - smooth(span(.28, .42, p)),
     logo: smooth(span(.2, .36, p)),
     travel: inOut(span(.36, .8, p)),
@@ -202,7 +204,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     if (t <= 0) clearOrb();
     else {
       if (orb instanceof HTMLElement) Object.assign(orb.style, { transform: `translate(${x - from.x}px, ${y - from.y}px) scale(${shrink})`, opacity: String(phase.ball) });
-      ball?.current?.setCollapse(phase.contract);
+      ball?.current?.setCollapse(phase.drain);
     }
     // 원은 볼 고리와 같은 화면 지름에서 넘겨받아(host는 About 크기 그대로라 컨테이너 px = 화면 px) 펼침 동안 로고 크기로 크며 풀린다.
     // 경계 캔버스 자리는 줄지 않으므로 가장 큰 원으로 한 번 잡는다. GL이 아직 그리지 않았으면 다음 프레임에 다시 잡는다.

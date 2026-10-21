@@ -302,8 +302,8 @@ describe('변신 시간표', () => {
   const scale = (p: number) => 1 - (1 - CORE) * at(p).contract;
 
   it('끝점: 0은 쉬는 볼, 1은 내려앉은 로고이고 전체는 1.2초다', () => {
-    expect(at(0)).toEqual({ contract: 0, ball: 1, logo: 0, travel: 0, grow: 0, boundary: 1 });
-    expect(at(1)).toEqual({ contract: 1, ball: 0, logo: 1, travel: 1, grow: 1, boundary: 0 });
+    expect(at(0)).toEqual({ contract: 0, drain: 0, ball: 1, logo: 0, travel: 0, grow: 0, boundary: 1 });
+    expect(at(1)).toEqual({ contract: 1, drain: 1, ball: 0, logo: 1, travel: 1, grow: 1, boundary: 0 });
     expect(LOGO_SECONDS).toBe(1.2);
     expect([CORE, ORBIT]).toEqual([.22, .7]);
   });
@@ -328,11 +328,24 @@ describe('변신 시간표', () => {
     expect(scale(.2)).toBeLessThan(.7);
   });
 
+  // Task 10 리뷰 Important 1. 참조(background_good g37–g51)의 판은 채워진 한 덩이로 줄고, 속이 빠지는 것은 끝(g50–g53)뿐이다.
+  // 그래서 볼 속(먼지·안개·아이콘)은 줄기 내내 테두리와 같은 배율이고, .3–.42에만 가운데로 빠진다.
+  it('줄기는 채워진 한 덩이다: 속은 .3까지 테두리와 같은 배율로 줄고 .3–.42에만 빠진다', () => {
+    const PULL = .85;
+    const contents = (p: number) => scale(p) * (1 - PULL * at(p).drain);
+    for (let i = 0; i <= 30; i++) expect(contents(i / 100)).toBe(scale(i / 100));
+    expect(at(.3).drain).toBe(0);
+    expect(at(.36).drain).toBeCloseTo(.5, 5);
+    expect(at(.42).drain).toBe(1);
+    // p .2(줄기 한가운데)에 테두리는 이미 0.7배 아래인데 속도 같은 배율이다. 사이에 빈 띠가 없다.
+    expect(contents(.2) / scale(.2)).toBe(1);
+  });
+
   it('모든 값은 진행도에 대해 한쪽으로만 움직여 되감기가 같은 길을 거꾸로 밟는다', () => {
     let last = at(0);
     for (let i = 1; i <= 400; i++) {
       const now = at(i / 400);
-      for (const key of ['contract', 'logo', 'travel', 'grow'] as const) expect(now[key]).toBeGreaterThanOrEqual(last[key]);
+      for (const key of ['contract', 'drain', 'logo', 'travel', 'grow'] as const) expect(now[key]).toBeGreaterThanOrEqual(last[key]);
       for (const key of ['ball', 'boundary'] as const) expect(now[key]).toBeLessThanOrEqual(last[key]);
       last = now;
     }
@@ -383,9 +396,13 @@ describe('로고: About 본문보다 먼저 내려앉게 떠나는 변신', () =
     scrollAt(START);
     expect(handle.beginBoundary).toHaveBeenCalledTimes(1);
     expect(handle.beginBoundary).toHaveBeenCalledWith({ width: 360, height: 360, radius: 180 });
-    advance(.3 * 1.2);
+    // 줄기 한가운데: 볼 전체(앵커)가 줄고 속은 아직 빠지지 않는다.
+    advance(.2 * 1.2);
+    expect(orb().scale).toBeLessThan(.7);
+    expect(lastCall(ball.setCollapse)).toBe(0);
+    advance(.1 * 1.2);
     const { contract } = logoPhases(.3);
-    expect(lastCall(ball.setCollapse)).toBeCloseTo(contract, 2);
+    expect(lastCall(ball.setCollapse)).toBeCloseTo(0, 2);
     expect(orb().scale).toBeCloseTo(1 - (1 - CORE) * contract, 2);
     expect(orb().dx + orb().dy).toBe(0);
     const ring = 360 * orb().scale;
@@ -399,6 +416,10 @@ describe('로고: About 본문보다 먼저 내려앉게 떠나는 변신', () =
     expect(Number(inner.style.opacity)).toBeGreaterThan(0); expect(Number(inner.style.opacity)).toBeLessThan(1);
     expect(logo()).toEqual(HERO_LOGO);
     expect(handle.beginBoundary).toHaveBeenCalledTimes(1);
+    // 줄기 끝(.3–.42)에만 속이 고리 가운데로 빠진다.
+    advance(.06 * 1.2);
+    expect(lastCall(ball.setCollapse) as number).toBeCloseTo(logoPhases(.36).drain, 1);
+    expect(lastCall(ball.setCollapse) as number).toBeGreaterThan(.3);
   });
 
   it('이동과 펼침: 작은 원이 문서 좌표로 About 앵커에 가서 React 로고로 풀리고, 1.2초에 정확히 내려앉는다', () => {

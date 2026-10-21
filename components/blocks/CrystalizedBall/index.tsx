@@ -11,7 +11,7 @@ import { CYAN_PALETTE } from '../Hyperspeed/presets';
 import { BALL_ICONS, FIELD_GLSL, HOVER, driftPoint, fieldPoint, iconStyle, type Vec3 } from './field';
 import { STIR, STIR_GLSL, stiffness, stirStep, trackBrush } from './stir';
 
-// Hero -> About 변신(HomeClient motion.ts)이 매 프레임 접힘 정도를 넘긴다. 0 쉬는 볼, 1 작은 고리.
+// Hero -> About 변신(HomeClient motion.ts)이 매 프레임 속이 빠진 정도를 넘긴다. 0 쉬는 볼, 1 속이 다 빠진 고리.
 export interface CrystalizedBallHandle { setCollapse(value: number): void }
 
 export interface CrystalizedBallProps {
@@ -48,7 +48,7 @@ const MAX_DPR = 1.25;
 const PIXEL_BUDGET = 4.5e5;
 const clamp = (v: number, a: number, b: number) => Math.min(Math.max(v, a), b);
 const smooth = (a: number, b: number, v: number) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
-// 접힐 때 먼지와 아이콘이 가운데로 끌려드는 몫. 볼 자체는 경계가 CSS로 줄이고, 안쪽은 그보다 더 모여 밝은 심이 된다.
+// 속이 빠질 때 먼지와 아이콘이 가운데로 끌려드는 몫. 볼 전체는 경계가 CSS로 함께 줄이고, 그 끝에서만 속이 더 모여 밝은 심이 된다.
 export const PULL = 0.85;
 
 const seeded = (start: number) => {
