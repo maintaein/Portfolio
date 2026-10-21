@@ -41,10 +41,17 @@ vi.mock('next/dynamic', async () => {
 });
 const handle = vi.hoisted(() => ({ beginBoundary: () => true, setBoundaryTarget: () => {}, seekBoundary: () => {}, endBoundary: () => {} }));
 vi.mock('@/components/blocks/ElectricLogo', () => ({
-  default: forwardRef<typeof handle, { src: string; active: boolean; onReady?: (src: string) => void }>(function Logo({ src, active, onReady }, ref) {
+  default: forwardRef<typeof handle, { src: string; active: boolean; prewarm?: boolean; onReady?: (src: string) => void }>(function Logo({ src, active, prewarm, onReady }, ref) {
     useImperativeHandle(ref, () => handle, []);
-    return <div data-electric-src={src} data-electric-active={active}><span data-signal-ready onClick={() => onReady?.(src)} /></div>;
+    return <div data-electric-src={src} data-electric-active={active} data-electric-prewarm={prewarm}><span data-signal-ready onClick={() => onReady?.(src)} /></div>;
   }),
+}));
+const ball = vi.hoisted(() => ({ icons: null as null | { current: HTMLElement | null } }));
+vi.mock('@/components/blocks/CrystalizedBall', () => ({
+  default: ({ icons, paused, onReady }: { icons: { current: HTMLElement | null }; paused?: boolean; onReady?: () => void }) => {
+    ball.icons = icons;
+    return <div data-ball-gl data-ball-paused={String(!!paused)}><span data-ball-ready onClick={() => onReady?.()} /></div>;
+  },
 }));
 beforeEach(() => {
   flags.obscured = false; flags.pageVisible = true; flags.reduced = false; flags.wide = false; flags.ready = true;
@@ -81,6 +88,10 @@ it('keeps one name button, one GL host and one Hero h1; anchors hold no readable
   expect(screen.getAllByRole('button', { name: '개요로 이동' })).toHaveLength(1);
   expect(container.querySelectorAll('[data-logo-host]')).toHaveLength(1);
   expect(container.querySelectorAll('[data-logo-host] [data-electric-src]')).toHaveLength(1);
+  // Hero 오브젝트의 GL host는 볼 하나다. Electric 로고 host는 About의 오브젝트로 남는다.
+  expect(container.querySelectorAll('[data-ball-gl]')).toHaveLength(1);
+  expect(container.querySelector('#overview [data-motion-anchor="hero-object"] [data-ball-gl]')).not.toBeNull();
+  expect(container.querySelector('#overview [data-electric-src]')).toBeNull();
   expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
   const objectAnchor = container.querySelector('#overview [data-motion-anchor="hero-object"]')!;
   expect(objectAnchor).toHaveAttribute('aria-hidden', 'true');
@@ -119,6 +130,57 @@ it('loads the boundary module after the route resolves, connects the real anchor
   expect(motion.setPaused).toHaveBeenLastCalledWith(false);
 });
 
+// Task 9: Hero 오브젝트는 크리스털 볼이다. 정적 유리와 핵심 아이콘 여섯이 서버 HTML부터 쉬는 자리에 서고,
+// GL은 같은 아이콘 층을 움직인다. 아이콘은 장식이라 읽히지 않는다(기술 이름은 Skills에 있다).
+it('the Hero object is the crystal ball: one icon layer of the six core icons at rest that the GL ball drives', async () => {
+  const { BALL_ICONS, fieldPoint, iconStyle } = await import('@/components/blocks/CrystalizedBall/field');
+  flags.wide = true;
+  const { container } = render(<HomeClient />); await flush();
+  const anchor = container.querySelector('#overview [data-motion-anchor="hero-object"]')!;
+  const shell = anchor.querySelector(':scope > .hero-ball')!;
+  expect(shell.querySelector(':scope > .hero-ball-glass')).not.toBeNull();
+  const icons = shell.querySelectorAll<HTMLElement>(':scope > .hero-ball-icons > span');
+  expect(icons).toHaveLength(6);
+  icons.forEach((icon, index) => {
+    const rest = iconStyle(fieldPoint(BALL_ICONS[index].home, BALL_ICONS[index].seed, 0, [0, 0], [0, 0, 0]));
+    expect(icon.style.transform).toBe(rest.transform);
+    expect(icon.style.opacity).toBe(String(rest.opacity));
+    expect(icon.firstElementChild!.getAttribute('style')).toContain(`/icons-mono/${BALL_ICONS[index].name}.svg`);
+  });
+  expect(ball.icons!.current).toBe(shell.querySelector('.hero-ball-icons'));
+  expect(anchor.closest('[aria-hidden="true"]')).toBe(anchor);
+  expect(screen.queryByRole('img')).toBeNull();
+});
+
+// 볼은 GL 로고와 같은 규칙으로 뜬다(1024px부터, 모션 감소가 아니고 진입이 끝난 뒤). 첫 그림 뒤에만 정적 유리가 물러난다.
+// 모달, 숨은 탭, 로고가 Hero를 떠난 동안(볼이 사라진 동안)은 멈춘다.
+it('the GL ball mounts like the GL logo, hides the static glass after its first frame and pauses on the activity flags', async () => {
+  flags.wide = true;
+  const view = render(<HomeClient />); await flush();
+  const shell = view.container.querySelector('.hero-ball')!;
+  const gl = () => view.container.querySelector('[data-ball-gl]');
+  expect(shell).not.toHaveAttribute('data-ball-live');
+  act(() => motion.owner!('hero'));
+  expect(gl()).toHaveAttribute('data-ball-paused', 'false');
+  fireEvent.click(view.container.querySelector('[data-ball-ready]')!);
+  expect(shell).toHaveAttribute('data-ball-live');
+  for (const owner of ['boundary', 'about'] as const) {
+    act(() => motion.owner!(owner));
+    expect(gl()).toHaveAttribute('data-ball-paused', 'true');
+  }
+  act(() => motion.owner!('hero'));
+  expect(gl()).toHaveAttribute('data-ball-paused', 'false');
+  flags.obscured = true; view.rerender(<HomeClient />);
+  expect(gl()).toHaveAttribute('data-ball-paused', 'true');
+  flags.obscured = false; flags.pageVisible = false; view.rerender(<HomeClient />);
+  expect(gl()).toHaveAttribute('data-ball-paused', 'true');
+  view.unmount();
+  flags.pageVisible = true; flags.wide = false;
+  const narrow = render(<HomeClient />); await flush();
+  expect(narrow.container.querySelector('[data-ball-gl]')).toBeNull();
+  expect(narrow.container.querySelectorAll('.hero-ball-icons > span')).toHaveLength(6);
+});
+
 it('connects only the name channel when the GL logo is not mounted (narrow screens)', async () => {
   const { container } = render(<HomeClient />); await flush();
   expect(container.querySelector('[data-electric-src]')).toBeNull();
@@ -134,6 +196,8 @@ it('reduced motion creates a reduced motion context and no GL logo; static ancho
   expect(motion.create).toHaveBeenLastCalledWith(expect.objectContaining({ reduced: true }));
   expect(motion.setLogo).toHaveBeenLastCalledWith(null);
   expect(container.querySelector('[data-electric-src]')).toBeNull();
+  expect(container.querySelector('[data-ball-gl]')).toBeNull();
+  expect(container.querySelectorAll('.hero-ball-icons > span')).toHaveLength(6);
   expect(container.querySelector('.portfolio-document')).not.toHaveAttribute('data-logo-live');
   expect(screen.getByTestId('wordmark').style.transform).toBe('');
 });
@@ -237,27 +301,29 @@ it('lays the Hero out as name, sentence, then object, and the object shrinks fir
   expect(css).toMatch(/@media \(min-width: 1536px\) \{[^@]*\.portfolio-hero h1 \{ font-size: var\(--font-size-d2\)/);
   expect(css).toMatch(/--hero-object-size: min\([^;]*svh\);/);
   expect(css).toMatch(/\.hero-object \{ width: var\(--hero-object-size\); \}/);
-  // JS 전·JS 없이도 큰 이름은 CSS만으로 고리 앞에서 멈춘다(motion.ts의 고리 상한과 같은 식).
-  expect(css).toMatch(/--hero-name-size: min\(clamp\(56px, 6\.5vw, 128px\), calc\(\(42vw - \.82 \* var\(--hero-object-size\) - 16px\) \/ 2\.835\)\);/);
+  // JS 전·JS 없이도 큰 이름은 CSS만으로 볼 상자(광휘 포함) 앞에서 멈춘다(motion.ts의 볼 상한과 같은 식). 이름은 글 칸 왼쪽(8vw)에서 시작한다.
+  expect(css).toMatch(/--hero-name-size: min\(clamp\(56px, 6\.5vw, 128px\), calc\(\(84vw - 1\.1 \* var\(--hero-object-size\) - 32px\) \/ 5\.67\)\);/);
+  expect(css).not.toContain('2.835');
   expect(css).not.toMatch(/\.portfolio-hero (p|h1) \{[^}]*svh/);
   expect(css).toMatch(/\.logo-host \{[^}]*z-index: 2;/);
 });
 
-// 리뷰 Important 2. 인트로와 GL 교대 전후에 오브젝트가 같은 기울어진 궤도 자세여야 한다(스펙 5.2의 5).
-// Task 5: 경계는 더 긁지 않으므로 정적 실루엣은 늘 쉬는 자세다. GL 로고만 About으로 날아가며 정면으로 돈다.
-it('the Hero static symbol rests in the GL orbit tilt at every width', async () => {
+// Task 9: 볼은 정면이다(눕힌 평면 캔버스는 원을 타원으로 누른다). Hero에서 쉬는 동안은 볼만 보이고 Electric 로고 host는 숨는다.
+// 로고가 Hero를 떠나면(boundary·about) 볼이 사라지고 로고 이동이 그대로 돈다. 돌아오면 거꾸로다(Task 10 전의 임시 교대).
+it('the Hero ball is frontal; at Hero rest only the ball shows and it cross-fades with the Electric logo when the logo leaves', async () => {
   const { readFileSync } = await import('node:fs');
   const css = readFileSync('styles/design-tokens.css', 'utf8');
-  const motionSource = readFileSync('components/sections/HomeClient/motion.ts', 'utf8');
-  expect(css).toMatch(/\n\.hero-object-tilt \{[^}]*transform: perspective\(900px\) rotateX\(56deg\) rotateY\(-24deg\);/);
-  expect(css).not.toContain('--hero-lean');
-  expect(motionSource).toMatch(/const REST_X_DEG = 56;\s*const REST_Y_DEG = -24;/);
-  expect(motionSource).toMatch(/const PERSPECTIVE_PX = 900;/);
-  expect(css).toMatch(/html\[data-intro\] \.hero-object \.about-electric-static \{ transition: none; \}/);
+  expect(css).not.toContain('hero-object-tilt');
+  expect(css).toMatch(/\[data-logo-live\]:not\(\[data-logo-owner='hero'\]\) \.logo-host \{ opacity: 1; \}/);
+  expect(css).not.toMatch(/\n\[data-logo-live\] \.logo-host \{/);
+  expect(css).toMatch(/\.hero-ball \{[^}]*transition: opacity 250ms ease;/);
+  expect(css).toMatch(/\[data-logo-owner='boundary'\] \.hero-ball, \[data-logo-owner='about'\] \.hero-ball \{ opacity: 0; \}/);
+  expect(css).toMatch(/\.hero-ball\[data-ball-live\] \.hero-ball-glass \{ opacity: 0; \}/);
+  expect(css).toMatch(/html\[data-intro\] \.hero-ball \{ transition: none; \}/);
   // 가려진 실루엣의 충전 애니메이션이 GL 뒤에서 계속 돌면 첫 화면 프레임이 무거워진다(e2e에서 잡혔다).
   expect(css).toMatch(/\[data-logo-live\] \[data-motion-anchor\] \.about-electric-static-shape \{ animation: none; \}/);
   const { container } = render(<HomeClient />);
-  expect(container.querySelectorAll('#overview [data-motion-anchor="hero-object"] .hero-object-tilt')).toHaveLength(1);
+  expect(container.querySelector('#overview .about-electric-static')).toBeNull();
 });
 
 // 사용자 결정(2026-10-20). 인사말 교대와 커튼이 없다. Hero 왼쪽 두 줄 인사가 유일한 h1이고 옛 소개 문장은 없다.
@@ -276,8 +342,14 @@ it('without the pre-paint gate (hash, revisit, reduced, no JS) the intro is disa
   expect(boot.props).toMatchObject({ enabled: false, reducedMotion: false, targets: null });
   expect(screen.getByTestId('flow')).toHaveAttribute('data-paused', 'false');
   expect(container.querySelector('[data-electric-src]')).toHaveAttribute('data-electric-active', 'false');
+  // Hero에서 쉬는 동안 로고 host는 숨어 있어 돌지 않는다. 한 장만 미리 그려 준비를 알리고, Hero를 떠나면 돈다.
+  expect(container.querySelector('[data-electric-src]')).toHaveAttribute('data-electric-prewarm', 'true');
   act(() => motion.owner!('hero'));
-  expect(container.querySelector('[data-electric-src]')).toHaveAttribute('data-electric-active', 'true');
+  expect(container.querySelector('[data-electric-src]')).toHaveAttribute('data-electric-active', 'false');
+  for (const owner of ['boundary', 'about'] as const) {
+    act(() => motion.owner!(owner));
+    expect(container.querySelector('[data-electric-src]')).toHaveAttribute('data-electric-active', 'true');
+  }
 });
 
 // 헤드 Chrome에서 WebGL 문맥 생성이 메인 스레드를 1.4–2.3초 막았다. GL 로고는 진입 뒤에 뜬다.
@@ -295,19 +367,24 @@ it.each([['wide', true], ['narrow', false]] as const)('first visit (%s): the bac
   expect(targets.wordmark).toBe(screen.getByTestId('wordmark').firstElementChild);
   expect(targets.headline).toBe(screen.getByRole('heading', { level: 1 }));
   expect(targets).not.toHaveProperty('background');
-  // 오브젝트는 Hero 앵커 안 정적 실루엣의 껍질이다. 경계가 재는 앵커 상자와 기울기 껍질은 진입이 쓰지 않는다(리뷰 Minor 2).
+  // 오브젝트는 Hero 앵커 안 볼의 껍질이다. 경계가 재는 앵커 상자는 진입이 쓰지 않는다(리뷰 Minor 2).
   const anchor = container.querySelector('#overview [data-motion-anchor="hero-object"]')!;
-  expect(targets.heroObject).toBe(anchor.querySelector(':scope > .about-electric-static'));
+  expect(targets.heroObject).toBe(anchor.querySelector(':scope > .hero-ball'));
   expect(targets.heroObject).not.toBe(anchor);
-  expect((targets.heroObject as HTMLElement).querySelector(':scope > .hero-object-tilt > .about-electric-static-shape')).not.toBeNull();
+  expect((targets.heroObject as HTMLElement).querySelectorAll(':scope > .hero-ball-icons > span')).toHaveLength(6);
   expect(container.querySelector('[data-electric-src]')).toBeNull();
+  expect(container.querySelector('[data-ball-gl]')).toBeNull();
   expect(screen.getByTestId('flow')).toHaveAttribute('data-paused', 'false');
   act(() => boot.props!.onComplete());
   await flush();
   if (wide) {
     expect(container.querySelector('[data-electric-src]')).not.toBeNull();
+    expect(container.querySelector('[data-ball-gl]')).not.toBeNull();
     expect(motion.setLogo).toHaveBeenLastCalledWith(handle);
-  } else expect(container.querySelector('[data-electric-src]')).toBeNull();
+  } else {
+    expect(container.querySelector('[data-electric-src]')).toBeNull();
+    expect(container.querySelector('[data-ball-gl]')).toBeNull();
+  }
   // GL 손잡이가 와도 경계를 다시 만들지 않는다. 날던 이름·로고가 끊기지 않는다.
   expect(motion.create).toHaveBeenCalledTimes(1);
 });

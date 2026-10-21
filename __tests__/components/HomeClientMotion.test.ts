@@ -26,12 +26,12 @@ const owners: LogoOwner[] = [];
 let observed: Element[] = [];
 
 // 이름 글자 줄은 8em × 1.5em이다(nav 15px에서 120 × 22.5). 버튼 하나가 CSS 두 자리(data-wordmark-mode) 사이를 오간다.
-// nav: nav-name 앵커(24, 16)에 fixed, 44px 최소 높이 가운데에 글자 줄. Hero: 자리 세로 가운데·Hero 가로 가운데(720).
+// nav: nav-name 앵커(24, 16)에 fixed, 44px 최소 높이 가운데에 글자 줄. Hero: 자리 세로 가운데·자리 왼쪽 끝(Task 9, 문장과 같은 끝).
 const font = () => parseFloat(wordmark.style.fontSize) || (wordmark.dataset.wordmarkMode === 'nav' ? 15 : 88);
 function layout() {
   const f = font();
   if (wordmark.dataset.wordmarkMode === 'nav') return { button: { x: 24, y: 16, w: 120, h: 44 }, label: { x: 24, y: 16 + (44 - 22.5) / 2, w: 120, h: 22.5 } };
-  const label = { x: 720 - 4 * f, y: 266 - .75 * f - documentY, w: 8 * f, h: 1.5 * f };
+  const label = { x: heroName.offsetLeft, y: 266 - .75 * f - documentY, w: 8 * f, h: 1.5 * f };
   return { button: label, label };
 }
 // 날고 있는 버튼의 transform(원점 왼쪽 위)을 실은 화면 상자. 브라우저의 getBoundingClientRect와 같다.
@@ -236,20 +236,29 @@ describe('이름: 지점을 넘으면 0.5초 FLIP', () => {
     expect(wordmark.style.fontSize).toBe('37.5px');
   });
 
-  // 리뷰 Important 1. 넓고 낮은 화면(1280x720 실측)에서는 오브젝트 칸이 이름 높이까지 올라온다.
-  // 눕힌 궤도의 보이는 고리는 앵커 상자 안쪽(왼쪽 18%, 위 28%, 아래 24%)에 있다. 이름은 그 상자에 닿지 않게 줄어든다.
-  it('넓고 낮은 화면에서 이름 상자가 보이는 궤도 상자와 겹치지 않게 줄어든다', () => {
+  // Task 9. 볼은 앵커를 꽉 채우고 광휘가 앵커 폭의 10%만큼 밖으로 나간다. 이름 자리와 같은 높이에 볼이 있으면
+  // 왼쪽 끝에서 시작한 이름의 오른쪽 끝이 그 볼 상자 16px 앞에서 멈춘다.
+  it('볼이 이름 옆에 있으면 이름 상자가 광휘까지 포함한 볼 상자에 닿지 않게 줄어든다', () => {
     place(heroObject, { x: 780, y: 150, w: 360, h: 360 });
     create();
-    const ring = { l: 780 + .18 * 360, t: 150 + .28 * 360, b: 510 - .24 * 360 };
+    const ball = { l: 780 - .1 * 360, t: 150 - .1 * 360, b: 510 + .1 * 360 };
     const box = visual('label');
-    expect(box.y < ring.b && box.y + box.h > ring.t).toBe(true);
-    expect(box.x + box.w).toBeLessThanOrEqual(ring.l - 16 + 1e-6);
+    expect(box.x).toBe(100);
+    expect(box.y < ball.b && box.y + box.h > ball.t).toBe(true);
+    expect(box.x + box.w).toBeLessThanOrEqual(ball.l - 16 + 1e-6);
+    expect(box.x + box.w).toBeGreaterThan(ball.l - 16 - 1);
     expect(font()).toBeGreaterThan(1.5 * 15);
   });
 
-  // tracking-widest는 마지막 글자 뒤에도 자간을 남긴다. 고리까지의 거리는 보이는 글자 폭으로 잰다.
-  it('끝 자간을 빼고 보이는 글자 폭으로 고리 앞 크기를 잰다', () => {
+  // 1024px 아래에서는 볼이 문장 아래에 있어 이름 높이와 겹치지 않는다. 이름은 자리에만 맞춘다.
+  it('볼이 이름 아래에 있으면 볼 상한이 걸리지 않는다', () => {
+    place(heroObject, { x: 100, y: 600, w: 220, h: 220 });
+    create();
+    expect(wordmark.style.fontSize).toBe('88px');
+  });
+
+  // tracking-widest는 마지막 글자 뒤에도 자간을 남긴다. 볼까지의 거리는 보이는 글자 폭으로 잰다.
+  it('끝 자간을 빼고 보이는 글자 폭으로 볼 앞 크기를 잰다', () => {
     place(heroObject, { x: 780, y: 150, w: 360, h: 360 });
     create();
     const tight = font();

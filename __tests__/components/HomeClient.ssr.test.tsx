@@ -92,10 +92,29 @@ it('ships the one name button in its Hero rest state inside the Hero name slot',
   const nav = html.slice(html.indexOf('<nav'), html.indexOf('</nav>'));
   expect(nav).toMatch(/data-motion-anchor="nav-name"[^>]*><\/div>/);
   const css = readFileSync('styles/design-tokens.css', 'utf8');
-  expect(css).toMatch(/\.site-name\[data-wordmark-mode='hero'\] \{[^}]*position: absolute;[^}]*left: 0; right: 0; margin-inline: auto; width: max-content; font-size: var\(--hero-name-size\);/);
+  // Task 9 (사용자 결정 2026-10-21): 이름은 가운데가 아니라 이름 자리(글 칸) 왼쪽 끝에 서고 문장이 바로 아래 같은 끝에 맞는다.
+  expect(css).toMatch(/\n\.hero-name \{ position: relative;/);
+  expect(css).toMatch(/\.site-name\[data-wordmark-mode='hero'\] \{[^}]*position: absolute;[^}]*left: 0; width: max-content; font-size: var\(--hero-name-size\);/);
+  expect(css).not.toMatch(/\.site-name\[data-wordmark-mode='hero'\] \{[^}]*margin-inline: auto/);
   expect(css).toMatch(/\.site-name\[data-wordmark-mode='nav'\] \{ position: fixed; z-index: 51; \}/);
   // 쉬는 자리에는 transform이 없다. 누르는 상자가 보이는 글자 줄이다.
   expect(css).not.toMatch(/\.site-name[^{]*\{[^}]*(transform|scale)/);
+});
+
+// Task 9. JS가 없어도 Hero 오브젝트는 같은 구성의 정적 볼이다. 유리 모양과 핵심 기술 아이콘 여섯이 쉬는 자리에 선다.
+it('ships the static crystal ball with the six core icons at their rest positions and no canvas', async () => {
+  const { BALL_ICONS, fieldPoint, iconStyle } = await import('@/components/blocks/CrystalizedBall/field');
+  const html = renderToString(<HomeClient />);
+  const object = html.slice(html.indexOf('data-motion-anchor="hero-object"'), html.indexOf('data-section="about"'));
+  expect(object).toMatch(/^data-motion-anchor="hero-object" aria-hidden="true"/);
+  expect(object).toContain('class="hero-ball"');
+  expect(object).toContain('class="hero-ball-glass"');
+  expect(object).not.toContain('<canvas');
+  for (const icon of BALL_ICONS) {
+    const rest = iconStyle(fieldPoint(icon.home, icon.seed, 0, [0, 0], [0, 0, 0]));
+    expect(object).toContain(`transform:${rest.transform}`);
+    expect(object).toContain(`/icons-mono/${icon.name}.svg`);
+  }
 });
 
 // 최종 리뷰 I2. JS가 없거나 하이드레이션 전, 본 번들이 실패해도 About의 활성 chapter는 읽혀야 한다.

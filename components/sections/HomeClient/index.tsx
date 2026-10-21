@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useRef, useState, type ComponentType, type Ref } from 'react';
+import { BALL_ICONS, ICON_SIZE, fieldPoint, iconStyle } from '@/components/blocks/CrystalizedBall/field';
 import type { ElectricLogoHandle, ElectricLogoProps } from '@/components/blocks/ElectricLogo';
 import LuminousFlowBackground, { type LuminousFlowBackgroundHandle } from '@/components/blocks/LuminousFlowBackground';
 import Navigation from '@/components/blocks/Navigation';
@@ -27,6 +28,10 @@ const SECTION_COMPONENTS = {
 // WebGL 장식은 셸에 한 번만 띄워 Hero와 About이 같은 로고를 나눠 쓴다.
 const DynamicElectricLogo = dynamic<ElectricLogoProps & { ref?: Ref<ElectricLogoHandle> }>(() => import('@/components/blocks/ElectricLogo'), { ssr: false });
 const LOGO_SRCS = coreValues.map(value => value.logoSrc);
+// Hero 오브젝트는 크리스털 볼이다. GL은 로고와 같이 진입 뒤에 뜨는 지연 청크(OGL 청크를 같이 쓴다)이고,
+// 정적 볼(유리 + 아이콘의 쉬는 자리)이 서버 HTML부터 같은 구성을 보인다. 쉬는 자리는 GL 첫 프레임(시간 0, 포인터 없음)과 같다.
+const DynamicCrystalizedBall = dynamic(() => import('@/components/blocks/CrystalizedBall'), { ssr: false });
+const BALL_REST = BALL_ICONS.map(icon => ({ name: icon.name, ...iconStyle(fieldPoint(icon.home, icon.seed, 0, [0, 0], [0, 0, 0])) }));
 
 export default function HomeClient() {
   const rootRef = useRef<HTMLElement>(null);
@@ -38,6 +43,7 @@ export default function HomeClient() {
   const wordmarkRef = useRef<HTMLButtonElement>(null);
   const logoHostRef = useRef<HTMLDivElement>(null);
   const heroStaticRef = useRef<HTMLDivElement>(null);
+  const ballIconsRef = useRef<HTMLDivElement>(null);
   const headlineRef = useRef<HTMLHeadingElement>(null);
   const bootRef = useRef<BootSequenceHandle>(null);
   // 그리기 전 판정 스크립트(lib/introGate.ts)가 붙인 표시를 하이드레이션 때 한 번 읽는다. 마크업에는 쓰지 않는다.
@@ -56,12 +62,17 @@ export default function HomeClient() {
   const [logoReady, setLogoReady] = useState(false);
   // GL 로고는 쉬는 자리(hero·about)에서만 드러난다. 날아가는 도중에 준비돼도 내려앉은 뒤에 정적 실루엣과 바뀐다.
   const [logoLive, setLogoLive] = useState(false);
+  // GL 볼이 첫 그림을 그린 뒤에만 정적 유리가 물러난다.
+  const [ballReady, setBallReady] = useState(false);
+  const ballDone = useCallback(() => setBallReady(true), []);
   const motionRef = useRef<PortfolioMotion | null>(null);
   // 명시적 이동 직전에 About의 읽기 잠금을 풀어 목적지로 가는 스크롤을 붙잡지 않는다.
   const { active, routeResolved, navigationTarget, navigate } = useSectionNav({ rootRef, headerRef, blocked: obscured, reducedMotion, onBeforeNavigate: () => { bootRef.current?.finish(); aboutRef.current?.release(); } });
   const motionReady = routeResolved && preferenceReady;
-  // About 레일과 같이 1024px부터만 WebGL 로고를 띄운다. 그 아래와 모션 감소는 앵커의 정적 실루엣이다.
+  // About 레일과 같이 1024px부터만 WebGL 로고와 볼을 띄운다. 그 아래와 모션 감소는 앵커의 정적 실루엣과 정적 볼이다.
   const glLogo = wideScreen && preferenceReady && !reducedMotion && !introPending;
+  // 로고가 Hero를 떠나면(boundary·about) 볼은 사라진 채 멈춘다. Task 10의 변신 전까지의 임시 교대다.
+  const heroResting = logoOwner === 'hero' || logoOwner === 'none';
   const activeLabel = HOME_SECTION_CONFIG.find(section => section.id === active)?.label ?? 'Overview';
   const [announcement, setAnnouncement] = useState('');
   // 명시적 이동이 도착해 목적지에 포커스가 간 때만 알린다. 수동으로 읽어 넘긴 섹션은 알리지 않는다.
@@ -108,6 +119,7 @@ export default function HomeClient() {
     setIntroTargets({ wordmark, headline, heroObject });
   }, [introEnabled, motionModule]);
   useEffect(() => { if (!logo) setLogoReady(false); }, [logo]);
+  useEffect(() => { if (!glLogo) setBallReady(false); }, [glLogo]);
 
   return <SectionActivityProvider pageVisible={pageVisible} routeResolved={routeResolved} motionReady={motionReady} reducedMotion={reducedMotion} obscured={obscured}>
     {/* 준비 전 기본값(reduced: true)으로 진입을 끝내지 않는다. 그리기 전 판정이 이미 모션 감소를 걸렀다.
@@ -132,14 +144,19 @@ export default function HomeClient() {
             </div>
             <h1 ref={headlineRef}>{'안녕하세요.\nSW개발자 김태인입니다.'}</h1>
           </div>
-          {/* 공유 로고가 앉는 자리. GL이 없거나 준비 전, 모션 감소에서는 정적 실루엣이 대신한다.
+          {/* 볼이 앉는 자리이자 로고가 떠나는 자리. 볼은 정면이고 앵커를 꽉 채운다.
               D5-A: 1024px부터 문장 오른쪽, 그 아래는 이름·문장 다음이다. */}
           <div data-motion-anchor="hero-object" aria-hidden="true" className="hero-object">
-            {/* 바깥 껍질은 인트로의 opacity·크기, 안쪽은 GL 궤도와 같은 기울기(경계가 정면으로 돌린다)다. */}
-            <div ref={heroStaticRef} className={`about-electric-static ${glLogo ? 'about-electric-static-charging' : ''}`}>
-              <div className="hero-object-tilt">
-                <div className="about-electric-static-shape" style={{ maskImage: `url(${LOGO_SRCS[0]})`, WebkitMaskImage: `url(${LOGO_SRCS[0]})` }} />
+            {/* 껍질은 인트로의 opacity·크기와 로고와의 교대를 받는다. 아이콘 층은 하나뿐이고 유리(캔버스) 아래에 있다.
+                기술 이름은 Skills에 있어 아이콘은 장식이다. */}
+            <div ref={heroStaticRef} className="hero-ball" data-ball-live={glLogo && ballReady ? '' : undefined}>
+              <div className="hero-ball-glass" />
+              <div ref={ballIconsRef} className="hero-ball-icons">
+                {BALL_REST.map(({ name, transform, opacity, zIndex }) => <span key={name} style={{ width: `${ICON_SIZE * 100}%`, transform, opacity, zIndex }}>
+                  <span style={{ maskImage: `url(/icons-mono/${name}.svg)`, WebkitMaskImage: `url(/icons-mono/${name}.svg)` }} />
+                </span>)}
               </div>
+              {glLogo ? <DynamicCrystalizedBall icons={ballIconsRef} paused={!heroResting || !motionReady || !pageVisible || obscured} onReady={ballDone} /> : null}
             </div>
           </div>
         </section>
@@ -153,8 +170,9 @@ export default function HomeClient() {
             바깥은 경계가 옮기고 안쪽은 포인터만 기울인다. */}
         <div ref={logoHostRef} data-logo-host aria-hidden="true" className="logo-host">
           <div>
-            {glLogo ? <DynamicElectricLogo ref={setLogo} src={LOGO_SRCS[logoOwner === 'about' ? aboutChapter : 0]} active={logoOwner !== 'none' && motionReady && pageVisible && !obscured}
-              preloadSrcs={LOGO_SRCS} onReady={() => setLogoReady(true)} color="#7fe3ee" glowColor="#03b3c3"
+            {/* Hero에서 쉬는 동안 host는 숨어 돌지 않는다. 한 장만 미리 그려 준비를 알리고 Hero를 떠날 때 돈다. */}
+            {glLogo ? <DynamicElectricLogo ref={setLogo} src={LOGO_SRCS[logoOwner === 'about' ? aboutChapter : 0]} active={!heroResting && motionReady && pageVisible && !obscured}
+              prewarm preloadSrcs={LOGO_SRCS} onReady={() => setLogoReady(true)} color="#7fe3ee" glowColor="#03b3c3"
               intensity={0.65} glow={0.3} speed={1.1} flicker={0.25} interactive={false} /> : null}
           </div>
         </div>

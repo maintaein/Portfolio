@@ -144,12 +144,12 @@ test.describe('Native motion activity', () => {
     // 상자들은 한 번의 evaluate로 같은 프레임에서 읽는다. 소프트웨어 GL에서는 프레임이 1초 가까이 걸려 따로 읽으면 사이에 화면이 바뀐다.
     const offsets = () => page.evaluate(() => {
       const r = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
-      const [name, slot, hero, nav, about, host] = ['[data-testid="wordmark"]', '[data-motion-anchor="hero-name"]', '#overview', '[data-motion-anchor="nav-name"]', '[data-motion-anchor="about-logo"]', '[data-logo-host]'].map(r);
+      const [name, slot, headline, nav, about, host] = ['[data-testid="wordmark"]', '[data-motion-anchor="hero-name"]', '#overview h1', '[data-motion-anchor="nav-name"]', '[data-motion-anchor="about-logo"]', '[data-logo-host]'].map(r);
       const centre = (a: DOMRect) => [a.left + a.width / 2, a.top + a.height / 2];
-      const [nx, ny] = centre(name);
+      const [, ny] = centre(name);
       return {
-        // Hero: 세로 가운데는 이름 자리에, 가로 가운데는 Hero에 맞는다. 끝 자간은 버튼 폭에서 빠져 있다.
-        hero: Math.max(Math.abs(centre(slot)[1] - ny), Math.abs(centre(hero)[0] - nx)),
+        // Hero: 세로 가운데는 이름 자리에, 왼쪽 끝은 자리와 바로 아래 문장의 왼쪽 끝에 맞는다(Task 9).
+        hero: Math.max(Math.abs(centre(slot)[1] - ny), Math.abs(slot.left - name.left), Math.abs(headline.left - name.left)),
         // nav: 왼쪽 끝과 세로 가운데가 앵커에 맞는다.
         nav: Math.max(Math.abs(nav.left - name.left), Math.abs(centre(nav)[1] - ny)),
         logo: Math.max(Math.abs(centre(about)[0] - centre(host)[0]), Math.abs(centre(about)[1] - centre(host)[1])),
@@ -178,6 +178,11 @@ test.describe('Native motion activity', () => {
     // 첫 GL 그림(문맥 생성)이 끝난 뒤에 스크롤한다. 그 사이 프레임이 멈춰 재생이 늦게 따라온다.
     await expect(owner).toHaveAttribute('data-logo-live', '', { timeout: 30_000 });
     expect(await singles()).toEqual([1, 1]);
+    // Task 9: Hero에서 쉬는 동안은 볼(GL 캔버스 하나)만 보이고 Electric 로고 host는 숨어 있다.
+    const ball = page.locator('#overview .hero-ball');
+    await expect(page.locator('#overview [data-motion-anchor="hero-object"] canvas')).toHaveCount(1, settled);
+    await expect(page.locator('[data-logo-host]')).toHaveCSS('opacity', '0');
+    await expect(ball).toHaveCSS('opacity', '1');
 
     // 휠 두 칸(200px): 이름만 nav로 간다. 로고 지점(내려앉을 About 로고가 화면에 다 드는 스크롤)은 아직이다.
     await scrollTo(200);
@@ -201,6 +206,9 @@ test.describe('Native motion activity', () => {
     // 지점 바로 아래에서 멈춰도 내려앉은 로고가 nav 아래 화면 안에 다 든다(리뷰 Important 1).
     await scrollTo(Math.round(logoAt) + 4);
     await expect(owner).toHaveAttribute('data-logo-owner', 'about', settled);
+    // 로고가 떠나면 볼은 사라지고 로고가 드러난다(Task 10 전의 임시 교대).
+    await expect(ball).toHaveCSS('opacity', '0', settled);
+    await expect(page.locator('[data-logo-host]')).toHaveCSS('opacity', '1', settled);
     const landed = await page.evaluate(() => { const r = document.querySelector('[data-logo-host]')!.getBoundingClientRect(); return [r.top, r.bottom, innerHeight]; });
     expect(landed[0]).toBeGreaterThanOrEqual(76); expect(landed[1]).toBeLessThanOrEqual(landed[2]);
     await expect.poll(() => page.evaluate(() => {
@@ -215,6 +223,8 @@ test.describe('Native motion activity', () => {
     // 되넘으면 Hero 앵커로 돌아간다.
     await scrollTo(Math.round(logoAt) - 40);
     await expect(owner).toHaveAttribute('data-logo-owner', 'hero', settled);
+    await expect(ball).toHaveCSS('opacity', '1', settled);
+    await expect(page.locator('[data-logo-host]')).toHaveCSS('opacity', '0', settled);
 
     await navButton(page, 'About').click(); await expectActive(page, 'about');
     await expect(owner).toHaveAttribute('data-logo-owner', 'about', settled);
@@ -243,7 +253,7 @@ test.describe('Native motion activity', () => {
     expect(Math.abs(a.x - b.x)).toBeLessThan(1.5);
     await expect(page.locator('.portfolio-document')).not.toHaveAttribute('data-logo-owner', /hero|boundary/, { timeout: 20_000 });
   });
-  test('첫 방문은 커튼 없이 바로 진입해 완성된 첫 화면으로 끝나고 큰 이름은 Hero 가운데에 있다', async ({ page }) => {
+  test('첫 방문은 커튼 없이 바로 진입해 완성된 첫 화면으로 끝나고 큰 이름은 문장 바로 위 같은 왼쪽 끝에 있다', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     // load를 기다리면 진입이 이미 끝났을 수 있다. 문서가 오자마자 표시를 본다.
     await page.goto('/', { waitUntil: 'commit' });
@@ -253,9 +263,10 @@ test.describe('Native motion activity', () => {
     const headline = page.getByRole('heading', { level: 1 });
     await expect(headline).toHaveText('안녕하세요. SW개발자 김태인입니다.');
     expect(await headline.evaluate(el => el.children.length)).toBe(0);
-    const [anchor, hero, name] = [(await page.locator('[data-motion-anchor="hero-name"]').boundingBox())!, (await page.locator('#overview').boundingBox())!, (await page.getByTestId('wordmark').boundingBox())!];
+    const [anchor, text, name] = [(await page.locator('[data-motion-anchor="hero-name"]').boundingBox())!, (await headline.boundingBox())!, (await page.getByTestId('wordmark').boundingBox())!];
     expect(Math.abs(anchor.y + anchor.height / 2 - name.y - name.height / 2)).toBeLessThan(1.5);
-    expect(Math.abs(hero.x + hero.width / 2 - name.x - name.width / 2)).toBeLessThan(10);
+    expect(Math.abs(text.x - name.x)).toBeLessThan(1.5);
+    expect(name.y + name.height).toBeLessThanOrEqual(text.y);
     // 자리 높이는 이름 글자 크기의 1.5배다. 왼쪽 문장(1440에서 36px)의 1.5배를 넘는다.
     expect(anchor.height / 1.5).toBeGreaterThan(36 * 1.5);
     await expect(page.getByTestId('wordmark').locator('span')).toHaveCSS('opacity', '1');
@@ -297,7 +308,10 @@ test.describe('Native motion activity', () => {
     await expect(name).toHaveCSS('transform', 'none');
     await expect(page.locator('[data-logo-host]')).toHaveCount(1);
     await expect(page.locator('[data-logo-host] canvas')).toHaveCount(0);
-    await expect(page.locator('[data-motion-anchor="hero-object"] .about-electric-static')).toBeVisible();
+    // Hero 오브젝트는 같은 구성의 정적 볼이다(유리 + 핵심 아이콘 여섯, 움직임 없음).
+    await expect(page.locator('[data-motion-anchor="hero-object"] .hero-ball-glass')).toBeVisible();
+    await expect(page.locator('[data-motion-anchor="hero-object"] .hero-ball-icons > span')).toHaveCount(6);
+    await expect(page.locator('[data-motion-anchor="hero-object"] canvas')).toHaveCount(0);
   });
   test('reduced motion deep links settle with native readable sections @smoke', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' }); await enter(page, 'projects');

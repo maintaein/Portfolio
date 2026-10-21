@@ -28,11 +28,11 @@ const SHIFT_PX = 12;
 const REST_X_DEG = 56;
 const REST_Y_DEG = -24;
 const PERSPECTIVE_PX = 900;
-// 눕힌 React 궤도의 보이는 고리가 Hero 앵커 상자 안에서 차지하는 자리(상자 비율). 1024–1440에서 픽셀로 잰 값이다.
-// shortcut: 쉬는 자세의 React 로고 한 장에서 잰 고정 비율, Hero 로고·마스크·기울기가 바뀌면 다시 잰다.
-const RING_INSET = { left: .18, top: .28, bottom: .24 };
-// 큰 이름과 고리 상자 사이에 남기는 거리(px).
-const RING_GAP = 16;
+// 크리스털 볼은 Hero 앵커를 꽉 채우고 테두리 광휘가 앵커 폭의 이만큼 밖으로 나간다(볼 상자 = 앵커 + 광휘).
+// shortcut: 쉬는 볼을 픽셀로 잰 고정 비율, 볼의 크기·광휘가 바뀌면 다시 잰다.
+const BALL_GLOW = .1;
+// 큰 이름과 볼 상자 사이에 남기는 거리(px).
+const BALL_GAP = 16;
 
 type Box = { x: number; y: number; w: number; h: number };
 const EMPTY: Box = { x: 0, y: 0, w: 0, h: 0 };
@@ -85,7 +85,6 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, reduce
   let tilt: ((x: number, y: number) => void) | null = null;
 
   const measure = () => {
-    const hero = root.querySelector('[data-section="overview"]');
     const about = root.querySelector('[data-section="about"]');
     const heroObject = layoutBox(anchor('hero-object'));
     const aboutLogo = layoutBox(anchor('about-logo'));
@@ -95,14 +94,13 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, reduce
     const font = parseFloat(style.fontSize) || 0;
     const width = font ? label.getBoundingClientRect().width / font : 0;
     const glyph = width - (font ? (parseFloat(style.letterSpacing) || 0) / font : 0);
-    const heroLayout = rectBox(hero);
-    const centreX = heroLayout.x + heroLayout.w / 2;
-    // 이름 자리와 같은 높이에 오른쪽 고리가 있으면(넓고 낮은 화면) 글자 오른쪽 끝이 고리 상자 앞에서 멈추게 줄인다.
-    const ring = { x: heroObject.x + heroObject.w * RING_INSET.left, top: heroObject.y + heroObject.h * RING_INSET.top, bottom: heroObject.y + heroObject.h * (1 - RING_INSET.bottom) };
-    const besideRing = heroObject.w > 0 && ring.x > centreX && slot.y < ring.bottom && slot.y + slot.h > ring.top;
-    const ringRoom = besideRing && glyph > 0 ? 2 * (ring.x - RING_GAP - centreX) / glyph : Infinity;
-    // 자리 높이(글자 줄)와 자리 폭에 맞추되 고리에 닿지 않는다. 잴 수 없으면 CSS 크기를 둔다.
-    const size = width > 0 ? Math.max(1, Math.min(slot.h / NAME_LINE, slot.w / width, ringRoom)) : 0;
+    // 이름은 자리 왼쪽 끝에서 시작한다. 이름 자리와 같은 높이에 오른쪽 볼이 있으면(1024px부터) 글자 오른쪽 끝이 볼 상자 앞에서 멈추게 줄인다.
+    const glow = heroObject.w * BALL_GLOW;
+    const ball = { x: heroObject.x - glow, top: heroObject.y - glow, bottom: heroObject.y + heroObject.h + glow };
+    const besideBall = heroObject.w > 0 && ball.x > slot.x && slot.y < ball.bottom && slot.y + slot.h > ball.top;
+    const ballRoom = besideBall && glyph > 0 ? (ball.x - BALL_GAP - slot.x) / glyph : Infinity;
+    // 자리 높이(글자 줄)와 자리 폭에 맞추되 볼에 닿지 않는다. 잴 수 없으면 CSS 크기를 둔다.
+    const size = width > 0 ? Math.max(1, Math.min(slot.h / NAME_LINE, slot.w / width, ballRoom)) : 0;
     const target = aboutLogo.w ? aboutLogo : heroObject;
     // 로고 지점: 그 자리에서 멈춰도 내려앉은 About 로고가 화면 안에 다 드는 첫 스크롤. 크기마다 앵커로 다시 잰다.
     // 두 로고 앵커 사이가 화면 높이만큼 멀어 두 끝을 함께 다 보일 수는 없다. 1440x900에서 About 머리가 화면 3분의 1쯤일 때다.
@@ -128,7 +126,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, reduce
 
   const aim = () => tilt?.(pointer.x * weight, pointer.y * weight);
 
-  // 이름의 두 쉬는 자리는 CSS 배치(data-wordmark-mode)다. Hero는 자리 안 가운데, nav는 nav-name 앵커에 fixed로 선다.
+  // 이름의 두 쉬는 자리는 CSS 배치(data-wordmark-mode)다. Hero는 자리 왼쪽 끝(문장과 같은 끝), nav는 nav-name 앵커에 fixed로 선다.
   // 쉬는 동안 transform이 없어 누르는 상자가 보이는 글자 줄 상자다.
   const applyName = () => {
     wordmark.dataset.wordmarkMode = side;
