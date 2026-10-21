@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 const WHILE_IN_VIEW_DEBT: Record<string, { plan: number; count: number }> = {};
 // 섹션 진입 연출이 아닌 화면 밖 Canvas 렌더링 정지용. 정지·재개는 e2e/motion.spec.ts에서 검증한다.
 const VISIBILITY_ONLY_IO = new Set([
+  'components/blocks/CrystalizedBall/index.tsx',
   'components/blocks/ElectricLogo/index.tsx',
   'components/blocks/LuminousFlowBackground/index.tsx',
 ]);
