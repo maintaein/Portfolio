@@ -17,12 +17,12 @@ main[data-route-resolved="true"] .stage[data-entered="false"] .articles { opacit
 .panel { grid-area: 1 / 1; position: relative; opacity: 0; filter: blur(8px); transform: rotateX(-25deg); transform-origin: 50% 50% calc(0px - var(--reading-orbit-radius)); transition: opacity calc(var(--chapter-transition) * .45) ease, filter calc(var(--chapter-transition) * .6) ease, transform var(--chapter-transition) cubic-bezier(.77, 0, .175, 1); transition-delay: calc(var(--chapter-transition) * .375), calc(var(--chapter-transition) * .3), 0ms; }
 .panel[data-position="active"] { opacity: 1; filter: blur(0); transform: rotateX(0); transition-duration: calc(var(--chapter-transition) * .825), calc(var(--chapter-transition) * .825), var(--chapter-transition); transition-delay: calc(var(--chapter-transition) * .1), calc(var(--chapter-transition) * .075), 0ms; }
 .panel[data-position="past"] { transform: rotateX(25deg); }
-.title { margin: 24px 0 32px; font-size: clamp(28px, 3vw, 42px); line-height: 1.4; font-weight: 500; letter-spacing: -.045em; word-break: keep-all; }
+.title { margin: 24px 0 32px; font-size: clamp(28px, 3vw, 42px); line-height: 1.4; font-weight: 500; letter-spacing: -.045em; }
 .evidence { display: flex; flex-wrap: wrap; gap: 36px; margin: 28px 0 32px; }
 .evidence div { display: flex; flex-direction: column-reverse; gap: 9px; }
 .evidence dt { color: var(--color-text-secondary); font-size: var(--font-size-t7); }
 .evidence dd { font-size: clamp(23px, 2.2vw, 34px); line-height: 1.2; font-weight: 500; letter-spacing: -.04em; }
-.description { font-size: var(--font-size-t5); line-height: 1.85; color: var(--color-text-secondary); word-break: keep-all; overflow-wrap: anywhere; }
+.description { font-size: var(--font-size-t5); line-height: 1.85; color: var(--color-text-secondary); overflow-wrap: anywhere; }
 .description p + p { margin-top: 18px; }
 /* WebGL 로고는 1024px부터만 띄운다. 그 아래는 글이 폭 전체를 쓴다. */
 @media (max-width: 1023px) {

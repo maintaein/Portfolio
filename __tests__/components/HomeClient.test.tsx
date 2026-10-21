@@ -213,6 +213,12 @@ it('the shared logo host lives outside clipping ancestors and can shrink with it
   expect(host.closest('#about, .about-electric')).toBeNull();
 });
 
+it('Korean text breaks by word site-wide while long Latin strings can still wrap', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync('styles/design-tokens.css', 'utf8');
+  expect(css).toMatch(/@layer base \{[^@]*\n  body \{[^}]*word-break: keep-all;[^}]*overflow-wrap: anywhere;/);
+});
+
 // D5-A: 1024px부터 왼쪽 문장·오른쪽 오브젝트, 그 아래는 이름·문장·오브젝트 순서. 크기는 소개 문장(h1)에 걸고
 // 낮은 화면에서는 오브젝트가 먼저 준다. 로고는 날아가는 동안 chapter 단어 줄(z 3) 아래로 지나간다.
 // 이름 자리는 큰 이름의 줄 높이만큼 비워 둔다. 두 줄 인사는 원문 개행으로 나눈다.

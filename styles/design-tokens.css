@@ -177,6 +177,9 @@
     font-family: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     color: var(--color-text-primary);
     background-color: var(--color-ink);
+    /* 한국어는 어절 단위로 끊고, 긴 영문·이메일·URL은 넘치지 않게 어디서든 끊는다. */
+    word-break: keep-all;
+    overflow-wrap: anywhere;
   }
 }
 
@@ -373,7 +376,7 @@
    낮은 화면에서는 오브젝트가 svh로 먼저 줄고 문장은 줄지 않는다. 넘치면 첫 화면이 내용만큼 늘어난다.
    두 줄 인사는 원문 개행으로 나눈다(pre-line). 단어로 나뉘는 진입 동안에도 같은 자리에서 끊긴다. */
 .portfolio-hero { --hero-name-size: clamp(56px, 6.5vw, 128px); display: flex; flex-direction: column; justify-content: center; gap: 30px; padding: 4rem max(1.5rem, 8vw); }
-.portfolio-hero h1 { max-width: 44rem; margin-top: 1.5rem; font-size: var(--font-size-t1); line-height: 1.35; font-weight: 500; word-break: keep-all; white-space: pre-line; }
+.portfolio-hero h1 { max-width: 44rem; margin-top: 1.5rem; font-size: var(--font-size-t1); line-height: 1.35; font-weight: 500; white-space: pre-line; }
 /* 큰 이름의 자리. 이름 버튼 하나가 두 쉬는 자리(data-wordmark-mode)를 CSS 배치로 오간다. 서버 HTML은 Hero 자리다.
    Hero: 이 자리 높이의 글자 줄(1.5em)로 Hero 가로 가운데에 선다. absolute라 가로는 Hero 상자(left/right 0)로,
    세로는 정적 위치라 이 flex 자리의 가운데로 정해진다. 자리와 고리에 맞춘 크기는 경계(motion.ts)가 잰다.

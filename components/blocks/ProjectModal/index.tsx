@@ -508,7 +508,7 @@ export default function ProjectModal({
           'grid-cols-[3fr_2fr] grid-rows-[64px_minmax(0,1fr)]',
           'overflow-hidden bg-[rgb(6_8_10_/_0.97)]',
           // 한국어는 어절 중간에서 끊기면 안 읽힌다. balance만으로는 부족하다.
-          '[word-break:keep-all] [overflow-wrap:anywhere] [text-wrap:pretty] [-webkit-font-smoothing:antialiased]'
+          '[overflow-wrap:anywhere] [text-wrap:pretty] [-webkit-font-smoothing:antialiased]'
         )}
       >
         {/* 1100px 아래 재배치는 순수 CSS 미디어 쿼리라 자바스크립트로
