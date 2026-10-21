@@ -6,7 +6,7 @@ import { STIR_GLSL, stiffness, stirStep } from '@/components/blocks/CrystalizedB
 
 // The GL mock records the uniforms of every draw and the shader sources; nothing is rasterised.
 type Drawn = Record<string, number | number[]>;
-const gpu = vi.hoisted(() => ({ drawn: [] as Record<string, number | number[]>[], vertex: [] as string[], fragment: [] as string[], targets: [] as { color: number; type: number }[], lost: 0, webgl2: true, fail: false, floatTargets: true, renderer: null as null | { dpr: number; width: number; height: number } }));
+const gpu = vi.hoisted(() => ({ drawn: [] as Record<string, number | number[]>[], vertex: [] as string[], fragment: [] as string[], targets: [] as { color: number; type: number }[], feedback: 0, lost: 0, webgl2: true, fail: false, floatTargets: true, renderer: null as null | { dpr: number; width: number; height: number } }));
 vi.mock('ogl', () => {
   class Renderer {
     dpr = 1; isWebgl2 = gpu.webgl2; width = 0; height = 0;
@@ -21,7 +21,9 @@ vi.mock('ogl', () => {
       this.width = width; this.height = height;
       this.gl.canvas.width = Math.round(width * this.dpr); this.gl.canvas.height = Math.round(height * this.dpr);
     }
-    render({ scene }: { scene: { program: { uniforms: Record<string, { value: unknown }> } } }) {
+    render({ scene, target }: { scene: { program: { uniforms: Record<string, { value: unknown }> } }; target?: { textures: unknown[] } }) {
+      // WebGL2 drops a draw whose target texture is also bound as a sampler input (feedback loop).
+      if (target && Object.values(scene.program.uniforms).some(u => target.textures.includes(u.value))) gpu.feedback++;
       gpu.drawn.push(Object.fromEntries(Object.entries(scene.program.uniforms)
         .filter(([, u]) => typeof u.value === 'number' || Array.isArray(u.value))
         .map(([key, u]) => [key, Array.isArray(u.value) ? [...u.value] : u.value as number])));
@@ -55,7 +57,7 @@ let clock = 1000;
 let side = 400;
 const frames = new Map<number, FrameRequestCallback>();
 beforeEach(() => {
-  gpu.drawn.length = 0; gpu.vertex.length = 0; gpu.fragment.length = 0; gpu.targets.length = 0; gpu.lost = 0; gpu.webgl2 = true; gpu.fail = false; gpu.floatTargets = true; gpu.renderer = null;
+  gpu.drawn.length = 0; gpu.vertex.length = 0; gpu.fragment.length = 0; gpu.targets.length = 0; gpu.feedback = 0; gpu.lost = 0; gpu.webgl2 = true; gpu.fail = false; gpu.floatTargets = true; gpu.renderer = null;
   frames.clear(); clock = 1000; side = 400;
   let id = 0;
   vi.spyOn(performance, 'now').mockImplementation(() => clock);
@@ -173,6 +175,8 @@ it('icons move with the particles stir equations on the same per-frame inputs: d
   expect(Math.hypot(...check()[0])).toBe(0);
   const settled = stirDraws().length;
   expect(stirDraws().at(-1)!.uReset).toBe(1);
+  // Final review M-1: no stir step or reset draw renders into a target it is sampling.
+  expect(gpu.feedback).toBe(0);
   // A resting cursor moves nothing: no stir step runs and the icons sit on the bare field.
   for (let i = 0; i < 30; i++) tick(33);
   expect(stirDraws()).toHaveLength(settled);

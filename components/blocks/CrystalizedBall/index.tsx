@@ -3,7 +3,7 @@
 // designRefactoring2/CrystalizedBall을 Hero 오브젝트로 줄였다. 뺀 것: 프리셋 8개, light 테마, 런타임 팔레트(Oklab),
 // rise·fall·orbit 먼지와 사각 입자, 테두리 hover heat와 클릭 kick, 펼쳐짐(intro), HDR float 렌더 타깃과 합성 패스.
 // 남긴 것: 테두리 가닥 5개와 flare, 테두리 불꽃 4개, 바닥 안개, drift 먼지 5000개, 포인터 응시 회전,
-// 포인터 휘젓기(입자마다 offset·velocity 상태 타깃). 아이콘은 같은 휘젓기 식(field.ts stirStep)을 JS로 푼다.
+// 포인터 휘젓기(입자마다 offset·velocity 상태 타깃). 아이콘은 같은 휘젓기 식(stir.ts stirStep)을 JS로 푼다.
 import { useEffect, useImperativeHandle, useRef, type Ref, type RefObject } from 'react';
 import { Geometry, Mesh, RenderTarget, Renderer, Texture, Triangle } from 'ogl';
 import { ParallelProgram } from '@/lib/parallelProgram';
@@ -411,6 +411,8 @@ export default function CrystalizedBall({ icons, paused = false, onReady, ref }:
     const resetStir = () => {
       if (!read || !write) return;
       stirUniforms.uReset.value = 1;
+      // 마지막 걸음 뒤 입력은 지금 write의 텍스처다. 그대로 두면 write에 그리는 두 번째 패스가 피드백 루프로 버려진다(참조의 빈 텍스처와 같다).
+      stirUniforms.tOffset.value = stirUniforms.tVelocity.value = homeTexture;
       renderer.render({ scene: stirMesh, target: read, clear: false });
       renderer.render({ scene: stirMesh, target: write, clear: false });
       stirUniforms.uReset.value = 0;
