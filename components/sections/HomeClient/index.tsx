@@ -147,7 +147,7 @@ export default function HomeClient() {
             {/* 이름 버튼은 문서에 하나뿐이다. 서버 HTML부터 이 자리(Hero)에 크게 서고, 경계가 지점을 넘으면 nav 자리로 옮긴다.
                 버튼 transform은 경계가, 안쪽 span의 opacity·자세는 인트로가 쓴다. 키보드로 누른 클릭(detail 0)은 smooth 없이 바로 간다. */}
             <div data-motion-anchor="hero-name" className="hero-name">
-              <button ref={wordmarkRef} data-testid="wordmark" data-wordmark-mode="hero" aria-label="개요로 이동"
+              <button ref={wordmarkRef} data-testid="wordmark" data-wordmark-mode="hero" aria-label={`${PERSONAL_INFO.NAME_EN}, 개요로 이동`}
                 onClick={event => navigate('overview', { focus: true, behavior: reducedMotion || event.detail === 0 ? 'auto' : 'smooth' })}
                 className="site-name min-h-11 text-left text-t6 font-bold tracking-widest"><span className="inline-block">{PERSONAL_INFO.NAME_EN}</span></button>
             </div>

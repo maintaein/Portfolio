@@ -292,7 +292,7 @@ test.describe('Native motion activity', () => {
     await expect(page.getByTestId('wordmark').locator('span')).toHaveCSS('opacity', '1');
     // 다시 위로 와도 진입은 돌지 않는다.
     await navButton(page, 'About').click(); await expectActive(page, 'about');
-    await page.getByRole('button', { name: '개요로 이동' }).click(); await expectActive(page, 'overview');
+    await page.getByRole('button', { name: 'KIM TAEIN, 개요로 이동', exact: true }).click(); await expectActive(page, 'overview');
     await expect(page.locator('html')).not.toHaveAttribute('data-intro');
   });
   test('직접 해시와 첫 휠은 진입을 기다리지 않는다', async ({ page }) => {

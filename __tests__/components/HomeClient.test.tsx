@@ -86,7 +86,9 @@ it('only the modal obscures the readable main and navigation', () => {
 it('keeps one name button, one GL host and one Hero h1; anchors hold no readable text or controls', async () => {
   flags.wide = true;
   const { container } = render(<HomeClient />); await flush();
-  expect(screen.getAllByRole('button', { name: '개요로 이동' })).toHaveLength(1);
+  // 최종 리뷰 M-4(WCAG 2.5.3): 읽기 이름이 보이는 글자로 시작해야 음성 입력의 "KIM TAEIN 클릭"이 닿는다.
+  expect(screen.getAllByRole('button', { name: 'KIM TAEIN, 개요로 이동' })).toHaveLength(1);
+  expect(screen.queryByRole('button', { name: '개요로 이동' })).toBeNull();
   expect(container.querySelectorAll('[data-logo-host]')).toHaveLength(1);
   expect(container.querySelectorAll('[data-logo-host] [data-electric-src]')).toHaveLength(1);
   // Hero 오브젝트의 GL host는 볼 하나다. Electric 로고 host는 About의 오브젝트로 남는다.
@@ -347,6 +349,13 @@ it('lays the Hero out as name, sentence, then object, and the object shrinks fir
   expect(css).toMatch(/\.hero-object \{ width: var\(--hero-object-size\); \}/);
   // JS 전·JS 없이도 큰 이름은 CSS만으로 볼 상자(광휘 포함) 앞에서 멈춘다(motion.ts의 볼 상한과 같은 식). 이름은 글 칸 왼쪽(8vw)에서 시작한다.
   expect(css).toMatch(/--hero-name-size: min\(clamp\(56px, 6\.5vw, 128px\), calc\(\(84vw - 1\.1 \* var\(--hero-object-size\) - 32px\) \/ 5\.67\)\);/);
+  // 최종 리뷰 M-3: 1024px 아래도 CSS만으로 이름(끝 자간 포함 5.77em)이 글 칸에 든다. 경계가 첫 화면 뒤에 줄여 튀지 않는다.
+  // 16px은 스크롤바 몫이다(1024px 규칙과 같다).
+  expect(css).toMatch(/\.portfolio-hero \{ --hero-name-size: min\(clamp\(56px, 6\.5vw, 128px\), calc\(\(84vw - 16px\) \/ 5\.77\)\);/);
+  for (const vw of [320, 360, 375, 390, 768, 1023]) {
+    const size = Math.min(Math.max(56, Math.min(.065 * vw, 128)), (.84 * vw - 16) / 5.77);
+    expect(size * 5.77, `${vw}px`).toBeLessThanOrEqual(vw - 16 - 2 * Math.max(24, .08 * vw) + 1e-9);
+  }
   expect(css).not.toContain('2.835');
   expect(css).not.toMatch(/\.portfolio-hero (p|h1) \{[^}]*svh/);
   expect(css).toMatch(/\.logo-host \{[^}]*z-index: 2;/);

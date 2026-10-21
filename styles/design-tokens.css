@@ -374,8 +374,10 @@
 /* Hero(D5-A). 1024px부터 왼쪽 문장·오른쪽 오브젝트, 그 아래는 이름·문장·오브젝트 순서로 쌓는다.
    소개 문장(h1)은 t1(30px)에서 1024px부터 d3(48px), 1536px부터 d2(72px). 줄 수는 폭에 맡긴다.
    낮은 화면에서는 오브젝트가 svh로 먼저 줄고 문장은 줄지 않는다. 넘치면 첫 화면이 내용만큼 늘어난다.
-   두 줄 인사는 원문 개행으로 나눈다(pre-line). 단어로 나뉘는 진입 동안에도 같은 자리에서 끊긴다. */
-.portfolio-hero { --hero-name-size: clamp(56px, 6.5vw, 128px); display: flex; flex-direction: column; justify-content: center; gap: 30px; padding: 4rem max(1.5rem, 8vw); }
+   두 줄 인사는 원문 개행으로 나눈다(pre-line). 단어로 나뉘는 진입 동안에도 같은 자리에서 끊긴다.
+   이름은 CSS만으로 글 칸(84vw, 스크롤바 16px을 뺀다)에 든다. 360·375px에서도 JS 전·JS 없이 넘치지 않고 경계가 나중에 줄여 튀지 않는다.
+   shortcut: 끝 자간까지 든 글자 폭 5.77em(motion.ts가 재는 폭)을 옮겨 적었다. 글꼴이 바뀌면 함께 고친다. */
+.portfolio-hero { --hero-name-size: min(clamp(56px, 6.5vw, 128px), calc((84vw - 16px) / 5.77)); display: flex; flex-direction: column; justify-content: center; gap: 30px; padding: 4rem max(1.5rem, 8vw); }
 .portfolio-hero h1 { max-width: 44rem; margin-top: 1.5rem; font-size: var(--font-size-t1); line-height: 1.35; font-weight: 500; white-space: pre-line; }
 /* 큰 이름의 자리. 이름 버튼 하나가 두 쉬는 자리(data-wordmark-mode)를 CSS 배치로 오간다. 서버 HTML은 Hero 자리다.
    Hero: 이 자리 높이의 글자 줄(1.5em)로 자리 왼쪽 끝에 서고 문장이 바로 아래 같은 끝에 맞는다(사용자 결정 2026-10-21).
@@ -383,7 +385,7 @@
    nav: nav-name 앵커에 fixed로 선다(좌표는 경계가 잰다). 넘을 때만 경계가 0.5초 FLIP으로 옮기고 쉬는 동안 transform이 없다.
    흰 광휘는 Hero 자리의 글자 그림자이고 FLIP 동안 사라진다. 글자 뒤 판은 두지 않는다(사용자 결정 2026-10-20). */
 .hero-name { position: relative; display: flex; align-items: center; height: calc(var(--hero-name-size) * 1.5); }
-.site-name { line-height: 1.5; text-shadow: 0 0 .2em rgb(255 255 255 / 0), 0 0 .6em rgb(255 255 255 / 0); transition: text-shadow 500ms cubic-bezier(0.22, 1, 0.36, 1); }
+.site-name { line-height: 1.5; text-shadow: 0 0 .2em rgb(255 255 255 / 0), 0 0 .6em rgb(255 255 255 / 0); transition: text-shadow 500ms cubic-bezier(0.22, 1, 0.36, 1), opacity 500ms cubic-bezier(0.22, 1, 0.36, 1), filter 500ms cubic-bezier(0.22, 1, 0.36, 1); }
 /* tracking-widest의 끝 자간을 버튼 폭에서 빼 보이는 글자 끝이 버튼 끝이다. */
 .site-name > span { margin-right: -.1em; }
 .site-name[data-wordmark-mode='hero'] { position: absolute; z-index: 1; left: 0; width: max-content; font-size: var(--hero-name-size); text-shadow: 0 0 .2em rgb(255 255 255 / .4), 0 0 .6em rgb(255 255 255 / .2); }
@@ -446,6 +448,11 @@ html[data-intro] .hero-ball { opacity: 0; }
      건다. 감싸는 div에 걸면 그 div가 fixed nav의 containing block이 돼
      nav가 자리를 잃는다. 전환 길이는 비행(500ms)과 같다 */
   [data-obscured] > nav {
+    opacity: 0;
+    filter: blur(6px);
+  }
+  /* nav 자리의 이름은 main 안의 fixed 버튼이라 위 규칙이 닿지 않는다. 모달이 열리면(main inert) nav와 같은 길이로 함께 물러난다 */
+  main[inert] .site-name[data-wordmark-mode='nav'] {
     opacity: 0;
     filter: blur(6px);
   }
