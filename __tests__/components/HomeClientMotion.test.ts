@@ -495,6 +495,23 @@ describe('로고: About 본문보다 먼저 내려앉게 떠나는 변신', () =
     scrollAt(494); expect(owners.at(-1)).toBe('boundary');
   });
 
+  // M4 Task 0. 경로 지점에서 1–2px 떨면 로고가 Hero와 About을 번갈아 날았다. 되돌기는 경로 지점 그대로이고 다시 날기만 몇 px 늦춘다.
+  it('경로 지점에서 돌아선 뒤 1–3px 떨림에는 다시 날지 않고, 돌아선 자리에서 4px 내려와야 About으로 다시 난다', () => {
+    create();
+    scrollAt(900); advance(2);
+    scrollAt(494); expect(owners.at(-1)).toBe('boundary');
+    // 경로는 495부터 About이다. 그 위아래로 떨어도 되돌던 길을 지킨다.
+    for (const y of [495, 494, 496, 495, 497]) scrollAt(y);
+    advance(2); expect(owners.at(-1)).toBe('hero');
+    for (const y of [496, 497, 495, 498]) {
+      scrollAt(y);
+      expect(owners.at(-1)).toBe('hero');
+    }
+    // 마지막으로 올라온 495에서 4px 내려왔다.
+    scrollAt(499); expect(owners.at(-1)).toBe('boundary');
+    advance(2); expect(owners.at(-1)).toBe('about');
+  });
+
   it('줄기: 볼이 제자리에서 접히고 같은 지름의 Electric 원(반지름 = 반변)이 넘겨받는다. 경계는 가장 큰 원으로 한 번만 시작한다', () => {
     create();
     scrollAt(START);
