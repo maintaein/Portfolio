@@ -341,6 +341,9 @@ test.describe('Native motion activity', () => {
     await expect(frame).toHaveCSS('opacity', '0');
     await expect(list).toHaveCSS('opacity', '0');
     await expect(frame).toHaveCSS('transform', 'none');
+    // 숨은 틀(안의 열기 단추)과 목록은 포인터를 받지 않는다(Task 1 리뷰 I2).
+    await expect(page.locator('[data-part="preview-open"]')).toHaveCSS('pointer-events', 'none');
+    await expect(list).toHaveCSS('pointer-events', 'none');
     const points = await page.evaluate(() => {
       const top = (selector: string) => document.querySelector(selector)!.getBoundingClientRect().top + scrollY;
       const margin = (selector: string) => parseFloat(getComputedStyle(document.querySelector(selector)!).scrollMarginTop);
@@ -375,6 +378,8 @@ test.describe('Native motion activity', () => {
     await expect(list).toHaveCSS('opacity', '1');
     await expect(frame).toHaveCSS('transform', 'none');
     await expect(frame).toHaveCSS('clip-path', 'none');
+    await expect(page.locator('[data-part="preview-open"]')).toHaveCSS('pointer-events', 'auto');
+    await expect(list).toHaveCSS('pointer-events', 'auto');
     await expect(page.locator('[data-logo-host] > div')).toHaveCSS('opacity', '0');
     const boxes = await page.evaluate(() => [document.querySelector('[data-motion-anchor="projects-preview"]')!, document.querySelector('[data-part="preview-open"]')!].map(el => el.getBoundingClientRect().toJSON()));
     expect(boxes[1]).toEqual(boxes[0]);
@@ -406,6 +411,19 @@ test.describe('Native motion activity', () => {
     await expect(owner).toHaveAttribute('data-logo-owner', 'about');
     await expect(frame).toHaveCSS('opacity', '0');
     await expect(page.locator('[data-logo-host] > div')).toHaveCSS('opacity', '1');
+    // 되돌아온 자리에서 프리뷰 자리는 아직 화면 아래쪽에 있다. 그 가운데를 눌러도 열기 단추가 아니다.
+    const hit = await page.evaluate(() => {
+      const open = document.querySelector('[data-part="preview-open"]')!;
+      const box = open.getBoundingClientRect();
+      const y = Math.min(innerHeight - 2, box.top + box.height / 2);
+      return { onScreen: box.top < innerHeight, open: document.elementFromPoint(box.left + box.width / 2, y) === open };
+    });
+    expect(hit).toEqual({ onScreen: true, open: false });
+    // 키보드로 Projects 목록에 닿으면 재생 없이 Projects 쉬는 자리가 되어 내용이 보인다.
+    await page.locator('#projects [role="tab"][aria-selected="true"]').focus();
+    await expect(owner).toHaveAttribute('data-logo-owner', 'projects');
+    await expect(list).toHaveCSS('opacity', '1');
+    await expect(frame).toHaveCSS('opacity', '1');
   });
   test('문턱 아래로 바로 온 해시는 처음부터 이름이 nav, 로고가 About 자리이고 재생하지 않는다', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });

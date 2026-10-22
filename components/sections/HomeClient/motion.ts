@@ -130,7 +130,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   // 틀에는 선택 전환 tween도 Flip 손잡이도 없고, 미디어 겹·data-flip-id·크기는 건드리지 않는다. 쉬는 Projects 자리에서 ''로 되돌린다.
   const previewAnchor = anchor('projects-preview');
   const frame = previewAnchor?.firstElementChild instanceof HTMLElement ? previewAnchor.firstElementChild : null;
-  const list = previewAnchor?.closest('section')?.querySelector<HTMLElement>('[data-part="index"]') ?? null;
+  const projectsSection = previewAnchor?.closest('section') ?? null;
+  const list = projectsSection?.querySelector<HTMLElement>('[data-part="index"]') ?? null;
   // Hero 이름 글자 크기(0이면 CSS 값), nav 자리(화면 좌표), 로고가 떠나는 스크롤 지점, 두 로고 앵커(문서 좌표).
   // aboutTop·line: useSectionNav가 About을 고르는 읽기선(About 위끝 <= 스크롤 + 읽기선).
   // previewAt·projectsTop: 프리뷰로 떠나는 지점과 Projects 위끝(경로 판정), preview·radius: 프리뷰 상자와 모서리.
@@ -244,8 +245,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     ball?.current?.setCollapse(0);
   };
   const clearProjects = () => {
-    if (frame) Object.assign(frame.style, { transform: '', opacity: '', clipPath: '' });
-    if (list) list.style.opacity = '';
+    if (frame) Object.assign(frame.style, { transform: '', opacity: '', clipPath: '', pointerEvents: '' });
+    if (list) Object.assign(list.style, { opacity: '', pointerEvents: '' });
   };
   const renderLogo = () => {
     if (!logo) {
@@ -279,46 +280,57 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     }
     // 원은 볼 고리와 같은 화면 지름에서 넘겨받아(host는 About 크기 그대로라 컨테이너 px = 화면 px) 펼침 동안 로고 크기로 크며 풀린다.
     // 경계 캔버스 자리는 줄지 않으므로 가장 큰 원으로 한 번 잡는다. GL이 아직 그리지 않았으면 다음 프레임에 다시 잡는다.
-    if (leg === 1 && !bound) {
-      const size = Math.max(hero.w, about.w * ORBIT);
-      bound = logo.beginBoundary({ width: size, height: size, radius: size / 2 });
-    }
-    if (bound) {
-      const ring = lerp(hero.w * shrink, about.w * ORBIT, phase.grow);
-      logo.setBoundaryTarget({ width: ring, height: ring, radius: ring / 2 });
-      logo.seekBoundary(phase.boundary);
-      if (leg !== 1) {
-        logo.endBoundary();
-        bound = false;
-      }
-    }
+    const ring = lerp(hero.w * shrink, about.w * ORBIT, phase.grow);
+    const aimRing = () => {
+      logo!.setBoundaryTarget({ width: ring, height: ring, radius: ring / 2 });
+      logo!.seekBoundary(phase.boundary);
+    };
     // 외피는 About 로고 크기의 타일에서 가로부터 넓어져 프리뷰보다 4% 큰 면이 되고, 정착에서 프리뷰 상자·모서리로 줄어든다.
     // 캔버스 자리는 줄지 않으므로 가장 큰 면으로 한 번 잡는다(자리를 그 이상 넓히지 않는다).
     const tile = about.w * ORBIT;
     const over = lerp(PREVIEW_OVER, 1, view.settle);
     const box = { width: lerp(tile, preview.w * over, view.widen), height: lerp(tile, preview.h * over, view.face), radius: lerp(tile * TILE_RADIUS, m.radius, view.corner) };
-    if (leg === 2 && !boxed) {
-      boxed = logo.beginBoundary({ width: preview.w * PREVIEW_OVER, height: preview.h * PREVIEW_OVER, radius: m.radius });
-      // GL이 아직 그리지 않았으면 이 방문은 정적으로 넘긴다. 늦게 준비돼도 날던 도중에 외피를 끼우지 않고 다음 방문에 잇는다.
-      if (!boxed) {
-        travel?.kill();
-        travel = null;
-        pose.t = goal;
-        renderLogo();
-        return;
-      }
+    const aimBox = () => {
+      logo!.setBoundaryTarget(box);
+      logo!.seekBoundary(view.shell);
+    };
+    // 지금 구간의 것이 아닌 경계를 먼저 닫는다. ElectricLogo는 경계를 잡은 채 다시 begin하면 새로 잡지 않고 다시 겨누기만 해서,
+    // 한 트윈이 About을 지나 반대쪽 구간으로 넘어갈 때 뒤에 닫으면 새 구간의 경계까지 지웠다(Task 1 리뷰 I1).
+    if (bound && leg !== 1) {
+      aimRing();
+      logo.endBoundary();
+      bound = false;
     }
-    if (boxed) {
-      logo.setBoundaryTarget(box);
-      logo.seekBoundary(view.shell);
-      if (leg !== 2) {
-        logo.endBoundary();
-        boxed = false;
+    if (boxed && leg !== 2) {
+      aimBox();
+      logo.endBoundary();
+      boxed = false;
+    }
+    if (leg === 1) {
+      if (!bound) {
+        const size = Math.max(hero.w, about.w * ORBIT);
+        bound = logo.beginBoundary({ width: size, height: size, radius: size / 2 });
       }
+      if (bound) aimRing();
+    }
+    if (leg === 2) {
+      if (!boxed) {
+        boxed = logo.beginBoundary({ width: preview.w * PREVIEW_OVER, height: preview.h * PREVIEW_OVER, radius: m.radius });
+        // GL이 아직 그리지 않았으면 이 방문은 정적으로 넘긴다. 늦게 준비돼도 날던 도중에 외피를 끼우지 않고 다음 방문에 잇는다.
+        if (!boxed) {
+          travel?.kill();
+          travel = null;
+          pose.t = goal;
+          renderLogo();
+          return;
+        }
+      }
+      aimBox();
     }
     // 내용 창: 미디어·캡션(틀)은 외피와 같은 transform·clip으로 드러나고 목록이 같은 구간에 따라온다.
     // About 쪽에서 쉬거나 나는 동안은 숨고, 프리뷰에 넘긴 뒤에는 쓴 값을 걷는다. 숨은 틀은 옮기지 않는다.
-    // 틀 안의 열기 단추가 보이지 않는 채 About·Hero 위로 옮겨 가 눌리면 안 된다.
+    // 틀 안의 열기 단추가 보이지 않는 채 About·Hero 위로 옮겨 가 눌리면 안 된다. 숨은(0) 틀과 목록은 제자리에서도 포인터를 받지 않는다.
+    // 되돌기 뒤 About 쪽에서 프리뷰 자리가 아직 화면 아래쪽에 남아 빈 배경을 누르면 상세가 열렸다(Task 1 리뷰 I2).
     if (pose.t >= 2) clearProjects();
     else {
       if (frame) {
@@ -329,9 +341,10 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
           transform: open ? `translate(${x - centre.x}px, ${y - centre.y}px) scale(${sx}, ${sy})` : '',
           clipPath: open ? `inset(0px round ${box.radius / sx}px / ${box.radius / sy}px)` : '',
           opacity: String(view.media),
+          pointerEvents: open ? '' : 'none',
         });
       }
-      if (list) list.style.opacity = String(view.list);
+      if (list) Object.assign(list.style, { opacity: String(view.list), pointerEvents: view.list > 0 ? '' : 'none' });
     }
     report(leg === 2 ? 'preview' : leg ? 'boundary' : pose.t >= 2 ? 'projects' : t >= 1 ? 'about' : 'hero');
   };
@@ -422,6 +435,14 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(queue);
   for (const element of [root, header, anchor('hero-name'), anchor('hero-object'), anchor('about-logo'), previewAnchor]) if (element) resize?.observe(element);
   document.fonts?.ready.then(queue);
+  // 숨은 Projects 안으로 키보드 포커스가 들어오면 재생 없이 Projects 쉬는 자리를 보인다. 보이지 않는 단추에 포커스가 서지 않는다.
+  // visibility로 숨기면 About에서 Tab으로 Projects에 닿지 못해 포커스로 드러낸다(Task 1 리뷰 I2).
+  const reveal = () => {
+    if (!alive || paused || !logo || pose.t >= 2) return;
+    goal = -1;
+    moveLogo(2, false);
+  };
+  projectsSection?.addEventListener('focusin', reveal);
 
   return {
     refresh: settle,
@@ -452,6 +473,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       alive = false;
       cancelAnimationFrame(queued);
       resize?.disconnect();
+      projectsSection?.removeEventListener('focusin', reveal);
       travel?.kill();
       stopName();
       context.revert();

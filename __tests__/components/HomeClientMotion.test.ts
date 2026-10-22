@@ -955,6 +955,95 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     expect(owners.slice(-1)).toEqual(['projects']);
     expect(owners).toEqual(['none', 'hero', 'boundary', 'preview', 'projects']);
   });
+
+  // Task 1 리뷰 I1. ElectricLogo는 경계를 잡은 채 다시 begin하면 새로 잡지 않고 그 경계를 다시 겨누기만 한다(index.tsx beginBoundary).
+  // 한 트윈이 About을 지나 반대쪽 구간으로 넘어갈 때 앞 구간의 경계를 먼저 닫지 않으면, 뒤의 end가 새 구간의 경계까지 지운다.
+  // 상태를 가진 손잡이로 실제 begin·end 의미를 흉내 낸다.
+  const stateful = () => {
+    const log: string[] = [];
+    let held = false;
+    let applied = 0;
+    let dropped = 0;
+    const logo: ElectricLogoHandle = {
+      beginBoundary: target => { log.push(held ? 'begin(reuse)' : `begin(${target.width === target.height ? 'circle' : 'box'})`); held = true; return true; },
+      setBoundaryTarget: () => { if (held) applied++; else dropped++; },
+      seekBoundary: () => { if (held) applied++; else dropped++; },
+      endBoundary: () => { if (held) log.push('end'); held = false; },
+    };
+    return { logo, log, counts: () => ({ applied, dropped, held }) };
+  };
+
+  it('Projects에서 Hero까지 한 트윈으로 돌아가도 About을 지날 때 상자 경계를 먼저 닫고 Hero 쪽 원 경계를 새로 잡아 끝까지 쓴다', () => {
+    const shell = stateful();
+    documentY = 1800;
+    create({ logo: shell.logo });
+    expect(owners.at(-1)).toBe('projects');
+    scrollAt(0);
+    expect(owners.at(-1)).toBe('preview');
+    advance(LOGO_SECONDS + .1);
+    expect(owners.at(-1)).toBe('boundary');
+    expect(shell.log).toEqual(['begin(box)', 'end', 'begin(circle)']);
+    expect(shell.counts().held).toBe(true);
+    const before = shell.counts().dropped;
+    advance(.5 * LOGO_SECONDS);
+    expect(shell.counts().dropped).toBe(before);
+    advance(LOGO_SECONDS);
+    expect(owners.at(-1)).toBe('hero');
+    expect(shell.log).toEqual(['begin(box)', 'end', 'begin(circle)', 'end']);
+    expect(shell.counts()).toMatchObject({ held: false, dropped: before });
+  });
+
+  it('Hero에서 Projects까지 한 트윈으로 가도 원 경계를 먼저 닫고 상자 경계를 새로 잡는다', () => {
+    const shell = stateful();
+    create({ logo: shell.logo });
+    scrollAt(1800);
+    advance(2 * LOGO_SECONDS + .1);
+    expect(owners.at(-1)).toBe('projects');
+    expect(shell.log).toEqual(['begin(circle)', 'end', 'begin(box)', 'end']);
+    expect(shell.counts()).toMatchObject({ held: false, dropped: 0 });
+  });
+
+  // Task 1 리뷰 I2. 되돌아온 About 쪽에서 숨은(불투명도 0) 프리뷰 열기 단추와 목록이 화면 아래쪽에 남아 눌렸다.
+  // 숨은 동안은 포인터를 받지 않고, 키보드로 Projects 안에 포커스가 들어오면 재생 없이 Projects 쉬는 자리를 보인다.
+  it('숨은 프리뷰 틀과 목록은 포인터를 받지 않고, 보이기 시작하면 받으며, 넘긴 뒤에는 쓴 값을 걷는다', () => {
+    restAtAbout();
+    expect([frame.style.pointerEvents, list.style.pointerEvents]).toEqual(['none', 'none']);
+    scrollAt(PREVIEW_AT);
+    advance(.75 * LOGO_SECONDS);
+    expect([frame.style.pointerEvents, list.style.pointerEvents]).toEqual(['', '']);
+    advance(1);
+    expect(frame.style.cssText).toBe('border-top-left-radius: 14px;');
+    expect(list.style.cssText).toBe('');
+    scrollAt(1800); scrollAt(1394); advance(2);
+    expect(owners.at(-1)).toBe('about');
+    expect([frame.style.pointerEvents, list.style.pointerEvents]).toEqual(['none', 'none']);
+  });
+
+  it('숨은 Projects 안으로 포커스가 들어오면(Tab) 재생 없이 Projects 쉬는 자리가 되어 내용이 보이고, 날던 되돌기도 그 자리에서 멈춘다', () => {
+    restAtAbout();
+    scrollAt(1800); scrollAt(1394); advance(2);
+    handle.beginBoundary.mockClear();
+    const tab = document.createElement('button');
+    list.append(tab);
+    tab.focus();
+    expect(owners.at(-1)).toBe('projects');
+    expect(frame.style.cssText).toBe('border-top-left-radius: 14px;');
+    expect(list.style.cssText).toBe('');
+    expect(inner.style.opacity).toBe('0');
+    expect(handle.beginBoundary).not.toHaveBeenCalled();
+    // 포커스가 머무는 동안 경로 지점(1394.4)을 넘지 않는 잔 스크롤에는 다시 숨지 않는다.
+    scrollAt(1396); scrollAt(1395);
+    expect(owners.at(-1)).toBe('projects');
+    // 되돌기 도중의 포커스도 같다.
+    tab.blur();
+    scrollAt(1800); scrollAt(1394); advance(.3 * LOGO_SECONDS);
+    expect(owners.at(-1)).toBe('preview');
+    handle.endBoundary.mockClear();
+    tab.focus();
+    expect(owners.at(-1)).toBe('projects');
+    expect(handle.endBoundary).toHaveBeenCalledTimes(1);
+    expect(list.style.opacity + frame.style.opacity).toBe('');
+  });
 });
 
 // Task 9 리뷰 Minor 5. Hero에서는 로고 host가 숨어 있으니 포인터로 기울일 것이 없다. About에서도 기울지 않았다.
