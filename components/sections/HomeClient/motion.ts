@@ -3,7 +3,8 @@ import type { ElectricLogoHandle } from '@/components/blocks/ElectricLogo';
 import { gsap, registerScrollTrigger, ScrollTrigger, SITE_EASE } from '@/lib/gsap';
 import { readingLineY } from '@/lib/utils/scrollGeometry';
 
-export type LogoOwner = 'hero' | 'about' | 'boundary' | 'none';
+// boundary: Hero↔About 비행, preview: About↔Projects 비행, projects: 프리뷰에 넘기고 숨은 자리.
+export type LogoOwner = 'hero' | 'about' | 'boundary' | 'preview' | 'projects' | 'none';
 
 export interface PortfolioMotion {
   refresh(): void;
@@ -41,6 +42,11 @@ const LOGO_SLACK = 4;
 export const CORE = .22;
 // 원이 펼쳐지는 지름(About 앵커 비율). ElectricLogo가 로고를 그리는 크기(scale .7)와 같다.
 export const ORBIT = .7;
+// About 로고에서 프로젝트 프리뷰로(M4 Task 1, 참조 background.mp4 5.15–6.17초). 다 넓어진 면은 프리뷰보다 이만큼 크게 섰다가
+// 정착에서 프리뷰 상자로 줄어든다. 참조의 면 488×188 → 카드 456×185(가로 1.07, 세로 1.016)의 기하 평균이다. 미디어는 원래 비율이라 한 배율이다.
+export const PREVIEW_OVER = 1.04;
+// 떠나는 타일의 모서리(로고 크기 비율). 참조 5.35초의 155px 타일이 45px 남짓 둥글다.
+const TILE_RADIUS = .3;
 
 type Box = { x: number; y: number; w: number; h: number };
 const EMPTY: Box = { x: 0, y: 0, w: 0, h: 0 };
@@ -68,6 +74,24 @@ export function logoPhases(p: number) {
     travel: inOut(span(.36, .8, p)),
     grow: out(unfold),
     boundary: 1 - inOut(unfold),
+  };
+}
+
+// About(1)에서 Projects(2)로 가는 진행도 q의 구간. 참조 5.15–5.35초 기호가 옮겨 가며 타일로 차고, 5.35–5.75초 면이 가로로 넓어지고,
+// 5.75–6.13초 그 면 안에 내용이 드러나고, 6.13–6.17초 카드로 들어앉는다. 비율은 녹화 속도가 아니라 이 구간들의 몫이다.
+// 이동 0–.25, 가로 0–.65, 외피 seek 0–.65(옮겨 가는 동안 이미 3분의 1 풀린다), 높이 .1–.65, 모서리 .25–.65, 미디어·캡션 .65–.85,
+// 목록 .7–.9, 정착·로고 사라짐 .9–1.
+export function previewPhases(q: number) {
+  return {
+    travel: inOut(span(0, .25, q)),
+    widen: inOut(span(0, .65, q)),
+    shell: smooth(span(0, .65, q)),
+    face: inOut(span(.1, .65, q)),
+    corner: inOut(span(.25, .65, q)),
+    media: smooth(span(.65, .85, q)),
+    list: smooth(span(.7, .9, q)),
+    settle: inOut(span(.9, 1, q)),
+    logo: 1 - smooth(span(.9, 1, q)),
   };
 }
 
@@ -102,18 +126,27 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   const anchor = (name: string) => root.querySelector(`[data-motion-anchor="${name}"]`);
   // 볼은 Hero 앵커째로 접히고 옮긴다. 앵커는 offset으로 재므로 이 transform이 측정에 섞이지 않는다.
   const orb = anchor('hero-object');
+  // 프리뷰 손잡이(previewRef)는 재기만 한다. 경계가 쓰는 것은 그 안의 자르는 틀(transform·opacity·clip-path)과 목록(opacity)뿐이다.
+  // 틀에는 선택 전환 tween도 Flip 손잡이도 없고, 미디어 겹·data-flip-id·크기는 건드리지 않는다. 쉬는 Projects 자리에서 ''로 되돌린다.
+  const previewAnchor = anchor('projects-preview');
+  const frame = previewAnchor?.firstElementChild instanceof HTMLElement ? previewAnchor.firstElementChild : null;
+  const list = previewAnchor?.closest('section')?.querySelector<HTMLElement>('[data-part="index"]') ?? null;
   // Hero 이름 글자 크기(0이면 CSS 값), nav 자리(화면 좌표), 로고가 떠나는 스크롤 지점, 두 로고 앵커(문서 좌표).
   // aboutTop·line: useSectionNav가 About을 고르는 읽기선(About 위끝 <= 스크롤 + 읽기선).
-  let m = { nameSize: 0, nav: EMPTY, logoAt: Infinity, aboutTop: Infinity, line: 0, hero: EMPTY, about: EMPTY, origin: EMPTY };
+  // previewAt·projectsTop: 프리뷰로 떠나는 지점과 Projects 위끝(경로 판정), preview·radius: 프리뷰 상자와 모서리.
+  let m = { nameSize: 0, nav: EMPTY, logoAt: Infinity, aboutTop: Infinity, line: 0, hero: EMPTY, about: EMPTY, origin: EMPTY,
+    previewAt: Infinity, projectsTop: Infinity, preview: EMPTY, radius: 0 };
   let side: 'hero' | 'nav' = 'hero';
   let flip: gsap.core.Tween | null = null;
-  // 로고 진행도 t: 0 Hero, 1 About. 시간으로만 움직이고 goal은 지금 스크롤이 가리키는 쪽이다.
+  // 로고 진행도 t: 0 Hero, 1 About, 2 Projects 프리뷰. 시간으로만 움직이고 goal은 지금 스크롤이 가리키는 쪽이다.
   const pose = { t: 0 };
   let goal = 0;
   let travel: gsap.core.Tween | null = null;
   let logo: ElectricLogoHandle | null = null;
   // 날아가는 동안 ElectricLogo 경계(원)를 잡고 있는지.
   let bound = false;
+  // 프리뷰 쪽 경계(상자)를 잡고 있는지. 방문마다 떠날 때 한 번만 잡는다.
+  let boxed = false;
   let owner: LogoOwner | null = null;
   let paused = false;
   let alive = true;
@@ -149,11 +182,19 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     const aboutTop = about ? about.getBoundingClientRect().top + window.scrollY : Infinity;
     const lock = aboutTop - (about ? parseFloat(getComputedStyle(about).scrollMarginTop) || header.offsetHeight : 0);
     const reveal = lock - window.innerHeight / 2;
+    // 프리뷰로 떠나는 지점도 같은 규칙이다. Projects가 화면 절반 안에 드는 스크롤보다 화면 높이의 15% 먼저 떠나 내용보다 먼저 내려앉는다.
+    // About 잠금 자리 뒤, Projects 잠금 자리 앞에 둔다. 프리뷰가 없으면(Projects 미마운트) 떠나지 않는다.
+    const projects = root.querySelector('[data-section="projects"]');
+    const projectsTop = projects ? projects.getBoundingClientRect().top + window.scrollY : Infinity;
+    const projectsLock = projectsTop - (projects ? parseFloat(getComputedStyle(projects).scrollMarginTop) || header.offsetHeight : 0);
+    const preview = layoutBox(previewAnchor);
     m = {
       nameSize: size, nav: rectBox(header.querySelector('[data-motion-anchor="nav-name"]')),
       logoAt: Math.min(lock - 1, Math.max(NAME_DOWN, reveal - LOGO_LEAD * window.innerHeight)),
       aboutTop, line: readingLineY(window.innerHeight, header.getBoundingClientRect().height),
       hero: heroObject, about: target, origin: layoutBox(logoHost.offsetParent),
+      previewAt: preview.w ? Math.min(projectsLock - 1, Math.max(lock + 1, projectsLock - window.innerHeight / 2 - LOGO_LEAD * window.innerHeight)) : Infinity,
+      projectsTop, preview, radius: frame ? parseFloat(getComputedStyle(frame).borderTopLeftRadius) || 0 : 0,
     };
     if (m.about.w) {
       logoHost.style.width = `${m.about.w}px`;
@@ -202,20 +243,35 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     if (orb instanceof HTMLElement) Object.assign(orb.style, { transform: '', opacity: '' });
     ball?.current?.setCollapse(0);
   };
+  const clearProjects = () => {
+    if (frame) Object.assign(frame.style, { transform: '', opacity: '', clipPath: '' });
+    if (list) list.style.opacity = '';
+  };
   const renderLogo = () => {
     if (!logo) {
+      clearProjects();
       report('none');
       return;
     }
-    const { t } = pose;
-    const { hero, about, origin } = m;
+    // 진행도 1–2는 About에서 프리뷰로 가는 구간이다. Hero 쪽 값은 그동안 1(About)에 머문다.
+    const t = Math.min(pose.t, 1);
+    const q = Math.max(0, pose.t - 1);
+    // 날고 있는 구간. 1에서 막 떠나는 순간은 가는 쪽이고, 1에 닿는 마지막 갱신은 내려앉음이다(반대쪽 경계를 잡지 않는다).
+    const leg = !travel ? 0 : pose.t > 1 ? 2 : pose.t < 1 ? 1 : goal > 1 ? 2 : goal < 1 ? 1 : 0;
+    const { hero, about, origin, preview } = m;
     const phase = logoPhases(t);
+    const view = previewPhases(q);
     const from = { x: hero.x + hero.w / 2, y: hero.y + hero.h / 2 };
-    const x = lerp(from.x, about.x + about.w / 2, phase.travel);
-    const y = lerp(from.y, about.y + about.h / 2, phase.travel);
+    const centre = { x: preview.x + preview.w / 2, y: preview.y + preview.h / 2 };
+    let x = lerp(from.x, about.x + about.w / 2, phase.travel);
+    let y = lerp(from.y, about.y + about.h / 2, phase.travel);
+    if (q > 0) {
+      x = lerp(x, centre.x, view.travel);
+      y = lerp(y, centre.y, view.travel);
+    }
     const shrink = lerp(1, CORE, phase.contract);
     logoHost.style.transform = `translate3d(${x - about.w / 2 - origin.x}px, ${y - about.h / 2 - origin.y}px, 0)`;
-    if (inner) inner.style.opacity = String(phase.logo);
+    if (inner) inner.style.opacity = String(q > 0 ? view.logo : phase.logo);
     if (t <= 0) clearOrb();
     else {
       if (orb instanceof HTMLElement) Object.assign(orb.style, { transform: `translate(${x - from.x}px, ${y - from.y}px) scale(${shrink})`, opacity: String(phase.ball) });
@@ -223,7 +279,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     }
     // 원은 볼 고리와 같은 화면 지름에서 넘겨받아(host는 About 크기 그대로라 컨테이너 px = 화면 px) 펼침 동안 로고 크기로 크며 풀린다.
     // 경계 캔버스 자리는 줄지 않으므로 가장 큰 원으로 한 번 잡는다. GL이 아직 그리지 않았으면 다음 프레임에 다시 잡는다.
-    if (travel && !bound) {
+    if (leg === 1 && !bound) {
       const size = Math.max(hero.w, about.w * ORBIT);
       bound = logo.beginBoundary({ width: size, height: size, radius: size / 2 });
     }
@@ -231,12 +287,53 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       const ring = lerp(hero.w * shrink, about.w * ORBIT, phase.grow);
       logo.setBoundaryTarget({ width: ring, height: ring, radius: ring / 2 });
       logo.seekBoundary(phase.boundary);
-      if (!travel) {
+      if (leg !== 1) {
         logo.endBoundary();
         bound = false;
       }
     }
-    report(travel ? 'boundary' : t >= 1 ? 'about' : 'hero');
+    // 외피는 About 로고 크기의 타일에서 가로부터 넓어져 프리뷰보다 4% 큰 면이 되고, 정착에서 프리뷰 상자·모서리로 줄어든다.
+    // 캔버스 자리는 줄지 않으므로 가장 큰 면으로 한 번 잡는다(자리를 그 이상 넓히지 않는다).
+    const tile = about.w * ORBIT;
+    const over = lerp(PREVIEW_OVER, 1, view.settle);
+    const box = { width: lerp(tile, preview.w * over, view.widen), height: lerp(tile, preview.h * over, view.face), radius: lerp(tile * TILE_RADIUS, m.radius, view.corner) };
+    if (leg === 2 && !boxed) {
+      boxed = logo.beginBoundary({ width: preview.w * PREVIEW_OVER, height: preview.h * PREVIEW_OVER, radius: m.radius });
+      // GL이 아직 그리지 않았으면 이 방문은 정적으로 넘긴다. 늦게 준비돼도 날던 도중에 외피를 끼우지 않고 다음 방문에 잇는다.
+      if (!boxed) {
+        travel?.kill();
+        travel = null;
+        pose.t = goal;
+        renderLogo();
+        return;
+      }
+    }
+    if (boxed) {
+      logo.setBoundaryTarget(box);
+      logo.seekBoundary(view.shell);
+      if (leg !== 2) {
+        logo.endBoundary();
+        boxed = false;
+      }
+    }
+    // 내용 창: 미디어·캡션(틀)은 외피와 같은 transform·clip으로 드러나고 목록이 같은 구간에 따라온다.
+    // About 쪽에서 쉬거나 나는 동안은 숨고, 프리뷰에 넘긴 뒤에는 쓴 값을 걷는다. 숨은 틀은 옮기지 않는다.
+    // 틀 안의 열기 단추가 보이지 않는 채 About·Hero 위로 옮겨 가 눌리면 안 된다.
+    if (pose.t >= 2) clearProjects();
+    else {
+      if (frame) {
+        const sx = preview.w ? box.width / preview.w : 1;
+        const sy = preview.h ? box.height / preview.h : 1;
+        const open = view.media > 0;
+        Object.assign(frame.style, {
+          transform: open ? `translate(${x - centre.x}px, ${y - centre.y}px) scale(${sx}, ${sy})` : '',
+          clipPath: open ? `inset(0px round ${box.radius / sx}px / ${box.radius / sy}px)` : '',
+          opacity: String(view.media),
+        });
+      }
+      if (list) list.style.opacity = String(view.list);
+    }
+    report(leg === 2 ? 'preview' : leg ? 'boundary' : pose.t >= 2 ? 'projects' : t >= 1 ? 'about' : 'hero');
   };
 
   const moveLogo = (target: number, animate: boolean) => {
@@ -262,15 +359,18 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   // 그 사이에서는 아래로 움직이면 About(첫 하강처럼 R 전에 내려앉는다), 경로 지점을 넘어 올라왔으면 Hero, 그 밖에는 지금 쪽이다.
   // 경로가 About이면 언제나 About이다. 부르는 곳 모두가 지난 스크롤 갱신을 원해 여기서 lastY를 바꾼다.
   // 다시 날기(아래로 움직임, 경로 About)는 LOGO_SLACK만큼 늦춘다. 되돌기는 경로 지점 그대로다.
+  // Projects(2)도 같은 규칙이다. 경로가 Projects에서 About으로 바뀌는 프레임에 되돌고, 그 아래 띠에서 내려가면 다시 난다.
   const logoSide = () => {
     const y = window.scrollY;
     const was = lastY;
     lastY = y;
     if (y < was) lowY = y;
-    const routed = (at: number) => m.aboutTop <= at + m.line;
-    if (y >= m.logoAt && (routed(y - LOGO_SLACK) || y >= lowY + LOGO_SLACK)) return 1;
-    if (y <= m.logoAt - LOGO_BACK || (routed(was) && !routed(y))) return 0;
-    return Math.max(0, goal);
+    const routed = (top: number, at: number) => top <= at + m.line;
+    if (y >= m.previewAt && (routed(m.projectsTop, y - LOGO_SLACK) || y >= lowY + LOGO_SLACK)) return 2;
+    if (goal === 2 && y > m.previewAt - LOGO_BACK && !(routed(m.projectsTop, was) && !routed(m.projectsTop, y))) return 2;
+    if (y >= m.logoAt && (routed(m.aboutTop, y - LOGO_SLACK) || y >= lowY + LOGO_SLACK)) return 1;
+    if (y <= m.logoAt - LOGO_BACK || (routed(m.aboutTop, was) && !routed(m.aboutTop, y))) return 0;
+    return clamp(goal);
   };
 
   const decide = () => {
@@ -320,7 +420,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   // 폰트, 창 크기, About 정적 배치 전환이 앵커를 옮긴다. main만 보면 크기가 같은 채 움직인 앵커를 놓친다. 다음 프레임에 한 번만 잰다.
   const queue = () => { if (!queued) queued = requestAnimationFrame(() => { queued = 0; settle(); }); };
   const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(queue);
-  for (const element of [root, header, anchor('hero-name'), anchor('hero-object'), anchor('about-logo')]) if (element) resize?.observe(element);
+  for (const element of [root, header, anchor('hero-name'), anchor('hero-object'), anchor('about-logo'), previewAnchor]) if (element) resize?.observe(element);
   document.fonts?.ready.then(queue);
 
   return {
@@ -339,13 +439,14 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
         travel?.kill();
         travel = null;
         bound = false;
+        boxed = false;
         pose.t = goal;
         logoHost.style.transform = '';
         clearOrb();
       }
       renderLogo();
     },
-    // M4가 Projects 경계를 붙이기 전까지는 할 일이 없다.
+    // Projects 입력의 인계(M4 Task 2)가 채운다.
     settleProjects: () => {},
     destroy: () => {
       alive = false;
@@ -362,6 +463,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       logoHost.style.height = '';
       if (inner) inner.style.opacity = '';
       clearOrb();
+      clearProjects();
     },
   };
 }

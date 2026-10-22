@@ -7,7 +7,7 @@ import { coreValues } from '@/lib/data';
 const flags = vi.hoisted(() => ({ obscured: false, pageVisible: true, reduced: false, wide: false, ready: true }));
 const motion = vi.hoisted(() => ({
   create: vi.fn(), destroy: vi.fn(), setPaused: vi.fn(), setLogo: vi.fn(), refresh: vi.fn(), settleProjects: vi.fn(),
-  owner: null as ((owner: 'hero' | 'about' | 'boundary' | 'none') => void) | null,
+  owner: null as ((owner: 'hero' | 'about' | 'boundary' | 'preview' | 'projects' | 'none') => void) | null,
 }));
 vi.mock('@/hooks/useProjectModalObscured', () => ({ useProjectModalObscured: () => flags.obscured }));
 vi.mock('@/hooks/usePageVisibility', () => ({ usePageVisibility: () => flags.pageVisible }));
@@ -28,7 +28,7 @@ vi.mock('@/components/sections/BootSequence', async () => {
 });
 vi.mock('@/components/sections', () => ({ AboutSection: ({ onChapterChange, logoOwner }: { onChapterChange: (index: number) => void; logoOwner: string }) => <p data-logo-owner-prop={logoOwner} onClick={() => onChapterChange(2)}>About original body</p>, ProjectsSection: () => <p>Projects original body</p>, ExperienceSection: () => <p>Experience original body</p>, SkillsSection: () => <p>Skills original body</p>, AwardAndCertificateSection: () => <p>Awards original body</p>, Footer: () => <footer>Contacts</footer> }));
 vi.mock('@/components/sections/HomeClient/motion', () => ({
-  createPortfolioMotion: (options: { onLogoOwnerChange: (owner: 'hero' | 'about' | 'boundary' | 'none') => void }) => {
+  createPortfolioMotion: (options: { onLogoOwnerChange: (owner: 'hero' | 'about' | 'boundary' | 'preview' | 'projects' | 'none') => void }) => {
     motion.create(options); motion.owner = options.onLogoOwnerChange;
     return { destroy: motion.destroy, setPaused: motion.setPaused, setLogo: motion.setLogo, refresh: motion.refresh, settleProjects: motion.settleProjects };
   },
@@ -282,6 +282,34 @@ it('the shared logo follows the selected chapter at About and shows BASICS React
   expect(logo).toHaveAttribute('data-electric-src', coreValues[2].logoSrc);
   act(() => motion.owner!('hero'));
   expect(logo).toHaveAttribute('data-electric-src', coreValues[0].logoSrc);
+});
+
+// M4 Task 1. About↔Projects 비행(preview) 동안에는 로고만 돌고 볼은 멈춘다. 프리뷰에 넘긴 뒤(projects)에는 숨은 로고도 멈춘다.
+// 로고는 그동안 chapter 모양 그대로라 되돌아올 때 About에서 보던 로고로 접힌다. GL은 날아가는 동안 받아들이지 않는다.
+it('the logo keeps the chapter shape and draws only while flying to the preview; handed over it rests hidden', async () => {
+  flags.wide = true;
+  const { container } = render(<HomeClient />); await flush();
+  const documentRoot = container.querySelector('.portfolio-document')!;
+  const logo = () => container.querySelector('[data-electric-src]')!;
+  const ballPaused = () => container.querySelector('[data-ball-gl]')!.getAttribute('data-ball-paused');
+  act(() => motion.owner!('about'));
+  fireEvent.click(screen.getByText('About original body'));
+  act(() => motion.owner!('preview'));
+  fireEvent.click(container.querySelector('[data-signal-ready]')!);
+  expect(documentRoot).not.toHaveAttribute('data-logo-live');
+  expect(logo()).toHaveAttribute('data-electric-src', coreValues[2].logoSrc);
+  expect(logo()).toHaveAttribute('data-electric-active', 'true');
+  expect(ballPaused()).toBe('true');
+  act(() => motion.owner!('projects'));
+  expect(documentRoot).toHaveAttribute('data-logo-live');
+  expect(logo()).toHaveAttribute('data-electric-src', coreValues[2].logoSrc);
+  expect(logo()).toHaveAttribute('data-electric-active', 'false');
+  expect(ballPaused()).toBe('true');
+  expect(screen.getByText('About original body')).toHaveAttribute('data-logo-owner-prop', 'projects');
+  act(() => motion.owner!('preview'));
+  act(() => motion.owner!('about'));
+  expect(logo()).toHaveAttribute('data-electric-src', coreValues[2].logoSrc);
+  expect(logo()).toHaveAttribute('data-electric-active', 'true');
 });
 
 it('a chapter onReady never rebuilds the boundary; the static fallbacks hide once the GL logo is live', async () => {

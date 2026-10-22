@@ -1264,10 +1264,13 @@ export default function ProjectsSection() {
             lg에서만 3fr 열 안의 80% 프리뷰를 가로 가운데로 민다 */}
         <div className="flex items-center justify-center">
           {/* 같은 data-flip-id를 가진 노드가 화면에 둘이면 Flip이 짝을 못
-              짓는다. 펼침이 살아 있는 동안은 접힘 쪽 손잡이를 뗀다 */}
+              짓는다. 펼침이 살아 있는 동안은 접힘 쪽 손잡이를 뗀다.
+              About 로고가 이 상자로 내려앉는다(HomeClient motion.ts). 경계는
+              이 상자를 재기만 하고, 쓰는 것은 아래 자르는 틀과 목록뿐이다 */}
           <div
             ref={previewRef}
             data-part="preview"
+            data-motion-anchor="projects-preview"
             aria-hidden="true"
             data-flip-id={modalOpen ? undefined : `pv-${activeProject.title}`}
             className="w-full lg:w-[80%] aspect-video"

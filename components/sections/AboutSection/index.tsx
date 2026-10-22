@@ -18,7 +18,9 @@ export interface AboutSectionProps {
   navigationPending: boolean;
   // 공유 로고의 자리(HomeClient motion.ts의 LogoOwner). 날아가는 동안(boundary)에는 잠그지 않고,
   // 그사이 잠금 자리에 닿았으면 About에 내려앉을 때 잠근다. Hero로 되돌아가 내려앉으면 미룬 잠금을 버린다.
-  logoOwner?: 'hero' | 'about' | 'boundary' | 'none';
+  // Projects 프리뷰와 오가는 비행(preview)과 프리뷰 자리(projects)에는 잠금도 본문도 묶이지 않는다(돌아올 때 읽던 chapter로 잠근다).
+  // Hero에서 About을 지나 그대로 프리뷰로 가면 미룬 잠금을 버린다.
+  logoOwner?: 'hero' | 'about' | 'boundary' | 'preview' | 'projects' | 'none';
 }
 
 const GESTURE_IDLE_MS = 220;
@@ -67,7 +69,7 @@ export default function AboutSection({ ref, onChapterChange, navigationPending, 
     landedRef.current = logoOwner !== 'boundary';
     restingRef.current = logoOwner === 'about';
     revealRef.current();
-    if (landedRef.current) landRef.current(logoOwner !== 'hero');
+    if (landedRef.current) landRef.current(logoOwner === 'about' || logoOwner === 'none');
   }, [logoOwner]);
 
   // 스크림 포털 대상. 서버 렌더에는 document가 없어 마운트 뒤에 정한다.
@@ -291,8 +293,9 @@ export default function AboutSection({ ref, onChapterChange, navigationPending, 
 
   const value = coreValues[activeIndex];
   // 본문은 로고가 내려앉은 뒤에 나타난다(사용자 결정 2026-10-21). 날아가는 동안 기다릴 뿐 스크롤 입력은 막지 않는다.
-  // 본문은 로고가 About에 내려앉아 있을 때만 보인다. 경로 지점에서 Hero로 돌아간 로고는 R 아래에서도 본문을 다시 열지 않는다(Task 12).
-  const entered = (revealed && (logoOwner === 'about' || logoOwner === 'none')) || plain;
+  // 본문은 로고가 Hero 쪽(Hero에 있거나 Hero와 오가는 중)에 있으면 보이지 않는다. 경로 지점에서 Hero로 돌아간 로고는 R 아래에서도 본문을 다시 열지 않는다(Task 12).
+  // 로고가 Projects 프리뷰 쪽에 있을 때는 About 자신의 규칙(반 화면)만 따른다(M4 Task 1).
+  const entered = (revealed && logoOwner !== 'hero' && logoOwner !== 'boundary') || plain;
   return (
     <section ref={sectionRef} id={SECTION_IDS.ABOUT} aria-labelledby="about-heading" className={styles.section}>
       {/* 섹션 제목은 시각적으로 숨긴다. 화면 위에는 chapter 단어만 남는다. */}

@@ -53,6 +53,15 @@ test.describe('Native motion activity', () => {
 
     await navButton(page, 'Skills').click();
     await expectActive(page, 'skills');
+    // 가는 길에 Projects 지점을 지나 로고가 프리뷰로 날아간다(M4 Task 1). 넘겨진 뒤에야 숨은 로고가 멈춘다.
+    // 소프트웨어 GL의 긴 프레임에는 1.5초 비행이 수십 프레임이라 페이지 쪽 rAF로 비행이 끝나기를 기다린다.
+    await page.evaluate(() => new Promise<void>(resolve => {
+      const read = () => {
+        if (document.querySelector('.portfolio-document')!.getAttribute('data-logo-owner') !== 'preview') resolve();
+        else requestAnimationFrame(read);
+      };
+      read();
+    }));
 
     // 떠나는 순간 날던 프레임 하나는 도착한다. 그 뒤로 멈춰 있는지를 본다.
     await waitFrames(page, 30);
@@ -317,6 +326,86 @@ test.describe('Native motion activity', () => {
     await expect(owner).toHaveAttribute('data-logo-owner', 'hero');
     // Hero에 내려앉은 로고는 R 아래에서도 본문을 다시 열지 않는다.
     await expect(entered).toHaveAttribute('data-entered', 'false');
+  });
+  // M4 Task 1. About 로고가 지금 고른 프로젝트 프리뷰로 한 번 재생해 내려앉고, 위로 경로가 About으로 바뀌는 스크롤에서 되돌아간다.
+  test('About→Projects 경계는 지점에서 로고를 프리뷰로 옮겨 내용을 그 뒤에 보이고, 경로가 About으로 바뀌면 되돌린다', async ({ page }) => {
+    // 쉬는 자리마다 소프트웨어 GL 프레임을 기다린다. 성공 조건이 아니라 실패 상한이다.
+    test.setTimeout(240_000);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await enter(page, 'about');
+    const owner = page.locator('.portfolio-document');
+    await expect(owner).toHaveAttribute('data-logo-owner', 'about', { timeout: 20_000 });
+    await expect(owner).toHaveAttribute('data-logo-live', '', { timeout: 30_000 });
+    const frame = page.locator('[data-motion-anchor="projects-preview"] > div');
+    const list = page.locator('#projects [data-part="index"]');
+    await expect(frame).toHaveCSS('opacity', '0');
+    await expect(list).toHaveCSS('opacity', '0');
+    await expect(frame).toHaveCSS('transform', 'none');
+    const points = await page.evaluate(() => {
+      const top = (selector: string) => document.querySelector(selector)!.getBoundingClientRect().top + scrollY;
+      const margin = (selector: string) => parseFloat(getComputedStyle(document.querySelector(selector)!).scrollMarginTop);
+      const aboutLock = top('[data-section="about"]') - margin('[data-section="about"]');
+      const projectsLock = top('[data-section="projects"]') - margin('[data-section="projects"]');
+      const header = document.querySelector('[data-scroll-header]')!.getBoundingClientRect().height;
+      return {
+        start: Math.min(projectsLock - 1, Math.max(aboutLock + 1, projectsLock - innerHeight / 2 - .15 * innerHeight)),
+        route: top('[data-section="projects"]') - (header + (innerHeight - header) * .4),
+      };
+    });
+    expect(points.route).toBeGreaterThan(points.start);
+    // 매 프레임 주인과 내용 불투명도를 같이 읽는다. 날기 전에는 내용이 숨어 있고, 날기 시작한 프레임에도 숨어 있다.
+    const gate = page.evaluate(() => new Promise<{ flying: number; early: number; firstFlying: number }>(resolve => {
+      const counts = { flying: 0, early: 0, firstFlying: -1 };
+      const shown = () => Math.max(...['[data-motion-anchor="projects-preview"] > div', '#projects [data-part="index"]'].map(selector => Number(getComputedStyle(document.querySelector(selector)!).opacity)));
+      const read = () => {
+        const owner = document.querySelector('.portfolio-document')!.getAttribute('data-logo-owner');
+        if (owner === 'about' && shown() > 0) counts.early++;
+        if (owner === 'preview') { if (!counts.flying++) counts.firstFlying = shown(); }
+        if (owner === 'projects') resolve(counts); else requestAnimationFrame(read);
+      };
+      read();
+    }));
+    await page.evaluate(y => window.scrollTo({ top: y, behavior: 'instant' }), Math.ceil(points.start) + 10);
+    const seen = await gate;
+    expect(seen.flying).toBeGreaterThan(0);
+    expect(seen.early).toBe(0);
+    expect(seen.firstFlying).toBe(0);
+    // 넘긴 뒤: 틀·목록에 경계가 쓴 값이 없고 로고 host는 숨었다. 누르는 상자는 프리뷰 상자 그대로다.
+    await expect(frame).toHaveCSS('opacity', '1');
+    await expect(list).toHaveCSS('opacity', '1');
+    await expect(frame).toHaveCSS('transform', 'none');
+    await expect(frame).toHaveCSS('clip-path', 'none');
+    await expect(page.locator('[data-logo-host] > div')).toHaveCSS('opacity', '0');
+    const boxes = await page.evaluate(() => [document.querySelector('[data-motion-anchor="projects-preview"]')!, document.querySelector('[data-part="preview-open"]')!].map(el => el.getBoundingClientRect().toJSON()));
+    expect(boxes[1]).toEqual(boxes[0]);
+
+    // 경로가 Projects인 동안은 머물고, About으로 바뀌는 스크롤에서 되돌기가 시작한다. 내용은 되돌기 시작보다 먼저 사라지지 않는다.
+    await page.evaluate(y => window.scrollTo({ top: y, behavior: 'instant' }), Math.ceil(points.route) + 2);
+    await expectActive(page, 'projects');
+    await expect(owner).toHaveAttribute('data-logo-owner', 'projects');
+    // 주인 표시는 React가 다음 커밋에 쓰고 불투명도는 경계가 바로 쓴다. 그래서 "되돌기 시작 전"을 주인이 아니라 스크롤로 잰다.
+    const leave = page.evaluate(route => new Promise<number>(resolve => {
+      let early = 0;
+      const read = () => {
+        if (scrollY >= route && Number(getComputedStyle(document.querySelector('#projects [data-part="index"]')!).opacity) < 1) early++;
+        if (document.querySelector('.portfolio-document')!.getAttribute('data-logo-owner') !== 'projects') return resolve(early);
+        requestAnimationFrame(read);
+      };
+      read();
+    }), points.route);
+    await page.evaluate(y => window.scrollTo({ top: y, behavior: 'instant' }), Math.floor(points.route) - 2);
+    expect(await leave).toBe(0);
+    await expectActive(page, 'about');
+    await page.evaluate(() => new Promise<void>(resolve => {
+      const read = () => {
+        if (document.querySelector('.portfolio-document')!.getAttribute('data-logo-owner') !== 'preview') resolve();
+        else requestAnimationFrame(read);
+      };
+      read();
+    }));
+    await expect(owner).toHaveAttribute('data-logo-owner', 'about');
+    await expect(frame).toHaveCSS('opacity', '0');
+    await expect(page.locator('[data-logo-host] > div')).toHaveCSS('opacity', '1');
   });
   test('문턱 아래로 바로 온 해시는 처음부터 이름이 nav, 로고가 About 자리이고 재생하지 않는다', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });

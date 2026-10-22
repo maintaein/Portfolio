@@ -77,7 +77,10 @@ export default function HomeClient() {
   const glLogo = wideScreen && preferenceReady && !reducedMotion && !introPending;
   // 쉬는 자리마다 그리는 GL host는 하나다. Hero에서는 볼이 돌고 로고는 한 장만 미리 그린 채 멈춘다.
   // About에서는 로고가 돌고 볼은 접혀 사라진 채 멈춘다. 변신 동안(boundary)만 둘이 함께 그린다.
+  // 프리뷰로 가는 동안(preview)은 로고만 돌고, 프리뷰에 넘긴 뒤(projects)에는 숨은 로고도 멈춘다.
   const heroResting = logoOwner === 'hero' || logoOwner === 'none';
+  const logoIdle = heroResting || logoOwner === 'projects';
+  const ballRuns = heroResting || logoOwner === 'boundary';
   const activeLabel = HOME_SECTION_CONFIG.find(section => section.id === active)?.label ?? 'Overview';
   const [announcement, setAnnouncement] = useState('');
   // 명시적 이동이 도착해 목적지에 포커스가 간 때만 알린다. 수동으로 읽어 넘긴 섹션은 알리지 않는다.
@@ -114,7 +117,7 @@ export default function HomeClient() {
   useEffect(() => { motionRef.current?.setPaused(obscured || !pageVisible); }, [obscured, pageVisible, motionModule, reducedMotion]);
   useEffect(() => {
     if (!logoReady || logoOwner === 'none') setLogoLive(false);
-    else if (logoOwner !== 'boundary') setLogoLive(true);
+    else if (logoOwner !== 'boundary' && logoOwner !== 'preview') setLogoLive(true);
   }, [logoReady, logoOwner]);
   // 진입 대상은 경계가 이름을 Hero 자리에 놓은 뒤에 넘긴다. 숨긴 이름이 nav에서 나타나 뛰어내리지 않는다.
   // 오브젝트는 Hero 앵커 안 정적 실루엣의 껍질이다. 경계가 재는 앵커 상자는 건드리지 않는다.
@@ -166,7 +169,7 @@ export default function HomeClient() {
                   <span style={{ maskImage: `url(/icons-mono/${name}.svg)`, WebkitMaskImage: `url(/icons-mono/${name}.svg)` }} />
                 </span>)}
               </div>
-              {glLogo ? <DynamicCrystalizedBall ref={ballRef} icons={ballIconsRef} paused={logoOwner === 'about' || !motionReady || !pageVisible || obscured} onReady={ballDone} /> : null}
+              {glLogo ? <DynamicCrystalizedBall ref={ballRef} icons={ballIconsRef} paused={!ballRuns || !motionReady || !pageVisible || obscured} onReady={ballDone} /> : null}
             </div>
           </div>
         </section>
@@ -180,8 +183,9 @@ export default function HomeClient() {
             바깥은 경계가 옮기고, 안쪽 불투명도는 변신 진행도(Hero에서 0)다. */}
         <div ref={logoHostRef} data-logo-host aria-hidden="true" className="logo-host">
           <div>
-            {/* Hero에서 쉬는 동안 host는 숨어 돌지 않는다. 한 장만 미리 그려 준비를 알리고 변신이 시작되면 돈다. */}
-            {glLogo ? <DynamicElectricLogo ref={setLogo} src={LOGO_SRCS[logoOwner === 'about' ? aboutChapter : 0]} active={!heroResting && motionReady && pageVisible && !obscured}
+            {/* Hero에서 쉬는 동안 host는 숨어 돌지 않는다. 한 장만 미리 그려 준비를 알리고 변신이 시작되면 돈다.
+                About을 떠나 프리뷰로 가고 돌아오는 동안은 chapter 로고 그대로다. 되돌아올 때 About에서 보던 로고로 접힌다. */}
+            {glLogo ? <DynamicElectricLogo ref={setLogo} src={LOGO_SRCS[heroResting || logoOwner === 'boundary' ? 0 : aboutChapter]} active={!logoIdle && motionReady && pageVisible && !obscured}
               prewarm preloadSrcs={LOGO_SRCS} onReady={() => setLogoReady(true)} color="#7fe3ee" glowColor="#03b3c3"
               intensity={0.65} glow={0.3} speed={1.1} flicker={0.25} interactive={false} /> : null}
           </div>

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { gsap, ScrollTrigger } from '@/lib/gsap';
 import type { ElectricLogoHandle } from '@/components/blocks/ElectricLogo';
-import { CORE, LOGO_SECONDS, ORBIT, createPortfolioMotion, logoPhases, type LogoOwner, type PortfolioMotion } from '@/components/sections/HomeClient/motion';
+import { CORE, LOGO_SECONDS, ORBIT, PREVIEW_OVER, createPortfolioMotion, logoPhases, previewPhases, type LogoOwner, type PortfolioMotion } from '@/components/sections/HomeClient/motion';
 import { resolveCurrentSection } from '@/lib/utils/scrollGeometry';
 
 // jsdom에는 레이아웃이 없어 실제 브라우저가 줄 offset 값을 요소마다 심는다.
@@ -697,6 +697,263 @@ describe('로고: About 본문보다 먼저 내려앉게 떠나는 변신', () =
     const calls = Object.values(handle).map(fn => fn.mock.calls.length);
     scrollAt(808); advance(1);
     expect(Object.values(handle).map(fn => fn.mock.calls.length)).toEqual(calls);
+  });
+});
+
+// M4 Task 1(사용자 결정 D2-A 2026-10-20, 참조 background.mp4 5.15–6.17초). About 로고가 지금 고른 프로젝트의 프리뷰가 된다.
+// 진행도는 1(About)에서 2(Projects)로 1.5초 동안 시간으로 돈다. 0–25% 이동·가로 확장, 25–65% 외피가 프리뷰 면을 이루고,
+// 65–90% 실제 미디어·캡션·목록이 같은 창으로 드러나고, 90–100% 프리뷰 상자·모서리에 정확히 내려앉은 뒤 host가 숨는다.
+describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 된다', () => {
+  let projectsSection: HTMLElement; let preview: HTMLElement; let frame: HTMLElement; let media: HTMLElement; let list: HTMLElement;
+  // Projects는 1800부터 900 높이. 프리뷰(640×360, 모서리 14)는 왼쪽 열에 있고 목록은 오른쪽 열이다.
+  // 지점 = 잠금(1800 - 76) - 화면 절반 450 - 화면 15% 135 = 1139. 경로 지점 = 1800 - (76 + 824 × .4) = 1394.4.
+  const PREVIEW_AT = 1139;
+  const PREVIEW = { x: 120, y: 2050, w: 640, h: 360 };
+  // 프리뷰 가운데(440, 2230)에 About 앵커 크기(360)의 host 가운데가 온다.
+  const PREVIEW_LOGO = { x: 260, y: 2050, z: 0 };
+  const OVER = { width: 640 * 1.04, height: 360 * 1.04, radius: 14 };
+  beforeEach(() => {
+    projectsSection = document.createElement('div');
+    projectsSection.dataset.section = 'projects';
+    projectsSection.innerHTML = `<section><div data-motion-anchor="projects-preview" data-flip-id="pv-A"><div style="border-top-left-radius: 14px"><div data-part="preview-media"></div></div></div><div data-part="index"></div></section>`;
+    root.insertBefore(projectsSection, host);
+    preview = projectsSection.querySelector('[data-motion-anchor="projects-preview"]')!;
+    frame = preview.firstElementChild as HTMLElement;
+    media = projectsSection.querySelector('[data-part="preview-media"]')!;
+    list = projectsSection.querySelector('[data-part="index"]')!;
+    place(projectsSection, { x: 0, y: 1800, w: 1440, h: 900 });
+    place(preview, PREVIEW);
+  });
+  const shown = () => ({ frame: frame.style.opacity, list: list.style.opacity });
+  const restAtAbout = () => { create(); scrollAt(900); advance(2); expect(owners.at(-1)).toBe('about'); };
+  const route = (y: number) => resolveCurrentSection({
+    sections: [{ id: 'overview', top: 76 }, { id: 'about', top: 900 }, { id: 'projects', top: 1800 }],
+    scrollY: y, viewportHeight: viewport, headerHeight: 76, documentHeight: 5000,
+  });
+
+  it('시간표: 이동 0–.25, 외피 seek 0–.65, 높이 .1–.65, 모서리 .25–.65, 미디어 .65–.85, 목록 .7–.9, 정착 .9–1', () => {
+    expect(previewPhases(0)).toEqual({ travel: 0, widen: 0, shell: 0, face: 0, corner: 0, media: 0, list: 0, settle: 0, logo: 1 });
+    expect(previewPhases(1)).toEqual({ travel: 1, widen: 1, shell: 1, face: 1, corner: 1, media: 1, list: 1, settle: 1, logo: 0 });
+    expect(previewPhases(.25).travel).toBe(1);
+    expect(previewPhases(.65)).toMatchObject({ widen: 1, shell: 1, face: 1, corner: 1, media: 0 });
+    expect(previewPhases(.85).media).toBe(1);
+    expect(previewPhases(.7).list).toBe(0);
+    expect(previewPhases(.9)).toMatchObject({ list: 1, settle: 0, logo: 1 });
+    expect(PREVIEW_OVER).toBe(1.04);
+    let last = previewPhases(0);
+    for (let i = 1; i <= 400; i++) {
+      const now = previewPhases(i / 400);
+      for (const key of ['travel', 'widen', 'shell', 'face', 'corner', 'media', 'list', 'settle'] as const) expect(now[key]).toBeGreaterThanOrEqual(last[key]);
+      expect(now.logo).toBeLessThanOrEqual(last.logo);
+      last = now;
+    }
+  });
+
+  it('About에서 쉬는 동안 Projects 내용은 숨어 있고, 지점(Projects 잠금 - 화면 절반 - 15%)에서 한 번 재생해 프리뷰에 내려앉는다', () => {
+    restAtAbout();
+    expect(shown()).toEqual({ frame: '0', list: '0' });
+    expect(frame.style.transform).toBe('');
+    scrollAt(PREVIEW_AT - 1); expect(owners.at(-1)).toBe('about');
+    scrollAt(PREVIEW_AT); expect(owners.at(-1)).toBe('preview');
+    expect(handle.beginBoundary).toHaveBeenLastCalledWith(OVER);
+    advance(LOGO_SECONDS - .02); expect(owners.at(-1)).toBe('preview');
+    advance(.04); expect(owners.at(-1)).toBe('projects');
+    expect(logo()).toEqual(PREVIEW_LOGO);
+    expect(inner.style.opacity).toBe('0');
+    expect(shown()).toEqual({ frame: '', list: '' });
+    expect(frame.style.transform + frame.style.clipPath).toBe('');
+    // 경로 지점에 닿지 않고 돌아서면 지점 24 위에서 돌아간다.
+    scrollAt(PREVIEW_AT - 23); expect(owners.at(-1)).toBe('projects');
+    scrollAt(PREVIEW_AT - 24); expect(owners.at(-1)).toBe('preview');
+    advance(2); expect(owners.at(-1)).toBe('about');
+    expect(logo()).toEqual(ABOUT_LOGO);
+    expect(shown()).toEqual({ frame: '0', list: '0' });
+  });
+
+  it('위로 갈 때 되돌기는 경로가 Projects에서 About으로 바뀌는 스크롤에서 시작하고, 1–3px 떨림에는 다시 날지 않는다', () => {
+    restAtAbout();
+    scrollAt(1800); advance(2); expect(owners.at(-1)).toBe('projects');
+    let left = 0;
+    let switched = 0;
+    for (let y = 1799; y > 900 && !(left && switched); y--) {
+      scrollAt(y);
+      if (!left && owners.at(-1) !== 'projects') left = y;
+      if (!switched && route(y) === 'about') switched = y;
+    }
+    expect({ left, switched }).toEqual({ left: 1394, switched: 1394 });
+    expect(owners.at(-1)).toBe('preview');
+    for (const y of [1395, 1394, 1396, 1395, 1397]) scrollAt(y);
+    advance(2); expect(owners.at(-1)).toBe('about');
+    for (const y of [1396, 1397, 1395, 1398]) {
+      scrollAt(y);
+      expect(owners.at(-1)).toBe('about');
+    }
+    // 마지막으로 올라온 1395에서 4px 내려왔다(M4 Task 0의 늦춤).
+    scrollAt(1399); expect(owners.at(-1)).toBe('preview');
+    advance(2); expect(owners.at(-1)).toBe('projects');
+  });
+
+  it('외피: 지금 보이는 로고에서 시작해 가장 큰 면으로 한 번만 잡고, 이동·확장 뒤 면을 이루고, 프리뷰 상자·모서리에 정확히 정착한다', () => {
+    restAtAbout();
+    handle.beginBoundary.mockClear(); handle.endBoundary.mockClear();
+    scrollAt(PREVIEW_AT);
+    expect(handle.beginBoundary).toHaveBeenCalledTimes(1);
+    // 출발은 About 로고 크기(앵커 × .7)의 타일이고 외피는 아직 로고 모양 그대로다(seek 0).
+    expect(lastCall(handle.setBoundaryTarget)).toEqual({ width: 360 * ORBIT, height: 360 * ORBIT, radius: 360 * ORBIT * .3 });
+    expect(lastCall(handle.seekBoundary)).toBe(0);
+    expect(logo()).toEqual(ABOUT_LOGO);
+    // 25%: host가 프리뷰 가운데에 닿았고 가로가 먼저 넓어진다.
+    advance(.25 * LOGO_SECONDS);
+    expect(logo()).toEqual(PREVIEW_LOGO);
+    const wide = lastCall(handle.setBoundaryTarget) as { width: number; height: number };
+    expect(wide.width).toBeGreaterThan(wide.height);
+    // 옮겨 가는 동안 로고가 이미 넓어지는 타일로 풀리기 시작한다(headed Chrome에서 .08이면 로고 그대로였다).
+    expect(lastCall(handle.seekBoundary) as number).toBeGreaterThan(.3);
+    // 65%: 외피가 프리뷰보다 4% 큰 면을 이뤘다.
+    advance(.4 * LOGO_SECONDS);
+    const face = lastCall(handle.setBoundaryTarget) as { width: number; height: number; radius: number };
+    expect(face.width).toBeCloseTo(OVER.width, 3); expect(face.height).toBeCloseTo(OVER.height, 3); expect(face.radius).toBeCloseTo(14, 3);
+    expect(lastCall(handle.seekBoundary)).toBe(1);
+    expect(inner.style.opacity).toBe('1');
+    expect(owners.at(-1)).toBe('preview');
+    advance(.35 * LOGO_SECONDS + .02);
+    expect(lastCall(handle.setBoundaryTarget)).toEqual({ width: 640, height: 360, radius: 14 });
+    expect(handle.endBoundary).toHaveBeenCalledTimes(1);
+    expect(handle.beginBoundary).toHaveBeenCalledTimes(1);
+    expect(owners.at(-1)).toBe('projects');
+  });
+
+  it('미디어·캡션은 외피와 같은 transform·clip 창으로 드러나고 목록이 같은 구간에 따라온다. 프리뷰 손잡이·미디어 겹은 건드리지 않는다', () => {
+    restAtAbout();
+    scrollAt(PREVIEW_AT);
+    advance(.5 * LOGO_SECONDS);
+    expect(shown()).toEqual({ frame: '0', list: '0' });
+    // 숨은 틀은 옮기지 않는다. 안의 열기 단추가 보이지 않는 채 About 위로 오면 눌린다.
+    expect(frame.style.transform + frame.style.clipPath).toBe('');
+    advance(.25 * LOGO_SECONDS);
+    // q = .75: 면은 프리뷰의 1.04배, 창의 모서리는 화면에서 14px이다.
+    const box = lastCall(handle.setBoundaryTarget) as { width: number; height: number; radius: number };
+    const [dx, dy, sx, sy] = numbers(frame.style.transform);
+    expect([dx, dy]).toEqual([0, 0]);
+    expect(sx).toBeCloseTo(box.width / 640, 4); expect(sy).toBeCloseTo(box.height / 360, 4);
+    expect(frame.style.clipPath).toMatch(/^inset\(0px round [\d.]+px \/ [\d.]+px\)$/);
+    const [rx, ry] = (frame.style.clipPath.match(/[\d.]+(?=px)/g) ?? []).slice(1).map(Number);
+    expect(rx * sx).toBeCloseTo(box.radius, 2); expect(ry * sy).toBeCloseTo(box.radius, 2);
+    expect(Number(shown().frame)).toBeGreaterThan(0); expect(Number(shown().frame)).toBeLessThan(1);
+    expect(Number(shown().list)).toBeGreaterThan(0); expect(Number(shown().list)).toBeLessThan(Number(shown().frame));
+    expect(preview.style.cssText + media.style.cssText).toBe('');
+    expect(preview.dataset.flipId).toBe('pv-A');
+    advance(1);
+    expect(frame.style.cssText).toBe('border-top-left-radius: 14px;');
+    expect(list.style.cssText + preview.style.cssText + media.style.cssText).toBe('');
+  });
+
+  it('되돌기는 같은 창을 거꾸로 밟는다: 시작 프레임에는 내용이 그대로이고 내용이 사라진 뒤 로고로 접혀 About에서 chapter 시간으로 돌아간다', () => {
+    restAtAbout();
+    scrollAt(1800); advance(2);
+    handle.beginBoundary.mockClear(); handle.endBoundary.mockClear();
+    scrollAt(1394);
+    expect(owners.at(-1)).toBe('preview');
+    expect(handle.beginBoundary).toHaveBeenCalledWith(OVER);
+    expect(lastCall(handle.seekBoundary)).toBe(1);
+    // 시작 프레임은 쉬는 자리 그대로다(쓴 값 없음).
+    expect(shown()).toEqual({ frame: '', list: '' });
+    expect(frame.style.transform + frame.style.clipPath).toBe('');
+    advance(.2 * LOGO_SECONDS);
+    expect(Number(shown().list)).toBeLessThan(1);
+    advance(.8 * LOGO_SECONDS + .02);
+    expect(owners.at(-1)).toBe('about');
+    expect(lastCall(handle.seekBoundary)).toBe(0);
+    expect(handle.endBoundary).toHaveBeenCalledTimes(1);
+    expect(shown()).toEqual({ frame: '0', list: '0' });
+  });
+
+  it('도중에 되넘으면 보이는 그대로에서 거꾸로 돌고 지난 진행도만큼의 시간만 쓴다', () => {
+    restAtAbout();
+    scrollAt(PREVIEW_AT); advance(.7 * LOGO_SECONDS);
+    const seen = () => ({ host: host.style.transform, inner: inner.style.opacity, frame: frame.style.cssText, list: list.style.opacity,
+      seek: lastCall(handle.seekBoundary), target: lastCall(handle.setBoundaryTarget) });
+    const before = seen();
+    scrollAt(PREVIEW_AT - 24);
+    expect(owners.at(-1)).toBe('preview');
+    expect(seen()).toEqual(before);
+    advance(.7 * LOGO_SECONDS - .02); expect(owners.at(-1)).toBe('preview');
+    advance(.04); expect(owners.at(-1)).toBe('about');
+    expect(logo()).toEqual(ABOUT_LOGO);
+  });
+
+  it('날던 중의 크기 변화·refresh는 처음부터 다시 돌지 않고 다시 잰 프리뷰로 마저 간다', () => {
+    restAtAbout();
+    scrollAt(PREVIEW_AT); advance(.5 * LOGO_SECONDS);
+    place(preview, { x: 100, y: 2000, w: 560, h: 315 });
+    resize();
+    motion!.refresh();
+    expect(owners.at(-1)).toBe('preview');
+    expect(handle.endBoundary).toHaveBeenCalledTimes(1);
+    advance(.5 * LOGO_SECONDS + .02);
+    expect(owners.at(-1)).toBe('projects');
+    expect(logo()).toEqual({ x: 100 + 280 - 180, y: 2000 + 157.5 - 180, z: 0 });
+    expect(lastCall(handle.setBoundaryTarget)).toEqual({ width: 560, height: 315, radius: 14 });
+  });
+
+  it('GL이 아직 준비되지 않은 방문은 정적으로 넘기고, 늦게 준비돼도 그 방문 도중에 외피를 끼우지 않는다. 다음 방문은 다시 잇는다', () => {
+    restAtAbout();
+    handle.beginBoundary.mockClear();
+    handle.beginBoundary.mockReturnValueOnce(false);
+    scrollAt(PREVIEW_AT);
+    expect(owners.slice(-2)).toEqual(['about', 'projects']);
+    expect(handle.beginBoundary).toHaveBeenCalledTimes(1);
+    expect(shown()).toEqual({ frame: '', list: '' });
+    expect(inner.style.opacity).toBe('0');
+    // 이제 begin은 true를 돌려준다(늦은 onReady). 같은 방문 안에서는 다시 부르지 않는다.
+    scrollAt(PREVIEW_AT + 100); advance(2);
+    expect(handle.beginBoundary).toHaveBeenCalledTimes(1);
+    expect(owners.at(-1)).toBe('projects');
+    scrollAt(PREVIEW_AT - 24);
+    expect(owners.at(-1)).toBe('preview');
+    expect(handle.beginBoundary).toHaveBeenCalledTimes(2);
+  });
+
+  it('직접 해시(/#projects)와 모션 감소는 재생 없이 Projects 쉬는 자리이고 내용은 손대지 않는다', () => {
+    documentY = 1800;
+    create();
+    expect(owners).toEqual(['none', 'projects']);
+    expect(handle.beginBoundary).not.toHaveBeenCalled();
+    expect(shown()).toEqual({ frame: '', list: '' });
+    motion!.destroy(); owners.length = 0;
+    create({ reduced: true });
+    scrollAt(900); scrollAt(1800);
+    expect(owners).toEqual(['none', 'projects', 'about', 'projects']);
+    expect(handle.beginBoundary).not.toHaveBeenCalled();
+    expect(shown()).toEqual({ frame: '', list: '' });
+  });
+
+  it('1024px 아래(GL 로고 없음)는 Projects 내용을 숨기지 않고 정적으로 넘긴다. GL 손잡이가 떠나면 쓴 값을 걷는다', () => {
+    create({ logo: null });
+    scrollAt(900); scrollAt(1800);
+    expect(shown()).toEqual({ frame: '', list: '' });
+    expect(owners).toEqual(['none']);
+    motion!.setLogo(handle);
+    scrollAt(900); advance(2);
+    expect(shown()).toEqual({ frame: '0', list: '0' });
+    scrollAt(PREVIEW_AT); advance(.8 * LOGO_SECONDS);
+    motion!.setLogo(null);
+    expect(frame.style.cssText).toBe('border-top-left-radius: 14px;');
+    expect(list.style.cssText).toBe('');
+  });
+
+  it('Hero에서 Projects로 바로 가면 한 진행도로 About을 지나고, Hero 쪽 원 경계를 닫은 뒤 상자 경계를 잡는다', () => {
+    create();
+    scrollAt(1800);
+    expect(owners.at(-1)).toBe('boundary');
+    advance(LOGO_SECONDS + .1);
+    expect(owners.at(-1)).toBe('preview');
+    const order = [...handle.beginBoundary.mock.invocationCallOrder, ...handle.endBoundary.mock.invocationCallOrder].sort((a, b) => a - b);
+    expect(order).toEqual([handle.beginBoundary.mock.invocationCallOrder[0], handle.endBoundary.mock.invocationCallOrder[0], handle.beginBoundary.mock.invocationCallOrder[1]]);
+    expect(handle.beginBoundary).toHaveBeenLastCalledWith(OVER);
+    advance(LOGO_SECONDS);
+    expect(owners.slice(-1)).toEqual(['projects']);
+    expect(owners).toEqual(['none', 'hero', 'boundary', 'preview', 'projects']);
   });
 });
 

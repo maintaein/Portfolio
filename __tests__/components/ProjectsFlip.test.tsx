@@ -1062,6 +1062,40 @@ describe('ProjectsFlip. 전환 tween이 비행 기하를 안 건드린다', { ti
   });
 });
 
+// M4 Task 1. About 로고가 프리뷰가 되는 경계(HomeClient motion.ts)는 프리뷰
+// 손잡이에 앵커 표시 하나만 받고, 자르는 틀(손잡이의 첫 자식)의 transform·
+// opacity·clip-path만 쓴다. 섹션은 그 세 값을 모르는 채 제 일을 해야 하고
+// 경계도 섹션의 겹·손잡이·data-flip-id를 안 건드린다
+describe('ProjectsFlip. 로고→프리뷰 경계의 소유 범위', { timeout: 30_000 }, () => {
+  it('앵커는 프리뷰 손잡이 자신이고, 경계가 틀에 쓴 값이 남아 있어도 선택 전환·손잡이·비행 상태 뜨기가 그대로다', async () => {
+    const getState = vi.spyOn(Flip, 'getState');
+    renderSection();
+    await flushGsapImport();
+    const preview = previewEl();
+    expect(document.querySelectorAll('[data-motion-anchor]')).toHaveLength(1);
+    expect(preview).toHaveAttribute('data-motion-anchor', 'projects-preview');
+    const frame = preview.firstElementChild as HTMLElement;
+    const layer = document.querySelector<HTMLElement>('[data-part="preview-media"]')!;
+    expect(frame.contains(layer)).toBe(true);
+    expect(frame.contains(document.querySelector('[data-part="preview-open"]'))).toBe(true);
+    // 경계가 65–90% 구간에 쓰는 값들
+    const boundary = { transform: 'translate(0px, 0px) scale(1.02, 1.02)', opacity: '0.5', clipPath: 'inset(0px round 13.7px / 13.7px)' };
+    Object.assign(frame.style, boundary);
+    const list = document.querySelector<HTMLElement>('[data-part="index"]')!;
+    list.style.opacity = '0.3';
+
+    fireEvent.click(nameEl(READY_INDEX));
+    expect(layer.style.transform).not.toBe('');
+    expect(preview).toHaveAttribute('data-flip-id', `pv-${projects[READY_INDEX].title}`);
+    expect(frame.style).toMatchObject(boundary);
+    expect(list.style.opacity).toBe('0.3');
+    fireEvent.click(nameEl(READY_INDEX));
+    expect(getState).toHaveBeenCalledTimes(1);
+    expect((getState.mock.calls[0][0] as HTMLElement[])[0]).toBe(preview);
+    expect(preview.style.transform).toBe('');
+  });
+});
+
 // 계획 5 T2 phase D task Q-2. 새로고침으로 복구된 모달은 openModal을 안
 // 거치므로 snapWheel도 없다. 휠 effect가 modalOpen이면 그냥 돌아가 버리면
 // 휠 pos는 마운트 때의 기본값(0)에 멈춘 채 DOM에는 그 어떤 자리도

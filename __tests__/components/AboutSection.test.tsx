@@ -505,7 +505,7 @@ describe('AboutSection', () => {
     const wheel = (deltaY: number, at: number) => stamp(new WheelEvent('wheel', { deltaY, cancelable: true }), at);
     const key = (name: string, at: number) => stamp(new KeyboardEvent('keydown', { key: name, cancelable: true }), at);
     const scrollAt = (top: number, at: number) => { documentY = top; stamp(new Event('scroll'), at); };
-    const mount = (top: number, initial: { navigationPending?: boolean; obscured?: boolean; logoOwner?: 'hero' | 'about' | 'boundary' | 'none' } = {}) => {
+    const mount = (top: number, initial: { navigationPending?: boolean; obscured?: boolean; logoOwner?: 'hero' | 'about' | 'boundary' | 'preview' | 'projects' | 'none' } = {}) => {
       documentY = top;
       const handle = createRef<AboutSectionHandle>();
       const onChapterChange = vi.fn();
@@ -638,6 +638,43 @@ describe('AboutSection', () => {
       expect(entered(container)).toBe('false');
       update({ logoOwner: 'about' });
       expect(entered(container)).toBe('true');
+    });
+
+    // M4 Task 1. 로고가 Projects 프리뷰로 날아가거나(preview) 프리뷰에 넘겨진 동안(projects)에도 About 본문은 About 자신의 규칙(반 화면)을 따른다.
+    it('로고가 Projects 프리뷰로 가는 동안과 넘겨진 뒤에도 본문은 그대로이고 반 화면을 지나면 사라진다', () => {
+      const entered = (container: HTMLElement) => container.querySelector('[data-entered]')!.getAttribute('data-entered');
+      const { container, update } = mount(START + 200, { logoOwner: 'about' });
+      expect(entered(container)).toBe('true');
+      update({ logoOwner: 'preview' });
+      expect(entered(container)).toBe('true');
+      update({ logoOwner: 'projects' });
+      expect(entered(container)).toBe('true');
+      scrollAt(START + 500, 20_000);
+      expect(entered(container)).toBe('false');
+      update({ logoOwner: 'preview' });
+      scrollAt(START + 300, 20_400);
+      expect(entered(container)).toBe('true');
+    });
+
+    // M4 Task 1. Projects에서 돌아오는 로고가 아직 날고 있어도 About 읽기는 그대로다. 위로 잠금 자리에 닿으면 바로 TEAMWORK로 잠근다
+    // (e2e navigation.spec의 "arriving at About locks it"이 지키는 읽던 chapter도 그대로다). Hero에서 About을 지나 프리뷰로 그대로 가면
+    // Hero 쪽 비행 동안 미룬 잠금을 버린다.
+    it('Projects에서 돌아오는 로고가 날아가는 동안에도 잠금은 바로 잡히고, Hero에서 About을 지나 프리뷰로 가면 미룬 잠금을 버린다', () => {
+      const first = mount(START + 300, { logoOwner: 'preview' });
+      documentY = START + 60;
+      wheel(-120, 20_000);
+      expect(isLocked(first.container)).toBe(true);
+      expect(window.scrollTo).toHaveBeenLastCalledWith({ top: START, behavior: 'instant' });
+      expect(chapter(first.container)).toBe('TEAMWORK');
+      first.unmount();
+      vi.mocked(window.scrollTo).mockClear();
+      const second = mount(900, { logoOwner: 'boundary' });
+      documentY = 960;
+      expect(wheel(120, 30_000).defaultPrevented).toBe(false);
+      second.update({ logoOwner: 'preview' });
+      second.update({ logoOwner: 'projects' });
+      expect(isLocked(second.container)).toBe(false);
+      expect(window.scrollTo).not.toHaveBeenCalled();
     });
 
     it('로고가 날지 않으면(GL 로고 없음) 본문은 그대로 R에서 사라진다', () => {

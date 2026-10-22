@@ -70,6 +70,43 @@ test.describe('미디어', () => {
     await expect.poll(playingCount).toBe(0);
   });
 
+  // M4 Task 1. About 로고가 프리뷰로 내려앉은 뒤에도 고른 프로젝트·상세 영상 재생은 그대로다.
+  test('About에서 내려와 로고가 프리뷰에 넘겨진 뒤에도 선택은 그대로이고 상세 영상이 재생된다', async ({ page }) => {
+    test.skip(!withVideo, '영상이 있는 프로젝트가 없다');
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await enter(page, 'projects');
+    const tab = page.getByRole('tab', { name: withVideo!.title, exact: true });
+    if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
+    await expect(tab).toHaveAttribute('aria-selected', 'true');
+    // GL이 준비됐으면 1.5초 비행, 아니면 정적 인계다. 소프트웨어 GL에서는 비행이 수십 프레임이라 페이지 쪽 rAF로 기다린다.
+    const landed = () => page.evaluate(() => new Promise<void>(resolve => {
+      const read = () => {
+        if (document.querySelector('.portfolio-document')!.getAttribute('data-logo-owner') !== 'preview') resolve();
+        else requestAnimationFrame(read);
+      };
+      read();
+    }));
+    const lockAt = (section: string) => page.locator(`[data-section="${section}"]`).evaluate(el => window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - parseFloat(getComputedStyle(el).scrollMarginTop), behavior: 'instant' }));
+    await lockAt('about');
+    await expectActive(page, 'about');
+    await landed();
+    await lockAt('projects');
+    await expectActive(page, 'projects');
+    await landed();
+    const frame = page.locator('[data-motion-anchor="projects-preview"] > div');
+    await expect(frame).toHaveCSS('opacity', '1');
+    await expect(frame).toHaveCSS('transform', 'none');
+    // 들어올 때 첫 프로젝트로 되돌리지 않는다. 떠나기 전에 고른 것이 그대로다.
+    await expect(tab).toHaveAttribute('aria-selected', 'true');
+
+    await openProjectModal(page, withVideo!.title);
+    const playing = () => page.locator('[data-modal-part="stage"] video').evaluateAll(
+      (videos) => (videos as HTMLVideoElement[]).filter((video) => !video.paused).length
+    );
+    await expect.poll(playing, { timeout: 20_000 }).toBe(1);
+  });
+
   test('About ElectricLogo는 문항·섹션 전환 뒤에도 캔버스와 청크를 재사용한다', async ({ page }) => {
     const requested: string[] = [];
     page.on('request', (request) => {
