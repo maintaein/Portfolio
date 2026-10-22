@@ -314,6 +314,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   // 지점 검출이 만들어지며 잰 값 없이 부른 판단이 이름을 날리기 시작했을 수 있어 먼저 내려놓는다.
   stopName();
   settle();
+  // 그리기 전 판정(lib/introGate.ts)이 nav 줄에 세워 둔 표시는 이제 data-wordmark-mode가 맡는다.
+  document.documentElement.removeAttribute('data-name-side');
 
   // 폰트, 창 크기, About 정적 배치 전환이 앵커를 옮긴다. main만 보면 크기가 같은 채 움직인 앵커를 놓친다. 다음 프레임에 한 번만 잰다.
   const queue = () => { if (!queued) queued = requestAnimationFrame(() => { queued = 0; settle(); }); };

@@ -390,6 +390,10 @@
 .site-name > span { margin-right: -.1em; }
 .site-name[data-wordmark-mode='hero'] { position: absolute; z-index: 1; left: 0; width: max-content; font-size: var(--hero-name-size); text-shadow: 0 0 .2em rgb(255 255 255 / .4), 0 0 .6em rgb(255 255 255 / .2); }
 .site-name[data-wordmark-mode='nav'] { position: fixed; z-index: 51; }
+/* 이름 문턱 아래에서 시작하는 방문은 그리기 전 판정(lib/introGate.ts)이 html[data-name-side='nav']를 붙인다. 경계 청크가 오기 전에도
+   이름은 nav-name 앵커 자리(nav 안쪽 여백 24px, max-w-7xl 칸의 왼쪽 끝, 위 16px)에 nav 크기로 선다. 경계가 자리를 정하면 표시를 걷는다.
+   shortcut: Navigation의 px-6·py-4·max-w-7xl을 옮겨 적었다. nav 배치가 바뀌면 함께 고친다. */
+html[data-name-side='nav'] .site-name { position: fixed; z-index: 51; left: max(24px, calc(50% - 640px)); top: 16px; font-size: var(--font-size-t6); text-shadow: none; }
 @media (prefers-reduced-motion: reduce) { .site-name { transition: none; } }
 .hero-copy { min-width: 0; }
 /* 1024px 아래는 문장 아래의 정적 볼이다. 아이콘이 읽히도록 옛 실루엣(112px)보다 크게 둔다. */

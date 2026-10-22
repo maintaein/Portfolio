@@ -140,13 +140,51 @@ it('About의 BASICS chapter와 단어는 서버 상태에서 CSS로 숨지 않�
 describe('그리기 전 인트로 판정(lib/introGate.ts)', () => {
   const run = ({ path = '/', hash = '', reduced = false, type = 'navigate', saved }: { path?: string; hash?: string; reduced?: boolean; type?: string; saved?: number }) => {
     document.documentElement.removeAttribute('data-intro');
+    document.documentElement.removeAttribute('data-name-side');
     window.history.replaceState(saved === undefined ? null : { sectionScrollY: saved }, '', `${path}${hash}`);
     vi.stubGlobal('matchMedia', (query: string) => ({ matches: reduced && query.includes('reduce') }));
     vi.spyOn(performance, 'getEntriesByType').mockReturnValue([{ type } as unknown as PerformanceEntry]);
     new Function(INTRO_GATE_SCRIPT)();
     return document.documentElement.hasAttribute('data-intro');
   };
-  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); document.documentElement.removeAttribute('data-intro'); });
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); document.documentElement.removeAttribute('data-intro'); document.documentElement.removeAttribute('data-name-side'); });
+
+  // M4 Task 0 (M3 #14). 경계 청크가 오기 전까지 이름이 화면 밖 Hero에 있어 nav 줄이 비었다가 재생 없이 나타났다.
+  // useSectionNav가 첫 스크롤을 정하는 규칙 그대로다: 새로고침·앞뒤 이동은 저장한 위치, 아니면 해시 섹션. 이름 문턱은 180px(motion.ts NAME_DOWN)이다.
+  const nameSide = (options: Parameters<typeof run>[0]) => {
+    run(options);
+    return document.documentElement.getAttribute('data-name-side');
+  };
+  it.each([
+    ['직접 해시', { hash: '#about' }],
+    ['아래 섹션 해시', { hash: '#projects' }],
+    ['모션 감소의 직접 해시', { hash: '#skills', reduced: true }],
+    ['저장된 읽기 위치가 문턱 아래인 새로고침', { type: 'reload', saved: 900 }],
+    ['저장된 읽기 위치가 문턱 아래인 앞뒤 이동', { type: 'back_forward', saved: 180 }],
+  ] as const)('%s는 첫 페인트부터 이름을 nav 자리에 둔다', (_, options) => {
+    expect(nameSide(options)).toBe('nav');
+  });
+  it.each([
+    ['첫 방문', {}],
+    ['#overview', { hash: '#overview' }],
+    ['모르는 해시', { hash: '#nowhere' }],
+    ['문턱 위에 저장된 새로고침', { type: 'reload', hash: '#about', saved: 179 }],
+    ['저장 위치 없는 앞뒤 이동의 첫 화면', { type: 'back_forward' }],
+    ['/ 밖의 경로', { path: '/background-preview', hash: '#about' }],
+  ] as const)('%s는 표시를 붙이지 않는다(Hero 자리)', (_, options) => {
+    expect(nameSide(options)).toBeNull();
+  });
+  it('표시가 있으면 CSS가 이름을 nav-name 앵커 자리(nav 안쪽 여백, max-w-7xl 칸의 왼쪽 끝, 위 16px)에 nav 크기로 세운다', () => {
+    const css = readFileSync('styles/design-tokens.css', 'utf8');
+    const rule = css.match(/html\[data-name-side='nav'\] \.site-name \{[^}]*\}/)![0];
+    expect(rule).toMatch(/position: fixed; z-index: 51; left: max\(24px, calc\(50% - 640px\)\); top: 16px; font-size: var\(--font-size-t6\);/);
+    expect(rule).toMatch(/text-shadow: none/);
+    expect(rule).not.toMatch(/transform|scale/);
+    // nav 자리 계산이 옮겨 적은 nav 배치와 같다.
+    const nav = readFileSync('components/blocks/Navigation/index.tsx', 'utf8');
+    expect(nav).toMatch(/fixed inset-x-0 top-0 z-50 bg-\[var\(--color-ink\)\] px-6 py-4/);
+    expect(nav).toMatch(/mx-auto flex max-w-7xl/);
+  });
 
   it('첫 방문 / 와 #overview만 진입 출발 상태를 건다', () => {
     expect(run({})).toBe(true);

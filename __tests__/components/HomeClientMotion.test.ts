@@ -220,6 +220,15 @@ describe('이름: 지점을 넘으면 0.5초 FLIP', () => {
     expect(handle.beginBoundary).not.toHaveBeenCalled();
   });
 
+  // M4 Task 0 (M3 #14). 그리기 전 판정(lib/introGate.ts)의 nav 표시는 경계가 처음 자리를 정하면 걷는다. 그 뒤로는 data-wordmark-mode만 따른다.
+  it('그리기 전 판정이 붙인 nav 표시는 경계가 처음 자리를 정할 때 걷는다', () => {
+    document.documentElement.setAttribute('data-name-side', 'nav');
+    documentY = 808;
+    create();
+    expectNameAt('nav');
+    expect(document.documentElement.hasAttribute('data-name-side')).toBe(false);
+  });
+
   it('refresh는 쉬는 이름을 재생하지 않고 다시 잰 지금 쪽 자리에 둔다', () => {
     create();
     scrollAt(200); advance(1);
