@@ -1179,9 +1179,72 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     expect(owners.at(-1)).toBe('preview');
     expect(document.activeElement).not.toBe(tab);
   });
+
+  // M4 Task 2. 비행 중의 Projects 입력은 비행을 동기로 끝 자리에 놓은 뒤 원래 동작을 한다. 스크롤은 움직이지 않고, 새 비행도 예약하지 않는다.
+  it('settleProjects: 앞으로 날던 비행을 같은 호출 안에서 Projects 쉬는 자리로 끝내고, 경계를 닫고 쓴 값을 걷는다. 스크롤은 그대로다', () => {
+    restAtAbout();
+    scrollAt(PREVIEW_AT); advance(.3 * LOGO_SECONDS);
+    expect(owners.at(-1)).toBe('preview');
+    handle.endBoundary.mockClear(); handle.beginBoundary.mockClear();
+    motion!.settleProjects();
+    expect(owners.at(-1)).toBe('projects');
+    expect(logo()).toEqual(PREVIEW_LOGO);
+    expect(inner.style.opacity).toBe('0');
+    expect(handle.endBoundary).toHaveBeenCalledTimes(1);
+    expect(frame.style.cssText).toBe('border-top-left-radius: 14px;');
+    expect(list.style.cssText).toBe('');
+    expect(documentY).toBe(PREVIEW_AT);
+    // 남은 재생 시간이 흘러도 달라지는 것이 없다(트윈이 남지 않았다).
+    advance(2);
+    expect(owners.at(-1)).toBe('projects');
+    expect(handle.endBoundary).toHaveBeenCalledTimes(1);
+    expect(handle.beginBoundary).not.toHaveBeenCalled();
+    expect(logo()).toEqual(PREVIEW_LOGO);
+  });
+
+  it('settleProjects 뒤에도 지점 규칙은 그대로다: 같은 자리의 스크롤은 다시 날지 않고, 지점 24 위로 되돌면 평소처럼 돌아간다', () => {
+    restAtAbout();
+    scrollAt(PREVIEW_AT); advance(.3 * LOGO_SECONDS);
+    motion!.settleProjects();
+    scrollAt(PREVIEW_AT + 1);
+    expect(owners.at(-1)).toBe('projects');
+    scrollAt(PREVIEW_AT - 24);
+    expect(owners.at(-1)).toBe('preview');
+    advance(2);
+    expect(owners.at(-1)).toBe('about');
+    expect(logo()).toEqual(ABOUT_LOGO);
+  });
+
+  it('settleProjects: 돌아가던 비행도 Projects 쪽 끝 자리로 놓는다', () => {
+    restAtAbout();
+    scrollAt(1800); advance(2); scrollAt(1394); advance(.3 * LOGO_SECONDS);
+    expect(owners.at(-1)).toBe('preview');
+    motion!.settleProjects();
+    expect(owners.at(-1)).toBe('projects');
+    expect(list.style.cssText).toBe('');
+    advance(2);
+    expect(owners.at(-1)).toBe('projects');
+  });
+
+  it('settleProjects: 날고 있지 않으면 아무것도 하지 않는다(About 쉬는 자리, Projects 쉬는 자리, GL 손잡이 없음)', () => {
+    restAtAbout();
+    motion!.settleProjects();
+    expect(owners.at(-1)).toBe('about');
+    expect(shown()).toEqual({ frame: '0', list: '0' });
+    scrollAt(1800); advance(2);
+    handle.endBoundary.mockClear();
+    const count = owners.length;
+    motion!.settleProjects();
+    expect(owners).toHaveLength(count);
+    expect(handle.endBoundary).not.toHaveBeenCalled();
+    motion!.destroy();
+    create({ logo: null });
+    expect(() => motion!.settleProjects()).not.toThrow();
+    expect(owners.at(-1)).toBe('none');
+  });
 });
 
-// Task 9 리뷰 Minor 5. Hero에서는 로고 host가 숨어 있으니 포인터로 기울일 것이 없다. About에서도 기울지 않았다.
+// Task 9리뷰 Minor 5. Hero에서는 로고 host가 숨어 있으니 포인터로 기울일 것이 없다. About에서도 기울지 않았다.
 it('로고 host는 포인터에 기울지 않는다', () => {
   create();
   window.dispatchEvent(Object.assign(new MouseEvent('pointermove', { clientX: 1500, clientY: 0 }), { pointerType: 'mouse' }));

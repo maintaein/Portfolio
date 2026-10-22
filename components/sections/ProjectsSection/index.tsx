@@ -229,7 +229,13 @@ function snapshotMedia(
   return canvas;
 }
 
-export default function ProjectsSection() {
+// 스크롤 인계 중의 입력이 원래 동작을 한 번만 하게 하는 관문(M4 Task 2). 셸이 정착을 마친 뒤 runOriginal을 동기로 한 번 부른다.
+// 없으면 바로 실행한다. 의도(눌린 인덱스, 이미 고른 이름인지, 방향)는 정착 전에 잡아 closure에 담는다.
+export interface ProjectsSectionProps {
+  beforeAction?: (runOriginal: () => void) => void;
+}
+
+export default function ProjectsSection({ beforeAction }: ProjectsSectionProps = {}) {
   const { routeResolved, motionReady, reducedMotion, pageVisible, obscured } =
     useSectionActivity();
   const { ref: visibilityRef, visible, hasEntered } = useSectionVisibility<HTMLElement>();
@@ -1206,6 +1212,8 @@ export default function ProjectsSection() {
     if (opts?.focus) nameRefs.current[next]?.focus();
   }, []);
 
+  const runAction = useCallback((run: () => void) => (beforeAction ? beforeAction(run) : run()), [beforeAction]);
+
   // 첫 클릭은 선택만 옮긴다. 이미 고른 이름을 다시 클릭해야 상세를 연다 -
   // 목록을 훑다가 실수로 상세가 펼쳐지지 않게 하는 장치다. 이미 그 항목인지는
   // activeIndex state가 아니라 activeIndexRef.current로 본다. goTo가 그 ref를
@@ -1215,14 +1223,16 @@ export default function ProjectsSection() {
   const handleNameClick = useCallback(
     (i: number) => {
       const alreadyActive = i === activeIndexRef.current;
-      goTo(i);
-      if (alreadyActive && isProjectModalReady(projects[i])) {
-        // 비행보다 먼저다. 출발 rect를 뜨는 것이 openModal 안이라 순서가 계약이다
-        if (!reducedMotion) snapWheel(i);
-        openModal(i);
-      }
+      runAction(() => {
+        goTo(i);
+        if (alreadyActive && isProjectModalReady(projects[i])) {
+          // 비행보다 먼저다. 출발 rect를 뜨는 것이 openModal 안이라 순서가 계약이다
+          if (!reducedMotion) snapWheel(i);
+          openModal(i);
+        }
+      });
     },
-    [goTo, openModal, snapWheel, reducedMotion]
+    [runAction, goTo, openModal, snapWheel, reducedMotion]
   );
 
   // 프리뷰 클릭은 이름의 두 번째 클릭과 같다. 이미 고른 프로젝트를 다시
@@ -1230,10 +1240,12 @@ export default function ProjectsSection() {
   // 순서는 handleNameClick과 같다: snapWheel이 openModal보다 먼저다
   const handlePreviewClick = useCallback(() => {
     const i = activeIndexRef.current;
-    if (!isProjectModalReady(projects[i])) return;
-    if (!reducedMotion) snapWheel(i);
-    openModal(i);
-  }, [openModal, snapWheel, reducedMotion]);
+    runAction(() => {
+      if (!isProjectModalReady(projects[i])) return;
+      if (!reducedMotion) snapWheel(i);
+      openModal(i);
+    });
+  }, [runAction, openModal, snapWheel, reducedMotion]);
 
   const handleIndexKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLElement>) => {
@@ -1245,9 +1257,10 @@ export default function ProjectsSection() {
 
       if (next === null) return;
       event.preventDefault();
-      goTo(next, { focus: true });
+      const to = next;
+      runAction(() => goTo(to, { focus: true }));
     },
-    [activeIndex, goTo]
+    [activeIndex, goTo, runAction]
   );
 
   return (

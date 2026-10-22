@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import {
   enter,
   expectActive,
@@ -127,5 +127,72 @@ test.describe('프로젝트 상세', () => {
         SLOW
       )
       .toBe('projects');
+  });
+
+  // M4 Task 2. 로고가 프리뷰로 날아가는 도중의 입력은 비행을 끝 자리로 정착시킨 뒤 원래 동작을 한 번만 한다.
+  // 소프트웨어 GL에서는 프로토콜 호출이 느려 클릭도 페이지 안에서 프레임에 맞춰 낸다. 날기 시작 3프레임 뒤에 누르고, 그 뒤 60프레임 동안 비행이 되살아나는지 본다.
+  const duringFlight = async (page: Page, selector: string) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await enter(page, 'about');
+    const owner = page.locator('.portfolio-document');
+    await expect(owner).toHaveAttribute('data-logo-owner', 'about', { timeout: 20_000 });
+    await expect(owner).toHaveAttribute('data-logo-live', '', { timeout: 30_000 });
+    const start = await page.evaluate(() => {
+      const top = (query: string) => document.querySelector(query)!.getBoundingClientRect().top + scrollY;
+      const margin = (query: string) => parseFloat(getComputedStyle(document.querySelector(query)!).scrollMarginTop);
+      const lock = top('[data-section="projects"]') - margin('[data-section="projects"]');
+      return lock - innerHeight / 2 - .15 * innerHeight;
+    });
+    const result = page.evaluate(query => new Promise<{ clickedWhile: string | null; after: string | null; revived: number; y: number }>(resolve => {
+      const stage = () => document.querySelector('.portfolio-document')!.getAttribute('data-logo-owner');
+      let flying = 0;
+      const wait = () => {
+        if (stage() === 'preview' && ++flying >= 3) {
+          const clickedWhile = stage();
+          document.querySelector<HTMLElement>(query)!.click();
+          let frames = 0;
+          let revived = 0;
+          const watch = () => {
+            if (stage() === 'preview') revived++;
+            if (++frames < 60) requestAnimationFrame(watch);
+            else resolve({ clickedWhile, after: stage(), revived, y: scrollY });
+          };
+          requestAnimationFrame(watch);
+        } else requestAnimationFrame(wait);
+      };
+      wait();
+    }), selector);
+    const y = Math.ceil(start) + 10;
+    await page.evaluate(top => window.scrollTo({ top, behavior: 'instant' }), y);
+    return { seen: await result, y };
+  };
+  const target = projects.findIndex((project, i) => i !== 0 && isProjectModalReady(project));
+
+  test('날아가는 도중 선택 안 된 이름의 첫 클릭은 비행을 끝내고 그 프로젝트를 고르기만 한다', async ({ page }) => {
+    test.skip(target === -1, '첫 항목이 아닌 상세 통과 프로젝트가 없다');
+    test.setTimeout(240_000);
+    const { seen, y } = await duringFlight(page, `#projects [role="tab"][data-name="${target}"]`);
+    expect(seen.clickedWhile).toBe('preview');
+    expect(seen.after).toBe('projects');
+    expect(seen.revived).toBe(0);
+    expect(seen.y).toBeCloseTo(y, 0);
+    await expect(page.locator(`#projects [role="tab"][data-name="${target}"]`)).toHaveAttribute('aria-selected', 'true', SLOW);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.locator('[data-motion-anchor="projects-preview"] > div')).toHaveCSS('opacity', '1');
+  });
+
+  test('날아가는 도중 프리뷰 클릭은 비행을 끝내고 선택된 프로젝트의 상세를 한 번만 연다', async ({ page }) => {
+    test.skip(!isProjectModalReady(projects[0]), '첫 항목이 상세 계약 미달이면 열리지 않는다');
+    test.setTimeout(240_000);
+    const { seen, y } = await duringFlight(page, '[data-part="preview-open"]');
+    expect(seen.clickedWhile).toBe('preview');
+    expect(seen.revived).toBe(0);
+    await expectModalOpen(page);
+    await expect(page.getByRole('dialog')).toHaveCount(1);
+    await expect(page.getByRole('dialog')).toHaveAccessibleName(projects[0].title, SLOW);
+    await page.goBack();
+    await expect(page.getByRole('dialog')).toHaveCount(0, SLOW);
+    // 정착은 스크롤을 옮기지 않는다. 열고 닫아도 읽던 자리 그대로다.
+    expect(await page.evaluate(() => scrollY)).toBeCloseTo(y, 0);
   });
 });

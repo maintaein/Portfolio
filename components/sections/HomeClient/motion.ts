@@ -485,8 +485,16 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       }
       renderLogo();
     },
-    // Projects 입력의 인계(M4 Task 2)가 채운다.
-    settleProjects: () => {},
+    // 날고 있는 About↔Projects 비행을 Projects 쪽 끝 자리로 동기로 끝낸다. 스크롤은 건드리지 않는다.
+    // 새 경로를 만들지 않는다: 쉬는 자리(t=2)로 놓는 renderLogo가 경계를 닫고 소유 속성을 걷는다. GL이 없으면 정적 자리 그대로다.
+    settleProjects: () => {
+      if (!alive || (pose.t <= 1 && goal !== 2) || (pose.t >= 2 && !travel)) return;
+      travel?.kill();
+      travel = null;
+      goal = 2;
+      pose.t = 2;
+      renderLogo();
+    },
     destroy: () => {
       alive = false;
       cancelAnimationFrame(queued);

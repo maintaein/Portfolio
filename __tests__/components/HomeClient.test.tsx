@@ -26,7 +26,15 @@ vi.mock('@/components/sections/BootSequence', async () => {
     default: forwardRef<unknown, BootProps>(function Boot(props, ref) { boot.props = props; useImperativeHandle(ref, () => ({ finish: boot.finish }), []); return null; }),
   };
 });
-vi.mock('@/components/sections', () => ({ AboutSection: ({ onChapterChange, logoOwner }: { onChapterChange: (index: number) => void; logoOwner: string }) => <p data-logo-owner-prop={logoOwner} onClick={() => onChapterChange(2)}>About original body</p>, ProjectsSection: () => <p>Projects original body</p>, ExperienceSection: () => <p>Experience original body</p>, SkillsSection: () => <p>Skills original body</p>, AwardAndCertificateSection: () => <p>Awards original body</p>, Footer: () => <footer>Contacts</footer> }));
+const projectsGate = vi.hoisted(() => ({ before: null as null | ((run: () => void) => void), release: vi.fn() }));
+vi.mock('@/components/sections', async () => {
+  const { forwardRef, useImperativeHandle } = await import('react');
+  const About = forwardRef<unknown, { onChapterChange: (index: number) => void; logoOwner: string }>(function About({ onChapterChange, logoOwner }, ref) {
+    useImperativeHandle(ref, () => ({ release: projectsGate.release }), []);
+    return <p data-logo-owner-prop={logoOwner} onClick={() => onChapterChange(2)}>About original body</p>;
+  });
+  return { AboutSection: About, ProjectsSection: ({ beforeAction }: { beforeAction?: (run: () => void) => void }) => { projectsGate.before = beforeAction ?? null; return <p>Projects original body</p>; }, ExperienceSection: () => <p>Experience original body</p>, SkillsSection: () => <p>Skills original body</p>, AwardAndCertificateSection: () => <p>Awards original body</p>, Footer: () => <footer>Contacts</footer> };
+});
 vi.mock('@/components/sections/HomeClient/motion', () => ({
   createPortfolioMotion: (options: { onLogoOwnerChange: (owner: 'hero' | 'about' | 'boundary' | 'preview' | 'projects' | 'none') => void }) => {
     motion.create(options); motion.owner = options.onLogoOwnerChange;
@@ -489,4 +497,23 @@ it('a nav click during the intro finishes it first and keeps the navigation', as
   fireEvent.click(screen.getAllByRole('button', { name: HOME_SECTION_CONFIG[1].label })[0]);
   expect(boot.finish).toHaveBeenCalledTimes(1);
   expect(location.hash).toBe(`#${HOME_SECTION_CONFIG[1].id}`);
+});
+
+it('hands Projects input to motion: releases the About lock, settles, then runs the original action exactly once', async () => {
+  render(<HomeClient />); await flush();
+  const order: string[] = [];
+  projectsGate.release.mockImplementation(() => order.push('release'));
+  motion.settleProjects.mockImplementation(() => order.push('settle'));
+  expect(projectsGate.before).toEqual(expect.any(Function));
+  const run = vi.fn(() => order.push('run'));
+  projectsGate.before!(run);
+  expect(order).toEqual(['release', 'settle', 'run']);
+  expect(run).toHaveBeenCalledTimes(1);
+});
+
+it('the gate passed to Projects is stable across renders', async () => {
+  const view = render(<HomeClient />); await flush();
+  const first = projectsGate.before;
+  view.rerender(<HomeClient />);
+  expect(projectsGate.before).toBe(first);
 });

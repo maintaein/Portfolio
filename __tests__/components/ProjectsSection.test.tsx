@@ -700,6 +700,124 @@ function typeRamp(el: Element): number {
   return FONT_SIZE_PX.get(hit!)!;
 }
 
+// M4 Task 2. 스크롤 인계 중의 입력은 셸의 관문(beforeAction)을 한 번 거쳐 원래 동작을 한 번 한다.
+// 관문은 정착을 마친 뒤 closure를 부른다. 의도(눌린 인덱스, 이미 고른 이름인지, 방향)는 관문에 들어가기 전에 잡힌다.
+describe('ProjectsSection beforeAction 관문', { timeout: 30_000 }, () => {
+  const gate = { hold: false, held: [] as Array<() => void>, calls: 0 };
+  const beforeAction = (run: () => void) => { gate.calls++; if (gate.hold) gate.held.push(run); else run(); };
+  beforeEach(() => { gate.hold = false; gate.held = []; gate.calls = 0; });
+  function renderGated() {
+    return render(
+      <SectionActivityProvider obscured={false} pageVisible routeResolved motionReady reducedMotion={false}>
+        <ProjectsSection beforeAction={beforeAction} />
+      </SectionActivityProvider>
+    );
+  }
+  const name = (i: number) => document.querySelector<HTMLElement>(`[data-name="${i}"]`)!;
+  const selected = () => document.querySelector('[aria-selected="true"]')!.getAttribute('data-name');
+  const target = projects.findIndex((p, i) => i !== 0 && isProjectModalReady(p));
+
+  it('활성이 아닌 이름의 첫 클릭: 관문을 한 번 지나고 closure가 돌기 전에는 아무것도 안 바뀐다. 돌면 선택만 옮기고 열림 0회', () => {
+    const push = vi.spyOn(window.history, 'pushState');
+    renderGated();
+    gate.hold = true;
+    fireEvent.click(name(target));
+    expect(gate.calls).toBe(1);
+    expect(selected()).toBe('0');
+    act(() => gate.held[0]());
+    expect(gate.calls).toBe(1);
+    expect(selected()).toBe(String(target));
+    expect(push).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('이미 고른 이름의 재클릭: 관문 뒤에 ready일 때만 한 번 열고, 계약 미달이면 열지 않는다', () => {
+    const push = vi.spyOn(window.history, 'pushState');
+    renderGated();
+    fireEvent.click(name(target));
+    expect(push).not.toHaveBeenCalled();
+    gate.hold = true;
+    fireEvent.click(name(target));
+    expect(push).not.toHaveBeenCalled();
+    act(() => gate.held[0]());
+    expect(push).toHaveBeenCalledTimes(1);
+    expect((push.mock.calls[0][0] as Record<string, unknown>).projectModalId).toBe(projects[target].title);
+    expect(gate.calls).toBe(2);
+
+    const unready = projects.findIndex(p => !isProjectModalReady(p));
+    if (unready === -1) return;
+    gate.hold = false;
+    fireEvent.click(name(unready));
+    fireEvent.click(name(unready));
+    expect(push).toHaveBeenCalledTimes(1);
+  });
+
+  it('눌린 의도는 관문에 들어가기 전에 잡힌다: 늦게 도는 첫 클릭은 그사이 그 이름이 선택됐어도 열지 않는다', () => {
+    const push = vi.spyOn(window.history, 'pushState');
+    renderGated();
+    gate.hold = true;
+    fireEvent.click(name(target));
+    gate.hold = false;
+    fireEvent.click(name(target));
+    expect(selected()).toBe(String(target));
+    act(() => gate.held[0]());
+    expect(push).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('프리뷰 클릭: 눌린 때의 선택 index의 상세를 관문 뒤에 한 번 열고, ready 미달이면 열지 않는다', () => {
+    const push = vi.spyOn(window.history, 'pushState');
+    renderGated();
+    fireEvent.click(name(target));
+    gate.hold = true;
+    fireEvent.click(document.querySelector('[data-part="preview-open"]')!);
+    expect(gate.calls).toBe(2);
+    expect(push).not.toHaveBeenCalled();
+    gate.hold = false;
+    fireEvent.click(name(0));
+    act(() => gate.held[0]());
+    expect(push).toHaveBeenCalledTimes(1);
+    expect((push.mock.calls[0][0] as Record<string, unknown>).projectModalId).toBe(projects[target].title);
+
+    const unready = projects.findIndex(p => !isProjectModalReady(p));
+    if (unready === -1) return;
+    fireEvent.click(name(unready));
+    fireEvent.click(document.querySelector('[data-part="preview-open"]')!);
+    expect(push).toHaveBeenCalledTimes(1);
+  });
+
+  it('방향키와 Home·End: 관문을 한 번 지나 눌린 때의 방향 그대로 선택과 포커스를 한 번 옮긴다', () => {
+    renderGated();
+    gate.hold = true;
+    fireEvent.keyDown(name(0), { key: 'ArrowDown' });
+    expect(gate.calls).toBe(1);
+    expect(selected()).toBe('0');
+    // 그사이 선택이 1이 돼도 늦게 도는 closure는 눌린 때의 다음(1)이다. 때가 되어 다시 계산하면 2가 된다.
+    gate.hold = false;
+    fireEvent.keyDown(name(0), { key: 'ArrowDown' });
+    expect(selected()).toBe('1');
+    act(() => gate.held[0]());
+    expect(selected()).toBe('1');
+    expect(document.activeElement).toBe(name(1));
+    fireEvent.keyDown(name(1), { key: 'End' });
+    expect(selected()).toBe(String(N - 1));
+    fireEvent.keyDown(name(N - 1), { key: 'Home' });
+    expect(selected()).toBe('0');
+    expect(document.activeElement).toBe(name(0));
+    fireEvent.keyDown(name(0), { key: 'ArrowUp' });
+    expect(selected()).toBe(String(N - 1));
+    expect(gate.calls).toBe(5);
+  });
+
+  it('다른 키는 관문을 지나지 않고, closure 안에서 다시 관문으로 가지 않는다', () => {
+    renderGated();
+    fireEvent.keyDown(name(0), { key: 'a' });
+    expect(gate.calls).toBe(0);
+    fireEvent.click(name(target));
+    expect(gate.calls).toBe(1);
+  });
+});
+
 describe('ProjectsSection 이름 목록 세로 간격', () => {
   // 이 작업이 존재하는 이유 그 자체다. 줄 사이를 목록의 gap으로 벌리면
   // 벌어진 만큼이 아무 것도 안 받는 죽은 띠가 되고, 목록을 세로로 훑을 때

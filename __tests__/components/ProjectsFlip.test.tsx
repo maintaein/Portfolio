@@ -71,6 +71,7 @@ interface Gates {
   routeResolved?: boolean;
   motionReady?: boolean;
   reducedMotion?: boolean;
+  beforeAction?: (run: () => void) => void;
 }
 
 // 배경 알림 싱글턴을 DOM으로 끌어내는 탐침. 닫기에서 배경이 언제 돌아오는지가
@@ -93,7 +94,7 @@ function renderSection(gates: Gates = {}) {
       motionReady={gates.motionReady ?? true}
       reducedMotion={gates.reducedMotion ?? false}
     >
-      <ProjectsSection />
+      <ProjectsSection beforeAction={gates.beforeAction} />
       <ObscuredProbe />
     </SectionActivityProvider>
   );
@@ -217,6 +218,30 @@ describe('ProjectsFlip. 펼치기 비행', { timeout: 30_000 }, () => {
 
     expect(getState).toHaveBeenCalledTimes(1);
     expect(getState).toHaveBeenCalledWith([preview, pressed]);
+  });
+
+  // M4 Task 2. 인계 중의 두 번째 클릭은 정착을 마친 뒤에 상태를 떠야 한다. 정착 전의 날고 있는 프리뷰 상자를 뜨면 출발 좌표가 튄다.
+  it('관문이 정착을 마친 뒤에 Flip.getState가 한 번 불리고, 관문은 눌림당 한 번만 지난다', async () => {
+    const log: string[] = [];
+    const original = Flip.getState;
+    const getState = vi.spyOn(Flip, 'getState').mockImplementation(((targets: Element[], vars?: unknown) => {
+      log.push('getState');
+      return original(targets, vars as never);
+    }) as typeof Flip.getState);
+    renderSection({
+      beforeAction: run => {
+        log.push('gate');
+        log.push('settled');
+        run();
+      },
+    });
+    await flushGsapImport();
+    fireEvent.click(nameEl(READY_INDEX));
+    expect(getState).not.toHaveBeenCalled();
+    fireEvent.click(nameEl(READY_INDEX));
+    expect(log).toEqual(['gate', 'settled', 'gate', 'settled', 'getState']);
+    expect(getState).toHaveBeenCalledTimes(1);
+    expect(getState).toHaveBeenCalledWith([previewEl(), nameFlipEl(READY_INDEX)]);
   });
 
   // 이 과제가 존재하는 이유. 두 노드의 상자가 다르면 Flip.from은 그 비율을

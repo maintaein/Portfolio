@@ -73,6 +73,8 @@ export default function HomeClient() {
   // 명시적 이동 직전에 About의 읽기 잠금을 풀어 목적지로 가는 스크롤을 붙잡지 않는다.
   const { active, routeResolved, navigationTarget, navigate } = useSectionNav({ rootRef, headerRef, blocked: obscured, reducedMotion, onBeforeNavigate: () => { bootRef.current?.finish(); aboutRef.current?.release(); } });
   const motionReady = routeResolved && preferenceReady;
+  // 프리뷰로 날아가는 동안의 Projects 입력: About 잠금을 풀고 비행을 끝 자리로 정착시킨 뒤 원래 동작을 한 번 부른다(다시 관문으로 보내지 않는다).
+  const beforeProjectsAction = useCallback((run: () => void) => { aboutRef.current?.release(); motionRef.current?.settleProjects(); run(); }, []);
   // About 레일과 같이 1024px부터만 WebGL 로고와 볼을 띄운다. 그 아래와 모션 감소는 앵커의 정적 실루엣과 정적 볼이다.
   const glLogo = wideScreen && preferenceReady && !reducedMotion && !introPending;
   // 쉬는 자리마다 그리는 GL host는 하나다. Hero에서는 볼이 돌고 로고는 한 장만 미리 그린 채 멈춘다.
@@ -174,9 +176,9 @@ export default function HomeClient() {
           </div>
         </section>
         {HOME_SECTION_CONFIG.map(({ id, label }) => {
-          const Section = id === SECTION_IDS.ABOUT ? null : SECTION_COMPONENTS[id];
+          const Section = id === SECTION_IDS.ABOUT || id === SECTION_IDS.PROJECTS ? null : SECTION_COMPONENTS[id];
           return <div key={id} data-section={id} role="region" aria-label={label} tabIndex={-1} className="document-section">
-            {Section ? <Section /> : <AboutSection ref={aboutRef} onChapterChange={setAboutChapter} navigationPending={navigationTarget !== null} logoOwner={logoOwner} />}
+            {id === SECTION_IDS.PROJECTS ? <ProjectsSection beforeAction={beforeProjectsAction} /> : Section ? <Section /> : <AboutSection ref={aboutRef} onChapterChange={setAboutChapter} navigationPending={navigationTarget !== null} logoOwner={logoOwner} />}
           </div>;
         })}
         {/* 공유 로고 host. About의 원형 마스크와 overflow-x: clip 밖, 문서 좌표에 산다.
