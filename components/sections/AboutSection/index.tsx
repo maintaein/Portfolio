@@ -282,7 +282,8 @@ export default function AboutSection({ ref, onChapterChange, navigationPending, 
 
   const value = coreValues[activeIndex];
   // 본문은 로고가 내려앉은 뒤에 나타난다(사용자 결정 2026-10-21). 날아가는 동안 기다릴 뿐 스크롤 입력은 막지 않는다.
-  const entered = (revealed && logoOwner !== 'boundary') || plain;
+  // 본문은 로고가 About에 내려앉아 있을 때만 보인다. 경로 지점에서 Hero로 돌아간 로고는 R 아래에서도 본문을 다시 열지 않는다(Task 12).
+  const entered = (revealed && (logoOwner === 'about' || logoOwner === 'none')) || plain;
   return (
     <section ref={sectionRef} id={SECTION_IDS.ABOUT} aria-labelledby="about-heading" className={styles.section}>
       {/* 섹션 제목은 시각적으로 숨긴다. 화면 위에는 chapter 단어만 남는다. */}

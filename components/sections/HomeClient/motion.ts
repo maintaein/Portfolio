@@ -1,6 +1,7 @@
 import type { CrystalizedBallHandle } from '@/components/blocks/CrystalizedBall';
 import type { ElectricLogoHandle } from '@/components/blocks/ElectricLogo';
 import { gsap, registerScrollTrigger, ScrollTrigger, SITE_EASE } from '@/lib/gsap';
+import { readingLineY } from '@/lib/utils/scrollGeometry';
 
 export type LogoOwner = 'hero' | 'about' | 'boundary' | 'none';
 
@@ -31,7 +32,7 @@ export const LOGO_SECONDS = 1.5;
 // 로고는 About 본문이 나타나기 시작하는 스크롤 R보다 화면 높이의 이만큼 먼저 떠나 본문보다 먼저 내려앉는다.
 // 1.2초 때의 .12에서 비행 시간과 같은 비율로 늘렸다. 앞섬 / 비행 시간(이보다 느리게 굴리면 R 전에 내려앉는 빠르기)이 같다.
 const LOGO_LEAD = .15;
-// 이만큼 위로 돌아와야 Hero로 되돌아가 문턱에서 떨지 않는다(px). 위로 갈 때 되돌기가 일찍 시작하게 작게 둔다(사용자 요청 2026-10-22).
+// 경로 지점(About→Overview)에 닿지 않고 돌아선 사람은 로고 지점에서 이만큼 위로 돌아오면 Hero로 되돌아간다(px).
 // About 본문은 로고가 About을 떠나는 프레임까지 남는다(AboutSection).
 const LOGO_BACK = 24;
 // 볼이 접혀 드는 작은 고리의 지름(Hero 앵커 비율). 이 지름에서 Electric 원이 넘겨받는다.
@@ -100,7 +101,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   // 볼은 Hero 앵커째로 접히고 옮긴다. 앵커는 offset으로 재므로 이 transform이 측정에 섞이지 않는다.
   const orb = anchor('hero-object');
   // Hero 이름 글자 크기(0이면 CSS 값), nav 자리(화면 좌표), 로고가 떠나는 스크롤 지점, 두 로고 앵커(문서 좌표).
-  let m = { nameSize: 0, nav: EMPTY, logoAt: Infinity, hero: EMPTY, about: EMPTY, origin: EMPTY };
+  // aboutTop·line: useSectionNav가 About을 고르는 읽기선(About 위끝 <= 스크롤 + 읽기선).
+  let m = { nameSize: 0, nav: EMPTY, logoAt: Infinity, aboutTop: Infinity, line: 0, hero: EMPTY, about: EMPTY, origin: EMPTY };
   let side: 'hero' | 'nav' = 'hero';
   let flip: gsap.core.Tween | null = null;
   // 로고 진행도 t: 0 Hero, 1 About. 시간으로만 움직이고 goal은 지금 스크롤이 가리키는 쪽이다.
@@ -114,6 +116,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   let paused = false;
   let alive = true;
   let queued = 0;
+  // 지난 판단의 스크롤. 로고 지점과 경로 지점 사이에서는 어느 쪽에서 들어왔는지로 정한다.
+  let lastY = -Infinity;
 
   const measure = () => {
     const about = root.querySelector('[data-section="about"]');
@@ -136,11 +140,13 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     // 로고 지점: About 본문은 잠금 자리에서 화면 절반 안(R = 잠금 - 화면 높이 / 2)에 들면 나타나기 시작한다(AboutSection).
     // 그보다 화면 높이의 15% 먼저 떠나 본문보다 먼저 내려앉는다. 이름 문턱보다 아래, About 잠금 자리보다 위에 둔다.
     // 두 앵커가 화면 높이만큼 떨어져 있어 이 지점에서 멈추면 비행이 화면 아래로 빠진다(받아들인 결정).
-    const lock = about ? about.getBoundingClientRect().top + window.scrollY - (parseFloat(getComputedStyle(about).scrollMarginTop) || header.offsetHeight) : Infinity;
+    const aboutTop = about ? about.getBoundingClientRect().top + window.scrollY : Infinity;
+    const lock = aboutTop - (about ? parseFloat(getComputedStyle(about).scrollMarginTop) || header.offsetHeight : 0);
     const reveal = lock - window.innerHeight / 2;
     m = {
       nameSize: size, nav: rectBox(header.querySelector('[data-motion-anchor="nav-name"]')),
       logoAt: Math.min(lock - 1, Math.max(NAME_DOWN, reveal - LOGO_LEAD * window.innerHeight)),
+      aboutTop, line: readingLineY(window.innerHeight, header.getBoundingClientRect().height),
       hero: heroObject, about: target, origin: layoutBox(logoHost.offsetParent),
     };
     if (m.about.w) {
@@ -232,7 +238,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     goal = target;
     travel?.kill();
     travel = null;
-    if (!logo || !animate || reduced) pose.t = target;
+    // 남은 길이 0이면 길이 0 트윈이 만들어지는 중에 끝나 travel에 끝난 트윈이 남는다(경계에 멈춘다). 날기 시작한 프레임에 되돌 때다.
+    if (!logo || !animate || reduced || pose.t === target) pose.t = target;
     else {
       // 되돌아갈 때는 지난 진행도만큼의 시간만 쓴다. 진행도는 시간에 선형이고 구간마다 제 곡선을 쓴다(logoPhases).
       travel = gsap.to(pose, {
@@ -245,7 +252,17 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
 
   // 지금 스크롤이 가리키는 쪽. 이름은 두 문턱 사이에서 지금 자리를 지킨다.
   const nameSide = () => window.scrollY >= NAME_DOWN ? 'nav' : window.scrollY <= NAME_UP ? 'hero' : side;
-  const logoSide = () => window.scrollY >= m.logoAt ? 1 : window.scrollY <= m.logoAt - LOGO_BACK ? 0 : Math.max(0, goal);
+  // 위로 갈 때 되돌기는 경로가 About에서 Overview로 바뀌는 프레임에 시작한다(사용자 요청 2026-10-22). 경로 지점은 잰 화면 크기 모두에서 로고 지점보다 아래다.
+  // 그 사이에서는 로고 지점을 넘어 내려왔으면 About, 경로 지점을 넘어 올라왔으면 Hero를 지킨다. 경로가 About이면 언제나 About이다.
+  const logoSide = () => {
+    const y = window.scrollY;
+    const was = lastY;
+    lastY = y;
+    const routed = (at: number) => m.aboutTop <= at + m.line;
+    if (y >= m.logoAt && (routed(y) || was < m.logoAt)) return 1;
+    if (y <= m.logoAt - LOGO_BACK || (routed(was) && !routed(y))) return 0;
+    return Math.max(0, goal);
+  };
 
   const decide = () => {
     if (paused || !alive) return;

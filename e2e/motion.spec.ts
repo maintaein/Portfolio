@@ -236,7 +236,7 @@ test.describe('Native motion activity', () => {
     }), settled).toBeLessThan(1.5);
     await atRest('nav');
     expect(await singles()).toEqual([1, 1]);
-    // 되돌아오는 문턱은 지점 24px 위다(Task 11). 그 사이에서는 About에 머물고, R 위로 올라왔어도 본문이 그대로 보인다.
+    // 경로 지점(아래 Task 12)에 닿지 않고 돌아서면 되돌아오는 문턱은 지점 24px 위다(Task 11). 그 사이에서는 About에 머물고, R 위로 올라왔어도 본문이 그대로 보인다.
     await scrollTo(Math.round(points.start) - 12);
     await expect(owner).toHaveAttribute('data-logo-owner', 'about');
     await expect(entered).toHaveAttribute('data-entered', 'true');
@@ -274,6 +274,36 @@ test.describe('Native motion activity', () => {
     await atRest('hero');
     await expect.poll(offHero, settled).toBeLessThan(1.5);
     expect(await singles()).toEqual([1, 1]);
+
+    // Task 12(사용자 요청 2026-10-22): 위로 갈 때 되돌기는 경로가 About에서 Overview로 바뀌는 스크롤에서 시작한다.
+    // 경로 지점은 useSectionNav의 읽기선(실측 header 아래 화면의 40%)이 About 위끝에 닿는 스크롤이고, 1440x900에서는 로고 지점과 R보다 아래다.
+    await navButton(page, 'About').click(); await expectActive(page, 'about');
+    await expect(owner).toHaveAttribute('data-logo-owner', 'about', settled);
+    const routeAt = await page.evaluate(() => {
+      const top = document.querySelector('[data-section="about"]')!.getBoundingClientRect().top + scrollY;
+      const header = document.querySelector('[data-scroll-header]')!.getBoundingClientRect().height;
+      return top - (header + (innerHeight - header) * .4);
+    });
+    expect(routeAt).toBeGreaterThan(points.reveal);
+    await scrollTo(Math.ceil(routeAt) + 2);
+    await expectActive(page, 'about');
+    await expect(owner).toHaveAttribute('data-logo-owner', 'about');
+    await expect(entered).toHaveAttribute('data-entered', 'true');
+    const leave = page.evaluate(() => new Promise<number>(resolve => {
+      let early = 0;
+      const read = () => {
+        if (document.querySelector('.portfolio-document')!.getAttribute('data-logo-owner') !== 'about') return resolve(early);
+        if (document.querySelector('#about [data-motion-layout="reading"]')!.getAttribute('data-entered') !== 'true') early++;
+        requestAnimationFrame(read);
+      };
+      read();
+    }));
+    await scrollTo(Math.floor(routeAt) - 2);
+    expect(await leave).toBe(0);
+    await expectActive(page, 'overview');
+    await expect(owner).toHaveAttribute('data-logo-owner', 'hero', settled);
+    // Hero에 내려앉은 로고는 R 아래에서도 본문을 다시 열지 않는다.
+    await expect(entered).toHaveAttribute('data-entered', 'false');
   });
   test('문턱 아래로 바로 온 해시는 처음부터 이름이 nav, 로고가 About 자리이고 재생하지 않는다', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });

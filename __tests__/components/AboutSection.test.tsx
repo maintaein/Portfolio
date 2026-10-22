@@ -597,6 +597,24 @@ describe('AboutSection', () => {
       expect(entered(container)).toBe('false');
     });
 
+    // Task 12(사용자 요청 2026-10-22). 되돌기는 경로가 Overview로 바뀌는 R 아래 자리에서 시작한다. 본문은 그 프레임에 사라지고,
+    // 로고가 Hero에 내려앉은 뒤에도 R과 잠금 자리 사이에서 다시 나타나지 않는다. 다시 내려와 로고가 About에 내려앉으면 나타난다.
+    it('R과 잠금 자리 사이에서 로고가 Hero로 돌아가면 본문은 되돌기 시작에 사라지고 Hero에 내려앉아도 다시 나타나지 않는다', () => {
+      const entered = (container: HTMLElement) => container.querySelector('[data-entered]')!.getAttribute('data-entered');
+      const { container, update } = mount(START - 300, { logoOwner: 'about' });
+      expect(entered(container)).toBe('true');
+      update({ logoOwner: 'boundary' });
+      expect(entered(container)).toBe('false');
+      update({ logoOwner: 'hero' });
+      expect(entered(container)).toBe('false');
+      scrollAt(START - 250, 20_000);
+      expect(entered(container)).toBe('false');
+      update({ logoOwner: 'boundary' });
+      expect(entered(container)).toBe('false');
+      update({ logoOwner: 'about' });
+      expect(entered(container)).toBe('true');
+    });
+
     it('로고가 날지 않으면(GL 로고 없음) 본문은 그대로 R에서 사라진다', () => {
       const entered = (container: HTMLElement) => container.querySelector('[data-entered]')!.getAttribute('data-entered');
       const { container } = mount(START - 300);

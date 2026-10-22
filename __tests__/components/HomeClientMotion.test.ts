@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { gsap, ScrollTrigger } from '@/lib/gsap';
 import type { ElectricLogoHandle } from '@/components/blocks/ElectricLogo';
 import { CORE, LOGO_SECONDS, ORBIT, createPortfolioMotion, logoPhases, type LogoOwner, type PortfolioMotion } from '@/components/sections/HomeClient/motion';
+import { resolveCurrentSection } from '@/lib/utils/scrollGeometry';
 
 // jsdom에는 레이아웃이 없어 실제 브라우저가 줄 offset 값을 요소마다 심는다.
 type Box = { x: number; y: number; w: number; h: number };
@@ -390,6 +391,47 @@ describe('로고: About 본문보다 먼저 내려앉게 떠나는 변신', () =
     create();
     scrollAt(122); expect(owners.at(-1)).toBe('hero');
     scrollAt(123); expect(owners.at(-1)).toBe('boundary');
+  });
+
+  // Task 12(사용자 요청 2026-10-22). 위로 갈 때 되돌기는 useSectionNav가 About에서 Overview로 바뀌는 그 스크롤에서 시작한다.
+  // 읽기선은 실측 header 아래 화면의 40%다. 이 문서에서 경로 지점은 900 - (76 + 824 × .4) = 494.4로 로고 지점(239)보다 아래다.
+  it('위로 갈 때 되돌기는 경로가 About에서 Overview로 바뀌는 스크롤에서 시작하고, 경로 지점에 닿지 않았으면 옛 문턱(지점 - 24)에서 돌아간다', () => {
+    const route = (y: number) => resolveCurrentSection({
+      sections: [{ id: 'overview', top: 76 }, { id: 'about', top: 900 }],
+      scrollY: y, viewportHeight: viewport, headerHeight: header.getBoundingClientRect().height, documentHeight: 5000,
+    });
+    // About 잠금 자리 아래에서 1px씩 올라가며 로고가 About을 떠난 첫 스크롤과 경로가 Overview가 된 첫 스크롤을 함께 찾는다.
+    const climb = () => {
+      scrollAt(900); advance(2);
+      expect(owners.at(-1)).toBe('about');
+      let left = 0;
+      let switched = 0;
+      for (let y = 899; y > 0 && !(left && switched); y--) {
+        scrollAt(y);
+        if (!left && owners.at(-1) !== 'about') left = y;
+        if (!switched && route(y) === 'overview') switched = y;
+      }
+      return { left, switched };
+    };
+    create();
+    expect(climb()).toEqual({ left: 494, switched: 494 });
+    // 경로 지점 위로 올라와 Hero에 돌아간 로고는 로고 지점 아래에서 흔들어도 그대로 있고, 경로가 다시 About이 되면 떠난다.
+    advance(2); expect(owners.at(-1)).toBe('hero');
+    scrollAt(400); scrollAt(300); scrollAt(450); scrollAt(494);
+    expect(owners.at(-1)).toBe('hero');
+    scrollAt(495); expect(owners.at(-1)).toBe('boundary');
+    // 날기 시작한 그 스크롤에서 되돌아도(남은 길 0) 경계에 멈추지 않는다.
+    scrollAt(0); expect(owners.at(-1)).toBe('hero');
+    // 경로 지점에 닿지 않고 돌아서면 옛 문턱에서 돌아간다. Hero에 로고를 남긴 채 About이 보이는 일은 없다.
+    scrollAt(START + 100); advance(2); expect(owners.at(-1)).toBe('about');
+    scrollAt(START - 23); expect(owners.at(-1)).toBe('about');
+    scrollAt(START - 24); expect(owners.at(-1)).toBe('boundary');
+    motion!.destroy(); owners.length = 0; documentY = 0;
+    // 1280x720에 header 92: 경로 지점 900 - (92 + 628 × .4) = 556.8, 로고 지점 (808 - 360) - 108 = 340.
+    viewport = 720;
+    place(header, { x: 0, y: 0, w: 1440, h: 92 });
+    create();
+    expect(climb()).toEqual({ left: 556, switched: 556 });
   });
 
   it('줄기: 볼이 제자리에서 접히고 같은 지름의 Electric 원(반지름 = 반변)이 넘겨받는다. 경계는 가장 큰 원으로 한 번만 시작한다', () => {
