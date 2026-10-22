@@ -1226,6 +1226,24 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     expect(owners.at(-1)).toBe('projects');
   });
 
+  // 리뷰 M3. 돌아가던 비행을 정착시킨 뒤의 첫 스크롤 틱은 평소 규칙을 따른다: Projects 컨트롤에 포커스가 없으면 About으로 다시 날고, 있으면 머문다.
+  it.each([[false, 'preview'], [true, 'projects']])('settleProjects: 돌아가던 비행을 정착시킨 뒤 스크롤 틱 한 번은, 컨트롤 포커스 %s이면 %s', (focused, expected) => {
+    restAtAbout();
+    scrollAt(1800); advance(2); scrollAt(PREVIEW_AT - 100); advance(.3 * LOGO_SECONDS);
+    expect(owners.at(-1)).toBe('preview');
+    if (focused) {
+      const tab = document.createElement('button');
+      list.append(tab);
+      tab.focus();
+    }
+    motion!.settleProjects();
+    expect(owners.at(-1)).toBe('projects');
+    scrollAt(PREVIEW_AT - 101);
+    expect(owners.at(-1)).toBe(expected);
+    advance(2);
+    expect(owners.at(-1)).toBe(focused ? 'projects' : 'about');
+  });
+
   it('settleProjects: 날고 있지 않으면 아무것도 하지 않는다(About 쉬는 자리, Projects 쉬는 자리, GL 손잡이 없음)', () => {
     restAtAbout();
     motion!.settleProjects();
@@ -1244,7 +1262,7 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
   });
 });
 
-// Task 9리뷰 Minor 5. Hero에서는 로고 host가 숨어 있으니 포인터로 기울일 것이 없다. About에서도 기울지 않았다.
+// Task 9 리뷰 Minor 5. Hero에서는 로고 host가 숨어 있으니 포인터로 기울일 것이 없다. About에서도 기울지 않았다.
 it('로고 host는 포인터에 기울지 않는다', () => {
   create();
   window.dispatchEvent(Object.assign(new MouseEvent('pointermove', { clientX: 1500, clientY: 0 }), { pointerType: 'mouse' }));

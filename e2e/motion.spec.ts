@@ -434,15 +434,22 @@ test.describe('Native motion activity', () => {
     const owner = page.locator('.portfolio-document');
     await expect(owner).toHaveAttribute('data-logo-owner', 'about', { timeout: 20_000 });
     await expect(owner).toHaveAttribute('data-logo-live', '', { timeout: 30_000 });
-    // 페이지 쪽에서 프레임마다 주인을 읽어 비행 프레임 수와 첫 preview부터 projects까지의 시간을 잰다.
-    // 1.5초 트윈은 느린 프레임에 더 길어질 뿐 짧아지지 않는다. 건너뛰면 비행 프레임이 0이거나 시간이 거의 없다.
+    // 페이지 쪽에서 React 속성이 아니라 동기로 쓰이는 인라인 값을 프레임마다 읽는다.
+    // 시작은 로고 host의 transform이 클릭 전 값 그대로인 마지막 프레임(트윈이 닻 내린 GSAP tick 근처), 끝은 프리뷰 틀의 인라인 opacity가 비워지는(t = 2) 첫 프레임이다.
+    // 1.5초 트윈은 느린 프레임에 더 길어질 뿐 짧아지지 않는다. 건너뛰면 사이 프레임이 거의 없고 시간도 짧다.
     const flight = () => page.evaluate(() => new Promise<{ frames: number; ms: number }>(resolve => {
-      let first = 0;
+      const host = document.querySelector<HTMLElement>('[data-logo-host]')!;
+      const frame = document.querySelector<HTMLElement>('[data-motion-anchor="projects-preview"] > div')!;
+      const rest = host.style.transform;
+      let start = -1;
+      let left = false;
       let frames = 0;
       const read = (now: number) => {
-        const owner = document.querySelector('.portfolio-document')!.getAttribute('data-logo-owner');
-        if (owner === 'preview') { if (!frames++) first = now; }
-        if (owner === 'projects') resolve({ frames, ms: frames ? now - first : 0 }); else requestAnimationFrame(read);
+        if (!left && host.style.transform === rest) start = now;
+        else left = true;
+        if (left && frame.style.opacity === '') return resolve({ frames, ms: start < 0 ? 0 : now - start });
+        if (left) frames++;
+        requestAnimationFrame(read);
       };
       requestAnimationFrame(read);
     }));
@@ -454,7 +461,7 @@ test.describe('Native motion activity', () => {
     let seen = flight();
     await navButton(page, 'Projects').click();
     const click = await seen;
-    expect(click.frames).toBeGreaterThan(1);
+    expect(click.frames).toBeGreaterThan(2);
     expect(click.ms).toBeGreaterThan(1200);
     await expectActive(page, 'projects');
     await expect(page.locator('[data-section="projects"]')).toBeFocused();
@@ -464,7 +471,7 @@ test.describe('Native motion activity', () => {
     await navButton(page, 'Projects').focus();
     await page.keyboard.press('Enter');
     const enterKey = await seen;
-    expect(enterKey.frames).toBeGreaterThan(1);
+    expect(enterKey.frames).toBeGreaterThan(2);
     expect(enterKey.ms).toBeGreaterThan(1200);
     await expectActive(page, 'projects');
     await expect(page.locator('[data-section="projects"]')).toBeFocused();

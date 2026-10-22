@@ -147,9 +147,15 @@ test.describe('프로젝트 상세', () => {
       const stage = () => document.querySelector('.portfolio-document')!.getAttribute('data-logo-owner');
       let flying = 0;
       const wait = () => {
-        if (stage() === 'preview' && ++flying >= 3) {
+        const el = document.querySelector<HTMLElement>(query)!;
+        // opacity는 상속되지 않으므로 조상까지 곱한다. 보이지 않는 단추는 사람이 누를 수 없다. 보이기 시작한 뒤, 아직 날고 있을 때 누른다.
+        let shown = 1;
+        for (let node: Element | null = el; node; node = node.parentElement) shown *= Number(getComputedStyle(node).opacity);
+        if (stage() === 'preview' && ++flying >= 3 && shown > 0) {
           const clickedWhile = stage();
-          document.querySelector<HTMLElement>(query)!.click();
+          // Chrome이 마우스 누름에서 내는 순서: 포커스(mousedown) 다음 click. 마우스 포커스는 스크롤하지 않는다.
+          el.focus({ preventScroll: true });
+          el.click();
           let frames = 0;
           let revived = 0;
           const watch = () => {
