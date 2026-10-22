@@ -98,7 +98,8 @@ export default function HomeClient() {
   useEffect(() => {
     if (!motionReady) return;
     let alive = true;
-    import('./motion').then(module => { if (alive) setMotionModule(module); });
+    // 청크를 못 받으면 모듈 없이 둔다. 이름·로고·볼은 CSS 쉬는 자리에 남고, 직접 해시의 nav 표시도 걷히지 않는다.
+    import('./motion').then(module => { if (alive) setMotionModule(module); }).catch(() => {});
     return () => { alive = false; };
   }, [motionReady]);
   // 모듈 준비와 모션 감소 전환 때만 다시 잇는다. GL 손잡이는 날던 이름·로고를 끊지 않게 따로 넘긴다.

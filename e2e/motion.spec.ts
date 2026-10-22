@@ -305,7 +305,16 @@ test.describe('Native motion activity', () => {
     await scrollTo(Math.floor(routeAt) - 2);
     expect(await leave).toBe(0);
     await expectActive(page, 'overview');
-    await expect(owner).toHaveAttribute('data-logo-owner', 'hero', settled);
+    // 되돌기는 1.5초 시간 트윈이다. 소프트웨어 GL에서는 경계 동안 두 캔버스를 함께 그려 프레임이 500ms를 넘고, GSAP 지연 보정이 그 프레임마다
+    // 33ms만 진행해 45프레임쯤 걸린다. 20초 상한 대신 앞의 gate처럼 페이지 쪽 rAF로 경계가 끝나기를 기다린다. 실패 상한은 이 테스트의 240초다.
+    await page.evaluate(() => new Promise<void>(resolve => {
+      const read = () => {
+        if (document.querySelector('.portfolio-document')!.getAttribute('data-logo-owner') !== 'boundary') resolve();
+        else requestAnimationFrame(read);
+      };
+      read();
+    }));
+    await expect(owner).toHaveAttribute('data-logo-owner', 'hero');
     // Hero에 내려앉은 로고는 R 아래에서도 본문을 다시 열지 않는다.
     await expect(entered).toHaveAttribute('data-entered', 'false');
   });

@@ -174,6 +174,13 @@ describe('그리기 전 인트로 판정(lib/introGate.ts)', () => {
   ] as const)('%s는 표시를 붙이지 않는다(Hero 자리)', (_, options) => {
     expect(nameSide(options)).toBeNull();
   });
+  // 판정 스크립트는 문턱을 옮겨 적었다. motion.ts의 이름 문턱과 어긋나면 첫 화면과 경계가 다른 자리를 고른다.
+  it('판정의 문턱은 motion.ts NAME_DOWN과 같다', () => {
+    const down = Number(readFileSync('components/sections/HomeClient/motion.ts', 'utf8').match(/\nconst NAME_DOWN = (\d+);/)![1]);
+    expect(INTRO_GATE_SCRIPT).toContain(`y>=${down}:`);
+    expect(nameSide({ type: 'reload', saved: down })).toBe('nav');
+    expect(nameSide({ type: 'reload', saved: down - 1 })).toBeNull();
+  });
   it('표시가 있으면 CSS가 이름을 nav-name 앵커 자리(nav 안쪽 여백, max-w-7xl 칸의 왼쪽 끝, 위 16px)에 nav 크기로 세운다', () => {
     const css = readFileSync('styles/design-tokens.css', 'utf8');
     const rule = css.match(/html\[data-name-side='nav'\] \.site-name \{[^}]*\}/)![0];
