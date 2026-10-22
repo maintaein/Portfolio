@@ -135,6 +135,9 @@ test.describe('Native motion activity', () => {
     await expect(page.getByRole('button', { name: 'START' })).toHaveCount(0);
   });
   test('Hero→About 경계는 지점을 넘을 때 이름 버튼 하나와 로고 host 하나를 실제 앵커 사이로 한 번 옮기고 되넘으면 돌려놓는다', async ({ page }) => {
+    // 이 한 건이 진입, 스크롤 왕복, 리사이즈 두 번, 되돌기까지 쉬는 자리를 열 번 넘게 기다린다. 소프트웨어 GL에서는 호출 하나가
+    // 1.2~1.4초라 설정의 60초 상한을 쉬는 자리 대기와 무관하게 넘긴다. 성공 조건이 아니라 실패 상한이다.
+    test.setTimeout(240_000);
     await page.setViewportSize({ width: 1440, height: 900 });
     await enter(page, 'overview');
     const name = page.getByTestId('wordmark');
@@ -265,8 +268,9 @@ test.describe('Native motion activity', () => {
 
     // 창이 줄면 host도 줄어든 앵커를 따라간다.
     await page.setViewportSize({ width: 1100, height: 760 });
-    // 재생 없이 다시 재는 일이라 기본 상한(5초)에 든다. 앵커를 지켜보므로 main 크기 변화를 기다리지 않는다.
-    await expect.poll(async () => (await offsets()).width).toBeLessThan(1.5);
+    // 재생 없이 다시 재는 일이지만 표본마다 프로토콜 호출 하나(소프트웨어 GL에서 1.2~1.4초)가 들어, 기본 5초에는 표본이 서너 개뿐이다.
+    // 앵커를 지켜보므로 main 크기 변화를 기다리지 않는다. 상한은 성공 조건이 아니라 실패 상한이다.
+    await expect.poll(async () => (await offsets()).width, settled).toBeLessThan(1.5);
     await page.setViewportSize({ width: 1440, height: 900 });
 
     await name.click(); await expectActive(page, 'overview');

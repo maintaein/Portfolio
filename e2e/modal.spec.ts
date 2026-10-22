@@ -5,6 +5,7 @@ import {
   expectModalOpen,
   historyLength,
   openProjectModal,
+  SLOW,
 } from './helpers';
 import { projects } from '@/lib/data/projects';
 import { isProjectModalReady } from '@/lib/utils/projectContract';
@@ -34,14 +35,14 @@ test.describe('프로젝트 상세', () => {
     expect(new URL(page.url()).hash).toBe('#projects');
 
     await page.goBack();
-    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByRole('dialog')).toHaveCount(0, SLOW);
     // 섹션은 움직이지 않았다. 뒤로가기가 모달만 걷어 갔다.
     await expectActive(page, 'projects');
     expect(new URL(page.url()).hash).toBe('#projects');
 
     await page.goForward();
     await expectModalOpen(page);
-    await expect(page.getByRole('dialog')).toHaveAccessibleName(ready!.title);
+    await expect(page.getByRole('dialog')).toHaveAccessibleName(ready!.title, SLOW);
     await expectActive(page, 'projects');
   });
 
@@ -54,7 +55,7 @@ test.describe('프로젝트 상세', () => {
       timeout: 20_000,
     });
     await expectModalOpen(page);
-    await expect(page.getByRole('dialog')).toHaveAccessibleName(ready!.title);
+    await expect(page.getByRole('dialog')).toHaveAccessibleName(ready!.title, SLOW);
 
     // 없는 id를 심는다. 같은 항목의 다른 필드는 살아남아야 한다 -
     // Next.js가 쓰는 필드가 여기 같이 산다.
@@ -71,7 +72,7 @@ test.describe('프로젝트 상세', () => {
     await expect(page.locator('main')).toHaveAttribute('data-route-resolved', 'true', {
       timeout: 20_000,
     });
-    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByRole('dialog')).toHaveCount(0, SLOW);
 
     const state = await page.evaluate(() => history.state);
     expect(state).toMatchObject({ e2eKeep: 'keep' });
@@ -87,28 +88,43 @@ test.describe('프로젝트 상세', () => {
     await openProjectModal(page, ready!.title);
 
     // 모달 뒤의 무대와 내비는 격리된다. 뒤에서 섹션이 갈리면 모순이다.
-    await expect(page.locator('main')).toHaveAttribute('inert', '');
+    await expect(page.locator('main')).toHaveAttribute('inert', '', SLOW);
 
-    for (let i = 0; i < 15; i += 1) {
-      await page.keyboard.press('Tab');
-      const inDialog = await page.evaluate(
-        () => !!document.activeElement?.closest('[role="dialog"]')
+    // 누를 때마다 evaluate를 부르면 프로토콜 호출이 두 배로 늘어 느린 프레임에서 60초 상한에 닿는다.
+    // keyup은 keydown의 포커스 이동이 끝난 뒤에 오므로, 페이지 안에서 매 Tab의 위치를 기록하고
+    // 15번을 다 누른 뒤 한 번에 읽는다. 판정은 같다.
+    await page.evaluate(() => {
+      const log: boolean[] = [];
+      (window as unknown as { __tabLog: boolean[] }).__tabLog = log;
+      document.addEventListener(
+        'keyup',
+        (event) => {
+          if (event.key === 'Tab') log.push(!!document.activeElement?.closest('[role="dialog"]'));
+        },
+        true
       );
-      expect(inDialog, `Tab ${i + 1}번째에 포커스가 모달 밖으로 나갔다`).toBe(true);
-    }
+    });
+    for (let i = 0; i < 15; i += 1) await page.keyboard.press('Tab');
+    const tabLog = await page.evaluate(() => (window as unknown as { __tabLog: boolean[] }).__tabLog);
+    expect(tabLog).toHaveLength(15);
+    tabLog.forEach((inDialog, i) =>
+      expect(inDialog, `Tab ${i + 1}번째에 포커스가 모달 밖으로 나갔다`).toBe(true)
+    );
 
     await page.keyboard.press('Escape');
-    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByRole('dialog')).toHaveCount(0, SLOW);
 
     // 포커스는 연 자리로 돌아온다. 정확한 노드(이름 단추 또는 섹션 fallback)는
     // 닫는 경로에 따라 갈리므로 섹션 안이라는 것까지만 계약이다.
     await expect
-      .poll(() =>
-        page.evaluate(
-          () =>
-            document.activeElement?.closest('[data-section]')?.getAttribute('data-section') ??
-            null
-        )
+      .poll(
+        () =>
+          page.evaluate(
+            () =>
+              document.activeElement?.closest('[data-section]')?.getAttribute('data-section') ??
+              null
+          ),
+        SLOW
       )
       .toBe('projects');
   });

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { enter, expectActive, historyLength, navButton, waitFrames } from './helpers';
+import { enter, expectActive, historyLength, navButton, SLOW, waitFrames } from './helpers';
 
 const chapter = (page: Page) => page.locator('[data-section="about"] [data-position="active"]').getAttribute('data-chapter');
 const locked = (page: Page) => page.locator('[data-motion-layout="reading"][data-locked="true"]');
@@ -19,7 +19,7 @@ test('back and forward keep the reading position of each entry @smoke', async ({
   await navButton(page, 'Skills').click(); await expectActive(page, 'skills');
   await page.locator('[data-section="skills"]').evaluate(el => window.scrollTo(0, el.getBoundingClientRect().top + scrollY - 76 + 120));
   // 읽기를 멈춘 뒤 저장된 위치가 이 항목이 떠날 때의 자리다.
-  await expect.poll(() => page.evaluate(() => history.state?.sectionScrollY === window.scrollY)).toBe(true);
+  await expect.poll(() => page.evaluate(() => history.state?.sectionScrollY === window.scrollY), SLOW).toBe(true);
   const left = await page.evaluate(() => window.scrollY);
   await page.goBack(); await expectActive(page, 'experience'); await waitFrames(page, 10);
   expect(Math.abs(await page.evaluate(() => window.scrollY) - before)).toBeLessThanOrEqual(2);
@@ -48,7 +48,7 @@ test('native document scroll exposes the next original section without hiding si
   await expect(page.locator('[data-section][inert], [data-section][aria-hidden="true"]')).toHaveCount(0);
   const before = await page.evaluate(() => window.scrollY); const length = await historyLength(page);
   await page.mouse.move(20, 400); await page.mouse.wheel(0, 950);
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(before);
+  await expect.poll(() => page.evaluate(() => window.scrollY), SLOW).toBeGreaterThan(before);
   expect(await historyLength(page)).toBe(length);
 });
 test('manual reading replaces hash without stealing focus or losing history fields', async ({ page }) => {
@@ -95,15 +95,15 @@ test('About reading lock moves one chapter per wheel gesture and hands the last 
   const start = await page.evaluate(() => window.scrollY);
   await page.mouse.move(640, 400);
   await page.mouse.wheel(0, 100);
-  await expect.poll(() => chapter(page)).toBe('QUALITY');
+  await expect.poll(() => chapter(page), SLOW).toBe('QUALITY');
   // 로고 모프 1초가 끝나야 다음 제스처가 chapter를 넘긴다.
   await page.waitForTimeout(1100);
   await page.mouse.wheel(0, 100);
-  await expect.poll(() => chapter(page)).toBe('TEAMWORK');
+  await expect.poll(() => chapter(page), SLOW).toBe('TEAMWORK');
   expect(await page.evaluate(() => window.scrollY)).toBe(start);
   await page.waitForTimeout(1100);
   await page.mouse.wheel(0, 300);
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(start);
+  await expect.poll(() => page.evaluate(() => window.scrollY), SLOW).toBeGreaterThan(start);
   await expect(locked(page)).toHaveCount(0);
 });
 test('explicit navigation from inside About is not pulled back, and arriving at About locks it', async ({ page }) => {
@@ -117,26 +117,14 @@ test('explicit navigation from inside About is not pulled back, and arriving at 
   await expect(locked(page)).toHaveCount(1);
   expect(await chapter(page)).toBe('QUALITY');
 });
-test('keyboard steps About chapters while End and programmatic scroll leave without a pull back', async ({ page }) => {
-  await enter(page, 'about');
-  await page.keyboard.press('ArrowDown');
-  await expect.poll(() => chapter(page)).toBe('QUALITY');
-  await page.keyboard.press('End');
-  const atEnd = () => page.evaluate(() => window.scrollY + innerHeight >= document.documentElement.scrollHeight - 2);
-  await expect.poll(atEnd).toBe(true);
-  await waitFrames(page, 20); expect(await atEnd()).toBe(true);
-  const top = await page.locator('#about').evaluate(el => el.getBoundingClientRect().top + scrollY - 92 + 300);
-  await page.evaluate(y => window.scrollTo(0, y), top);
-  await waitFrames(page, 20);
-  expect(Math.abs(await page.evaluate(() => window.scrollY) - top)).toBeLessThanOrEqual(1);
-});
+// 'keyboard steps About chapters while End ...'는 e2e/navigation-end.spec.ts로 옮겼다. 키보드 smooth scroll을 끄는 설정이 파일 단위라서다.
 test('a nav click during the first-visit entrance ends it and still arrives at its destination', async ({ page }) => {
   await page.goto('/');
   await page.locator('html[data-intro="playing"]').waitFor({ state: 'attached', timeout: 20_000 });
   await navButton(page, 'Projects').click();
-  await expect(page.locator('html')).not.toHaveAttribute('data-intro');
+  await expect(page.locator('html')).not.toHaveAttribute('data-intro', SLOW);
   await expectActive(page, 'projects');
-  await expect(page.locator('[data-section="projects"]')).toBeFocused();
+  await expect(page.locator('[data-section="projects"]')).toBeFocused(SLOW);
   expect(page.url()).toContain('#projects');
 });
 test('direct hash below About opens at its destination', async ({ page }) => {
