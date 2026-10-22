@@ -12,8 +12,19 @@ import { useSectionVisibility } from '@/hooks/useSectionVisibility';
 import type { Flip, gsap } from '@/lib/gsap';
 import type { PreviewMorphHandle } from '@/components/blocks/PreviewMorph';
 
+// 상세 판 청크(또는 거기 딸린 GSAP 청크)를 못 받으면 lazy 렌더가 던져 페이지 전체가
+// 오류 화면으로 떨어졌다. 대신 열리자마자 닫아 History와 가림을 되돌린다. 누른
+// 이름은 선택만 된 채 페이지는 그대로 쓰인다.
+// shortcut: 실패한 청크는 이 페이지에서 다시 받지 않는다. 다시 시도가 필요해지면 loader를 열 때마다 부른다
+function ProjectModalUnavailable({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  useEffect(() => {
+    if (isOpen) onClose();
+  }, [isOpen, onClose]);
+  return null;
+}
+
 const ProjectModal = dynamic(
-  () => import('@/components/blocks/ProjectModal'),
+  () => import('@/components/blocks/ProjectModal').catch(() => ({ default: ProjectModalUnavailable })),
   { ssr: false }
 );
 
@@ -37,6 +48,11 @@ const DynamicPreviewMorph = dynamic(
         onHandle: (handle: PreviewMorphHandle | null) => void;
       }) {
         return <PreviewMorph ref={onHandle} className={className} preload={preload} paused={paused} />;
+      },
+    })).catch(() => ({
+      // 청크를 못 받으면 핸들이 오지 않아 모프 없는 전환으로 간다. 던지면 페이지 전체가 오류 화면이다
+      default: function PreviewMorphUnavailable() {
+        return null;
       },
     })),
   { ssr: false }
@@ -326,9 +342,10 @@ export default function ProjectsSection() {
   }, [modalOpen]);
 
   useEffect(() => {
+    // 청크를 못 받으면 모듈 없이 둔다. 비행 관문이 닫혀 GSAP 없는 길로 열고 닫는다
     import('@/lib/gsap').then((mod) => {
       gsapModuleRef.current = mod;
-    });
+    }).catch(() => {});
   }, []);
 
   // 프로젝트 전환. 이 모션이 전하는 것 하나: "보고 있는 프로젝트가 바뀌었다".
