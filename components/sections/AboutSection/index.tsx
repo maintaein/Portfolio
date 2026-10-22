@@ -54,6 +54,15 @@ export default function AboutSection({ ref, onChapterChange, navigationPending, 
 
   useImperativeHandle(ref, () => ({ release: () => releaseRef.current() }), []);
   useEffect(() => { onChapterChange(activeIndex); }, [activeIndex, onChapterChange]);
+  // 창·탭에 돌아오면 브라우저가 떠날 때 포커스가 있던 요소에 focus를 다시 보낸다(relatedTarget 없음).
+  // 사용자가 옮긴 포커스가 아니므로 chapter 단어의 잠금을 걸지 않는다(M3 N1).
+  const refocusRef = useRef<Element | null>(null);
+  useEffect(() => {
+    // 요소의 blur는 거품이 일지 않아 캡처 없이 단 이 리스너에는 창 자신의 blur만 온다.
+    const leave = () => { refocusRef.current = document.activeElement; };
+    window.addEventListener('blur', leave);
+    return () => window.removeEventListener('blur', leave);
+  }, []);
   useEffect(() => {
     landedRef.current = logoOwner !== 'boundary';
     restingRef.current = logoOwner === 'about';
@@ -331,7 +340,11 @@ export default function AboutSection({ ref, onChapterChange, navigationPending, 
         : null}
       <div className={styles.stage} style={{ '--chapter-transition': `${TRANSITION_MS}ms` } as CSSProperties}
         data-motion-layout="reading" data-static={plain ? '' : undefined} data-entered={entered} data-locked={locked}>
-        <div className={styles.header} onFocus={event => { if (event.target.matches(':focus-visible')) enterRef.current(); }}>
+        <div className={styles.header} onFocus={event => {
+          const returned = !event.relatedTarget && event.target === refocusRef.current;
+          refocusRef.current = null;
+          if (!returned && event.target.matches(':focus-visible')) enterRef.current();
+        }}>
           <ChapterFocus active={activeIndex} entered={entered} onSelect={index => selectRef.current(index)} />
         </div>
         <div className={styles.rail} aria-hidden="true">

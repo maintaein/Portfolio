@@ -543,6 +543,31 @@ describe('AboutSection', () => {
       expect(chapter(container)).toBe('TEAMWORK');
     });
 
+    // M4 Task 0 (M3 최종 재리뷰 N1). 창이나 탭에 돌아오면 브라우저가 떠날 때 포커스가 있던 단어에 focus를 다시 보낸다.
+    // 키보드로 단 포커스는 :focus-visible에 그대로 맞아, About을 지나친 방문자를 About으로 끌어올렸다.
+    it('chapter 단어에 포커스를 둔 채 About을 지나친 뒤 창에 돌아와도 끌어올리지 않고, 다시 Tab으로 들어오면 잠근다', async () => {
+      const { container, handle } = mount(0);
+      await userEvent.tab();
+      const basics = screen.getByRole('button', { name: 'BASICS' });
+      expect(isLocked(container)).toBe(true);
+      act(() => handle.current!.release());
+      scrollAt(2400, 30_000);
+      expect(isLocked(container)).toBe(false);
+      vi.mocked(window.scrollTo).mockClear();
+      act(() => { window.dispatchEvent(new FocusEvent('blur')); });
+      fireEvent.focusIn(basics, { relatedTarget: null });
+      expect(basics).toHaveFocus();
+      expect(isLocked(container)).toBe(false);
+      expect(window.scrollTo).not.toHaveBeenCalled();
+      // 사용자가 옮긴 포커스는 그대로 잠근다.
+      act(() => basics.blur());
+      scrollAt(0, 31_000);
+      await userEvent.tab();
+      expect(basics).toHaveFocus();
+      expect(isLocked(container)).toBe(true);
+      expect(window.scrollTo).toHaveBeenLastCalledWith({ top: START, behavior: 'instant' });
+    });
+
     // Task 5. 공유 로고가 About 자리로 날아가는 동안에는 잠그지 않는다. 그사이 잠금 자리에 닿으면 입력은 막지 않고, 내려앉을 때 잠근다.
     it('로고가 날아가는 동안 잠금 자리에 닿으면 입력을 막지 않고 기다렸다가 내려앉을 때 BASICS로 잠근다', () => {
       const { container, update } = mount(900, { logoOwner: 'boundary' });
