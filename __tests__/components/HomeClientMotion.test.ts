@@ -1147,6 +1147,38 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     scrollAt(1392); scrollAt(1393);
     expect(owners.at(-1)).toBe('about');
   });
+
+  // Task 1 재리뷰 3. 머묾이 풀려 Projects가 다시 숨으면 포커스가 보이지 않는 컨트롤에 남았다(WCAG 2.4.7). 풀리는 프레임에 한 번 놓는다.
+  it('머무는 동안은 포커스를 두고, 머묾이 풀려 Projects가 숨는 프레임에 숨은 컨트롤의 포커스를 놓는다', () => {
+    restAtAbout();
+    const tab = document.createElement('button');
+    list.append(tab);
+    tab.focus();
+    scrollAt(PREVIEW_AT - 100);
+    scrollAt(PREVIEW_AT - 102); scrollAt(PREVIEW_AT - 99);
+    expect(owners.at(-1)).toBe('projects');
+    expect(document.activeElement).toBe(tab);
+    scrollAt(PREVIEW_AT - 112);
+    expect(owners.at(-1)).toBe('preview');
+    expect(document.activeElement).not.toBe(tab);
+    // 다음 Tab은 그 자리에서 이어져 다시 드러낸다.
+    advance(2);
+    tab.focus();
+    expect(owners.at(-1)).toBe('projects');
+  });
+
+  // Task 1 재리뷰 3 N5. 낮은 자리에서 포커스를 얻은 뒤 깊이 내려갔다가 한 번에 경로 지점 아래로 뛰어오르면, 포커스 자리 띠 안이라 머물렀다.
+  it('포커스를 둔 채 깊이 내려갔다가 한 프레임에 경로가 About인 자리로 뛰어오르면 그 프레임에 돌아간다', () => {
+    restAtAbout();
+    const tab = document.createElement('button');
+    list.append(tab);
+    tab.focus();
+    scrollAt(1800);
+    expect(owners.at(-1)).toBe('projects');
+    scrollAt(PREVIEW_AT - 100);
+    expect(owners.at(-1)).toBe('preview');
+    expect(document.activeElement).not.toBe(tab);
+  });
 });
 
 // Task 9 리뷰 Minor 5. Hero에서는 로고 host가 숨어 있으니 포인터로 기울일 것이 없다. About에서도 기울지 않았다.

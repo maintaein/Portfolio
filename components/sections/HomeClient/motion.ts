@@ -386,11 +386,14 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     if (y >= m.previewAt && (routed(m.projectsTop, y - LOGO_SLACK) || y >= lowY + LOGO_SLACK)) return 2;
     // 포커스가 Projects 컨트롤에 있는 동안은 경로가 Projects이거나, 포커스가 선 자리(그 뒤 가장 아래)에서 LOGO_SLACK 넘게 위로 굴리지 않았으면 머문다.
     // Tab의 scroll-into-view는 옛 문턱(지점 - 24) 아래에 설 수 있다(재리뷰 N2). 풀림은 넘는 한 프레임이 아니라 상태로 본다(재리뷰 N4).
+    // 지난 스크롤도 내려간 자리로 친다. 깊은 데서 한 번에 뛰어올라도 그 프레임에 놓는다(재리뷰 3 N5).
     if (goal === 2 && focusedControl()) {
-      if (routed(m.projectsTop, y) || y >= holdFrom - LOGO_SLACK) {
+      if (routed(m.projectsTop, y) || y >= Math.max(holdFrom, was) - LOGO_SLACK) {
         holdFrom = Math.max(holdFrom, y);
         return 2;
       }
+      // 아래 규칙은 언제나 Projects가 아니다(clamp는 1까지). 다시 숨는 컨트롤에 보이지 않는 포커스를 남기지 않는다. 다음 Tab은 그 자리에서 이어진다.
+      (document.activeElement as HTMLElement).blur();
     } else if (goal === 2 && y > m.previewAt - LOGO_BACK && !(routed(m.projectsTop, was) && !routed(m.projectsTop, y))) return 2;
     if (y >= m.logoAt && (routed(m.aboutTop, y - LOGO_SLACK) || y >= lowY + LOGO_SLACK)) return 1;
     if (y <= m.logoAt - LOGO_BACK || (routed(m.aboutTop, was) && !routed(m.aboutTop, y))) return 0;
