@@ -93,8 +93,9 @@ const ABOUT_LOGO = { x: 140, y: 1100, z: 0 };
 // 볼(hero-object 앵커): translate(dx, dy) scale(s). Hero 앵커 가운데 (1140, 480), About 앵커 가운데 (320, 1280).
 const orb = () => { const [dx, dy, scale] = numbers(heroObject.style.transform); return { dx: dx ?? 0, dy: dy ?? 0, scale: scale ?? 1, opacity: heroObject.style.opacity }; };
 const lastCall = (fn: { mock: { calls: unknown[][] } }) => fn.mock.calls.at(-1)?.[0];
-// 로고 지점: About 본문이 나타나기 시작하는 R(잠금 824 - 화면 절반 450 = 374)에서 화면 높이의 12% 앞, 266. 되돌아오는 문턱은 60 위 206.
-const START = 266;
+// 로고 지점: About 본문이 나타나기 시작하는 R(잠금 824 - 화면 절반 450 = 374)에서 화면 높이의 15% 앞, 239. 되돌아오는 문턱은 24 위 215.
+// Task 11: 1.5초 비행에 맞춰 12%에서 15%로 앞당겼다(앞섬 / 비행 시간이 같다). 되돌기는 60에서 24로 더 일찍 시작한다.
+const START = 239;
 const expectNameAt = (mode: 'hero' | 'nav') => {
   expect(wordmark.dataset.wordmarkMode).toBe(mode);
   expect(wordmark.style.transform).toBe('');
@@ -295,16 +296,16 @@ describe('이름: 지점을 넘으면 0.5초 FLIP', () => {
 });
 
 // Task 10(사용자 결정 2026-10-21, background_good.mp4 0–2초). 볼이 제자리에서 작은 고리로 접히고(줄기), 같은 지름의 Electric 원이
-// 넘겨받아 About으로 날아가(이동), 그 자리에서 React 로고로 풀린다(펼침). 진행도 하나를 1.2초 동안 시간으로 돌리고
+// 넘겨받아 About으로 날아가(이동), 그 자리에서 React 로고로 풀린다(펼침). 진행도 하나를 1.5초(Task 11, 1.2초에서 25% 느리게) 동안 시간으로 돌리고
 // 모든 값이 진행도의 함수라 어느 지점에서든 같은 길을 거꾸로 밟는다.
 describe('변신 시간표', () => {
   const at = logoPhases;
   const scale = (p: number) => 1 - (1 - CORE) * at(p).contract;
 
-  it('끝점: 0은 쉬는 볼, 1은 내려앉은 로고이고 전체는 1.2초다', () => {
+  it('끝점: 0은 쉬는 볼, 1은 내려앉은 로고이고 전체는 1.5초다', () => {
     expect(at(0)).toEqual({ contract: 0, drain: 0, ball: 1, logo: 0, travel: 0, grow: 0, boundary: 1 });
     expect(at(1)).toEqual({ contract: 1, drain: 1, ball: 0, logo: 1, travel: 1, grow: 1, boundary: 0 });
-    expect(LOGO_SECONDS).toBe(1.2);
+    expect(LOGO_SECONDS).toBe(1.5);
     expect([CORE, ORBIT]).toEqual([.22, .7]);
   });
 
@@ -362,21 +363,21 @@ describe('로고: About 본문보다 먼저 내려앉게 떠나는 변신', () =
     expect(owners).toEqual(['none', 'hero']);
   });
 
-  it('지점은 About 본문이 나타나는 R에서 화면 높이의 12% 앞이고 이름 문턱 아래·잠금 자리 위로 묶는다. 되돌아오는 문턱은 60 위다', () => {
+  it('지점은 About 본문이 나타나는 R에서 화면 높이의 15% 앞이고 이름 문턱 아래·잠금 자리 위로 묶는다. 되돌아오는 문턱은 24 위다', () => {
     create();
     scrollAt(START - 1); expect(owners.at(-1)).toBe('hero');
     scrollAt(START); expect(owners.at(-1)).toBe('boundary');
     advance(2); expect(owners.at(-1)).toBe('about');
-    scrollAt(START - 59); expect(owners.at(-1)).toBe('about');
-    scrollAt(START - 60); expect(owners.at(-1)).toBe('boundary');
+    scrollAt(START - 23); expect(owners.at(-1)).toBe('about');
+    scrollAt(START - 24); expect(owners.at(-1)).toBe('boundary');
     advance(2); expect(owners.at(-1)).toBe('hero');
     scrollAt(START - 1); expect(owners.at(-1)).toBe('hero');
     motion!.destroy(); owners.length = 0; documentY = 0;
-    // 1280x720: R = 824 - 360 = 464, 지점 464 - 86.4 = 377.6.
+    // 1280x720: R = 824 - 360 = 464, 지점 464 - 108 = 356.
     viewport = 720;
     create();
-    scrollAt(377); expect(owners.at(-1)).toBe('hero');
-    scrollAt(378); expect(owners.at(-1)).toBe('boundary');
+    scrollAt(355); expect(owners.at(-1)).toBe('hero');
+    scrollAt(356); expect(owners.at(-1)).toBe('boundary');
     motion!.destroy(); owners.length = 0; documentY = 0; viewport = 900;
     // About이 가까우면 이름 문턱(180)보다 먼저 떠나지 않는다.
     place(about, { x: 0, y: 500, w: 1440, h: 900 });
@@ -397,10 +398,10 @@ describe('로고: About 본문보다 먼저 내려앉게 떠나는 변신', () =
     expect(handle.beginBoundary).toHaveBeenCalledTimes(1);
     expect(handle.beginBoundary).toHaveBeenCalledWith({ width: 360, height: 360, radius: 180 });
     // 줄기 한가운데: 볼 전체(앵커)가 줄고 속은 아직 빠지지 않는다.
-    advance(.2 * 1.2);
+    advance(.2 * LOGO_SECONDS);
     expect(orb().scale).toBeLessThan(.7);
     expect(lastCall(ball.setCollapse)).toBe(0);
-    advance(.1 * 1.2);
+    advance(.1 * LOGO_SECONDS);
     const { contract } = logoPhases(.3);
     expect(lastCall(ball.setCollapse)).toBeCloseTo(0, 2);
     expect(orb().scale).toBeCloseTo(1 - (1 - CORE) * contract, 2);
@@ -417,15 +418,15 @@ describe('로고: About 본문보다 먼저 내려앉게 떠나는 변신', () =
     expect(logo()).toEqual(HERO_LOGO);
     expect(handle.beginBoundary).toHaveBeenCalledTimes(1);
     // 줄기 끝(.3–.42)에만 속이 고리 가운데로 빠진다.
-    advance(.06 * 1.2);
+    advance(.06 * LOGO_SECONDS);
     expect(lastCall(ball.setCollapse) as number).toBeCloseTo(logoPhases(.36).drain, 1);
     expect(lastCall(ball.setCollapse) as number).toBeGreaterThan(.3);
   });
 
-  it('이동과 펼침: 작은 원이 문서 좌표로 About 앵커에 가서 React 로고로 풀리고, 1.2초에 정확히 내려앉는다', () => {
+  it('이동과 펼침: 작은 원이 문서 좌표로 About 앵커에 가서 React 로고로 풀리고, 1.5초에 정확히 내려앉는다', () => {
     create();
     scrollAt(START);
-    advance(.6 * 1.2);
+    advance(.6 * LOGO_SECONDS);
     const mid = logo();
     expect(mid.x).toBeLessThan(960); expect(mid.x).toBeGreaterThan(140);
     expect(mid.y).toBeGreaterThan(300); expect(mid.y).toBeLessThan(1100);
@@ -436,11 +437,11 @@ describe('로고: About 본문보다 먼저 내려앉게 떠나는 변신', () =
     // 사라진 볼도 같은 길에 있다(host 가운데 = Hero 앵커 가운데 + 볼 이동).
     expect(1140 + orb().dx).toBeCloseTo(mid.x + 180, 3);
     expect(480 + orb().dy).toBeCloseTo(mid.y + 180, 3);
-    advance(.24 * 1.2 - .01);
+    advance(.24 * LOGO_SECONDS - .01);
     expect(owners.at(-1)).toBe('boundary');
     expect(lastCall(handle.seekBoundary) as number).toBeGreaterThan(.4);
     expect(lastCall(handle.seekBoundary) as number).toBeLessThan(.6);
-    advance(.16 * 1.2 - .01);
+    advance(.16 * LOGO_SECONDS - .01);
     expect(owners.at(-1)).toBe('boundary');
     advance(.03);
     expect(logo()).toEqual(ABOUT_LOGO);
@@ -460,14 +461,14 @@ describe('로고: About 본문보다 먼저 내려앉게 떠나는 변신', () =
 
   it('도중에 되넘으면 보이는 그대로에서 거꾸로 돌아 볼로 펼쳐지고 지난 진행도만큼의 시간만 쓴다. About에서 돌아가는 길도 같다', () => {
     create();
-    scrollAt(START); advance(.5 * 1.2);
+    scrollAt(START); advance(.5 * LOGO_SECONDS);
     const seen = () => ({ host: host.style.transform, orb: heroObject.style.transform + heroObject.style.opacity, inner: inner.style.opacity,
       seek: lastCall(handle.seekBoundary), target: lastCall(handle.setBoundaryTarget), collapse: lastCall(ball.setCollapse) });
     const before = seen();
-    scrollAt(START - 60);
+    scrollAt(START - 24);
     expect(owners.at(-1)).toBe('boundary');
     expect(seen()).toEqual(before);
-    advance(.5 * 1.2 - .02);
+    advance(.5 * LOGO_SECONDS - .02);
     expect(owners.at(-1)).toBe('boundary');
     advance(.04);
     expect(owners.at(-1)).toBe('hero');
@@ -481,7 +482,7 @@ describe('로고: About 본문보다 먼저 내려앉게 떠나는 변신', () =
     scrollAt(0);
     expect(handle.beginBoundary).toHaveBeenCalledTimes(3);
     // 로고가 원으로 접혀 가는 중(p = .84).
-    advance(.16 * 1.2);
+    advance(.16 * LOGO_SECONDS);
     expect(lastCall(handle.seekBoundary) as number).toBeCloseTo(.5, 1);
     advance(2);
     expect(owners.at(-1)).toBe('hero');

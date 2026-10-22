@@ -26,11 +26,14 @@ const BALL_GLOW = .1;
 // 큰 이름과 볼 상자 사이에 남기는 거리(px).
 const BALL_GAP = 16;
 // 볼에서 로고로의 변신(사용자 결정 2026-10-21, background_good.mp4 0–2초). 진행도 하나를 이 시간 동안 시간으로 돌린다.
-export const LOGO_SECONDS = 1.2;
+// 사용자 요청(2026-10-22)으로 1.2초에서 25% 느리게 했다. 구간 비율은 진행도 기준이라 그대로다.
+export const LOGO_SECONDS = 1.5;
 // 로고는 About 본문이 나타나기 시작하는 스크롤 R보다 화면 높이의 이만큼 먼저 떠나 본문보다 먼저 내려앉는다.
-const LOGO_LEAD = .12;
-// 이만큼 위로 돌아와야 Hero로 되돌아가 문턱에서 떨지 않는다(px).
-const LOGO_BACK = 60;
+// 1.2초 때의 .12에서 비행 시간과 같은 비율로 늘렸다. 앞섬 / 비행 시간(이보다 느리게 굴리면 R 전에 내려앉는 빠르기)이 같다.
+const LOGO_LEAD = .15;
+// 이만큼 위로 돌아와야 Hero로 되돌아가 문턱에서 떨지 않는다(px). 위로 갈 때 되돌기가 일찍 시작하게 작게 둔다(사용자 요청 2026-10-22).
+// About 본문은 로고가 About을 떠나는 프레임까지 남는다(AboutSection).
+const LOGO_BACK = 24;
 // 볼이 접혀 드는 작은 고리의 지름(Hero 앵커 비율). 이 지름에서 Electric 원이 넘겨받는다.
 export const CORE = .22;
 // 원이 펼쳐지는 지름(About 앵커 비율). ElectricLogo가 로고를 그리는 크기(scale .7)와 같다.
@@ -131,7 +134,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     const size = width > 0 ? Math.max(1, Math.min(slot.h / NAME_LINE, slot.w / width, ballRoom)) : 0;
     const target = aboutLogo.w ? aboutLogo : heroObject;
     // 로고 지점: About 본문은 잠금 자리에서 화면 절반 안(R = 잠금 - 화면 높이 / 2)에 들면 나타나기 시작한다(AboutSection).
-    // 그보다 화면 높이의 12% 먼저 떠나 본문보다 먼저 내려앉는다. 이름 문턱보다 아래, About 잠금 자리보다 위에 둔다.
+    // 그보다 화면 높이의 15% 먼저 떠나 본문보다 먼저 내려앉는다. 이름 문턱보다 아래, About 잠금 자리보다 위에 둔다.
     // 두 앵커가 화면 높이만큼 떨어져 있어 이 지점에서 멈추면 비행이 화면 아래로 빠진다(받아들인 결정).
     const lock = about ? about.getBoundingClientRect().top + window.scrollY - (parseFloat(getComputedStyle(about).scrollMarginTop) || header.offsetHeight) : Infinity;
     const reveal = lock - window.innerHeight / 2;

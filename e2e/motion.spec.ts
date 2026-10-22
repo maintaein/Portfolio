@@ -186,14 +186,14 @@ test.describe('Native motion activity', () => {
     await expect(ball).toHaveCSS('opacity', '1');
     await expect(ball).toHaveCSS('transform', 'none');
 
-    // 로고 지점(Task 10): About 본문이 나타나기 시작하는 R(잠금 자리 - 화면 절반)보다 화면 높이의 12% 앞, 이름 문턱(180) 아래로는 가지 않는다.
+    // 로고 지점(Task 10, Task 11에서 1.5초 비행에 맞춰 15%): About 본문이 나타나기 시작하는 R(잠금 자리 - 화면 절반)보다 화면 높이의 15% 앞, 이름 문턱(180) 아래로는 가지 않는다.
     const points = await page.evaluate(() => {
       const about = document.querySelector<HTMLElement>('[data-section="about"]')!;
       const lock = about.getBoundingClientRect().top + scrollY - parseFloat(getComputedStyle(about).scrollMarginTop);
       const reveal = lock - innerHeight / 2;
-      return { reveal, start: Math.max(180, reveal - .12 * innerHeight) };
+      return { reveal, start: Math.max(180, reveal - .15 * innerHeight) };
     });
-    // 휠 두 칸(200px): 이름만 nav로 간다. 로고 지점은 아직이다(1440x900에서 250).
+    // 휠 두 칸(200px): 이름만 nav로 간다. 로고 지점은 아직이다(1440x900에서 223).
     expect(points.start).toBeGreaterThan(200);
     await scrollTo(200);
     await atRest('nav');
@@ -236,11 +236,23 @@ test.describe('Native motion activity', () => {
     }), settled).toBeLessThan(1.5);
     await atRest('nav');
     expect(await singles()).toEqual([1, 1]);
-    // 되돌아오는 문턱은 지점 60px 위다. 그 사이에서는 About에 머문다.
-    await scrollTo(Math.round(points.start) - 40);
+    // 되돌아오는 문턱은 지점 24px 위다(Task 11). 그 사이에서는 About에 머물고, R 위로 올라왔어도 본문이 그대로 보인다.
+    await scrollTo(Math.round(points.start) - 12);
     await expect(owner).toHaveAttribute('data-logo-owner', 'about');
-    // 넘으면 로고가 원으로 접혀 돌아가고 볼이 다시 펼쳐진다.
-    await scrollTo(Math.round(points.start) - 64);
+    await expect(entered).toHaveAttribute('data-entered', 'true');
+    // 넘으면 로고가 원으로 접혀 돌아가고 볼이 다시 펼쳐진다. 본문은 되돌기가 시작한 프레임보다 먼저 사라지지 않는다.
+    const back = page.evaluate(() => new Promise<number>(resolve => {
+      let early = 0;
+      const read = () => {
+        const owner = document.querySelector('.portfolio-document')!.getAttribute('data-logo-owner');
+        if (owner !== 'about') return resolve(early);
+        if (document.querySelector('#about [data-motion-layout="reading"]')!.getAttribute('data-entered') !== 'true') early++;
+        requestAnimationFrame(read);
+      };
+      read();
+    }));
+    await scrollTo(Math.round(points.start) - 28);
+    expect(await back).toBe(0);
     await expect(owner).toHaveAttribute('data-logo-owner', 'hero', settled);
     await expect(ball).toHaveCSS('opacity', '1', settled);
     await expect(ball).toHaveCSS('transform', 'none', settled);

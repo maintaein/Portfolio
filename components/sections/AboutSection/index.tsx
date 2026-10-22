@@ -45,6 +45,9 @@ export default function AboutSection({ ref, onChapterChange, navigationPending, 
   const enterRef = useRef(() => {});
   const landedRef = useRef(logoOwner !== 'boundary');
   const landRef = useRef<(apply: boolean) => void>(() => {});
+  // 로고가 About에 내려앉아 있는지. 위로 돌아갈 때 그동안은 R 위에서도 본문을 남긴다.
+  const restingRef = useRef(logoOwner === 'about');
+  const revealRef = useRef(() => {});
   const { reducedMotion, motionReady, pageVisible, obscured } = useSectionActivity();
   const { ref: sectionRef, visible } = useSectionVisibility<HTMLElement>();
   const active = visible && motionReady && pageVisible && !obscured;
@@ -53,6 +56,8 @@ export default function AboutSection({ ref, onChapterChange, navigationPending, 
   useEffect(() => { onChapterChange(activeIndex); }, [activeIndex, onChapterChange]);
   useEffect(() => {
     landedRef.current = logoOwner !== 'boundary';
+    restingRef.current = logoOwner === 'about';
+    revealRef.current();
     if (landedRef.current) landRef.current(logoOwner !== 'hero');
   }, [logoOwner]);
 
@@ -202,7 +207,8 @@ export default function AboutSection({ ref, onChapterChange, navigationPending, 
     const scroll = () => {
       if (disabled) return;
       const offset = window.scrollY - start;
-      setRevealed(Math.abs(offset) < window.innerHeight / 2);
+      // 위로 R을 지나도 로고가 About에 있는 동안은 본문이 남는다. 로고가 떠나는 프레임(되돌기 시작)에 owner effect가 다시 읽는다(Task 11).
+      setRevealed(shown => offset < window.innerHeight / 2 && (offset > -window.innerHeight / 2 || (shown && restingRef.current)));
       // 방금 들어온 제스처의 관성이 넘친 거리만 되돌린다. 넘침은 Chrome의 부드러운 wheel
       // 스크롤 때문에 수백 px까지 간다. 스크롤바는 입력이 없고, History·명시적 이동·다른 키는
       // 이 창을 닫으므로 끌려오지 않는다.
@@ -244,6 +250,7 @@ export default function AboutSection({ ref, onChapterChange, navigationPending, 
       closeOvershoot(); pendingGesture = false; held = null;
       if (phase === 'locked') setPhase(window.scrollY > start ? 'after' : 'before');
     };
+    revealRef.current = () => { if (!disabled) setRevealed(Math.abs(window.scrollY - start) < window.innerHeight / 2); };
     measure();
     scroll();
     const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
@@ -269,6 +276,7 @@ export default function AboutSection({ ref, onChapterChange, navigationPending, 
       releaseRef.current = () => {};
       enterRef.current = () => {};
       landRef.current = () => {};
+      revealRef.current = () => {};
     };
   }, [sectionRef, reducedMotion, navigationPending, obscured]);
 

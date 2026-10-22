@@ -574,6 +574,37 @@ describe('AboutSection', () => {
       expect(entered(container)).toBe('true');
     });
 
+    // Task 11(사용자 요청 2026-10-22). 위로 돌아갈 때 로고가 볼로 돌아가기 시작하는 순간까지 본문은 다 보인다.
+    // 본문은 R(잠금 1000 - 화면 절반 384 = 616) 위로 올라가도 로고가 About에 있는 동안 남고, 로고가 떠나는 프레임에 사라진다. 내려올 때는 그대로 R에서 나타난다.
+    it('위로 돌아갈 때 본문은 R이 아니라 로고가 About을 떠나는 순간 사라지고, 내려올 때는 그대로 R에서 나타난다', () => {
+      const entered = (container: HTMLElement) => container.querySelector('[data-entered]')!.getAttribute('data-entered');
+      const { container, update } = mount(START - 300, { logoOwner: 'about' });
+      expect(entered(container)).toBe('true');
+      scrollAt(START - 500, 20_000);
+      expect(entered(container)).toBe('true');
+      update({ logoOwner: 'boundary' });
+      expect(entered(container)).toBe('false');
+      update({ logoOwner: 'hero' });
+      expect(entered(container)).toBe('false');
+      // 다시 내려와 R 위에서 내려앉으면 본문은 아직 기다린다.
+      update({ logoOwner: 'boundary' });
+      update({ logoOwner: 'about' });
+      expect(entered(container)).toBe('false');
+      scrollAt(START - 300, 20_400);
+      expect(entered(container)).toBe('true');
+      // 아래로 지나치면 그대로 사라진다.
+      scrollAt(START + 500, 20_800);
+      expect(entered(container)).toBe('false');
+    });
+
+    it('로고가 날지 않으면(GL 로고 없음) 본문은 그대로 R에서 사라진다', () => {
+      const entered = (container: HTMLElement) => container.querySelector('[data-entered]')!.getAttribute('data-entered');
+      const { container } = mount(START - 300);
+      expect(entered(container)).toBe('true');
+      scrollAt(START - 500, 20_000);
+      expect(entered(container)).toBe('false');
+    });
+
     it('로고가 날아가는 동안 반 화면 넘게 지나쳤으면 내려앉아도 끌어오지 않는다', () => {
       const { container, update } = mount(960, { logoOwner: 'boundary' });
       wheel(120, 20_000);
