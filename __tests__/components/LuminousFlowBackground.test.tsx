@@ -352,7 +352,8 @@ it('Contacts 표지의 위쪽 끝을 장면 좌표로 재어 형상에 넘기고
   expect(turns).toHaveLength(5);
   expect(rims).toHaveLength(5);
   rims.forEach((sample, index) => expect(Math.abs(sample - turns[index])).toBeLessThanOrEqual(1));
-});
+  // 혼자 돌면 1.3초지만 형상을 두 번 새로 만들어, 기본 워커 수의 전체 실행 부하에서 기본 5초를 넘긴 적이 있다.
+}, 20_000);
 
 it('광휘 텍스처는 프레임마다 8줄 단위 띠 하나씩 채우고 다 채운 뒤에야 살아 있는 SVG를 숨긴다', () => {
   const { drawn, tick, loadImages, shapes, strips } = harness();

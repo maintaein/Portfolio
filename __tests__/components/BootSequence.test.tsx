@@ -287,14 +287,16 @@ describe('BootSequence 중단 경로: 공개값 1·원문·원래 입력 유지'
     const before = lastReveal(background);
     const from = background.setRevealProgress.mock.calls.length;
     const tl = timeline.mock.results[0].value as gsap.core.Timeline;
-    const started = performance.now();
+    // 벽시계가 아니라 GSAP ticker 시간으로 잰다. ticker는 지연 보정으로 늦은 프레임을 33ms만 흘려, 부하로 타이머가 밀려도 시간표 시간은 변하지 않는다.
+    const started = gsap.ticker.time;
     act(() => { window.dispatchEvent(new WheelEvent('wheel', { deltaY: 120 })); });
     const [fast] = gsap.getTweensOf(tl);
     expect(fast).toBeDefined();
     act(() => { document.dispatchEvent(new Event('scroll')); window.dispatchEvent(new WheelEvent('wheel', { deltaY: 120 })); });
     expect(gsap.getTweensOf(tl)).toEqual([fast]);
-    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1), { timeout: 2000 });
-    const elapsed = (performance.now() - started) / 1000;
+    // 벽시계 상한은 실패 상한일 뿐이다. 시간표 시간이 느리게 흐르면 .35초 분량이 벽시계로 길어진다.
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    const elapsed = gsap.ticker.time - started;
     expect(elapsed).toBeGreaterThanOrEqual(.3);
     expect(elapsed).toBeLessThan(1);
     const values = background.setRevealProgress.mock.calls.slice(from).map(([value]) => value as number);
@@ -303,7 +305,7 @@ describe('BootSequence 중단 경로: 공개값 1·원문·원래 입력 유지'
     expect(values[0]).toBeLessThan(1);
     values.forEach((value, index) => expect(value).toBeGreaterThanOrEqual(values[index - 1] ?? before));
     expect(values.at(-1)).toBe(1);
-  });
+  }, 20_000);
 
   it('마저 돌리는 도중 언마운트하면 더 쓰지 않고 원문·자세를 되돌린다', async () => {
     const { targets, background } = makeTargets();
