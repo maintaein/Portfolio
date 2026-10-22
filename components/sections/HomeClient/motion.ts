@@ -253,13 +253,14 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   // 지금 스크롤이 가리키는 쪽. 이름은 두 문턱 사이에서 지금 자리를 지킨다.
   const nameSide = () => window.scrollY >= NAME_DOWN ? 'nav' : window.scrollY <= NAME_UP ? 'hero' : side;
   // 위로 갈 때 되돌기는 경로가 About에서 Overview로 바뀌는 프레임에 시작한다(사용자 요청 2026-10-22). 경로 지점은 잰 화면 크기 모두에서 로고 지점보다 아래다.
-  // 그 사이에서는 로고 지점을 넘어 내려왔으면 About, 경로 지점을 넘어 올라왔으면 Hero를 지킨다. 경로가 About이면 언제나 About이다.
+  // 그 사이에서는 아래로 움직이면 About(첫 하강처럼 R 전에 내려앉는다), 경로 지점을 넘어 올라왔으면 Hero, 그 밖에는 지금 쪽이다.
+  // 경로가 About이면 언제나 About이다. 부르는 곳 모두가 지난 스크롤 갱신을 원해 여기서 lastY를 바꾼다.
   const logoSide = () => {
     const y = window.scrollY;
     const was = lastY;
     lastY = y;
     const routed = (at: number) => m.aboutTop <= at + m.line;
-    if (y >= m.logoAt && (routed(y) || was < m.logoAt)) return 1;
+    if (y >= m.logoAt && (routed(y) || y > was)) return 1;
     if (y <= m.logoAt - LOGO_BACK || (routed(was) && !routed(y))) return 0;
     return Math.max(0, goal);
   };

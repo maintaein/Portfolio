@@ -415,11 +415,11 @@ describe('로고: About 본문보다 먼저 내려앉게 떠나는 변신', () =
     };
     create();
     expect(climb()).toEqual({ left: 494, switched: 494 });
-    // 경로 지점 위로 올라와 Hero에 돌아간 로고는 로고 지점 아래에서 흔들어도 그대로 있고, 경로가 다시 About이 되면 떠난다.
+    // 경로 지점 위로 올라와 Hero에 돌아간 로고는 계속 올라가는 동안 그대로 있고, 그 띠에서 아래로 굴리면 다시 떠난다(Task 12 fix 1).
     advance(2); expect(owners.at(-1)).toBe('hero');
-    scrollAt(400); scrollAt(300); scrollAt(450); scrollAt(494);
+    scrollAt(400); scrollAt(300);
     expect(owners.at(-1)).toBe('hero');
-    scrollAt(495); expect(owners.at(-1)).toBe('boundary');
+    scrollAt(450); expect(owners.at(-1)).toBe('boundary');
     // 날기 시작한 그 스크롤에서 되돌아도(남은 길 0) 경계에 멈추지 않는다.
     scrollAt(0); expect(owners.at(-1)).toBe('hero');
     // 경로 지점에 닿지 않고 돌아서면 옛 문턱에서 돌아간다. Hero에 로고를 남긴 채 About이 보이는 일은 없다.
@@ -432,6 +432,34 @@ describe('로고: About 본문보다 먼저 내려앉게 떠나는 변신', () =
     place(header, { x: 0, y: 0, w: 1440, h: 92 });
     create();
     expect(climb()).toEqual({ left: 556, switched: 556 });
+  });
+
+  // Task 12 fix 1(사용자 결정 2026-10-22). 경로 지점에서 돌아간 뒤 로고 지점과 경로 지점 사이에서 다시 내려가면
+  // 로고가 곧장 About으로 날아가 첫 하강과 같은 자리(R)에서 본문이 나타날 수 있다. 경로가 About이 될 때까지 기다리지 않는다.
+  it('경로 지점에서 돌아간 뒤 그 아래 띠에서 아래로 굴리면 로고가 About으로 다시 날고, 잔 휠에도 떨지 않는다', () => {
+    create();
+    scrollAt(900); advance(2);
+    scrollAt(494); expect(owners.at(-1)).toBe('boundary');
+    advance(2); expect(owners.at(-1)).toBe('hero');
+    // 계속 올라가는 동안은 Hero다.
+    scrollAt(420); scrollAt(380);
+    expect(owners.at(-1)).toBe('hero');
+    // 아래로 한 번 굴리면 다시 떠나 내려앉는다.
+    scrollAt(390); expect(owners.at(-1)).toBe('boundary');
+    advance(2); expect(owners.at(-1)).toBe('about');
+    // 위아래로 번갈아 조금씩 굴려도 경로 지점과 옛 문턱(지점 - 24)을 넘지 않으면 About에 머문다.
+    for (const y of [386, 392, 384, 391, 383]) {
+      scrollAt(y);
+      expect(owners.at(-1)).toBe('about');
+    }
+    // 경로가 다시 About을 읽지 않았으니 위로 돌아가는 것은 옛 문턱에서다.
+    scrollAt(START - 23); expect(owners.at(-1)).toBe('about');
+    scrollAt(START - 24); expect(owners.at(-1)).toBe('boundary');
+    advance(2); expect(owners.at(-1)).toBe('hero');
+    // 다시 경로 지점 아래까지 내려갔다가 올라오면 되돌기는 다시 경로 지점에서 시작한다.
+    scrollAt(900); advance(2);
+    scrollAt(495); expect(owners.at(-1)).toBe('about');
+    scrollAt(494); expect(owners.at(-1)).toBe('boundary');
   });
 
   it('줄기: 볼이 제자리에서 접히고 같은 지름의 Electric 원(반지름 = 반변)이 넘겨받는다. 경계는 가장 큰 원으로 한 번만 시작한다', () => {
