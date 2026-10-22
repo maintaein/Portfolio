@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { BALL_ICONS, DRIFT, FIELD_GLSL, HOVER, ICON_SIZE, LIMIT, driftPoint, fieldPoint, iconStyle, type Vec3 } from '@/components/blocks/CrystalizedBall/field';
+import { BALL_ICONS, DRIFT, FIELD_GLSL, HOVER, ICON_MARGIN, ICON_SIZE, LIMIT, driftPoint, fieldPoint, iconStyle, type Vec3 } from '@/components/blocks/CrystalizedBall/field';
 import { STIR, STIR_GLSL, stiffness, stirStep, trackBrush, type Brush } from '@/components/blocks/CrystalizedBall/stir';
 import { skillCategories } from '@/lib/data';
 
@@ -202,7 +202,7 @@ describe('BALL_ICONS', () => {
     }
   });
 
-  // A hard drag can carry an icon to the stir wall like any particle; the rim then draws over it (the icon layer is under the canvas).
+  // Drift alone never reaches iconStyle's soft rim limit, so unstirred icons sit exactly on the particle field (Task 11 limits stirred ones).
   it('are smaller than the study prototype (12.5% of the ball) and stay inside the glass under drift and any turn', () => {
     expect(ICON_SIZE).toBeLessThan(.125);
     for (const icon of BALL_ICONS) for (let t = 0; t < 60; t += .37) for (const turn of [[.6, .3], [-.6, -.3], [.6, -.3]]) {
@@ -231,5 +231,40 @@ describe('iconStyle', () => {
     expect(back.transform).toMatch(/scale\(0\.820\)$/);
     expect(back.opacity).toBeCloseTo(.61, 3);
     expect(back.zIndex).toBeLessThan(style.zIndex);
+  });
+
+  // Task 11(사용자 요청 2026-10-22). A stir can carry an icon to the stir wall (.97 radii), past the rim with its box.
+  // The icon box (half side ICON_SIZE x depth scale, plus ICON_MARGIN) stays inside the rim circle (radius 1), pressed in softly.
+  it('keeps the whole icon box inside the rim for any point, presses it in smoothly from a knee, and leaves inner points alone', () => {
+    const box = (point: Vec3) => {
+      const [x, y, scale] = iconStyle(point).transform.match(/-?\d+(\.\d+)?/g)!.map(Number);
+      return { cx: (x / 100 + .5) * 2 * ICON_SIZE, cy: -(y / 100 + .5) * 2 * ICON_SIZE, half: ICON_SIZE * scale };
+    };
+    expect(ICON_MARGIN).toBeGreaterThan(0);
+    expect(ICON_MARGIN).toBeLessThan(.06);
+    // Asserted once at the end: per-point expects time out under the full suite's load.
+    let corner = 0, back = 0, jump = 0;
+    for (const z of [-1, 0, .5, 1]) for (let a = 0; a < Math.PI * 2; a += Math.PI / 12) {
+      let last = 0;
+      for (let r = 0; r <= 1.2; r += .005) {
+        const { cx, cy, half } = box([r * Math.cos(a), r * Math.sin(a), z]);
+        // The farthest corner of the box, plus the margin, is inside the rim.
+        corner = Math.max(corner, Math.hypot(Math.abs(cx) + half, Math.abs(cy) + half) + ICON_MARGIN);
+        // No snap: the shown radius never goes back and never moves faster than the point does.
+        const shown = Math.hypot(cx, cy);
+        back = Math.max(back, last - shown);
+        jump = Math.max(jump, shown - last);
+        last = shown;
+      }
+    }
+    expect(corner).toBeLessThanOrEqual(1 + 1e-3);
+    expect(back).toBeLessThanOrEqual(1e-3);
+    expect(jump).toBeLessThanOrEqual(.005 + 1e-3);
+    // Points well inside (every drift position, the rest pose of the static ball) are placed exactly as before.
+    for (const point of [[.3, -.2, 1], [-.5, .3, .1], [.55, .3, -1]] as Vec3[]) {
+      const { cx, cy } = box(point);
+      expect(cx).toBeCloseTo(point[0], 3);
+      expect(cy).toBeCloseTo(point[1], 3);
+    }
   });
 });

@@ -50,6 +50,12 @@ const clamp = (v: number, a: number, b: number) => Math.min(Math.max(v, a), b);
 const smooth = (a: number, b: number, v: number) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 // 속이 빠질 때 먼지와 아이콘이 가운데로 끌려드는 몫. 볼 전체는 경계가 CSS로 함께 줄이고, 그 끝에서만 속이 더 모여 밝은 심이 된다.
 export const PULL = 0.85;
+// 고무 테두리. 포인터가 볼 위에 있으면 테두리가 포인터 쪽으로 반지름의 이만큼 늘어난다(테두리 근처에서 다 늘어난다).
+const STRETCH = 0.1;
+// 되튐까지 포함한 상한. 늘어난 테두리의 광휘(반지름의 약 0.09)가 캔버스 여백(1/3) 안에 든다.
+const STRETCH_MAX = 0.12;
+// animate skill의 스프링 표(mass 1, stiffness 100, damping 10, 감쇠비 0.5): 떠나면 16%쯤 넘쳐 들어갔다 돌아온다.
+const RUBBER = { stiffness: 100, damping: 10 };
 
 const seeded = (start: number) => {
   let state = start >>> 0;
@@ -132,6 +138,7 @@ uniform vec2 uCenter;
 uniform float uRadius, uDpr, uLine, uRimTime, uFrame, uBins, uCollapse;
 uniform vec3 uRim, uRimHot, uRimMid, uRimDeep, uSpark, uSparkGlow, uHazeColor, uEdgeColor;
 uniform vec4 uHarmonics[${STRANDS}], uRates[${STRANDS}], uPhases[${STRANDS}], uFlareHarmonics[${STRANDS}], uFlareRates[${STRANDS}], uFlarePhases[${STRANDS}], uArcs[${MAX_ARCS}];
+uniform vec3 uStretch;
 out vec4 fragColor;
 uint scramble(uint v) { v = v * 747796405u + 2891336453u; uint w = ((v >> ((v >> 28u) + 4u)) ^ v) * 277803737u; return (w >> 22u) ^ w; }
 float random(uint v) { return float(scramble(v)) * (1.0 / 4294967295.0); }
@@ -151,7 +158,9 @@ float pool(vec2 q) {
 void main() {
   vec2 p = gl_FragCoord.xy / uDpr - uCenter;
   float r = length(p);
-  float R = uRadius;
+  // 고무 테두리: 포인터 쪽(uStretch.xy) 테두리가 몫 z만큼 부풀고(되튈 때는 조금 들어가고) 양옆으로 잦아든다.
+  // 몫을 캔버스 여백(볼 반지름의 1/3) 안에서 광휘까지 들어가게 묶는다.
+  float R = uRadius * (1.0 + clamp(uStretch.z, -0.04, ${STRETCH_MAX.toFixed(2)}) * exp((dot(p, uStretch.xy) / max(r, 1e-3) - 1.0) / 0.12));
   float theta = atan(p.y, p.x);
   float topDim = 1.0 - 0.35 * pow(max(p.y / max(r, 1e-3), 0.0), 1.5);
   vec3 col = vec3(0.0);
@@ -360,7 +369,7 @@ export default function CrystalizedBall({ icons, paused = false, onReady, ref }:
       uSpark: { value: PALETTE.spark }, uSparkGlow: { value: PALETTE.sparkGlow }, uHazeColor: { value: PALETTE.haze }, uEdgeColor: { value: PALETTE.edge },
       uHarmonics: { value: strands.harmonics }, uRates: { value: strands.rates }, uPhases: { value: strands.phases },
       uFlareHarmonics: { value: strands.flareHarmonics }, uFlareRates: { value: strands.flareRates }, uFlarePhases: { value: strands.flarePhases },
-      uArcs: { value: arcData },
+      uArcs: { value: arcData }, uStretch: { value: [0, 0, 0] },
     };
     const turn = [0, 0];
     const points = buildDust();
@@ -423,6 +432,8 @@ export default function CrystalizedBall({ icons, paused = false, onReady, ref }:
     const arcs: { start: number; span: number; curl: number; life: number; duration: number; drift: number }[] = [];
     const pointer = { x: 0, y: 0, on: false };
     const look = { x: 0, y: 0, vx: 0, vy: 0 };
+    // 고무 테두리의 방향(포인터 쪽 단위 벡터)과 늘어난 몫·속도.
+    const rubber = { x: 1, y: 0, amount: 0, velocity: 0 };
     let width = 1, height = 1, raf = 0, last = performance.now(), time = 0, nextArc = 0.3, visible = true, ready = false;
 
     const resize = () => {
@@ -474,6 +485,13 @@ export default function CrystalizedBall({ icons, paused = false, onReady, ref }:
         look.y += look.vy * dt;
         turn[0] = 0.21 * Math.sin(time * 0.23) + look.x * 0.3;
         turn[1] = 0.06 * Math.sin(time * 0.17) - look.y * 0.16;
+        // 같은 포인터 상태로 테두리를 늘인다. 방향은 포인터를 바로 따르고 몫만 스프링으로 따라가 떠날 때 되튄다.
+        const reach = Math.hypot(bx, by);
+        if (over && reach > 1e-3) [rubber.x, rubber.y] = [bx / reach, by / reach];
+        const stretch = over ? STRETCH * smooth(0.3, 1, reach) : 0;
+        rubber.velocity += (RUBBER.stiffness * (stretch - rubber.amount) - RUBBER.damping * rubber.velocity) * dt;
+        rubber.amount += rubber.velocity * dt;
+        field.uStretch.value = [rubber.x, rubber.y, rubber.amount];
       }
       for (let i = 0; i < MAX_ARCS; i++) {
         const arc = arcs[i];

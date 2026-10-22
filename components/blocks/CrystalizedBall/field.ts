@@ -66,13 +66,25 @@ export const BALL_ICONS = [
   { name: 'tailwind', home: [0.42, -0.14, 0.2], seed: [0.59, 5.9, 0.25] },
 ] as const;
 
+// 아이콘 상자와 테두리 사이에 남기는 여백(볼 반지름 단위). 테두리 안쪽 광휘와 아이콘 drop-shadow 자리다.
+export const ICON_MARGIN = 0.04;
+// 이 너비 안에서 아이콘 자리를 한계 쪽으로 부드럽게 눌러 닿을 때 튀지 않는다. 표류만으로는 이 구간에 닿지 않는다.
+const ICON_SOFT = 0.1;
+
 // 아이콘은 볼 상자 가운데(50% 50%)에 놓인 한 변 ICON_SIZE의 상자다. translate 백분율은 아이콘 자신의 크기 기준이라
 // 픽셀 없이도(서버 HTML, JS 없음) 같은 자리에 선다. 크기와 밝기는 입자의 앞뒤 깊이 식(dust 셰이더)과 같다.
-export function iconStyle([x, y, z]: Vec3) {
+// 휘젓기는 아이콘을 입자처럼 유리 벽(.97)까지 끌고 가므로, 화면에서 상자의 반대각선과 여백까지 테두리 원(반지름 1) 안에 두도록 가운데를 tanh로 누른다.
+export function iconStyle([px, py, z]: Vec3) {
   const front = z * 0.5 + 0.5;
+  const scale = 0.82 + 0.36 * front;
+  const limit = 1 - ICON_SIZE * scale * Math.SQRT2 - ICON_MARGIN;
+  const knee = limit - ICON_SOFT;
+  const r = Math.hypot(px, py);
+  const press = r > knee ? (knee + ICON_SOFT * Math.tanh((r - knee) / ICON_SOFT)) / r : 1;
+  const [x, y] = [px * press, py * press];
   const at = (value: number) => ((value / (2 * ICON_SIZE) - 0.5) * 100).toFixed(1);
   return {
-    transform: `translate(${at(x)}%, ${at(-y)}%) scale(${(0.82 + 0.36 * front).toFixed(3)})`,
+    transform: `translate(${at(x)}%, ${at(-y)}%) scale(${scale.toFixed(3)})`,
     opacity: Math.round(Math.min(1, 0.61 + 0.48 * front) * 1000) / 1000,
     zIndex: Math.round(front * 10),
   };

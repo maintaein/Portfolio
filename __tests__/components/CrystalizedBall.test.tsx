@@ -185,6 +185,66 @@ it('icons move with the particles stir equations on the same per-frame inputs: d
   expect(dustDraw().uStirred).toBe(0);
 });
 
+// Task 11(사용자 요청 2026-10-22). The icon box never crosses the rim, even when a hard stir drags the icon to the stir wall.
+it('a strong stir that would push an icon box past the rim keeps every icon box inside it', () => {
+  const { icons } = mount();
+  for (let i = 0; i < 5; i++) tick(33);
+  const ICON = .09;
+  let rawWorst = 0, shownWorst = 0;
+  const measure = () => {
+    const { uTime, uTurn } = dustDraw();
+    const offsets = replay();
+    [...icons.current!.children].forEach((element, index) => {
+      const raw = fieldPoint(BALL_ICONS[index].home, BALL_ICONS[index].seed, uTime, uTurn, offsets[index]);
+      const half = ICON * (.82 + .36 * (raw[2] * .5 + .5));
+      rawWorst = Math.max(rawWorst, Math.hypot(Math.abs(raw[0]) + half, Math.abs(raw[1]) + half));
+      const [x, y, scale] = (element as HTMLElement).style.transform.match(/-?\d+(\.\d+)?/g)!.map(Number);
+      const [cx, cy, shown] = [(x / 100 + .5) * 2 * ICON, -(y / 100 + .5) * 2 * ICON, ICON * scale];
+      shownWorst = Math.max(shownWorst, Math.hypot(Math.abs(cx) + shown, Math.abs(cy) + shown));
+    });
+  };
+  // Fast strokes back and forth across the ball at several heights, outward toward the rim.
+  for (const y of [.55, -.2, .35, .1, -.45, .6]) for (const dir of [1, -1]) {
+    for (let i = 0; i <= 8; i++) { moveTo(dir * (-.9 + i * .225), y); tick(33); measure(); }
+  }
+  for (let i = 0; i < 40; i++) { tick(33); measure(); }
+  // Without the containment some icon box would have crossed the rim.
+  expect(rawWorst).toBeGreaterThan(1);
+  expect(shownWorst).toBeLessThan(1);
+});
+
+// Task 11(사용자 요청 2026-10-22). The rim stretches toward a hovering cursor like rubber, in the field pass, from the same pointer state.
+it('the rim stretches toward a hovering cursor and springs back past rest when it leaves; touch never stretches it', () => {
+  mount();
+  const stretch = () => gpu.drawn.filter(draw => 'uRim' in draw).at(-1)!.uStretch as number[];
+  const rim = gpu.fragment.find(source => source.includes('uRimHot'))!;
+  expect(rim).toContain('uniform vec3 uStretch;');
+  for (let i = 0; i < 5; i++) tick(33);
+  expect(stretch()[2]).toBe(0);
+  for (let i = 0; i < 30; i++) { moveTo(.9 + (i % 2) * .01, 0); tick(33); }
+  const right = stretch();
+  expect(right[0]).toBeCloseTo(1, 1);
+  expect(right[1]).toBeCloseTo(0, 1);
+  expect(right[2]).toBeGreaterThan(.05);
+  expect(right[2]).toBeLessThanOrEqual(.12);
+  // It follows the cursor round the rim.
+  for (let i = 0; i < 30; i++) { moveTo(0, .9 + (i % 2) * .01); tick(33); }
+  expect(stretch()[1]).toBeCloseTo(1, 1);
+  expect(stretch()[2]).toBeGreaterThan(.05);
+  // The cursor leaves the canvas: the rim springs back, dips slightly past rest, then rests.
+  moveTo(3, 3);
+  const amounts: number[] = [];
+  for (let i = 0; i < 90; i++) { tick(33); amounts.push(stretch()[2]); }
+  expect(Math.min(...amounts)).toBeLessThan(0);
+  expect(Math.min(...amounts)).toBeGreaterThan(-.03);
+  expect(Math.abs(amounts.at(-1)!)).toBeLessThan(1e-3);
+  cleanup();
+  gpu.drawn.length = 0;
+  mount();
+  for (let i = 0; i < 20; i++) { act(() => { window.dispatchEvent(pointer('pointermove', side / 2 + .9 * radius(), side / 2, 'touch')); }); tick(33); }
+  expect(stretch()[2]).toBe(0);
+});
+
 it('touch never stirs the particles', () => {
   mount();
   for (let i = 0; i < 12; i++) { act(() => { window.dispatchEvent(pointer('pointermove', side / 2 + i * 10, side / 2, 'touch')); }); tick(33); }
