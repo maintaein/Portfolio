@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 // The GL mock records uniforms per draw and counts renderer/texture lifetimes. Visual continuity is checked in M4.
 type Drawn = Record<string, number | number[]>;
-const gpu = vi.hoisted(() => ({ renderers: 0, textures: 0, drawn: [] as Record<string, number | number[]>[] }));
+const gpu = vi.hoisted(() => ({ renderers: 0, textures: 0, uploads: 0, drawn: [] as Record<string, number | number[]>[] }));
 vi.mock('ogl', () => {
   class Renderer {
     dpr: number; isWebgl2 = true; width = 0; height = 0;
@@ -35,7 +35,8 @@ vi.mock('ogl', () => {
   }
   class Mesh { program: unknown; constructor(_gl: unknown, { program }: { program: unknown }) { this.program = program; } }
   class Triangle {}
-  class Texture { constructor() { gpu.textures++; } }
+  // needsUpdate queues a GPU re-upload on the next draw, so setting it is what gets counted.
+  class Texture { constructor() { gpu.textures++; } set needsUpdate(value: boolean) { if (value) gpu.uploads++; } }
   return { Renderer, Program, Mesh, Triangle, Texture };
 });
 
@@ -46,7 +47,7 @@ let side = 200;
 const frames = new Map<number, FrameRequestCallback>();
 const images: { onload?: () => void }[] = [];
 beforeEach(() => {
-  gpu.renderers = 0; gpu.textures = 0; gpu.drawn.length = 0;
+  gpu.renderers = 0; gpu.textures = 0; gpu.uploads = 0; gpu.drawn.length = 0;
   frames.clear(); images.length = 0; clock = 1000; side = 200;
   let id = 0;
   vi.spyOn(performance, 'now').mockImplementation(() => clock);
@@ -256,4 +257,118 @@ it('draws a boundary end made off screen and inactive once the container returns
   expect(last().uResolution).toEqual([400, 400]);
   tick();
   expect(gpu.drawn.length).toBe(draws + 1);
+});
+
+// M4 Task 1: the first box consumer (About logo -> project preview) and the remaining M3 Task 1 carryovers.
+const preview = { width: 640 * 1.04, height: 360 * 1.04, radius: 14 };
+function observeResize() {
+  let resized = () => {};
+  vi.stubGlobal('ResizeObserver', class { constructor(callback: () => void) { resized = callback; } observe() {} disconnect() {} });
+  return (width: number) => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(width);
+    act(() => resized());
+  };
+}
+
+it('a preview box begun mid chapter morph starts from the visible blend, and a reverse seek returns to exactly that start', () => {
+  const { ref } = mount('box-a.svg', 'box-b.svg');
+  const start = last();
+  expect(start.uMorph).toBeCloseTo(0.4, 3);
+  ref.current!.beginBoundary(preview);
+  ref.current!.seekBoundary(0);
+  tick();
+  const zero = last();
+  expect(zero.uBoundary).toBe(0);
+  for (const key of ['uMorph', 'uMapFrom', 'uMapTo', 'uSizeFrom', 'uSizeTo']) expect(zero[key]).toEqual(start[key]);
+  for (const p of [0.4, 1, 0.7, 0.2, 0]) {
+    ref.current!.seekBoundary(p);
+    tick();
+  }
+  for (const key of ['uBoundary', 'uMorph', 'uMapFrom', 'uMapTo', 'uSizeFrom', 'uSizeTo', 'uBox', 'uBoxRadius']) expect(last()[key]).toEqual(zero[key]);
+});
+
+it('a container resize during the box boundary keeps the same start shape, re-centred, and re-centres the box', () => {
+  const resizeTo = observeResize();
+  const { ref } = mount('rs-a.svg', 'rs-b.svg');
+  ref.current!.beginBoundary(preview);
+  ref.current!.seekBoundary(0.5);
+  tick();
+  const before = last();
+  resizeTo(500);
+  ref.current!.seekBoundary(0.5);
+  tick();
+  const after = last();
+  expect(after.uMorph).toBe(before.uMorph);
+  for (const key of ['uMapTo', 'uMapFrom'] as const) {
+    const [x0, y0, fit0] = before[key] as number[];
+    const [x1, y1, fit1] = after[key] as number[];
+    expect(x1).toBeCloseTo(x0 + 50, 6);
+    expect([y1, fit1]).toEqual([y0, fit0]);
+  }
+  expect((after.uBox as number[]).slice(0, 2)).toEqual([250, 200]);
+});
+
+it('ending a boundary held while the loop was paused does not advance the frozen morph by the paused time', () => {
+  const ref = createRef<ElectricLogoHandle>();
+  const view = render(<ElectricLogo ref={ref} src="pause-a.svg" />);
+  loadImages(200);
+  tick();
+  view.rerender(<ElectricLogo ref={ref} src="pause-b.svg" />);
+  loadImages(120);
+  tick();
+  tick(384);
+  expect(last().uMorph).toBeCloseTo(0.4, 3);
+  ref.current!.beginBoundary(preview);
+  // Inactive: no frame runs while the clock moves on.
+  view.rerender(<ElectricLogo ref={ref} src="pause-b.svg" active={false} />);
+  tick();
+  act(() => { clock += 3000; });
+  ref.current!.endBoundary();
+  tick();
+  // Without the reset in end the 3 s would count as morph time and the blend would jump to the finished logo.
+  expect(last().uMorph).toBeCloseTo(0.4, 3);
+});
+
+// Resizing the backing store clears the canvas. In headed Chrome the next frame came one frame interval later, so the cleared
+// canvas was composited once: the visible About logo blinked out at the start of the flight and at the landing.
+it('draws the resized canvas in the same call that begins, grows or ends the boundary', () => {
+  const { ref } = mount('blank-a.svg');
+  let drawn = gpu.drawn.length;
+  ref.current!.beginBoundary(preview);
+  expect(gpu.drawn.length).toBe(drawn + 1);
+  expect(last().uResolution).not.toEqual([400, 400]);
+  drawn = gpu.drawn.length;
+  ref.current!.setBoundaryTarget({ width: 1200, height: 700, radius: 14 });
+  expect(gpu.drawn.length).toBe(drawn + 1);
+  drawn = gpu.drawn.length;
+  ref.current!.seekBoundary(0.5);
+  expect(gpu.drawn.length).toBe(drawn);
+  tick();
+  drawn = gpu.drawn.length;
+  ref.current!.endBoundary();
+  expect(gpu.drawn.length).toBe(drawn + 1);
+  expect(last().uResolution).toEqual([400, 400]);
+  // One frame stays queued for the loop, not two.
+  tick();
+  expect(gpu.drawn.length).toBe(drawn + 2);
+});
+
+it('a box boundary re-uploads no texture: seeks, target changes, a resize and end only change uniforms and the canvas', () => {
+  const resizeTo = observeResize();
+  const { ref } = mount('up-a.svg', 'up-b.svg');
+  tick(1000);
+  const [uploads, textures] = [gpu.uploads, gpu.textures];
+  expect(uploads).toBeGreaterThan(0);
+  ref.current!.beginBoundary(preview);
+  for (const p of [0.1, 0.5, 0.9]) {
+    ref.current!.seekBoundary(p);
+    ref.current!.setBoundaryTarget({ width: 300 + 400 * p, height: 360, radius: 14 });
+    tick();
+  }
+  resizeTo(500);
+  tick();
+  ref.current!.endBoundary();
+  tick();
+  tick(1000);
+  expect([gpu.uploads, gpu.textures]).toEqual([uploads, textures]);
 });

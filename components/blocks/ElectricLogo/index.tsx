@@ -1203,6 +1203,13 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
       dirty = true;
       if (!raf && wants()) raf = requestAnimationFrame(frame);
     };
+    // Resizing the backing store clears the canvas, and the next rAF came one frame later, so the cleared canvas reached the screen.
+    const repaint = () => {
+      dirty = true;
+      if (!wants()) return;
+      cancelAnimationFrame(raf);
+      frame(performance.now());
+    };
     const aim = (next: ElectricBoundaryTarget) => {
       if (!boundary) return;
       boundary.target = next;
@@ -1210,8 +1217,11 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
       const [rw, rh] = boundary.room;
       // Grow only, so a target that keeps changing size does not reallocate the canvas each time.
       boundary.room = [Math.max(rw, Math.ceil(next.width + margin * 2)), Math.max(rh, Math.ceil(next.height + margin * 2))];
-      if (boundary.room[0] !== rw || boundary.room[1] !== rh) resize();
-      paint();
+      if (boundary.room[0] === rw && boundary.room[1] === rh) paint();
+      else {
+        resize();
+        repaint();
+      }
     };
     engineRef.current = {
       beginBoundary: (next) => {
@@ -1241,7 +1251,7 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
         boundary = null;
         resize();
         last = performance.now();
-        paint();
+        repaint();
       }
     };
 
