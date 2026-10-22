@@ -1089,9 +1089,10 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     list.append(tab);
     tab.focus();
     expect(owners.at(-1)).toBe('projects');
+    // Tab의 scroll-into-view는 아래로 간다. 그 자리(경로는 About)에서 1–2px 떨려도 그대로다.
     scrollAt(PREVIEW_AT - 100);
     expect(owners.at(-1)).toBe('projects');
-    scrollAt(PREVIEW_AT - 110);
+    scrollAt(PREVIEW_AT - 102); scrollAt(PREVIEW_AT - 99);
     expect(owners.at(-1)).toBe('projects');
     tab.blur();
     scrollAt(PREVIEW_AT - 120);
@@ -1103,6 +1104,48 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     tab.focus();
     scrollAt(1396); scrollAt(1393);
     expect(owners.at(-1)).toBe('preview');
+  });
+
+  // Task 1 재리뷰 N4. 풀림이 경로 지점을 넘는 한 프레임에만 걸려 있어, 경로가 이미 About인 자리에서 포커스를 얻은 뒤 위로 굴리면
+  // 포커스가 떠날 때까지 Projects에 머물렀다. 풀림은 상태로 본다: 경로가 About이고 포커스가 선 자리(그 뒤 가장 아래)보다 위로 굴렸으면 돌아간다.
+  it('경로가 About인 자리에서 포커스를 얻은 뒤 위로 굴리면 포커스가 남아 있어도 돌아가고, 맨 위까지 가면 Hero다', () => {
+    restAtAbout();
+    const tab = document.createElement('button');
+    list.append(tab);
+    tab.focus();
+    expect(owners.at(-1)).toBe('projects');
+    scrollAt(PREVIEW_AT - 100);
+    scrollAt(PREVIEW_AT - 112);
+    expect(owners.at(-1)).toBe('preview');
+    advance(2);
+    expect(owners.at(-1)).toBe('about');
+    expect(shown()).toEqual({ frame: '0', list: '0' });
+    tab.blur(); tab.focus();
+    expect(owners.at(-1)).toBe('projects');
+    scrollAt(0);
+    advance(4);
+    expect(owners.at(-1)).toBe('hero');
+  });
+
+  it('포커스가 Projects 컨트롤에 있어도 경로 지점에서 떨면 한 번 돌아간 뒤 4px 늦춤 안에서는 다시 날지 않는다', () => {
+    restAtAbout();
+    scrollAt(1800); advance(2);
+    const tab = document.createElement('button');
+    list.append(tab);
+    tab.focus();
+    for (const y of [1396, 1395]) scrollAt(y);
+    expect(owners.at(-1)).toBe('projects');
+    // 경로가 About을 읽는 첫 스크롤에 돌아간다.
+    scrollAt(1393);
+    expect(owners.at(-1)).toBe('preview');
+    for (const y of [1392, 1391, 1393, 1390]) {
+      scrollAt(y);
+      expect(owners.at(-1)).toBe('preview');
+    }
+    advance(2);
+    expect(owners.at(-1)).toBe('about');
+    scrollAt(1392); scrollAt(1393);
+    expect(owners.at(-1)).toBe('about');
   });
 });
 

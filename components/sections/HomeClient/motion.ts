@@ -158,6 +158,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   let lastY = -Infinity;
   // 마지막으로 위로 움직인 스크롤. 아직 올라간 적이 없으면 -Infinity라 처음 내려가는 길에는 늦춤이 없다.
   let lowY = -Infinity;
+  // Projects 컨트롤에 포커스가 선 스크롤(그 뒤 내려간 가장 아래). 이보다 위로 굴리면 포커스가 남아 있어도 Projects를 놓는다.
+  let holdFrom = Infinity;
 
   const measure = () => {
     const about = root.querySelector('[data-section="about"]');
@@ -382,8 +384,14 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     if (y < was) lowY = y;
     const routed = (top: number, at: number) => top <= at + m.line;
     if (y >= m.previewAt && (routed(m.projectsTop, y - LOGO_SLACK) || y >= lowY + LOGO_SLACK)) return 2;
-    // 포커스가 Projects 컨트롤에 있는 동안은 옛 문턱(지점 - 24)으로 되돌지 않는다. Tab의 scroll-into-view가 그 아래에 설 수 있다(재리뷰 N2).
-    if (goal === 2 && (y > m.previewAt - LOGO_BACK || focusedControl()) && !(routed(m.projectsTop, was) && !routed(m.projectsTop, y))) return 2;
+    // 포커스가 Projects 컨트롤에 있는 동안은 경로가 Projects이거나, 포커스가 선 자리(그 뒤 가장 아래)에서 LOGO_SLACK 넘게 위로 굴리지 않았으면 머문다.
+    // Tab의 scroll-into-view는 옛 문턱(지점 - 24) 아래에 설 수 있다(재리뷰 N2). 풀림은 넘는 한 프레임이 아니라 상태로 본다(재리뷰 N4).
+    if (goal === 2 && focusedControl()) {
+      if (routed(m.projectsTop, y) || y >= holdFrom - LOGO_SLACK) {
+        holdFrom = Math.max(holdFrom, y);
+        return 2;
+      }
+    } else if (goal === 2 && y > m.previewAt - LOGO_BACK && !(routed(m.projectsTop, was) && !routed(m.projectsTop, y))) return 2;
     if (y >= m.logoAt && (routed(m.aboutTop, y - LOGO_SLACK) || y >= lowY + LOGO_SLACK)) return 1;
     if (y <= m.logoAt - LOGO_BACK || (routed(m.aboutTop, was) && !routed(m.aboutTop, y))) return 0;
     return clamp(goal);
@@ -443,7 +451,9 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   // 컨트롤(열기 단추·목록 이름)에 닿은 포커스만 본다. nav 도착은 섹션 자체(tabIndex -1)에 포커스를 주고(useSectionNav),
   // 프리뷰로 날고 있는 동안은 끊지 않는다. 내려앉으면 컨트롤이 드러난다(Task 1 재리뷰 N1).
   const reveal = (event: FocusEvent) => {
-    if (!alive || paused || !logo || pose.t >= 2 || (travel && goal === 2) || !focusedControl(event.target)) return;
+    if (!focusedControl(event.target)) return;
+    holdFrom = window.scrollY;
+    if (!alive || paused || !logo || pose.t >= 2 || (travel && goal === 2)) return;
     goal = -1;
     moveLogo(2, false);
   };
