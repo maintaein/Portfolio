@@ -131,6 +131,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   const previewAnchor = anchor('projects-preview');
   const frame = previewAnchor?.firstElementChild instanceof HTMLElement ? previewAnchor.firstElementChild : null;
   const projectsSection = previewAnchor?.closest('section') ?? null;
+  const focusedControl = (target: EventTarget | null = document.activeElement) => target instanceof Element && target !== projectsSection
+    && !!projectsSection?.contains(target) && !!target.closest('button, a, input, select, textarea, [tabindex]:not([tabindex="-1"])');
   const list = projectsSection?.querySelector<HTMLElement>('[data-part="index"]') ?? null;
   // Hero 이름 글자 크기(0이면 CSS 값), nav 자리(화면 좌표), 로고가 떠나는 스크롤 지점, 두 로고 앵커(문서 좌표).
   // aboutTop·line: useSectionNav가 About을 고르는 읽기선(About 위끝 <= 스크롤 + 읽기선).
@@ -380,7 +382,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     if (y < was) lowY = y;
     const routed = (top: number, at: number) => top <= at + m.line;
     if (y >= m.previewAt && (routed(m.projectsTop, y - LOGO_SLACK) || y >= lowY + LOGO_SLACK)) return 2;
-    if (goal === 2 && y > m.previewAt - LOGO_BACK && !(routed(m.projectsTop, was) && !routed(m.projectsTop, y))) return 2;
+    // 포커스가 Projects 컨트롤에 있는 동안은 옛 문턱(지점 - 24)으로 되돌지 않는다. Tab의 scroll-into-view가 그 아래에 설 수 있다(재리뷰 N2).
+    if (goal === 2 && (y > m.previewAt - LOGO_BACK || focusedControl()) && !(routed(m.projectsTop, was) && !routed(m.projectsTop, y))) return 2;
     if (y >= m.logoAt && (routed(m.aboutTop, y - LOGO_SLACK) || y >= lowY + LOGO_SLACK)) return 1;
     if (y <= m.logoAt - LOGO_BACK || (routed(m.aboutTop, was) && !routed(m.aboutTop, y))) return 0;
     return clamp(goal);
@@ -437,8 +440,10 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   document.fonts?.ready.then(queue);
   // 숨은 Projects 안으로 키보드 포커스가 들어오면 재생 없이 Projects 쉬는 자리를 보인다. 보이지 않는 단추에 포커스가 서지 않는다.
   // visibility로 숨기면 About에서 Tab으로 Projects에 닿지 못해 포커스로 드러낸다(Task 1 리뷰 I2).
-  const reveal = () => {
-    if (!alive || paused || !logo || pose.t >= 2) return;
+  // 컨트롤(열기 단추·목록 이름)에 닿은 포커스만 본다. nav 도착은 섹션 자체(tabIndex -1)에 포커스를 주고(useSectionNav),
+  // 프리뷰로 날고 있는 동안은 끊지 않는다. 내려앉으면 컨트롤이 드러난다(Task 1 재리뷰 N1).
+  const reveal = (event: FocusEvent) => {
+    if (!alive || paused || !logo || pose.t >= 2 || (travel && goal === 2) || !focusedControl(event.target)) return;
     goal = -1;
     moveLogo(2, false);
   };

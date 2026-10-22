@@ -425,6 +425,50 @@ test.describe('Native motion activity', () => {
     await expect(list).toHaveCSS('opacity', '1');
     await expect(frame).toHaveCSS('opacity', '1');
   });
+  // Task 1 재리뷰 N1. nav 도착은 섹션에 포커스를 준다. 그 포커스가 날던 변신을 쉬는 자리로 건너뛰게 하면 안 된다.
+  test('nav의 Projects를 누르거나 Enter로 가도 로고→프리뷰 변신을 끝까지 재생하고 섹션에 포커스가 간다', async ({ page }) => {
+    // 쉬는 자리마다 소프트웨어 GL 프레임을 기다린다. 성공 조건이 아니라 실패 상한이다.
+    test.setTimeout(240_000);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await enter(page, 'about');
+    const owner = page.locator('.portfolio-document');
+    await expect(owner).toHaveAttribute('data-logo-owner', 'about', { timeout: 20_000 });
+    await expect(owner).toHaveAttribute('data-logo-live', '', { timeout: 30_000 });
+    // 페이지 쪽에서 프레임마다 주인을 읽어 비행 프레임 수와 첫 preview부터 projects까지의 시간을 잰다.
+    // 1.5초 트윈은 느린 프레임에 더 길어질 뿐 짧아지지 않는다. 건너뛰면 비행 프레임이 0이거나 시간이 거의 없다.
+    const flight = () => page.evaluate(() => new Promise<{ frames: number; ms: number }>(resolve => {
+      let first = 0;
+      let frames = 0;
+      const read = (now: number) => {
+        const owner = document.querySelector('.portfolio-document')!.getAttribute('data-logo-owner');
+        if (owner === 'preview') { if (!frames++) first = now; }
+        if (owner === 'projects') resolve({ frames, ms: frames ? now - first : 0 }); else requestAnimationFrame(read);
+      };
+      requestAnimationFrame(read);
+    }));
+    const settleAbout = async () => {
+      await navButton(page, 'About').click(); await expectActive(page, 'about');
+      await expect(owner).toHaveAttribute('data-logo-owner', 'about', { timeout: 60_000 });
+    };
+
+    let seen = flight();
+    await navButton(page, 'Projects').click();
+    const click = await seen;
+    expect(click.frames).toBeGreaterThan(1);
+    expect(click.ms).toBeGreaterThan(1200);
+    await expectActive(page, 'projects');
+    await expect(page.locator('[data-section="projects"]')).toBeFocused();
+
+    await settleAbout();
+    seen = flight();
+    await navButton(page, 'Projects').focus();
+    await page.keyboard.press('Enter');
+    const enterKey = await seen;
+    expect(enterKey.frames).toBeGreaterThan(1);
+    expect(enterKey.ms).toBeGreaterThan(1200);
+    await expectActive(page, 'projects');
+    await expect(page.locator('[data-section="projects"]')).toBeFocused();
+  });
   test('문턱 아래로 바로 온 해시는 처음부터 이름이 nav, 로고가 About 자리이고 재생하지 않는다', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await enter(page, 'about');

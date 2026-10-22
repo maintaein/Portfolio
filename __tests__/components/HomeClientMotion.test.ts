@@ -1044,6 +1044,66 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     expect(handle.endBoundary).toHaveBeenCalledTimes(1);
     expect(list.style.opacity + frame.style.opacity).toBe('');
   });
+
+  // Task 1 재리뷰 N1. nav 도착은 섹션 자체(tabIndex -1)에 포커스를 준다(useSectionNav). 그 포커스나 비행 중의 포커스가 앞으로 가는 비행을 끊고
+  // 쉬는 자리로 건너뛰게 하면 nav의 Projects가 변신을 재생하지 않는다. 드러내기는 숨은 컨트롤에 닿은 포커스에만, 날고 있지 않을 때만 한다.
+  it('nav 도착의 섹션 포커스와 앞으로 가는 비행 중의 컨트롤 포커스는 비행을 끊지 않고 끝까지 재생한다', () => {
+    restAtAbout();
+    projectsSection.tabIndex = -1;
+    const inner = projectsSection.querySelector('section')!;
+    inner.tabIndex = -1;
+    const tab = document.createElement('button');
+    list.append(tab);
+    scrollAt(1800);
+    expect(owners.at(-1)).toBe('preview');
+    advance(.3 * LOGO_SECONDS);
+    projectsSection.focus();
+    inner.focus();
+    tab.focus();
+    expect(owners.at(-1)).toBe('preview');
+    advance(.7 * LOGO_SECONDS - .02);
+    expect(owners.at(-1)).toBe('preview');
+    advance(.04);
+    expect(owners.at(-1)).toBe('projects');
+  });
+
+  it('About에서 쉬는 동안 Tab으로 Projects 컨트롤에 닿으면 드러나고, 섹션 자체의 포커스로는 드러나지 않는다', () => {
+    restAtAbout();
+    const inner = projectsSection.querySelector('section')!;
+    inner.tabIndex = -1;
+    inner.focus();
+    expect(owners.at(-1)).toBe('about');
+    expect(shown()).toEqual({ frame: '0', list: '0' });
+    const tab = document.createElement('button');
+    list.append(tab);
+    tab.focus();
+    expect(owners.at(-1)).toBe('projects');
+    expect(shown()).toEqual({ frame: '', list: '' });
+  });
+
+  // Task 1 재리뷰 N2. Tab의 scroll-into-view가 컨트롤을 화면 아래 끝에 맞추면 스크롤이 프리뷰 지점 - 24 아래에 설 수 있다.
+  // 포커스가 Projects 컨트롤 안에 있는 동안은 그 스크롤로 되돌지 않는다. 포커스가 떠나거나 경로 지점을 위로 넘으면 돌아간다.
+  it('Projects 컨트롤에 포커스가 있는 동안 포커스가 부른 스크롤로는 되돌지 않고, 포커스가 떠난 뒤의 스크롤이나 경로 지점 위로 넘음에는 돌아간다', () => {
+    restAtAbout();
+    const tab = document.createElement('button');
+    list.append(tab);
+    tab.focus();
+    expect(owners.at(-1)).toBe('projects');
+    scrollAt(PREVIEW_AT - 100);
+    expect(owners.at(-1)).toBe('projects');
+    scrollAt(PREVIEW_AT - 110);
+    expect(owners.at(-1)).toBe('projects');
+    tab.blur();
+    scrollAt(PREVIEW_AT - 120);
+    expect(owners.at(-1)).toBe('preview');
+    advance(2);
+    expect(owners.at(-1)).toBe('about');
+    // 경로 지점 위로 넘어가면 포커스가 남아 있어도 돌아간다.
+    scrollAt(1800); advance(2);
+    tab.focus();
+    scrollAt(1396); scrollAt(1393);
+    expect(owners.at(-1)).toBe('preview');
+  });
 });
 
 // Task 9 리뷰 Minor 5. Hero에서는 로고 host가 숨어 있으니 포인터로 기울일 것이 없다. About에서도 기울지 않았다.
