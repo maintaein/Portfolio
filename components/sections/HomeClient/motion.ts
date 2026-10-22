@@ -127,7 +127,9 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     // 글자 폭은 글자 크기에 비례한다. em 단위로 재 두면 어느 쪽 자리에서 재도 같다. tracking-widest의 끝 자간은 보이는 폭에서 뺀다.
     const style = getComputedStyle(label);
     const font = parseFloat(style.fontSize) || 0;
-    const width = font ? label.getBoundingClientRect().width / font : 0;
+    // 날고 있는 이름은 FLIP 배율(원점 왼쪽 위)이 실린 상자다. 배율을 덜어 쉬는 글자 폭을 잰다.
+    const flying = flip ? Number(gsap.getProperty(wordmark, 'scaleX')) || 1 : 1;
+    const width = font ? label.getBoundingClientRect().width / flying / font : 0;
     const glyph = width - (font ? (parseFloat(style.letterSpacing) || 0) / font : 0);
     // 이름은 자리 왼쪽 끝에서 시작한다. 이름 자리와 같은 높이에 오른쪽 볼이 있으면(1024px부터) 글자 오른쪽 끝이 볼 상자 앞에서 멈추게 줄인다.
     const glow = heroObject.w * BALL_GLOW;
@@ -272,15 +274,23 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     moveLogo(logoSide(), true);
   };
 
-  // 크기·폰트가 바뀌면 앵커를 다시 재고 지금 쪽의 쉬는 자리에 둔다. 재생하지 않는다.
+  // 크기·폰트가 바뀌면 앵커를 다시 잰다. 쉬는 이름·로고는 재생 없이 지금 쪽의 쉬는 자리에 둔다.
+  // 날던 것은 끊지 않는다(M3 #12). 아래 섹션이 배치되며 main이 자라는 일이 잦아 도중에 툭 내려앉았다.
+  // 이름은 쉬는 자리만 바뀌어 transform이 새 자리로 마저 줄고, 로고는 프레임마다 m을 다시 읽는다.
   const settle = () => {
     if (!alive) return;
-    // 날던 이름의 배율이 측정에 섞이지 않게 먼저 내려놓는다.
-    stopName();
     measure();
-    placeName(nameSide(), false);
-    // 두 문턱 사이에서는 지금 쪽을 지킨다. 같은 쪽이라도 다시 놓도록 goal을 비운다.
+    const name = nameSide();
+    if (!flip) placeName(name, false);
+    else if (name !== side) placeName(name, true);
+    else applyName();
     const next = logoSide();
+    if (travel) {
+      moveLogo(next, true);
+      renderLogo();
+      return;
+    }
+    // 두 문턱 사이에서는 지금 쪽을 지킨다. 같은 쪽이라도 다시 놓도록 goal을 비운다.
     goal = -1;
     moveLogo(next, false);
   };
@@ -295,6 +305,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     });
   });
   // 처음 자리는 재생 없이 정한다. 문턱 아래로 바로 온 해시는 곧장 nav·About이다.
+  // 지점 검출이 만들어지며 잰 값 없이 부른 판단이 이름을 날리기 시작했을 수 있어 먼저 내려놓는다.
+  stopName();
   settle();
 
   // 폰트, 창 크기, About 정적 배치 전환이 앵커를 옮긴다. main만 보면 크기가 같은 채 움직인 앵커를 놓친다. 다음 프레임에 한 번만 잰다.

@@ -25,6 +25,7 @@ let navName: HTMLElement; let heroName: HTMLElement; let heroObject: HTMLElement
 let motion: PortfolioMotion | null = null;
 const owners: LogoOwner[] = [];
 let observed: Element[] = [];
+let resized = () => {};
 
 // 이름 글자 줄은 8em × 1.5em이다(nav 15px에서 120 × 22.5). 버튼 하나가 CSS 두 자리(data-wordmark-mode) 사이를 오간다.
 // nav: nav-name 앵커(24, 16)에 fixed, 44px 최소 높이 가운데에 글자 줄. Hero: 자리 세로 가운데·자리 왼쪽 끝(Task 9, 문장과 같은 끝).
@@ -84,6 +85,15 @@ const create = (options: { logo?: ElectricLogoHandle | null; reduced?: boolean }
   return motion;
 };
 const scrollAt = (y: number) => { documentY = y; window.dispatchEvent(new Event('scroll')); ScrollTrigger.update(); };
+// 크기 관찰이 부르면 motion.ts는 다음 프레임에 한 번 잰다. 그 프레임만 붙잡아 바로 돌린다.
+const resize = () => {
+  const frames: FrameRequestCallback[] = [];
+  const raf = vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(frame => frames.push(frame));
+  resized();
+  raf.mockRestore();
+  expect(frames).toHaveLength(1);
+  for (const frame of frames) frame(0);
+};
 // 루트 시간을 지금에서 앞으로 민다. 재생은 시간으로만 간다. 테스트 사이 rAF 틱이 루트를 되돌려도 지금 기준이다.
 const advance = (seconds: number) => gsap.updateRoot(gsap.globalTimeline.time() + seconds);
 const numbers = (value: string) => (value.replace(/translate3d|translate/, '').match(/-?\d+(\.\d+)?(e-?\d+)?/g) ?? []).map(Number);
@@ -113,7 +123,7 @@ beforeEach(() => {
   for (const element of [document.documentElement, document.body]) Object.defineProperty(element, 'scrollHeight', { configurable: true, get: () => 5000 });
   // ScrollTrigger가 등록 때 matchMedia를 부른다. jsdom에는 없다.
   vi.stubGlobal('matchMedia', vi.fn((media: string) => ({ matches: false, media, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} })));
-  vi.stubGlobal('ResizeObserver', class { observe(element: Element) { observed.push(element); } disconnect() {} });
+  vi.stubGlobal('ResizeObserver', class { constructor(callback: () => void) { resized = callback; } observe(element: Element) { observed.push(element); } disconnect() {} });
   const computed = window.getComputedStyle;
   vi.spyOn(window, 'getComputedStyle').mockImplementation(element => element === label
     ? { fontSize: `${font()}px`, letterSpacing: `${letterSpacing * font()}px` } as CSSStyleDeclaration
@@ -210,9 +220,9 @@ describe('이름: 지점을 넘으면 0.5초 FLIP', () => {
     expect(handle.beginBoundary).not.toHaveBeenCalled();
   });
 
-  it('refresh는 재생하지 않고 다시 잰 지금 쪽 자리에 둔다. 날던 이름도 내려놓는다', () => {
+  it('refresh는 쉬는 이름을 재생하지 않고 다시 잰 지금 쪽 자리에 둔다', () => {
     create();
-    scrollAt(200); advance(.2);
+    scrollAt(200); advance(1);
     place(navName, { x: 80, y: 16, w: 0, h: 44 }, header);
     motion!.refresh();
     expectNameAt('nav');
@@ -222,6 +232,29 @@ describe('이름: 지점을 넘으면 0.5초 FLIP', () => {
     motion!.refresh();
     expectNameAt('hero');
     expect(wordmark.style.fontSize).toBe('60px');
+  });
+
+  // M4 Task 0 (M3 #12, #53). 아래 섹션·그림이 배치되며 main이 자라면 크기 관찰이 날던 이름을 끊어 도중에 툭 내려앉혔다.
+  it('날던 이름은 크기 변화·refresh에 끊기지 않고 다시 잰 자리로 마저 난다. 날던 배율은 잰 크기에 섞이지 않는다', () => {
+    create();
+    scrollAt(200); advance(.2);
+    const mid = visual('label');
+    place(navName, { x: 80, y: 16, w: 0, h: 44 }, header);
+    resize();
+    expect(gsap.getTweensOf(wordmark)).toHaveLength(1);
+    expect(wordmark.style.left).toBe('80px');
+    // 아직 날고 있다. nav 크기로 내려앉지 않았다.
+    expect(visual('label').h).toBeCloseTo(mid.h, 1);
+    motion!.refresh();
+    expect(gsap.getTweensOf(wordmark)).toHaveLength(1);
+    advance(1);
+    expectNameAt('nav');
+    expect(wordmark.style.left).toBe('80px');
+    expect(visual('label').h).toBe(22.5);
+    // nav 쪽으로 날던 중에 잰 Hero 크기도 쉬는 자리의 크기와 같다.
+    scrollAt(100); advance(1);
+    expectNameAt('hero');
+    expect(wordmark.style.fontSize).toBe('88px');
   });
 
   it('멈춘 동안 넘은 지점은 풀릴 때 재생 없이 그쪽 자리에 둔다', () => {
@@ -568,6 +601,26 @@ describe('로고: About 본문보다 먼저 내려앉게 떠나는 변신', () =
     motion!.refresh();
     expect(logo()).toEqual({ ...ABOUT_LOGO, x: 180, y: 1140 });
     expect(host.style.width).toBe('300px');
+  });
+
+  // M4 Task 0 (M3 #12, #53). 크기 관찰이 날던 로고를 끊어 About 자리로 툭 옮겼다.
+  it('날던 로고는 크기 변화·refresh에 끊기지 않고 다시 잰 About 앵커로 마저 날아가 내려앉는다', () => {
+    create();
+    scrollAt(START); advance(.5 * LOGO_SECONDS);
+    place(aboutLogo, { x: 180, y: 1140, w: 300, h: 300 });
+    resize();
+    expect(owners.at(-1)).toBe('boundary');
+    expect(host.style.width).toBe('300px');
+    motion!.refresh();
+    expect(owners.at(-1)).toBe('boundary');
+    expect(handle.endBoundary).not.toHaveBeenCalled();
+    advance(.5 * LOGO_SECONDS - .02);
+    expect(owners.at(-1)).toBe('boundary');
+    advance(.04);
+    expect(owners.at(-1)).toBe('about');
+    expect(logo()).toEqual({ ...ABOUT_LOGO, x: 180, y: 1140 });
+    expect(handle.beginBoundary).toHaveBeenCalledTimes(1);
+    expect(handle.endBoundary).toHaveBeenCalledTimes(1);
   });
 
   it('창 크기 변화는 main뿐 아니라 앵커들도 지켜본다', () => {
