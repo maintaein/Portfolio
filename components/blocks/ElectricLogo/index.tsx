@@ -946,6 +946,8 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
     let photo = makePhoto();
     let photoSrc = '';
     let photoSize = [0, 0];
+    // A picture whose upload threw (cross-origin). It is not retried; its visits draw light only.
+    let photoBroken = '';
 
     const arcEnds = Array.from({ length: ARCS * 4 }, () => 0);
     const arcShape = Array.from({ length: ARCS * 4 }, () => 0);
@@ -1209,29 +1211,40 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
         uniforms.uReveal.value = boundary ? boundary.reveal : 0;
         uniforms.uStrandWidth.value = boundary ? boundary.strands : 1;
         const picture = boundary?.target.image;
-        const ready = !!picture && picture.source.complete && picture.source.naturalWidth > 0;
-        uniforms.uImage.value = ready ? 1 : 0;
+        const src = picture ? picture.source.currentSrc || picture.source.src : '';
+        let ready = !!picture && picture.source.complete && picture.source.naturalWidth > 0 && src !== photoBroken;
         if (picture && ready) {
           const { source } = picture;
           const { naturalWidth: iw, naturalHeight: ih } = source;
-          const src = source.currentSrc || source.src;
+          const renew = () => {
+            gl.deleteTexture(photo.texture);
+            photo = makePhoto();
+            uniforms.tImage.value = photo;
+          };
           if (src !== photoSrc) {
-            if (iw !== photoSize[0] || ih !== photoSize[1]) {
-              gl.deleteTexture(photo.texture);
-              photo = makePhoto();
-              uniforms.tImage.value = photo;
-            }
+            if (iw !== photoSize[0] || ih !== photoSize[1]) renew();
             photo.image = source;
             photo.needsUpdate = true;
             photoSrc = src;
             photoSize = [iw, ih];
+            // Upload here, not inside render: a cross-origin picture throws (SecurityError) and would stop the loop (review m4).
+            try {
+              photo.update();
+            } catch {
+              renew();
+              [photoBroken, photoSrc, photoSize, ready] = [src, '', [0, 0], false];
+            }
           }
+        }
+        if (picture && ready) {
+          const { naturalWidth: iw, naturalHeight: ih } = picture.source;
           // object-fit: cover, centred on the box, like the DOM frame. The mip level follows the picture's texels per canvas pixel,
           // one level sharper: plain trilinear was visibly softer than Chrome's own downscale at the handoff (1024 px, 1024 -> 446).
           const cover = Math.max(picture.width / iw, picture.height / ih);
           uniforms.uImageBox.value = [width / 2, height / 2, (iw * cover) / 2, (ih * cover) / 2];
           uniforms.uImageLod.value = Math.max(0, Math.log2(1 / (cover * renderer.dpr)) - 1);
         }
+        uniforms.uImage.value = ready ? 1 : 0;
         if (boundary) {
           const { width: w, height: h, radius } = boundary.target;
           uniforms.uBox.value = [width / 2, height / 2, w / 2, h / 2];
@@ -1393,6 +1406,7 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
       container.removeEventListener('pointerleave', onLeave);
       container.removeEventListener('pointercancel', onLeave);
       if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
+      gl.deleteTexture(photo.texture);
     };
   }, []);
 

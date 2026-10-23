@@ -21,8 +21,9 @@ vi.mock('ogl', () => {
     }
     render({ scene }: { scene: { program: { uniforms: Record<string, { value: unknown }> } } }) {
       gpu.drawn.push(Object.fromEntries(Object.entries(scene.program.uniforms)
-        .filter(([, u]) => typeof u.value === 'number' || Array.isArray(u.value))
-        .map(([key, u]) => [key, Array.isArray(u.value) ? [...u.value] : u.value as number])));
+        .filter(([, u]) => typeof u.value === 'number' || Array.isArray(u.value) || typeof (u.value as { id?: unknown })?.id === 'number')
+        // A texture uniform is recorded as its texture id, so a rebind is visible.
+        .map(([key, u]) => [key, Array.isArray(u.value) ? [...u.value] : typeof u.value === 'number' ? u.value : (u.value as { id: number }).id])));
     }
   }
   class Program {
@@ -36,7 +37,13 @@ vi.mock('ogl', () => {
   class Mesh { program: unknown; constructor(_gl: unknown, { program }: { program: unknown }) { this.program = program; } }
   class Triangle {}
   // needsUpdate queues a GPU re-upload on the next draw, so setting it is what gets counted.
-  class Texture { constructor() { gpu.textures++; } set needsUpdate(value: boolean) { if (value) gpu.uploads++; } }
+  // update() uploads now; a picture whose src contains "taint" throws like a cross-origin texImage2D.
+  class Texture {
+    id: number; image?: { currentSrc?: string };
+    constructor() { this.id = ++gpu.textures; }
+    set needsUpdate(value: boolean) { if (value) gpu.uploads++; }
+    update() { if (this.image?.currentSrc?.includes('taint')) throw new DOMException('tainted', 'SecurityError'); }
+  }
   return { Renderer, Program, Mesh, Triangle, Texture };
 });
 
@@ -464,9 +471,13 @@ it('follows a new picture: same size re-uploads into the texture, a new size del
   ref.current!.setBoundaryTarget(withPicture(picture('/_next/image?b', 1000, 500)));
   tick();
   expect([gpu.uploads, gpu.textures, gpu.deleted]).toEqual([uploads + 1, textures, deleted]);
+  const bound = last().tImage;
   ref.current!.setBoundaryTarget(withPicture(picture('/_next/image?c', 800, 800)));
   tick();
   expect([gpu.uploads, gpu.textures, gpu.deleted]).toEqual([uploads + 2, textures + 1, deleted + 1]);
+  // The sampler now points at the new texture (review m5), not the deleted one.
+  expect(last().tImage).toBe(gpu.textures);
+  expect(last().tImage).not.toBe(bound);
   // Cover on 640 x 360: scale .8, drawn 640 x 640.
   expect(last().uImageBox).toEqual([200, 200, 320, 320]);
   ref.current!.setBoundaryTarget(withPicture(picture('/_next/image?c', 800, 800)));
@@ -504,4 +515,32 @@ it('outside boundary mode there is no picture, no reveal and full strands: befor
   tick();
   expect([last().uImage, last().uReveal, last().uStrandWidth]).toEqual([0, 0, 1]);
   for (const key of ['uBoundary', 'uSurface', 'uThickness', 'uFill', 'uMorph', 'uMapTo', 'uSizeTo', 'uResolution', 'uOrigin']) expect(last()[key]).toEqual(before[key]);
+});
+
+// Task 4 review m4: an upload that throws (a cross-origin picture) falls back to light only and keeps the loop drawing.
+it('falls back to light only when the picture upload throws, keeps drawing, and does not retry the same picture', () => {
+  const { ref } = mount('img-taint.svg');
+  ref.current!.beginBoundary(withPicture(picture('https://elsewhere.test/taint.png', 1000, 500)));
+  ref.current!.seekBoundary(0.6, 1, 0.5, 0.5);
+  expect(() => tick()).not.toThrow();
+  expect(last().uImage).toBe(0);
+  const [uploads, draws] = [gpu.uploads, gpu.drawn.length];
+  ref.current!.seekBoundary(0.7, 1, 0.6, 0.4);
+  tick();
+  expect(gpu.drawn.length).toBe(draws + 1);
+  expect([last().uImage, last().uBoundary, gpu.uploads]).toEqual([0, 0.7, uploads]);
+  // A good picture afterwards draws.
+  ref.current!.setBoundaryTarget(withPicture(picture('/_next/image?ok', 1000, 500)));
+  tick();
+  expect(last().uImage).toBe(1);
+});
+
+// Task 4 review m3: the picture texture is released with the logo.
+it('deletes the picture texture on unmount', () => {
+  const { ref, unmount } = mount('img-unmount.svg');
+  ref.current!.beginBoundary(withPicture(picture('/_next/image?a', 1000, 500)));
+  tick();
+  const deleted = gpu.deleted;
+  unmount();
+  expect(gpu.deleted).toBe(deleted + 1);
 });

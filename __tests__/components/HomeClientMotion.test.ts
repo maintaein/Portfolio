@@ -736,8 +736,8 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
   // M4 Task 4(사용자 선택 (가) + (i) 2026-10-23): 그림이 처음부터 모양 안에서 가운데부터 드러나고(앞선 0–.8), 테두리 전기는 가늘어져 사라진다(.6–.9).
   // 면은 정착(.82–.94)에서 프리뷰 상자에 들어앉고, 그 뒤 .94–1 동안 GL 그림이 제자리에 멈춰 있다가 도착에서 DOM 틀로 한 프레임에 바뀐다.
   it('시간표: 이동 0–.25, 채움 0–.2, 외피 seek 0–.65, 높이 .1–.65, 모서리 .25–.65, 앞선 0–.8, 전기 .6–.9, 교차(그림 없는 방문) .65–.9, 목록 .7–.9, 정착 .82–.94', () => {
-    expect(previewPhases(0)).toEqual({ travel: 0, fill: 0, widen: 0, shell: 0, face: 0, corner: 0, reveal: 0, strands: 1, media: 0, list: 0, settle: 0, logo: 1 });
-    expect(previewPhases(1)).toEqual({ travel: 1, fill: 1, widen: 1, shell: 1, face: 1, corner: 1, reveal: 1, strands: 0, media: 1, list: 1, settle: 1, logo: 0 });
+    expect(previewPhases(0)).toEqual({ travel: 0, fill: 0, widen: 0, shell: 0, face: 0, corner: 0, reveal: 0, strands: 1, media: 0, list: 0, settle: 0, handoff: 0, logo: 1 });
+    expect(previewPhases(1)).toEqual({ travel: 1, fill: 1, widen: 1, shell: 1, face: 1, corner: 1, reveal: 1, strands: 0, media: 1, list: 1, settle: 1, handoff: 1, logo: 0 });
     expect(previewPhases(.2).fill).toBe(1);
     expect(previewPhases(.1).fill).toBeGreaterThan(0);
     expect(previewPhases(.25).travel).toBe(1);
@@ -750,11 +750,14 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     expect(previewPhases(.6).strands).toBe(1);
     expect(previewPhases(.82).settle).toBe(0);
     expect(previewPhases(.94).settle).toBe(1);
+    // 그림이 있는 방문의 넘김: 정착이 끝난 .94부터 GL 캔버스가 DOM 틀 위에서 빠진다.
+    expect(previewPhases(.94).handoff).toBe(0);
+    expect(previewPhases(.97).handoff).toBeCloseTo(.5, 12);
     expect(PREVIEW_OVER).toBe(1.04);
     let last = previewPhases(0);
     for (let i = 1; i <= 400; i++) {
       const now = previewPhases(i / 400);
-      for (const key of ['travel', 'fill', 'widen', 'shell', 'face', 'corner', 'reveal', 'media', 'list', 'settle'] as const) expect(now[key]).toBeGreaterThanOrEqual(last[key]);
+      for (const key of ['travel', 'fill', 'widen', 'shell', 'face', 'corner', 'reveal', 'media', 'list', 'settle', 'handoff'] as const) expect(now[key]).toBeGreaterThanOrEqual(last[key]);
       expect(now.logo).toBeLessThanOrEqual(last.logo);
       expect(now.strands).toBeLessThanOrEqual(last.strands);
       // 한 교차: 빛이 가라앉는 만큼 그림이 떠오른다. 빈 프레임도 둘 다 밝은 프레임도 없다.
@@ -1106,7 +1109,7 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     return img;
   };
 
-  it('그림이 있는 방문: 그림은 GL 모양 안에 그려지고, DOM 틀은 도착 전까지 숨은 채 .65부터 포인터만 받고, 도착하는 한 갱신에서 틀과 로고가 바뀐다', () => {
+  it('그림이 있는 방문: 그림은 GL 모양 안에 그려지고, DOM 틀은 .94까지 숨은 채 .65부터 포인터만 받고, .94에 GL 캔버스 아래 서서 캔버스가 .94–1 동안 빠진다', () => {
     const img = withImage();
     restAtAbout();
     scrollAt(PREVIEW_AT);
@@ -1119,23 +1122,43 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     expect(frame.style.transform).not.toBe('');
     expect(Number(list.style.opacity)).toBeGreaterThan(0);
     advance(.22 * PREVIEW_SECONDS);
-    // q = .97: 정착이 끝나 그림은 프리뷰 상자에 그대로 있고, 전기는 다 사라졌다.
+    // q = .97: 정착이 끝나 그림은 프리뷰 상자에 그대로 있고, 전기는 다 사라졌다. DOM 틀(그림·캡션)은 캔버스 아래 다 섰고 캔버스가 반쯤 빠졌다.
     expect(lastCall(handle.setBoundaryTarget)).toEqual({ width: 640, height: 360, radius: 14, image: { source: img, width: 640, height: 360 } });
     expect((handle.seekBoundary.mock.calls.at(-1) as unknown[]).slice(2)).toEqual([1, 0]);
-    expect([frame.style.opacity, inner.style.opacity]).toEqual(['0', '1']);
+    expect(frame.style.opacity).toBe('1');
+    expect(Number(inner.style.opacity)).toBeCloseTo(1 - previewPhases(.97).handoff, 2);
+    expect(Number(inner.style.opacity)).toBeGreaterThan(.3); expect(Number(inner.style.opacity)).toBeLessThan(.7);
     advance(.05 * PREVIEW_SECONDS);
     expect(owners.at(-1)).toBe('projects');
     expect([frame.style.cssText, inner.style.opacity]).toEqual(['border-top-left-radius: 14px;', '0']);
-    // 되돌기: 시작 갱신은 쉬는 자리 그대로(DOM 틀), 다음 갱신부터 GL 그림이 넘겨받는다.
+    // 되돌기: 시작 갱신은 쉬는 자리 그대로(DOM 틀). GL 캔버스가 틀 위로 다시 차오른 뒤(1–.94) 틀이 빠진다.
     scrollAt(1800); scrollAt(1394);
     expect(owners.at(-1)).toBe('preview');
     expect([frame.style.opacity, inner.style.opacity]).toEqual(['', '0']);
     expect(lastCall(handle.setBoundaryTarget)).toMatchObject({ image: { source: img } });
-    advance(.02);
+    advance(.03 * PREVIEW_SECONDS);
+    expect(frame.style.opacity).toBe('1');
+    expect(Number(inner.style.opacity)).toBeGreaterThan(.3); expect(Number(inner.style.opacity)).toBeLessThan(.7);
+    advance(.05 * PREVIEW_SECONDS);
     expect([frame.style.opacity, inner.style.opacity]).toEqual(['0', '1']);
     advance(3);
     expect(owners.at(-1)).toBe('about');
     expect([frame.style.opacity, inner.style.opacity]).toEqual(['0', '1']);
+  });
+
+  // Task 4 리뷰 m2: 받아진 그림을 미리 풀어 둔다. 비행의 첫 GL 그리기가 동기 디코드를 하지 않는다. 그림이 바뀌면(load) 다시 푼다.
+  it('프리뷰 그림은 받아져 있으면 만들 때, 새로 받아지면 그때 미리 디코드를 시작한다', () => {
+    const img = withImage();
+    const decode = vi.fn(() => Promise.resolve());
+    Object.defineProperty(img, 'decode', { configurable: true, value: decode });
+    restAtAbout();
+    expect(decode).toHaveBeenCalledTimes(1);
+    img.dispatchEvent(new Event('load'));
+    expect(decode).toHaveBeenCalledTimes(2);
+    // 실패한 디코드(오류 그림)는 조용히 넘긴다.
+    decode.mockReturnValueOnce(Promise.reject(new Error('EncodingError')));
+    img.dispatchEvent(new Event('load'));
+    expect(decode).toHaveBeenCalledTimes(3);
   });
 
   it('그림이 아직 받아지지 않은 방문은 그림 없이 빛 → 교차로 넘기고, 도중에 받아져도 그 방문에는 끼우지 않는다. 다음 방문은 그린다', () => {

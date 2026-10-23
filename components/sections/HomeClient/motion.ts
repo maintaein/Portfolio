@@ -89,7 +89,8 @@ export function logoPhases(p: number) {
 // 빛(로고 캔버스와 그 테두리 전기)이 가라앉는 만큼 미디어·캡션이 떠오른다(.65–.9). 둘은 한 곡선의 보수라 빈 프레임도 겹쳐 밝은 프레임도 없다.
 // 그림 안의 면(사용자 선택 (가) + (i) 2026-10-23): 프리뷰 그림이 받아져 있으면 처음부터 그 그림이 모양 안에서 가운데부터 드러난다(앞선 0–.8,
 // 10%에 이미 3분의 1). 테두리 전기는 굵기째 가늘어져 사라지고(.6–.9) 면은 정착(.82–.94)에서 프리뷰 상자에 들어앉는다.
-// .94–1은 GL 그림이 제자리에 멈춰 있는 몫이라 느린 프레임에도 도착 직전 프레임이 이미 제자리다. 위 교차(media·logo)는 그림이 없는 방문의 몫이다.
+// .94–1은 넘김이다(Task 4 수정 1): 제자리에 멈춘 GL 그림 아래 DOM 틀(그림·캡션)이 다 서고 캔버스가 빠진다. 둘이 같은 자리라 같은 그림이 차츰
+// 또렷해지고 캡션이 떠오른다. 한 프레임 바꿈은 DPR이 1.25를 넘으면 흐린 GL 그림이 또렷한 DOM 그림으로 툭 바뀌었다. 위 교차(media·logo)는 그림이 없는 방문의 몫이다.
 export function previewPhases(q: number) {
   const media = smooth(span(.65, .9, q));
   return {
@@ -104,6 +105,7 @@ export function previewPhases(q: number) {
     media,
     list: smooth(span(.7, .9, q)),
     settle: inOut(span(.82, .94, q)),
+    handoff: smooth(span(.94, 1, q)),
     logo: 1 - media,
   };
 }
@@ -291,10 +293,11 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       y = lerp(y, centre.y, view.travel);
     }
     const shrink = lerp(1, CORE, phase.contract);
-    // 그림이 있는 방문은 교차가 없다. GL 그림이 도착(q = 1)까지 보이고, 도착하는 갱신에서 DOM 틀로 한 번에 바뀐다(캔버스가 틀 위에 있다).
-    const media = photo ? (q >= 1 ? 1 : 0) : view.media;
+    // 그림이 있는 방문: 틀은 .94에 캔버스 아래 다 서고(캔버스가 틀 위에 있어 가려진다) 캔버스가 .94–1 동안 빠진다. 되돌기는 같은 길을 거꾸로 밟는다.
+    const media = photo ? (q >= .94 ? 1 : 0) : view.media;
+    const glLogo = photo ? 1 - view.handoff : 1 - media;
     logoHost.style.transform = `translate3d(${x - about.w / 2 - origin.x}px, ${y - about.h / 2 - origin.y}px, 0)`;
-    if (inner) inner.style.opacity = String(q > 0 ? 1 - media : phase.logo);
+    if (inner) inner.style.opacity = String(q > 0 ? glLogo : phase.logo);
     if (t <= 0) clearOrb();
     else {
       if (orb instanceof HTMLElement) Object.assign(orb.style, { transform: `translate(${x - from.x}px, ${y - from.y}px) scale(${shrink})`, opacity: String(phase.ball) });
@@ -488,6 +491,13 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     moveLogo(2, false);
   };
   projectsSection?.addEventListener('focusin', reveal);
+  // 받아진 프리뷰 그림을 미리 풀어 둔다(Task 4 리뷰 m2). 비행의 첫 GL 그리기(texImage2D)가 동기 디코드를 하지 않는다. 그림이 바뀌면 load가 다시 부른다.
+  const predecode = (img: EventTarget | null | undefined) => {
+    if (img instanceof HTMLImageElement && img.complete && img.naturalWidth) img.decode?.().catch(() => {});
+  };
+  const onImageLoad = (event: Event) => predecode(event.target);
+  frame?.addEventListener('load', onImageLoad, true);
+  predecode(frame?.querySelector('img'));
 
   return {
     refresh: settle,
@@ -527,6 +537,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       cancelAnimationFrame(queued);
       resize?.disconnect();
       projectsSection?.removeEventListener('focusin', reveal);
+      frame?.removeEventListener('load', onImageLoad, true);
       travel?.kill();
       stopName();
       context.revert();
