@@ -704,7 +704,7 @@ void main() {
   float tint = (1.0 - exp(-body * gain * 1.2)) * grow * grow * (1.0 - ink * 0.82);
   color += uGlowColor * tint * (1.0 - alpha);
   alpha += tint * (1.0 - alpha);
-  if (uSurface > 0.0) {
+  if (uSurface > 0.0 && base < 0.75) {
     // Boundary surface: the interior holds a dim, drifting sheet of light that brightens toward the edge. Alpha stays well below 1, so no white-out.
     vec2 q = pr / uUnit;
     float rim = exp(-max(-base, 0.0) / (uUnit * 7.0));
