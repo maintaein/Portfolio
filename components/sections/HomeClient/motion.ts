@@ -30,6 +30,11 @@ const BALL_GAP = 16;
 // 볼에서 로고로의 변신(사용자 결정 2026-10-21, background_good.mp4 0–2초). 진행도 하나를 이 시간 동안 시간으로 돌린다.
 // 사용자 요청(2026-10-22)으로 1.2초에서 25% 느리게 했다. 구간 비율은 진행도 기준이라 그대로다.
 export const LOGO_SECONDS = 1.5;
+// About 로고에서 프리뷰로 가는 구간(진행도 1–2)만의 시간. 사용자 요청(2026-10-23)으로 1.5초에서 40% 느리게 했다. 드문 설명 전환이라 길다.
+export const PREVIEW_SECONDS = 2.1;
+// 진행도 t까지 오는 데 드는 시간(Hero 0에서). 1을 지나는 한 트윈도 구간마다 제 빠르기로 돈다.
+const secondsAt = (t: number) => LOGO_SECONDS * Math.min(t, 1) + PREVIEW_SECONDS * Math.max(t - 1, 0);
+const progressAt = (s: number) => s <= LOGO_SECONDS ? s / LOGO_SECONDS : 1 + (s - LOGO_SECONDS) / PREVIEW_SECONDS;
 // 로고는 About 본문이 나타나기 시작하는 스크롤 R보다 화면 높이의 이만큼 먼저 떠나 본문보다 먼저 내려앉는다.
 // 1.2초 때의 .12에서 비행 시간과 같은 비율로 늘렸다. 앞섬 / 비행 시간(이보다 느리게 굴리면 R 전에 내려앉는 빠르기)이 같다.
 const LOGO_LEAD = .15;
@@ -79,19 +84,22 @@ export function logoPhases(p: number) {
 
 // About(1)에서 Projects(2)로 가는 진행도 q의 구간. 참조 5.15–5.35초 기호가 옮겨 가며 타일로 차고, 5.35–5.75초 면이 가로로 넓어지고,
 // 5.75–6.13초 그 면 안에 내용이 드러나고, 6.13–6.17초 카드로 들어앉는다. 비율은 녹화 속도가 아니라 이 구간들의 몫이다.
-// 이동 0–.25, 가로 0–.65, 외피 seek 0–.65(옮겨 가는 동안 이미 3분의 1 풀린다), 높이 .1–.65, 모서리 .25–.65, 미디어·캡션 .65–.85,
-// 목록 .7–.9, 정착·로고 사라짐 .9–1.
+// 이동 0–.25, 가로 0–.65, 외피 seek 0–.65(옮겨 가는 동안 이미 3분의 1 풀린다), 높이 .1–.65, 모서리 .25–.65, 목록 .7–.9, 정착 .9–1.
+// 빛의 면(사용자 선택 A 2026-10-23): 옮겨 가는 동안 기호 속이 빛으로 차(채움 0–.2) 면으로 퍼지고, 다 퍼진 자리에서
+// 빛(로고 캔버스와 그 테두리 전기)이 가라앉는 만큼 미디어·캡션이 떠오른다(.65–.9). 둘은 한 곡선의 보수라 빈 프레임도 겹쳐 밝은 프레임도 없다.
 export function previewPhases(q: number) {
+  const media = smooth(span(.65, .9, q));
   return {
     travel: inOut(span(0, .25, q)),
+    fill: smooth(span(0, .2, q)),
     widen: inOut(span(0, .65, q)),
     shell: smooth(span(0, .65, q)),
     face: inOut(span(.1, .65, q)),
     corner: inOut(span(.25, .65, q)),
-    media: smooth(span(.65, .85, q)),
+    media,
     list: smooth(span(.7, .9, q)),
     settle: inOut(span(.9, 1, q)),
-    logo: 1 - smooth(span(.9, 1, q)),
+    logo: 1 - media,
   };
 }
 
@@ -296,7 +304,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     const box = { width: lerp(tile, preview.w * over, view.widen), height: lerp(tile, preview.h * over, view.face), radius: lerp(tile * TILE_RADIUS, m.radius, view.corner) };
     const aimBox = () => {
       logo!.setBoundaryTarget(box);
-      logo!.seekBoundary(view.shell);
+      logo!.seekBoundary(view.shell, view.fill);
     };
     // 지금 구간의 것이 아닌 경계를 먼저 닫는다. ElectricLogo는 경계를 잡은 채 다시 begin하면 새로 잡지 않고 다시 겨누기만 해서,
     // 한 트윈이 About을 지나 반대쪽 구간으로 넘어갈 때 뒤에 닫으면 새 구간의 경계까지 지웠다(Task 1 리뷰 I1).
@@ -361,9 +369,13 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     // 남은 길이 0이면 길이 0 트윈이 만들어지는 중에 끝나 travel에 끝난 트윈이 남는다(경계에 멈춘다). 날기 시작한 프레임에 되돌 때다.
     if (!logo || !animate || reduced || pose.t === target) pose.t = target;
     else {
-      // 되돌아갈 때는 지난 진행도만큼의 시간만 쓴다. 진행도는 시간에 선형이고 구간마다 제 곡선을 쓴다(logoPhases).
+      // 되돌아갈 때는 지난 진행도만큼의 시간만 쓴다. 진행도는 구간마다 시간에 선형이고 구간마다 제 곡선을 쓴다(logoPhases·previewPhases).
+      // 트윈은 시간 축(secondsAt)을 고르게 돌고 진행도로 되옮긴다. 끝은 ease가 정확히 1이라 target 그대로다.
+      const from = pose.t;
+      const [start, end] = [secondsAt(from), secondsAt(target)];
       travel = gsap.to(pose, {
-        t: target, duration: LOGO_SECONDS * Math.abs(target - pose.t), ease: 'none', onUpdate: renderLogo,
+        t: target, duration: Math.abs(end - start), onUpdate: renderLogo,
+        ease: (p: number) => p >= 1 ? 1 : (progressAt(start + (end - start) * p) - from) / (target - from),
         onComplete: () => { travel = null; renderLogo(); },
       });
     }

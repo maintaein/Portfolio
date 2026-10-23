@@ -54,7 +54,7 @@ test.describe('Native motion activity', () => {
     await navButton(page, 'Skills').click();
     await expectActive(page, 'skills');
     // 가는 길에 Projects 지점을 지나 로고가 프리뷰로 날아간다(M4 Task 1). 넘겨진 뒤에야 숨은 로고가 멈춘다.
-    // 소프트웨어 GL의 긴 프레임에는 1.5초 비행이 수십 프레임이라 페이지 쪽 rAF로 비행이 끝나기를 기다린다.
+    // 소프트웨어 GL의 긴 프레임에는 2.1초 비행이 수십 프레임이라 페이지 쪽 rAF로 비행이 끝나기를 기다린다.
     await page.evaluate(() => new Promise<void>(resolve => {
       const read = () => {
         if (document.querySelector('.portfolio-document')!.getAttribute('data-logo-owner') !== 'preview') resolve();
@@ -436,7 +436,8 @@ test.describe('Native motion activity', () => {
     await expect(owner).toHaveAttribute('data-logo-live', '', { timeout: 30_000 });
     // 페이지 쪽에서 React 속성이 아니라 동기로 쓰이는 인라인 값을 프레임마다 읽는다.
     // 시작은 로고 host의 transform이 클릭 전 값 그대로인 마지막 프레임(트윈이 닻 내린 GSAP tick 근처), 끝은 프리뷰 틀의 인라인 opacity가 비워지는(t = 2) 첫 프레임이다.
-    // 1.5초 트윈은 느린 프레임에 더 길어질 뿐 짧아지지 않는다. 건너뛰면 사이 프레임이 거의 없고 시간도 짧다.
+    // 2.1초 트윈(Task 3)은 느린 프레임에 더 길어질 뿐 짧아지지 않는다. 건너뛰면 사이 프레임이 거의 없고 시간도 짧다.
+    // 하한 1800ms는 옛 1.5초 비행이나 줄어든 비행도 떨어뜨린다.
     const flight = () => page.evaluate(() => new Promise<{ frames: number; ms: number }>(resolve => {
       const host = document.querySelector<HTMLElement>('[data-logo-host]')!;
       const frame = document.querySelector<HTMLElement>('[data-motion-anchor="projects-preview"] > div')!;
@@ -462,7 +463,7 @@ test.describe('Native motion activity', () => {
     await navButton(page, 'Projects').click();
     const click = await seen;
     expect(click.frames).toBeGreaterThan(2);
-    expect(click.ms).toBeGreaterThan(1200);
+    expect(click.ms).toBeGreaterThan(1800);
     await expectActive(page, 'projects');
     await expect(page.locator('[data-section="projects"]')).toBeFocused();
 
@@ -472,7 +473,7 @@ test.describe('Native motion activity', () => {
     await page.keyboard.press('Enter');
     const enterKey = await seen;
     expect(enterKey.frames).toBeGreaterThan(2);
-    expect(enterKey.ms).toBeGreaterThan(1200);
+    expect(enterKey.ms).toBeGreaterThan(1800);
     await expectActive(page, 'projects');
     await expect(page.locator('[data-section="projects"]')).toBeFocused();
   });

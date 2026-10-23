@@ -30,7 +30,8 @@ export type ElectricBoundaryTarget = {
 export interface ElectricLogoHandle {
   beginBoundary(target: ElectricBoundaryTarget): boolean;
   setBoundaryTarget(target: ElectricBoundaryTarget): void;
-  seekBoundary(progress: number): void;
+  // fill 0-1: the shape's interior fills with light and becomes a surface. Boundary only; a seek without it draws no surface.
+  seekBoundary(progress: number, fill?: number): void;
   endBoundary(): void;
 }
 
@@ -114,6 +115,7 @@ interface Placement {
 
 interface Boundary {
   progress: number;
+  fill: number;
   target: ElectricBoundaryTarget;
   room: [number, number];
   near: Placement;
@@ -461,6 +463,7 @@ uniform float uInk;
 uniform vec4 uArcEnds[${ARCS}];
 uniform vec4 uArcShape[${ARCS}];
 uniform float uBoundary;
+uniform float uSurface;
 uniform vec4 uBox;
 uniform float uBoxRadius;
 uniform vec2 uOrigin;
@@ -701,6 +704,17 @@ void main() {
   float tint = (1.0 - exp(-body * gain * 1.2)) * grow * grow * (1.0 - ink * 0.82);
   color += uGlowColor * tint * (1.0 - alpha);
   alpha += tint * (1.0 - alpha);
+  if (uSurface > 0.0) {
+    // Boundary surface: the interior holds a dim, drifting sheet of light that brightens toward the edge. Alpha stays well below 1, so no white-out.
+    vec2 q = pr / uUnit;
+    float rim = exp(-max(-base, 0.0) / (uUnit * 7.0));
+    float slow = wobble(q * 0.04 + vec2(t * 0.23, -t * 0.17), 61u);
+    float fine = wobble(q * 0.13 + vec2(slow * 0.8 - t * 0.7, t * 0.5), 62u);
+    float sheet = smoothstep(0.75, -0.75, base) * (0.16 + 0.5 * rim) * (1.0 + 0.45 * slow + 0.3 * fine);
+    float lit = (1.0 - exp(-max(sheet, 0.0) * gain * 1.5)) * uSurface * (1.0 - ink * 0.82);
+    color += mix(uGlowColor, uColor, rim * 0.7) * lit * (1.0 - alpha);
+    alpha += lit * (1.0 - alpha);
+  }
   float grain = (fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) - 0.5) / 255.0;
   alpha = clamp(alpha + grain, 0.0, 1.0);
   fragColor = vec4(clamp(color + grain, 0.0, alpha), alpha);
@@ -740,7 +754,7 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
   useImperativeHandle(ref, () => ({
     beginBoundary: (next) => engineRef.current?.beginBoundary(next) ?? false,
     setBoundaryTarget: (next) => engineRef.current?.setBoundaryTarget(next),
-    seekBoundary: (progress) => engineRef.current?.seekBoundary(progress),
+    seekBoundary: (progress, fill) => engineRef.current?.seekBoundary(progress, fill),
     endBoundary: () => engineRef.current?.endBoundary()
   }), []);
   const settingsRef = useRef<Settings | null>(null);
@@ -928,6 +942,7 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
       uArcEnds: { value: arcEnds },
       uArcShape: { value: arcShape },
       uBoundary: { value: 0 },
+      uSurface: { value: 0 },
       uBox: { value: [0, 0, 0, 0] },
       uBoxRadius: { value: 0 },
       uOrigin: { value: [0, 0] }
@@ -1143,6 +1158,7 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
         }
         uniforms.uMorph.value = morph;
         uniforms.uBoundary.value = boundary ? boundary.progress : 0;
+        uniforms.uSurface.value = boundary ? boundary.fill : 0;
         if (boundary) {
           const { width: w, height: h, radius } = boundary.target;
           uniforms.uBox.value = [width / 2, height / 2, w / 2, h / 2];
@@ -1232,7 +1248,7 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
           // Freeze what is on screen now, including a half-finished morph, as the start shape.
           const from = morph < 1 ? slots[1 - target].shape : null;
           const near = place(to, s);
-          boundary = { progress: 0, target: next, room: [0, 0], near: recentre(near, -1), far: recentre(from ? place(from, s) : near, -1), overflow: container.style.overflow };
+          boundary = { progress: 0, fill: 0, target: next, room: [0, 0], near: recentre(near, -1), far: recentre(from ? place(from, s) : near, -1), overflow: container.style.overflow };
           sparks.length = 0;
           container.style.overflow = 'visible';
         }
@@ -1240,9 +1256,10 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
         return true;
       },
       setBoundaryTarget: aim,
-      seekBoundary: (progress) => {
+      seekBoundary: (progress, fill = 0) => {
         if (!boundary) return;
         boundary.progress = Math.min(1, Math.max(0, progress));
+        boundary.fill = Math.min(1, Math.max(0, fill));
         paint();
       },
       endBoundary: () => {

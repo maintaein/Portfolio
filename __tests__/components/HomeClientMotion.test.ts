@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { gsap, ScrollTrigger } from '@/lib/gsap';
 import type { ElectricLogoHandle } from '@/components/blocks/ElectricLogo';
-import { CORE, LOGO_SECONDS, ORBIT, PREVIEW_OVER, createPortfolioMotion, logoPhases, previewPhases, type LogoOwner, type PortfolioMotion } from '@/components/sections/HomeClient/motion';
+import { CORE, LOGO_SECONDS, ORBIT, PREVIEW_OVER, PREVIEW_SECONDS, createPortfolioMotion, logoPhases, previewPhases, type LogoOwner, type PortfolioMotion } from '@/components/sections/HomeClient/motion';
 import { resolveCurrentSection } from '@/lib/utils/scrollGeometry';
 
 // jsdom에는 레이아웃이 없어 실제 브라우저가 줄 offset 값을 요소마다 심는다.
@@ -701,8 +701,8 @@ describe('로고: About 본문보다 먼저 내려앉게 떠나는 변신', () =
 });
 
 // M4 Task 1(사용자 결정 D2-A 2026-10-20, 참조 background.mp4 5.15–6.17초). About 로고가 지금 고른 프로젝트의 프리뷰가 된다.
-// 진행도는 1(About)에서 2(Projects)로 1.5초 동안 시간으로 돈다. 0–25% 이동·가로 확장, 25–65% 외피가 프리뷰 면을 이루고,
-// 65–90% 실제 미디어·캡션·목록이 같은 창으로 드러나고, 90–100% 프리뷰 상자·모서리에 정확히 내려앉은 뒤 host가 숨는다.
+// 진행도는 1(About)에서 2(Projects)로 2.1초(Task 3, 1.5초에서 40% 느리게) 동안 시간으로 돈다. 0–25% 이동·가로 확장, 25–65% 외피가 프리뷰 면을 이루고,
+// 65–90% 빛이 가라앉으며 실제 미디어·캡션·목록이 같은 창으로 드러나고, 90–100% 프리뷰 상자·모서리에 정확히 내려앉는다.
 describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 된다', () => {
   let projectsSection: HTMLElement; let preview: HTMLElement; let frame: HTMLElement; let media: HTMLElement; let list: HTMLElement;
   // Projects는 1800부터 900 높이. 프리뷰(640×360, 모서리 14)는 왼쪽 열에 있고 목록은 오른쪽 열이다.
@@ -731,22 +731,86 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     scrollY: y, viewportHeight: viewport, headerHeight: 76, documentHeight: 5000,
   });
 
-  it('시간표: 이동 0–.25, 외피 seek 0–.65, 높이 .1–.65, 모서리 .25–.65, 미디어 .65–.85, 목록 .7–.9, 정착 .9–1', () => {
-    expect(previewPhases(0)).toEqual({ travel: 0, widen: 0, shell: 0, face: 0, corner: 0, media: 0, list: 0, settle: 0, logo: 1 });
-    expect(previewPhases(1)).toEqual({ travel: 1, widen: 1, shell: 1, face: 1, corner: 1, media: 1, list: 1, settle: 1, logo: 0 });
+  // M4 Task 3(사용자 선택 A 2026-10-23): 로고 속이 빛으로 차 면이 되고(채움 0–.2), 그 면이 프리뷰 모양으로 퍼지고(0–.65),
+  // 다 퍼진 자리에서 빛이 가라앉는 만큼 그림이 떠오른다(.65–.9, 한 교차). 테두리 전기도 그 교차 동안 함께 사라진다.
+  it('시간표: 이동 0–.25, 채움 0–.2, 외피 seek 0–.65, 높이 .1–.65, 모서리 .25–.65, 빛이 그림이 되는 교차 .65–.9, 목록 .7–.9, 정착 .9–1', () => {
+    expect(previewPhases(0)).toEqual({ travel: 0, fill: 0, widen: 0, shell: 0, face: 0, corner: 0, media: 0, list: 0, settle: 0, logo: 1 });
+    expect(previewPhases(1)).toEqual({ travel: 1, fill: 1, widen: 1, shell: 1, face: 1, corner: 1, media: 1, list: 1, settle: 1, logo: 0 });
+    expect(previewPhases(.2).fill).toBe(1);
+    expect(previewPhases(.1).fill).toBeGreaterThan(0);
     expect(previewPhases(.25).travel).toBe(1);
-    expect(previewPhases(.65)).toMatchObject({ widen: 1, shell: 1, face: 1, corner: 1, media: 0 });
-    expect(previewPhases(.85).media).toBe(1);
+    expect(previewPhases(.65)).toMatchObject({ fill: 1, widen: 1, shell: 1, face: 1, corner: 1, media: 0, logo: 1 });
+    expect(previewPhases(.9)).toMatchObject({ media: 1, logo: 0, list: 1, settle: 0 });
     expect(previewPhases(.7).list).toBe(0);
-    expect(previewPhases(.9)).toMatchObject({ list: 1, settle: 0, logo: 1 });
     expect(PREVIEW_OVER).toBe(1.04);
     let last = previewPhases(0);
     for (let i = 1; i <= 400; i++) {
       const now = previewPhases(i / 400);
-      for (const key of ['travel', 'widen', 'shell', 'face', 'corner', 'media', 'list', 'settle'] as const) expect(now[key]).toBeGreaterThanOrEqual(last[key]);
+      for (const key of ['travel', 'fill', 'widen', 'shell', 'face', 'corner', 'media', 'list', 'settle'] as const) expect(now[key]).toBeGreaterThanOrEqual(last[key]);
       expect(now.logo).toBeLessThanOrEqual(last.logo);
+      // 한 교차: 빛이 가라앉는 만큼 그림이 떠오른다. 빈 프레임도 둘 다 밝은 프레임도 없다.
+      expect(now.logo + now.media).toBeCloseTo(1, 12);
       last = now;
     }
+  });
+
+  it('프리뷰 구간은 2.1초이고 Hero 구간은 1.5초 그대로다. About에서 프리뷰까지 2.1초에 내려앉는다', () => {
+    expect(LOGO_SECONDS).toBe(1.5);
+    expect(PREVIEW_SECONDS).toBe(2.1);
+    restAtAbout();
+    scrollAt(PREVIEW_AT);
+    advance(PREVIEW_SECONDS - .02); expect(owners.at(-1)).toBe('preview');
+    advance(.04); expect(owners.at(-1)).toBe('projects');
+    scrollAt(1800); scrollAt(1394);
+    advance(PREVIEW_SECONDS - .02); expect(owners.at(-1)).toBe('preview');
+    advance(.04); expect(owners.at(-1)).toBe('about');
+  });
+
+  it('1을 지나는 한 트윈은 구간마다 제 빠르기로 돈다: Hero→Projects 1.5초 + 2.1초, Projects→Hero 2.1초 + 1.5초', () => {
+    create();
+    scrollAt(1800);
+    advance(LOGO_SECONDS - .02); expect(owners.at(-1)).toBe('boundary');
+    advance(.04); expect(owners.at(-1)).toBe('preview');
+    advance(PREVIEW_SECONDS - .04); expect(owners.at(-1)).toBe('preview');
+    advance(.04); expect(owners.at(-1)).toBe('projects');
+    scrollAt(0);
+    advance(PREVIEW_SECONDS - .02); expect(owners.at(-1)).toBe('preview');
+    advance(.04); expect(owners.at(-1)).toBe('boundary');
+    advance(LOGO_SECONDS - .04); expect(owners.at(-1)).toBe('boundary');
+    advance(.04); expect(owners.at(-1)).toBe('hero');
+  });
+
+  it('1을 지나는 트윈을 도중에 되돌리면 지난 시간만큼만 써서 돌아온다', () => {
+    create();
+    // Hero 구간 1.5초 + 프리뷰 구간 .5초를 날았다.
+    scrollAt(1800); advance(LOGO_SECONDS + .5);
+    expect(owners.at(-1)).toBe('preview');
+    scrollAt(0);
+    advance(.5 - .02); expect(owners.at(-1)).toBe('preview');
+    advance(.04); expect(owners.at(-1)).toBe('boundary');
+    advance(LOGO_SECONDS - .04); expect(owners.at(-1)).toBe('boundary');
+    advance(.04); expect(owners.at(-1)).toBe('hero');
+  });
+
+  it('채움은 상자 경계의 seek에 실려 손잡이에 닿고, Hero 쪽 원 경계에는 채움이 없다', () => {
+    create();
+    scrollAt(900);
+    advance(.5 * LOGO_SECONDS);
+    expect(handle.seekBoundary.mock.calls.length).toBeGreaterThan(0);
+    for (const call of handle.seekBoundary.mock.calls as unknown[][]) expect(call[1] ?? 0).toBe(0);
+    advance(2);
+    handle.seekBoundary.mockClear();
+    scrollAt(PREVIEW_AT);
+    expect(handle.seekBoundary).toHaveBeenLastCalledWith(0, 0);
+    advance(.1 * PREVIEW_SECONDS);
+    const [shell, fill] = handle.seekBoundary.mock.calls.at(-1) as unknown as [number, number];
+    expect(shell).toBeCloseTo(previewPhases(.1).shell, 3);
+    expect(fill).toBeCloseTo(previewPhases(.1).fill, 3);
+    expect(fill).toBeGreaterThan(0);
+    advance(.3 * PREVIEW_SECONDS);
+    const [later, full] = handle.seekBoundary.mock.calls.at(-1) as unknown as [number, number];
+    expect(later).toBeCloseTo(previewPhases(.4).shell, 3);
+    expect(full).toBe(1);
   });
 
   it('About에서 쉬는 동안 Projects 내용은 숨어 있고, 지점(Projects 잠금 - 화면 절반 - 15%)에서 한 번 재생해 프리뷰에 내려앉는다', () => {
@@ -756,7 +820,7 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     scrollAt(PREVIEW_AT - 1); expect(owners.at(-1)).toBe('about');
     scrollAt(PREVIEW_AT); expect(owners.at(-1)).toBe('preview');
     expect(handle.beginBoundary).toHaveBeenLastCalledWith(OVER);
-    advance(LOGO_SECONDS - .02); expect(owners.at(-1)).toBe('preview');
+    advance(PREVIEW_SECONDS - .02); expect(owners.at(-1)).toBe('preview');
     advance(.04); expect(owners.at(-1)).toBe('projects');
     expect(logo()).toEqual(PREVIEW_LOGO);
     expect(inner.style.opacity).toBe('0');
@@ -765,14 +829,14 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     // 경로 지점에 닿지 않고 돌아서면 지점 24 위에서 돌아간다.
     scrollAt(PREVIEW_AT - 23); expect(owners.at(-1)).toBe('projects');
     scrollAt(PREVIEW_AT - 24); expect(owners.at(-1)).toBe('preview');
-    advance(2); expect(owners.at(-1)).toBe('about');
+    advance(3); expect(owners.at(-1)).toBe('about');
     expect(logo()).toEqual(ABOUT_LOGO);
     expect(shown()).toEqual({ frame: '0', list: '0' });
   });
 
   it('위로 갈 때 되돌기는 경로가 Projects에서 About으로 바뀌는 스크롤에서 시작하고, 1–3px 떨림에는 다시 날지 않는다', () => {
     restAtAbout();
-    scrollAt(1800); advance(2); expect(owners.at(-1)).toBe('projects');
+    scrollAt(1800); advance(3); expect(owners.at(-1)).toBe('projects');
     let left = 0;
     let switched = 0;
     for (let y = 1799; y > 900 && !(left && switched); y--) {
@@ -783,14 +847,14 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     expect({ left, switched }).toEqual({ left: 1394, switched: 1394 });
     expect(owners.at(-1)).toBe('preview');
     for (const y of [1395, 1394, 1396, 1395, 1397]) scrollAt(y);
-    advance(2); expect(owners.at(-1)).toBe('about');
+    advance(3); expect(owners.at(-1)).toBe('about');
     for (const y of [1396, 1397, 1395, 1398]) {
       scrollAt(y);
       expect(owners.at(-1)).toBe('about');
     }
     // 마지막으로 올라온 1395에서 4px 내려왔다(M4 Task 0의 늦춤).
     scrollAt(1399); expect(owners.at(-1)).toBe('preview');
-    advance(2); expect(owners.at(-1)).toBe('projects');
+    advance(3); expect(owners.at(-1)).toBe('projects');
   });
 
   it('외피: 지금 보이는 로고에서 시작해 가장 큰 면으로 한 번만 잡고, 이동·확장 뒤 면을 이루고, 프리뷰 상자·모서리에 정확히 정착한다', () => {
@@ -803,20 +867,20 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     expect(lastCall(handle.seekBoundary)).toBe(0);
     expect(logo()).toEqual(ABOUT_LOGO);
     // 25%: host가 프리뷰 가운데에 닿았고 가로가 먼저 넓어진다.
-    advance(.25 * LOGO_SECONDS);
+    advance(.25 * PREVIEW_SECONDS);
     expect(logo()).toEqual(PREVIEW_LOGO);
     const wide = lastCall(handle.setBoundaryTarget) as { width: number; height: number };
     expect(wide.width).toBeGreaterThan(wide.height);
     // 옮겨 가는 동안 로고가 이미 넓어지는 타일로 풀리기 시작한다(headed Chrome에서 .08이면 로고 그대로였다).
     expect(lastCall(handle.seekBoundary) as number).toBeGreaterThan(.3);
     // 65%: 외피가 프리뷰보다 4% 큰 면을 이뤘다.
-    advance(.4 * LOGO_SECONDS);
+    advance(.4 * PREVIEW_SECONDS);
     const face = lastCall(handle.setBoundaryTarget) as { width: number; height: number; radius: number };
     expect(face.width).toBeCloseTo(OVER.width, 3); expect(face.height).toBeCloseTo(OVER.height, 3); expect(face.radius).toBeCloseTo(14, 3);
     expect(lastCall(handle.seekBoundary)).toBe(1);
     expect(inner.style.opacity).toBe('1');
     expect(owners.at(-1)).toBe('preview');
-    advance(.35 * LOGO_SECONDS + .02);
+    advance(.35 * PREVIEW_SECONDS + .02);
     expect(lastCall(handle.setBoundaryTarget)).toEqual({ width: 640, height: 360, radius: 14 });
     expect(handle.endBoundary).toHaveBeenCalledTimes(1);
     expect(handle.beginBoundary).toHaveBeenCalledTimes(1);
@@ -826,11 +890,11 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
   it('미디어·캡션은 외피와 같은 transform·clip 창으로 드러나고 목록이 같은 구간에 따라온다. 프리뷰 손잡이·미디어 겹은 건드리지 않는다', () => {
     restAtAbout();
     scrollAt(PREVIEW_AT);
-    advance(.5 * LOGO_SECONDS);
+    advance(.5 * PREVIEW_SECONDS);
     expect(shown()).toEqual({ frame: '0', list: '0' });
     // 숨은 틀은 옮기지 않는다. 안의 열기 단추가 보이지 않는 채 About 위로 오면 눌린다.
     expect(frame.style.transform + frame.style.clipPath).toBe('');
-    advance(.25 * LOGO_SECONDS);
+    advance(.25 * PREVIEW_SECONDS);
     // q = .75: 면은 프리뷰의 1.04배, 창의 모서리는 화면에서 14px이다.
     const box = lastCall(handle.setBoundaryTarget) as { width: number; height: number; radius: number };
     const [dx, dy, sx, sy] = numbers(frame.style.transform);
@@ -850,7 +914,7 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
 
   it('되돌기는 같은 창을 거꾸로 밟는다: 시작 프레임에는 내용이 그대로이고 내용이 사라진 뒤 로고로 접혀 About에서 chapter 시간으로 돌아간다', () => {
     restAtAbout();
-    scrollAt(1800); advance(2);
+    scrollAt(1800); advance(3);
     handle.beginBoundary.mockClear(); handle.endBoundary.mockClear();
     scrollAt(1394);
     expect(owners.at(-1)).toBe('preview');
@@ -859,9 +923,9 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     // 시작 프레임은 쉬는 자리 그대로다(쓴 값 없음).
     expect(shown()).toEqual({ frame: '', list: '' });
     expect(frame.style.transform + frame.style.clipPath).toBe('');
-    advance(.2 * LOGO_SECONDS);
+    advance(.2 * PREVIEW_SECONDS);
     expect(Number(shown().list)).toBeLessThan(1);
-    advance(.8 * LOGO_SECONDS + .02);
+    advance(.8 * PREVIEW_SECONDS + .02);
     expect(owners.at(-1)).toBe('about');
     expect(lastCall(handle.seekBoundary)).toBe(0);
     expect(handle.endBoundary).toHaveBeenCalledTimes(1);
@@ -870,27 +934,27 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
 
   it('도중에 되넘으면 보이는 그대로에서 거꾸로 돌고 지난 진행도만큼의 시간만 쓴다', () => {
     restAtAbout();
-    scrollAt(PREVIEW_AT); advance(.7 * LOGO_SECONDS);
+    scrollAt(PREVIEW_AT); advance(.7 * PREVIEW_SECONDS);
     const seen = () => ({ host: host.style.transform, inner: inner.style.opacity, frame: frame.style.cssText, list: list.style.opacity,
       seek: lastCall(handle.seekBoundary), target: lastCall(handle.setBoundaryTarget) });
     const before = seen();
     scrollAt(PREVIEW_AT - 24);
     expect(owners.at(-1)).toBe('preview');
     expect(seen()).toEqual(before);
-    advance(.7 * LOGO_SECONDS - .02); expect(owners.at(-1)).toBe('preview');
+    advance(.7 * PREVIEW_SECONDS - .02); expect(owners.at(-1)).toBe('preview');
     advance(.04); expect(owners.at(-1)).toBe('about');
     expect(logo()).toEqual(ABOUT_LOGO);
   });
 
   it('날던 중의 크기 변화·refresh는 처음부터 다시 돌지 않고 다시 잰 프리뷰로 마저 간다', () => {
     restAtAbout();
-    scrollAt(PREVIEW_AT); advance(.5 * LOGO_SECONDS);
+    scrollAt(PREVIEW_AT); advance(.5 * PREVIEW_SECONDS);
     place(preview, { x: 100, y: 2000, w: 560, h: 315 });
     resize();
     motion!.refresh();
     expect(owners.at(-1)).toBe('preview');
     expect(handle.endBoundary).toHaveBeenCalledTimes(1);
-    advance(.5 * LOGO_SECONDS + .02);
+    advance(.5 * PREVIEW_SECONDS + .02);
     expect(owners.at(-1)).toBe('projects');
     expect(logo()).toEqual({ x: 100 + 280 - 180, y: 2000 + 157.5 - 180, z: 0 });
     expect(lastCall(handle.setBoundaryTarget)).toEqual({ width: 560, height: 315, radius: 14 });
@@ -936,7 +1000,7 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     motion!.setLogo(handle);
     scrollAt(900); advance(2);
     expect(shown()).toEqual({ frame: '0', list: '0' });
-    scrollAt(PREVIEW_AT); advance(.8 * LOGO_SECONDS);
+    scrollAt(PREVIEW_AT); advance(.8 * PREVIEW_SECONDS);
     motion!.setLogo(null);
     expect(frame.style.cssText).toBe('border-top-left-radius: 14px;');
     expect(list.style.cssText).toBe('');
@@ -951,7 +1015,7 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     const order = [...handle.beginBoundary.mock.invocationCallOrder, ...handle.endBoundary.mock.invocationCallOrder].sort((a, b) => a - b);
     expect(order).toEqual([handle.beginBoundary.mock.invocationCallOrder[0], handle.endBoundary.mock.invocationCallOrder[0], handle.beginBoundary.mock.invocationCallOrder[1]]);
     expect(handle.beginBoundary).toHaveBeenLastCalledWith(OVER);
-    advance(LOGO_SECONDS);
+    advance(PREVIEW_SECONDS);
     expect(owners.slice(-1)).toEqual(['projects']);
     expect(owners).toEqual(['none', 'hero', 'boundary', 'preview', 'projects']);
   });
@@ -980,7 +1044,7 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     expect(owners.at(-1)).toBe('projects');
     scrollAt(0);
     expect(owners.at(-1)).toBe('preview');
-    advance(LOGO_SECONDS + .1);
+    advance(PREVIEW_SECONDS + .1);
     expect(owners.at(-1)).toBe('boundary');
     expect(shell.log).toEqual(['begin(box)', 'end', 'begin(circle)']);
     expect(shell.counts().held).toBe(true);
@@ -997,7 +1061,7 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     const shell = stateful();
     create({ logo: shell.logo });
     scrollAt(1800);
-    advance(2 * LOGO_SECONDS + .1);
+    advance(LOGO_SECONDS + PREVIEW_SECONDS + .1);
     expect(owners.at(-1)).toBe('projects');
     expect(shell.log).toEqual(['begin(circle)', 'end', 'begin(box)', 'end']);
     expect(shell.counts()).toMatchObject({ held: false, dropped: 0 });
@@ -1009,19 +1073,19 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     restAtAbout();
     expect([frame.style.pointerEvents, list.style.pointerEvents]).toEqual(['none', 'none']);
     scrollAt(PREVIEW_AT);
-    advance(.75 * LOGO_SECONDS);
+    advance(.75 * PREVIEW_SECONDS);
     expect([frame.style.pointerEvents, list.style.pointerEvents]).toEqual(['', '']);
     advance(1);
     expect(frame.style.cssText).toBe('border-top-left-radius: 14px;');
     expect(list.style.cssText).toBe('');
-    scrollAt(1800); scrollAt(1394); advance(2);
+    scrollAt(1800); scrollAt(1394); advance(3);
     expect(owners.at(-1)).toBe('about');
     expect([frame.style.pointerEvents, list.style.pointerEvents]).toEqual(['none', 'none']);
   });
 
   it('숨은 Projects 안으로 포커스가 들어오면(Tab) 재생 없이 Projects 쉬는 자리가 되어 내용이 보이고, 날던 되돌기도 그 자리에서 멈춘다', () => {
     restAtAbout();
-    scrollAt(1800); scrollAt(1394); advance(2);
+    scrollAt(1800); scrollAt(1394); advance(3);
     handle.beginBoundary.mockClear();
     const tab = document.createElement('button');
     list.append(tab);
@@ -1036,7 +1100,7 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     expect(owners.at(-1)).toBe('projects');
     // 되돌기 도중의 포커스도 같다.
     tab.blur();
-    scrollAt(1800); scrollAt(1394); advance(.3 * LOGO_SECONDS);
+    scrollAt(1800); scrollAt(1394); advance(.3 * PREVIEW_SECONDS);
     expect(owners.at(-1)).toBe('preview');
     handle.endBoundary.mockClear();
     tab.focus();
@@ -1056,12 +1120,12 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     list.append(tab);
     scrollAt(1800);
     expect(owners.at(-1)).toBe('preview');
-    advance(.3 * LOGO_SECONDS);
+    advance(.3 * PREVIEW_SECONDS);
     projectsSection.focus();
     inner.focus();
     tab.focus();
     expect(owners.at(-1)).toBe('preview');
-    advance(.7 * LOGO_SECONDS - .02);
+    advance(.7 * PREVIEW_SECONDS - .02);
     expect(owners.at(-1)).toBe('preview');
     advance(.04);
     expect(owners.at(-1)).toBe('projects');
@@ -1097,10 +1161,10 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     tab.blur();
     scrollAt(PREVIEW_AT - 120);
     expect(owners.at(-1)).toBe('preview');
-    advance(2);
+    advance(3);
     expect(owners.at(-1)).toBe('about');
     // 경로 지점 위로 넘어가면 포커스가 남아 있어도 돌아간다.
-    scrollAt(1800); advance(2);
+    scrollAt(1800); advance(3);
     tab.focus();
     scrollAt(1396); scrollAt(1393);
     expect(owners.at(-1)).toBe('preview');
@@ -1117,7 +1181,7 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     scrollAt(PREVIEW_AT - 100);
     scrollAt(PREVIEW_AT - 112);
     expect(owners.at(-1)).toBe('preview');
-    advance(2);
+    advance(3);
     expect(owners.at(-1)).toBe('about');
     expect(shown()).toEqual({ frame: '0', list: '0' });
     tab.blur(); tab.focus();
@@ -1129,7 +1193,7 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
 
   it('포커스가 Projects 컨트롤에 있어도 경로 지점에서 떨면 한 번 돌아간 뒤 4px 늦춤 안에서는 다시 날지 않는다', () => {
     restAtAbout();
-    scrollAt(1800); advance(2);
+    scrollAt(1800); advance(3);
     const tab = document.createElement('button');
     list.append(tab);
     tab.focus();
@@ -1142,7 +1206,7 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
       scrollAt(y);
       expect(owners.at(-1)).toBe('preview');
     }
-    advance(2);
+    advance(3);
     expect(owners.at(-1)).toBe('about');
     scrollAt(1392); scrollAt(1393);
     expect(owners.at(-1)).toBe('about');
@@ -1183,7 +1247,7 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
   // M4 Task 2. 비행 중의 Projects 입력은 비행을 동기로 끝 자리에 놓은 뒤 원래 동작을 한다. 스크롤은 움직이지 않고, 새 비행도 예약하지 않는다.
   it('settleProjects: 앞으로 날던 비행을 같은 호출 안에서 Projects 쉬는 자리로 끝내고, 경계를 닫고 쓴 값을 걷는다. 스크롤은 그대로다', () => {
     restAtAbout();
-    scrollAt(PREVIEW_AT); advance(.3 * LOGO_SECONDS);
+    scrollAt(PREVIEW_AT); advance(.3 * PREVIEW_SECONDS);
     expect(owners.at(-1)).toBe('preview');
     handle.endBoundary.mockClear(); handle.beginBoundary.mockClear();
     motion!.settleProjects();
@@ -1204,20 +1268,20 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
 
   it('settleProjects 뒤에도 지점 규칙은 그대로다: 같은 자리의 스크롤은 다시 날지 않고, 지점 24 위로 되돌면 평소처럼 돌아간다', () => {
     restAtAbout();
-    scrollAt(PREVIEW_AT); advance(.3 * LOGO_SECONDS);
+    scrollAt(PREVIEW_AT); advance(.3 * PREVIEW_SECONDS);
     motion!.settleProjects();
     scrollAt(PREVIEW_AT + 1);
     expect(owners.at(-1)).toBe('projects');
     scrollAt(PREVIEW_AT - 24);
     expect(owners.at(-1)).toBe('preview');
-    advance(2);
+    advance(3);
     expect(owners.at(-1)).toBe('about');
     expect(logo()).toEqual(ABOUT_LOGO);
   });
 
   it('settleProjects: 돌아가던 비행도 Projects 쪽 끝 자리로 놓는다', () => {
     restAtAbout();
-    scrollAt(1800); advance(2); scrollAt(1394); advance(.3 * LOGO_SECONDS);
+    scrollAt(1800); advance(3); scrollAt(1394); advance(.3 * PREVIEW_SECONDS);
     expect(owners.at(-1)).toBe('preview');
     motion!.settleProjects();
     expect(owners.at(-1)).toBe('projects');
@@ -1229,7 +1293,7 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
   // 리뷰 M3. 돌아가던 비행을 정착시킨 뒤의 첫 스크롤 틱은 평소 규칙을 따른다: Projects 컨트롤에 포커스가 없으면 About으로 다시 날고, 있으면 머문다.
   it.each([[false, 'preview'], [true, 'projects']])('settleProjects: 돌아가던 비행을 정착시킨 뒤 스크롤 틱 한 번은, 컨트롤 포커스 %s이면 %s', (focused, expected) => {
     restAtAbout();
-    scrollAt(1800); advance(2); scrollAt(PREVIEW_AT - 100); advance(.3 * LOGO_SECONDS);
+    scrollAt(1800); advance(3); scrollAt(PREVIEW_AT - 100); advance(.3 * PREVIEW_SECONDS);
     expect(owners.at(-1)).toBe('preview');
     if (focused) {
       const tab = document.createElement('button');
@@ -1240,7 +1304,7 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     expect(owners.at(-1)).toBe('projects');
     scrollAt(PREVIEW_AT - 101);
     expect(owners.at(-1)).toBe(expected);
-    advance(2);
+    advance(3);
     expect(owners.at(-1)).toBe(focused ? 'projects' : 'about');
   });
 
@@ -1249,7 +1313,7 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     motion!.settleProjects();
     expect(owners.at(-1)).toBe('about');
     expect(shown()).toEqual({ frame: '0', list: '0' });
-    scrollAt(1800); advance(2);
+    scrollAt(1800); advance(3);
     handle.endBoundary.mockClear();
     const count = owners.length;
     motion!.settleProjects();

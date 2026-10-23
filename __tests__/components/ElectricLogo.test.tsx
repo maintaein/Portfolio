@@ -372,3 +372,37 @@ it('a box boundary re-uploads no texture: seeks, target changes, a resize and en
   tick(1000);
   expect([gpu.uploads, gpu.textures]).toEqual([uploads, textures]);
 });
+
+// M4 Task 3 (user choice A, 2026-10-23): in box mode the shape fills with light and becomes a surface. The fill rides on seekBoundary.
+it('a boundary seek carries the surface fill to its uniform, clamped, and a seek without it draws no surface', () => {
+  const { ref } = mount('fill-a.svg');
+  ref.current!.beginBoundary(preview);
+  for (const [p, fill, drawn] of [[0, 0.3, 0.3], [0.5, 1, 1], [0.7, 2, 1], [0.7, -1, 0], [0.2, 0.6, 0.6]]) {
+    ref.current!.seekBoundary(p, fill);
+    tick();
+    expect(last().uBoundary).toBe(p);
+    expect(last().uSurface).toBe(drawn);
+  }
+  ref.current!.seekBoundary(0.4);
+  tick();
+  expect(last().uSurface).toBe(0);
+});
+
+it('outside boundary mode the logo draws no surface: before begin, after end, and for a logo without a ref', () => {
+  const plain = render(<ElectricLogo src="nofill-plain.svg" />);
+  loadImages(200);
+  tick();
+  expect(last().uSurface).toBe(0);
+  plain.unmount();
+  const { ref } = mount('nofill-a.svg');
+  expect(last().uSurface).toBe(0);
+  const before = last();
+  ref.current!.beginBoundary(preview);
+  ref.current!.seekBoundary(1, 1);
+  tick();
+  expect(last().uSurface).toBe(1);
+  ref.current!.endBoundary();
+  tick();
+  expect(last().uSurface).toBe(0);
+  for (const key of ['uBoundary', 'uFill', 'uMorph', 'uMapTo', 'uSizeTo', 'uResolution', 'uOrigin']) expect(last()[key]).toEqual(before[key]);
+});
