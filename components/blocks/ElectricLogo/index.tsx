@@ -25,13 +25,17 @@ export type ElectricBoundaryTarget = {
   width: number;
   height: number;
   radius: number;
+  // A loaded picture drawn inside the shape, covering a width x height box (object-fit: cover, centred) on the target centre.
+  // Without it, or while it has not loaded, the boundary draws light only.
+  image?: { source: HTMLImageElement; width: number; height: number };
 };
 
 export interface ElectricLogoHandle {
   beginBoundary(target: ElectricBoundaryTarget): boolean;
   setBoundaryTarget(target: ElectricBoundaryTarget): void;
   // fill 0-1: the shape's interior fills with light and becomes a surface. Boundary only; a seek without it draws no surface.
-  seekBoundary(progress: number, fill?: number): void;
+  // reveal 0-1: the target image shows from the centre outward. strands 1-0: the edge strands, their glow and the image wobble thin to nothing.
+  seekBoundary(progress: number, fill?: number, reveal?: number, strands?: number): void;
   endBoundary(): void;
 }
 
@@ -116,6 +120,8 @@ interface Placement {
 interface Boundary {
   progress: number;
   fill: number;
+  reveal: number;
+  strands: number;
   target: ElectricBoundaryTarget;
   room: [number, number];
   near: Placement;
@@ -464,6 +470,12 @@ uniform vec4 uArcEnds[${ARCS}];
 uniform vec4 uArcShape[${ARCS}];
 uniform float uBoundary;
 uniform float uSurface;
+uniform sampler2D tImage;
+uniform float uImage;
+uniform vec4 uImageBox;
+uniform float uImageLod;
+uniform float uReveal;
+uniform float uStrandWidth;
 uniform vec4 uBox;
 uniform float uBoxRadius;
 uniform vec2 uOrigin;
@@ -652,14 +664,15 @@ void main() {
   float edge = abs(base);
   vec2 halo = aura(pr, k);
   float ink = uInk;
-  float bloom = (halo.x * 0.16 + halo.y * 0.08) * (1.0 - ink * 0.65) * uGlow * (1.0 + heat * 1.2);
+  // uStrandWidth is 1 outside a boundary. In a boundary it thins the strands to nothing, and their glow goes with them.
+  float bloom = (halo.x * 0.16 + halo.y * 0.08) * (1.0 - ink * 0.65) * uGlow * (1.0 + heat * 1.2) * uStrandWidth;
   float body = smoothstep(0.75, -0.75, base) * uFill * (0.06 + 1.2 * min(halo.x, 1.0)) * (1.0 + heat * 0.5);
   light += uGlowColor * bloom * grow * grow;
   energy += bloom * grow * grow;
 
   float reachScale = mix(0.15, 1.0, grow) * (1.0 + heat * 0.9);
   float reach = (uUnit * uBend * 16.0 + uCrackle * 3.0) * (1.0 + heatCap * 0.9) + uThickness * 20.0 + 8.0;
-  if (edge < reach && grow > 0.0) {
+  if (edge < reach && grow > 0.0 && uStrandWidth > 0.0) {
     float fade = smoothstep(reach, reach * 0.55, edge);
     vec2 q = pr / uUnit;
     float count = min(uStrands + heat * 2.5, 6.0);
@@ -679,10 +692,10 @@ void main() {
       float d = dw / max(length(slope + jac * slope), 0.3);
       float spread = shape(pr + sway, k);
       float swell = 0.5 + 0.5 * wobble(q * 0.06 + vec2(t * 0.9, fi * 5.1 - t * 0.6), seed + 8u);
-      float w = uThickness * mix(0.5, 1.0, lead) * (0.5 + swell);
+      float w = uThickness * uStrandWidth * mix(0.5, 1.0, lead) * (0.5 + swell);
       float vis = mix(0.3 + 0.45 * smoothstep(-0.25, 0.2, wobble(q * 0.035 + vec2(t * 0.21, fi * 3.7), seed + 5u)), 1.0, lead);
       float spark = 1.0 - uFlicker * 0.3 * (0.5 + 0.5 * wobble(vec2(t * 6.0, fi * 2.3), seed + 6u));
-      float weight = max(vis, heat * 0.85) * spark * fade * present * (0.7 + 0.6 * swell);
+      float weight = max(vis, heat * 0.85) * spark * fade * present * (0.7 + 0.6 * swell) * uStrandWidth;
       vec2 g = glowShape(d, spread, w) * weight;
       float soft = mix(1.0, mix(0.5, 1.0, lead), ink);
       vec3 stroke = mix(uColor, uGlowColor, ink * (1.0 - lead) * 0.65);
@@ -707,13 +720,36 @@ void main() {
   if (uSurface > 0.0 && base < 0.75) {
     // Boundary surface: the interior holds a dim, drifting sheet of light that brightens toward the edge. Alpha stays well below 1, so no white-out.
     vec2 q = pr / uUnit;
+    float inside = smoothstep(0.75, -0.75, base);
     float rim = exp(-max(-base, 0.0) / (uUnit * 7.0));
-    float slow = wobble(q * 0.04 + vec2(t * 0.23, -t * 0.17), 61u);
+    mat2 jac;
+    vec2 flow = drift(q * 0.04 + vec2(t * 0.23, -t * 0.17), 61u, jac);
+    float slow = flow.x;
     float fine = wobble(q * 0.13 + vec2(slow * 0.8 - t * 0.7, t * 0.5), 62u);
-    float sheet = smoothstep(0.75, -0.75, base) * (0.16 + 0.5 * rim) * (1.0 + 0.45 * slow + 0.3 * fine);
+    float sheet = inside * (0.16 + 0.5 * rim) * (1.0 + 0.45 * slow + 0.3 * fine);
+    // Picture: a front grows from the box centre (distance in box half-sizes, ragged by the fine noise). Behind it the picture shows,
+    // on it rides a band of brighter surface, and the edge keeps a strip of light as wide as the strands are thick.
+    float shown = 0.0;
+    float band = 0.0;
+    if (uImage > 0.0) {
+      float ahead = uReveal * 1.75 + 0.06 * fine - length((pr - uBox.xy) / max(uBox.zw, vec2(1.0)));
+      float keep = uStrandWidth > 0.0 ? smoothstep(0.35, 1.0, -base / (uUnit * 12.0 * uStrandWidth)) : 1.0;
+      shown = smoothstep(0.0, 0.25, ahead) * keep;
+      float crest = (ahead - 0.08) / 0.09;
+      band = exp(-crest * crest);
+      sheet = sheet * (1.0 - shown) + inside * band * (0.45 + 0.25 * fine);
+    }
     float lit = (1.0 - exp(-max(sheet, 0.0) * gain * 1.5)) * uSurface * (1.0 - ink * 0.82);
-    color += mix(uGlowColor, uColor, rim * 0.7) * lit * (1.0 - alpha);
+    color += mix(uGlowColor, uColor, max(rim, band) * 0.7) * lit * (1.0 - alpha);
     alpha += lit * (1.0 - alpha);
+    if (shown > 0.0) {
+      // Straight-alpha sRGB texels go under the light as premultiplied colour, untinted. The liquid wobble dies with the strands.
+      vec2 uv = (pr + flow * uUnit * 2.0 * uStrandWidth - uImageBox.xy) / (2.0 * uImageBox.zw) + 0.5;
+      vec4 texel = textureLod(tImage, uv, uImageLod);
+      float a = texel.a * shown * inside;
+      color += texel.rgb * a * (1.0 - alpha);
+      alpha += a * (1.0 - alpha);
+    }
   }
   float grain = (fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) - 0.5) / 255.0;
   alpha = clamp(alpha + grain, 0.0, 1.0);
@@ -754,7 +790,7 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
   useImperativeHandle(ref, () => ({
     beginBoundary: (next) => engineRef.current?.beginBoundary(next) ?? false,
     setBoundaryTarget: (next) => engineRef.current?.setBoundaryTarget(next),
-    seekBoundary: (progress, fill) => engineRef.current?.seekBoundary(progress, fill),
+    seekBoundary: (progress, fill, reveal, strands) => engineRef.current?.seekBoundary(progress, fill, reveal, strands),
     endBoundary: () => engineRef.current?.endBoundary()
   }), []);
   const settingsRef = useRef<Settings | null>(null);
@@ -905,6 +941,11 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
       })
     });
     const slots = [makeSlot(), makeSlot()];
+    // The boundary picture. A picture of another size gets a new texture rather than a re-specified one, so no storage keeps an old size.
+    const makePhoto = () => new Texture(gl, { generateMipmaps: true, minFilter: gl.LINEAR_MIPMAP_LINEAR, magFilter: gl.LINEAR, flipY: false });
+    let photo = makePhoto();
+    let photoSrc = '';
+    let photoSize = [0, 0];
 
     const arcEnds = Array.from({ length: ARCS * 4 }, () => 0);
     const arcShape = Array.from({ length: ARCS * 4 }, () => 0);
@@ -943,6 +984,12 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
       uArcShape: { value: arcShape },
       uBoundary: { value: 0 },
       uSurface: { value: 0 },
+      tImage: { value: photo },
+      uImage: { value: 0 },
+      uImageBox: { value: [0, 0, 1, 1] },
+      uImageLod: { value: 0 },
+      uReveal: { value: 0 },
+      uStrandWidth: { value: 1 },
       uBox: { value: [0, 0, 0, 0] },
       uBoxRadius: { value: 0 },
       uOrigin: { value: [0, 0] }
@@ -1159,6 +1206,32 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
         uniforms.uMorph.value = morph;
         uniforms.uBoundary.value = boundary ? boundary.progress : 0;
         uniforms.uSurface.value = boundary ? boundary.fill : 0;
+        uniforms.uReveal.value = boundary ? boundary.reveal : 0;
+        uniforms.uStrandWidth.value = boundary ? boundary.strands : 1;
+        const picture = boundary?.target.image;
+        const ready = !!picture && picture.source.complete && picture.source.naturalWidth > 0;
+        uniforms.uImage.value = ready ? 1 : 0;
+        if (picture && ready) {
+          const { source } = picture;
+          const { naturalWidth: iw, naturalHeight: ih } = source;
+          const src = source.currentSrc || source.src;
+          if (src !== photoSrc) {
+            if (iw !== photoSize[0] || ih !== photoSize[1]) {
+              gl.deleteTexture(photo.texture);
+              photo = makePhoto();
+              uniforms.tImage.value = photo;
+            }
+            photo.image = source;
+            photo.needsUpdate = true;
+            photoSrc = src;
+            photoSize = [iw, ih];
+          }
+          // object-fit: cover, centred on the box, like the DOM frame. The mip level follows the picture's texels per canvas pixel,
+          // one level sharper: plain trilinear was visibly softer than Chrome's own downscale at the handoff (1024 px, 1024 -> 446).
+          const cover = Math.max(picture.width / iw, picture.height / ih);
+          uniforms.uImageBox.value = [width / 2, height / 2, (iw * cover) / 2, (ih * cover) / 2];
+          uniforms.uImageLod.value = Math.max(0, Math.log2(1 / (cover * renderer.dpr)) - 1);
+        }
         if (boundary) {
           const { width: w, height: h, radius } = boundary.target;
           uniforms.uBox.value = [width / 2, height / 2, w / 2, h / 2];
@@ -1248,7 +1321,7 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
           // Freeze what is on screen now, including a half-finished morph, as the start shape.
           const from = morph < 1 ? slots[1 - target].shape : null;
           const near = place(to, s);
-          boundary = { progress: 0, fill: 0, target: next, room: [0, 0], near: recentre(near, -1), far: recentre(from ? place(from, s) : near, -1), overflow: container.style.overflow };
+          boundary = { progress: 0, fill: 0, reveal: 0, strands: 1, target: next, room: [0, 0], near: recentre(near, -1), far: recentre(from ? place(from, s) : near, -1), overflow: container.style.overflow };
           sparks.length = 0;
           container.style.overflow = 'visible';
         }
@@ -1256,10 +1329,13 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
         return true;
       },
       setBoundaryTarget: aim,
-      seekBoundary: (progress, fill = 0) => {
+      seekBoundary: (progress, fill = 0, reveal = 0, strands = 1) => {
         if (!boundary) return;
-        boundary.progress = Math.min(1, Math.max(0, progress));
-        boundary.fill = Math.min(1, Math.max(0, fill));
+        const unit = (value: number) => Math.min(1, Math.max(0, value));
+        boundary.progress = unit(progress);
+        boundary.fill = unit(fill);
+        boundary.reveal = unit(reveal);
+        boundary.strands = unit(strands);
         paint();
       },
       endBoundary: () => {

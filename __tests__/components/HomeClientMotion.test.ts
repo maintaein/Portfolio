@@ -733,21 +733,30 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
 
   // M4 Task 3(사용자 선택 A 2026-10-23): 로고 속이 빛으로 차 면이 되고(채움 0–.2), 그 면이 프리뷰 모양으로 퍼지고(0–.65),
   // 다 퍼진 자리에서 빛이 가라앉는 만큼 그림이 떠오른다(.65–.9, 한 교차). 테두리 전기도 그 교차 동안 함께 사라진다.
-  it('시간표: 이동 0–.25, 채움 0–.2, 외피 seek 0–.65, 높이 .1–.65, 모서리 .25–.65, 빛이 그림이 되는 교차 .65–.9, 목록 .7–.9, 정착 .9–1', () => {
-    expect(previewPhases(0)).toEqual({ travel: 0, fill: 0, widen: 0, shell: 0, face: 0, corner: 0, media: 0, list: 0, settle: 0, logo: 1 });
-    expect(previewPhases(1)).toEqual({ travel: 1, fill: 1, widen: 1, shell: 1, face: 1, corner: 1, media: 1, list: 1, settle: 1, logo: 0 });
+  // M4 Task 4(사용자 선택 (가) + (i) 2026-10-23): 그림이 처음부터 모양 안에서 가운데부터 드러나고(앞선 0–.8), 테두리 전기는 가늘어져 사라진다(.6–.9).
+  // 면은 정착(.82–.94)에서 프리뷰 상자에 들어앉고, 그 뒤 .94–1 동안 GL 그림이 제자리에 멈춰 있다가 도착에서 DOM 틀로 한 프레임에 바뀐다.
+  it('시간표: 이동 0–.25, 채움 0–.2, 외피 seek 0–.65, 높이 .1–.65, 모서리 .25–.65, 앞선 0–.8, 전기 .6–.9, 교차(그림 없는 방문) .65–.9, 목록 .7–.9, 정착 .82–.94', () => {
+    expect(previewPhases(0)).toEqual({ travel: 0, fill: 0, widen: 0, shell: 0, face: 0, corner: 0, reveal: 0, strands: 1, media: 0, list: 0, settle: 0, logo: 1 });
+    expect(previewPhases(1)).toEqual({ travel: 1, fill: 1, widen: 1, shell: 1, face: 1, corner: 1, reveal: 1, strands: 0, media: 1, list: 1, settle: 1, logo: 0 });
     expect(previewPhases(.2).fill).toBe(1);
     expect(previewPhases(.1).fill).toBeGreaterThan(0);
     expect(previewPhases(.25).travel).toBe(1);
     expect(previewPhases(.65)).toMatchObject({ fill: 1, widen: 1, shell: 1, face: 1, corner: 1, media: 0, logo: 1 });
-    expect(previewPhases(.9)).toMatchObject({ media: 1, logo: 0, list: 1, settle: 0 });
+    expect(previewPhases(.9)).toMatchObject({ media: 1, logo: 0, list: 1, strands: 0 });
     expect(previewPhases(.7).list).toBe(0);
+    // 앞선은 처음부터 보인다: 10%에 이미 3분의 1 넘게 나아갔고, 정착 전에 상자를 다 덮는다.
+    expect(previewPhases(.1).reveal).toBeGreaterThan(.3);
+    expect(previewPhases(.8).reveal).toBe(1);
+    expect(previewPhases(.6).strands).toBe(1);
+    expect(previewPhases(.82).settle).toBe(0);
+    expect(previewPhases(.94).settle).toBe(1);
     expect(PREVIEW_OVER).toBe(1.04);
     let last = previewPhases(0);
     for (let i = 1; i <= 400; i++) {
       const now = previewPhases(i / 400);
-      for (const key of ['travel', 'fill', 'widen', 'shell', 'face', 'corner', 'media', 'list', 'settle'] as const) expect(now[key]).toBeGreaterThanOrEqual(last[key]);
+      for (const key of ['travel', 'fill', 'widen', 'shell', 'face', 'corner', 'reveal', 'media', 'list', 'settle'] as const) expect(now[key]).toBeGreaterThanOrEqual(last[key]);
       expect(now.logo).toBeLessThanOrEqual(last.logo);
+      expect(now.strands).toBeLessThanOrEqual(last.strands);
       // 한 교차: 빛이 가라앉는 만큼 그림이 떠오른다. 빈 프레임도 둘 다 밝은 프레임도 없다.
       expect(now.logo + now.media).toBeCloseTo(1, 12);
       last = now;
@@ -797,15 +806,18 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     scrollAt(900);
     advance(.5 * LOGO_SECONDS);
     expect(handle.seekBoundary.mock.calls.length).toBeGreaterThan(0);
-    for (const call of handle.seekBoundary.mock.calls as unknown[][]) expect(call[1] ?? 0).toBe(0);
+    // 원 경계에는 채움도 앞선도 전기 가늘어짐도 없다(손잡이 기본값: 채움 0, 앞선 0, 전기 1).
+    for (const call of handle.seekBoundary.mock.calls as unknown[][]) expect(call).toHaveLength(1);
     advance(2);
     handle.seekBoundary.mockClear();
     scrollAt(PREVIEW_AT);
-    expect(handle.seekBoundary).toHaveBeenLastCalledWith(0, 0);
+    expect(handle.seekBoundary).toHaveBeenLastCalledWith(0, 0, 0, 1);
     advance(.1 * PREVIEW_SECONDS);
-    const [shell, fill] = handle.seekBoundary.mock.calls.at(-1) as unknown as [number, number];
+    const [shell, fill, reveal, strands] = handle.seekBoundary.mock.calls.at(-1) as unknown as [number, number, number, number];
     expect(shell).toBeCloseTo(previewPhases(.1).shell, 3);
     expect(fill).toBeCloseTo(previewPhases(.1).fill, 3);
+    expect(reveal).toBeCloseTo(previewPhases(.1).reveal, 3);
+    expect(strands).toBe(1);
     expect(fill).toBeGreaterThan(0);
     advance(.3 * PREVIEW_SECONDS);
     const [later, full] = handle.seekBoundary.mock.calls.at(-1) as unknown as [number, number];
@@ -1081,6 +1093,66 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     scrollAt(1800); scrollAt(1394); advance(3);
     expect(owners.at(-1)).toBe('about');
     expect([frame.style.pointerEvents, list.style.pointerEvents]).toEqual(['none', 'none']);
+  });
+
+  // M4 Task 4. 프리뷰 그림(next/image의 img)이 받아져 있으면 GL 로고가 모양 안에 그린다. 아니면 그 방문은 Task 3의 빛 → 교차로 넘긴다.
+  const withImage = (complete = true) => {
+    const img = document.createElement('img');
+    Object.defineProperties(img, {
+      complete: { configurable: true, value: complete },
+      naturalWidth: { configurable: true, value: complete ? 1280 : 0 }, naturalHeight: { configurable: true, value: complete ? 720 : 0 },
+    });
+    media.appendChild(img);
+    return img;
+  };
+
+  it('그림이 있는 방문: 그림은 GL 모양 안에 그려지고, DOM 틀은 도착 전까지 숨은 채 .65부터 포인터만 받고, 도착하는 한 갱신에서 틀과 로고가 바뀐다', () => {
+    const img = withImage();
+    restAtAbout();
+    scrollAt(PREVIEW_AT);
+    expect(lastCall(handle.setBoundaryTarget)).toMatchObject({ image: { source: img, width: OVER.width, height: OVER.height } });
+    advance(.5 * PREVIEW_SECONDS);
+    expect([frame.style.opacity, inner.style.opacity]).toEqual(['0', '1']);
+    advance(.25 * PREVIEW_SECONDS);
+    // q = .75: 그림은 GL이 그리고 있다. 틀은 보이지 않지만 같은 창(transform·clip)에 서서 누르면 프리뷰 클릭이다.
+    expect([frame.style.opacity, frame.style.pointerEvents, inner.style.opacity]).toEqual(['0', '', '1']);
+    expect(frame.style.transform).not.toBe('');
+    expect(Number(list.style.opacity)).toBeGreaterThan(0);
+    advance(.22 * PREVIEW_SECONDS);
+    // q = .97: 정착이 끝나 그림은 프리뷰 상자에 그대로 있고, 전기는 다 사라졌다.
+    expect(lastCall(handle.setBoundaryTarget)).toEqual({ width: 640, height: 360, radius: 14, image: { source: img, width: 640, height: 360 } });
+    expect((handle.seekBoundary.mock.calls.at(-1) as unknown[]).slice(2)).toEqual([1, 0]);
+    expect([frame.style.opacity, inner.style.opacity]).toEqual(['0', '1']);
+    advance(.05 * PREVIEW_SECONDS);
+    expect(owners.at(-1)).toBe('projects');
+    expect([frame.style.cssText, inner.style.opacity]).toEqual(['border-top-left-radius: 14px;', '0']);
+    // 되돌기: 시작 갱신은 쉬는 자리 그대로(DOM 틀), 다음 갱신부터 GL 그림이 넘겨받는다.
+    scrollAt(1800); scrollAt(1394);
+    expect(owners.at(-1)).toBe('preview');
+    expect([frame.style.opacity, inner.style.opacity]).toEqual(['', '0']);
+    expect(lastCall(handle.setBoundaryTarget)).toMatchObject({ image: { source: img } });
+    advance(.02);
+    expect([frame.style.opacity, inner.style.opacity]).toEqual(['0', '1']);
+    advance(3);
+    expect(owners.at(-1)).toBe('about');
+    expect([frame.style.opacity, inner.style.opacity]).toEqual(['0', '1']);
+  });
+
+  it('그림이 아직 받아지지 않은 방문은 그림 없이 빛 → 교차로 넘기고, 도중에 받아져도 그 방문에는 끼우지 않는다. 다음 방문은 그린다', () => {
+    const img = withImage(false);
+    restAtAbout();
+    scrollAt(PREVIEW_AT);
+    expect(lastCall(handle.setBoundaryTarget)).not.toHaveProperty('image');
+    Object.defineProperties(img, { complete: { value: true }, naturalWidth: { value: 1280 }, naturalHeight: { value: 720 } });
+    advance(.75 * PREVIEW_SECONDS);
+    expect(lastCall(handle.setBoundaryTarget)).not.toHaveProperty('image');
+    const shownAt = Number(frame.style.opacity);
+    expect(shownAt).toBeGreaterThan(0); expect(shownAt).toBeLessThan(1);
+    expect(Number(inner.style.opacity)).toBeCloseTo(1 - shownAt, 12);
+    advance(1);
+    expect(owners.at(-1)).toBe('projects');
+    scrollAt(1800); scrollAt(1394);
+    expect(lastCall(handle.setBoundaryTarget)).toMatchObject({ image: { source: img } });
   });
 
   it('숨은 Projects 안으로 포커스가 들어오면(Tab) 재생 없이 Projects 쉬는 자리가 되어 내용이 보이고, 날던 되돌기도 그 자리에서 멈춘다', () => {

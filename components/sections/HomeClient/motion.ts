@@ -84,9 +84,12 @@ export function logoPhases(p: number) {
 
 // About(1)에서 Projects(2)로 가는 진행도 q의 구간. 참조 5.15–5.35초 기호가 옮겨 가며 타일로 차고, 5.35–5.75초 면이 가로로 넓어지고,
 // 5.75–6.13초 그 면 안에 내용이 드러나고, 6.13–6.17초 카드로 들어앉는다. 비율은 녹화 속도가 아니라 이 구간들의 몫이다.
-// 이동 0–.25, 가로 0–.65, 외피 seek 0–.65(옮겨 가는 동안 이미 3분의 1 풀린다), 높이 .1–.65, 모서리 .25–.65, 목록 .7–.9, 정착 .9–1.
+// 이동 0–.25, 가로 0–.65, 외피 seek 0–.65(옮겨 가는 동안 이미 3분의 1 풀린다), 높이 .1–.65, 모서리 .25–.65, 목록 .7–.9, 정착 .82–.94(Task 4, 전에는 .9–1).
 // 빛의 면(사용자 선택 A 2026-10-23): 옮겨 가는 동안 기호 속이 빛으로 차(채움 0–.2) 면으로 퍼지고, 다 퍼진 자리에서
 // 빛(로고 캔버스와 그 테두리 전기)이 가라앉는 만큼 미디어·캡션이 떠오른다(.65–.9). 둘은 한 곡선의 보수라 빈 프레임도 겹쳐 밝은 프레임도 없다.
+// 그림 안의 면(사용자 선택 (가) + (i) 2026-10-23): 프리뷰 그림이 받아져 있으면 처음부터 그 그림이 모양 안에서 가운데부터 드러난다(앞선 0–.8,
+// 10%에 이미 3분의 1). 테두리 전기는 굵기째 가늘어져 사라지고(.6–.9) 면은 정착(.82–.94)에서 프리뷰 상자에 들어앉는다.
+// .94–1은 GL 그림이 제자리에 멈춰 있는 몫이라 느린 프레임에도 도착 직전 프레임이 이미 제자리다. 위 교차(media·logo)는 그림이 없는 방문의 몫이다.
 export function previewPhases(q: number) {
   const media = smooth(span(.65, .9, q));
   return {
@@ -96,9 +99,11 @@ export function previewPhases(q: number) {
     shell: smooth(span(0, .65, q)),
     face: inOut(span(.1, .65, q)),
     corner: inOut(span(.25, .65, q)),
+    reveal: out(span(0, .8, q)),
+    strands: 1 - smooth(span(.6, .9, q)),
     media,
     list: smooth(span(.7, .9, q)),
-    settle: inOut(span(.9, 1, q)),
+    settle: inOut(span(.82, .94, q)),
     logo: 1 - media,
   };
 }
@@ -158,6 +163,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   let bound = false;
   // 프리뷰 쪽 경계(상자)를 잡고 있는지. 방문마다 떠날 때 한 번만 잡는다.
   let boxed = false;
+  // 이 방문에 GL 로고가 모양 안에 그리는 프리뷰 그림. 상자를 잡을 때 받아져 있을 때만 정하고, 아니면 그 방문은 빛 → 교차로 넘긴다.
+  let photo: HTMLImageElement | null = null;
   let owner: LogoOwner | null = null;
   let paused = false;
   let alive = true;
@@ -200,7 +207,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     const projects = root.querySelector('[data-section="projects"]');
     const projectsTop = projects ? projects.getBoundingClientRect().top + window.scrollY : Infinity;
     const projectsLock = projectsTop - (projects ? parseFloat(getComputedStyle(projects).scrollMarginTop) || header.offsetHeight : 0);
-    const preview = layoutBox(previewAnchor);
+    // 프리뷰는 소수점까지 잰다. 도착에서 GL 그림이 DOM 그림과 화소째 겹쳐야 한다(정수 offset으로는 반 화소 어긋났다). 프리뷰 조상에는 transform이 없다.
+    const preview = previewAnchor ? rectBox(previewAnchor, window.scrollY) : EMPTY;
     m = {
       nameSize: size, nav: rectBox(header.querySelector('[data-motion-anchor="nav-name"]')),
       logoAt: Math.min(lock - 1, Math.max(NAME_DOWN, reveal - LOGO_LEAD * window.innerHeight)),
@@ -283,8 +291,10 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       y = lerp(y, centre.y, view.travel);
     }
     const shrink = lerp(1, CORE, phase.contract);
+    // 그림이 있는 방문은 교차가 없다. GL 그림이 도착(q = 1)까지 보이고, 도착하는 갱신에서 DOM 틀로 한 번에 바뀐다(캔버스가 틀 위에 있다).
+    const media = photo ? (q >= 1 ? 1 : 0) : view.media;
     logoHost.style.transform = `translate3d(${x - about.w / 2 - origin.x}px, ${y - about.h / 2 - origin.y}px, 0)`;
-    if (inner) inner.style.opacity = String(q > 0 ? view.logo : phase.logo);
+    if (inner) inner.style.opacity = String(q > 0 ? 1 - media : phase.logo);
     if (t <= 0) clearOrb();
     else {
       if (orb instanceof HTMLElement) Object.assign(orb.style, { transform: `translate(${x - from.x}px, ${y - from.y}px) scale(${shrink})`, opacity: String(phase.ball) });
@@ -302,9 +312,10 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     const tile = about.w * ORBIT;
     const over = lerp(PREVIEW_OVER, 1, view.settle);
     const box = { width: lerp(tile, preview.w * over, view.widen), height: lerp(tile, preview.h * over, view.face), radius: lerp(tile * TILE_RADIUS, m.radius, view.corner) };
+    // 그림은 처음부터 정착할 상자(프리뷰 × 지금 배율)에 DOM과 같은 cover로 깔리고 모양이 그 창이다. 끝에서 DOM 그림과 같은 자리다.
     const aimBox = () => {
-      logo!.setBoundaryTarget(box);
-      logo!.seekBoundary(view.shell, view.fill);
+      logo!.setBoundaryTarget(photo ? { ...box, image: { source: photo, width: preview.w * over, height: preview.h * over } } : box);
+      logo!.seekBoundary(view.shell, view.fill, view.reveal, view.strands);
     };
     // 지금 구간의 것이 아닌 경계를 먼저 닫는다. ElectricLogo는 경계를 잡은 채 다시 begin하면 새로 잡지 않고 다시 겨누기만 해서,
     // 한 트윈이 About을 지나 반대쪽 구간으로 넘어갈 때 뒤에 닫으면 새 구간의 경계까지 지웠다(Task 1 리뷰 I1).
@@ -327,6 +338,9 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     }
     if (leg === 2) {
       if (!boxed) {
+        // next/image는 lazy라 아직 안 받아졌을 수 있다. 그 방문은 기다리지 않고 그림 없이 난다. 영상이나 오류 화면에는 img가 없다.
+        const img = frame?.querySelector('img');
+        photo = img?.complete && img.naturalWidth ? img : null;
         boxed = logo.beginBoundary({ width: preview.w * PREVIEW_OVER, height: preview.h * PREVIEW_OVER, radius: m.radius });
         // GL이 아직 그리지 않았으면 이 방문은 정적으로 넘긴다. 늦게 준비돼도 날던 도중에 외피를 끼우지 않고 다음 방문에 잇는다.
         if (!boxed) {
@@ -348,11 +362,12 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       if (frame) {
         const sx = preview.w ? box.width / preview.w : 1;
         const sy = preview.h ? box.height / preview.h : 1;
+        // 그림이 있는 방문에도 틀은 .65부터 같은 창에 서서 포인터를 받는다. 그 자리에 보이는 것은 GL이 그린 같은 그림이다.
         const open = view.media > 0;
         Object.assign(frame.style, {
           transform: open ? `translate(${x - centre.x}px, ${y - centre.y}px) scale(${sx}, ${sy})` : '',
           clipPath: open ? `inset(0px round ${box.radius / sx}px / ${box.radius / sy}px)` : '',
-          opacity: String(view.media),
+          opacity: String(media),
           pointerEvents: open ? '' : 'none',
         });
       }

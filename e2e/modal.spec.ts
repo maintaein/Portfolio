@@ -151,7 +151,10 @@ test.describe('프로젝트 상세', () => {
         // opacity는 상속되지 않으므로 조상까지 곱한다. 보이지 않는 단추는 사람이 누를 수 없다. 보이기 시작한 뒤, 아직 날고 있을 때 누른다.
         let shown = 1;
         for (let node: Element | null = el; node; node = node.parentElement) shown *= Number(getComputedStyle(node).opacity);
-        if (stage() === 'preview' && ++flying >= 3 && shown > 0) {
+        // M4 Task 4: 프리뷰 그림을 GL 로고가 그리는 동안 DOM 틀은 도착까지 불투명도 0이고, .65부터 보이는 GL 그림 아래 같은 창에서 포인터를 받는다.
+        const logo = Number(getComputedStyle(document.querySelector('[data-logo-host] > div')!).opacity);
+        const standIn = logo > 0 && getComputedStyle(el).pointerEvents !== 'none';
+        if (stage() === 'preview' && ++flying >= 3 && (shown > 0 || standIn)) {
           const clickedWhile = stage();
           // Chrome이 마우스 누름에서 내는 순서: 포커스(mousedown) 다음 click. 마우스 포커스는 스크롤하지 않는다.
           el.focus({ preventScroll: true });

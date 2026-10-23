@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 // The GL mock records uniforms per draw and counts renderer/texture lifetimes. Visual continuity is checked in M4.
 type Drawn = Record<string, number | number[]>;
-const gpu = vi.hoisted(() => ({ renderers: 0, textures: 0, uploads: 0, drawn: [] as Record<string, number | number[]>[] }));
+const gpu = vi.hoisted(() => ({ renderers: 0, textures: 0, uploads: 0, deleted: 0, drawn: [] as Record<string, number | number[]>[] }));
 vi.mock('ogl', () => {
   class Renderer {
     dpr: number; isWebgl2 = true; width = 0; height = 0;
@@ -12,7 +12,7 @@ vi.mock('ogl', () => {
     constructor({ dpr }: { dpr: number }) {
       gpu.renderers++;
       this.dpr = dpr;
-      this.gl = { canvas: document.createElement('canvas'), getExtension: () => null, clearColor() {}, renderer: this };
+      this.gl = { canvas: document.createElement('canvas'), getExtension: () => null, clearColor() {}, deleteTexture() { gpu.deleted++; }, renderer: this };
     }
     setSize(width: number, height: number) {
       this.width = width; this.height = height;
@@ -47,7 +47,7 @@ let side = 200;
 const frames = new Map<number, FrameRequestCallback>();
 const images: { onload?: () => void }[] = [];
 beforeEach(() => {
-  gpu.renderers = 0; gpu.textures = 0; gpu.uploads = 0; gpu.drawn.length = 0;
+  gpu.renderers = 0; gpu.textures = 0; gpu.uploads = 0; gpu.deleted = 0; gpu.drawn.length = 0;
   frames.clear(); images.length = 0; clock = 1000; side = 200;
   let id = 0;
   vi.spyOn(performance, 'now').mockImplementation(() => clock);
@@ -405,4 +405,103 @@ it('outside boundary mode the logo draws no surface: before begin, after end, an
   tick();
   expect(last().uSurface).toBe(0);
   for (const key of ['uBoundary', 'uFill', 'uMorph', 'uMapTo', 'uSizeTo', 'uResolution', 'uOrigin']) expect(last()[key]).toEqual(before[key]);
+});
+
+// M4 Task 4 (user choice (가) + (i), 2026-10-23): the preview image is drawn inside the morphing shape, revealed from the centre
+// outward, and the edge strands thin to nothing. The image rides on the boundary target; reveal and strand width ride on the seek.
+const picture = (src: string, width: number, height: number, complete = true) =>
+  ({ complete, naturalWidth: width, naturalHeight: height, currentSrc: src, src }) as unknown as HTMLImageElement;
+// A 2:1 picture covering the 640 x 360 box: cover scale .72, drawn 720 x 360, centred on the box.
+const withPicture = (source: HTMLImageElement, width = 640, height = 360) => ({ ...box, image: { source, width, height } });
+
+it('a boundary target image reaches its uniforms and its texture, mapped like object-fit: cover on the box centre', () => {
+  const { ref } = mount('img-a.svg');
+  const uploads = gpu.uploads;
+  ref.current!.beginBoundary(withPicture(picture('/_next/image?a', 1000, 500)));
+  ref.current!.seekBoundary(0.6, 1, 0.5, 0.4);
+  tick();
+  expect(last().uImage).toBe(1);
+  expect(last().uImageBox).toEqual([200, 200, 360, 180]);
+  // A mild downscale samples the full-size level.
+  expect(last().uImageLod).toBe(0);
+  expect(last().uReveal).toBe(0.5);
+  expect(last().uStrandWidth).toBe(0.4);
+  expect(gpu.uploads).toBe(uploads + 1);
+  // The same picture again uploads nothing.
+  for (const p of [0.7, 0.8]) {
+    ref.current!.seekBoundary(p, 1, 0.9, 0.1);
+    tick();
+  }
+  expect(gpu.uploads).toBe(uploads + 1);
+  // A strong downscale (cover .28125) samples one level above its texels per pixel.
+  ref.current!.setBoundaryTarget(withPicture(picture('/_next/image?big', 2560, 1280)));
+  tick();
+  expect(last().uImageLod as number).toBeCloseTo(Math.log2(1 / 0.28125) - 1, 6);
+});
+
+it('falls back to light only without a picture, or with a picture that has not loaded, and uploads nothing', () => {
+  const { ref } = mount('img-none.svg');
+  const [uploads, textures] = [gpu.uploads, gpu.textures];
+  ref.current!.beginBoundary(box);
+  ref.current!.seekBoundary(0.5, 1, 0.5, 0.5);
+  tick();
+  expect(last().uImage).toBe(0);
+  for (const source of [picture('/_next/image?late', 1000, 500, false), picture('/_next/image?empty', 0, 0)]) {
+    ref.current!.setBoundaryTarget(withPicture(source));
+    ref.current!.seekBoundary(0.5, 1, 0.5, 0.5);
+    tick();
+    expect(last().uImage).toBe(0);
+  }
+  expect([gpu.uploads, gpu.textures]).toEqual([uploads, textures]);
+});
+
+it('follows a new picture: same size re-uploads into the texture, a new size deletes it and makes a new one', () => {
+  const { ref } = mount('img-swap.svg');
+  ref.current!.beginBoundary(withPicture(picture('/_next/image?a', 1000, 500)));
+  ref.current!.seekBoundary(1, 1, 1, 0);
+  tick();
+  const [uploads, textures, deleted] = [gpu.uploads, gpu.textures, gpu.deleted];
+  ref.current!.setBoundaryTarget(withPicture(picture('/_next/image?b', 1000, 500)));
+  tick();
+  expect([gpu.uploads, gpu.textures, gpu.deleted]).toEqual([uploads + 1, textures, deleted]);
+  ref.current!.setBoundaryTarget(withPicture(picture('/_next/image?c', 800, 800)));
+  tick();
+  expect([gpu.uploads, gpu.textures, gpu.deleted]).toEqual([uploads + 2, textures + 1, deleted + 1]);
+  // Cover on 640 x 360: scale .8, drawn 640 x 640.
+  expect(last().uImageBox).toEqual([200, 200, 320, 320]);
+  ref.current!.setBoundaryTarget(withPicture(picture('/_next/image?c', 800, 800)));
+  tick();
+  expect([gpu.uploads, gpu.textures, gpu.deleted]).toEqual([uploads + 2, textures + 1, deleted + 1]);
+});
+
+it('a boundary seek carries the strand width ramp and the reveal, clamped; a seek without them keeps full strands and no reveal', () => {
+  const { ref } = mount('thin-a.svg');
+  ref.current!.beginBoundary(box);
+  for (const [reveal, strands, r, s] of [[0.2, 1, 0.2, 1], [0.6, 0.5, 0.6, 0.5], [2, -1, 1, 0], [-1, 2, 0, 1], [1, 0, 1, 0]]) {
+    ref.current!.seekBoundary(0.8, 1, reveal, strands);
+    tick();
+    expect([last().uReveal, last().uStrandWidth]).toEqual([r, s]);
+  }
+  ref.current!.seekBoundary(0.4, 1);
+  tick();
+  expect([last().uReveal, last().uStrandWidth]).toEqual([0, 1]);
+});
+
+it('outside boundary mode there is no picture, no reveal and full strands: before begin, after end, and for a logo without a ref', () => {
+  const plain = render(<ElectricLogo src="noimg-plain.svg" />);
+  loadImages(200);
+  tick();
+  expect([last().uImage, last().uReveal, last().uStrandWidth]).toEqual([0, 0, 1]);
+  plain.unmount();
+  const { ref } = mount('noimg-a.svg');
+  expect([last().uImage, last().uReveal, last().uStrandWidth]).toEqual([0, 0, 1]);
+  const before = last();
+  ref.current!.beginBoundary(withPicture(picture('/_next/image?a', 1000, 500)));
+  ref.current!.seekBoundary(1, 1, 1, 0);
+  tick();
+  expect([last().uImage, last().uReveal, last().uStrandWidth]).toEqual([1, 1, 0]);
+  ref.current!.endBoundary();
+  tick();
+  expect([last().uImage, last().uReveal, last().uStrandWidth]).toEqual([0, 0, 1]);
+  for (const key of ['uBoundary', 'uSurface', 'uThickness', 'uFill', 'uMorph', 'uMapTo', 'uSizeTo', 'uResolution', 'uOrigin']) expect(last()[key]).toEqual(before[key]);
 });
