@@ -16,6 +16,16 @@ const ARCS = 5;
 const PULSES = 3;
 const PIXEL_BUDGET = 4e6;
 const MAX_DPR = 1.25;
+// Uneven spread in a picture boundary (M4 Task 5, user request 2026-10-24), tunable. One slow noise field (PreviewMorph's fbm) of the
+// position in box half-heights drives the picture front and the outline, so some directions race ahead and others lag.
+// Noise cells per box half-height.
+const SPREAD_SCALE = 1.2;
+// Extra lead (and lag) of the picture front, in box half-sizes at full reveal. The lagging side keeps the Task 4 speed.
+const SPREAD_FRONT = 1.0;
+// Outline bulge and lag at full raggedness, in logo units (about 2.5 px at 1440). Stays inside the canvas margin of 40 units.
+const SPREAD_EDGE = 14;
+// Drift of the field per shader time unit (2.5 per second), so the pattern moves slowly during the leg.
+const SPREAD_DRIFT = 0.05;
 const MORPH_DURATION = ELECTRIC_LOGO_MORPH_SECONDS;
 const EMPTY_PRELOAD_SRCS: string[] = [];
 
@@ -35,7 +45,8 @@ export interface ElectricLogoHandle {
   setBoundaryTarget(target: ElectricBoundaryTarget): void;
   // fill 0-1: the shape's interior fills with light and becomes a surface. Boundary only; a seek without it draws no surface.
   // reveal 0-1: the target image shows from the centre outward. strands 1-0: the edge strands, their glow and the image wobble thin to nothing.
-  seekBoundary(progress: number, fill?: number, reveal?: number, strands?: number): void;
+  // ragged 0-1: the box outline advances unevenly by direction (a slow noise displacement); 0 is the exact box.
+  seekBoundary(progress: number, fill?: number, reveal?: number, strands?: number, ragged?: number): void;
   endBoundary(): void;
 }
 
@@ -122,6 +133,9 @@ interface Boundary {
   fill: number;
   reveal: number;
   strands: number;
+  ragged: number;
+  // Offset into the spread noise, new per boundary, so each visit spreads in its own pattern.
+  seed: [number, number];
   target: ElectricBoundaryTarget;
   room: [number, number];
   near: Placement;
@@ -476,6 +490,8 @@ uniform vec4 uImageBox;
 uniform float uImageLod;
 uniform float uReveal;
 uniform float uStrandWidth;
+uniform float uRag;
+uniform vec2 uRagSeed;
 uniform vec4 uBox;
 uniform float uBoxRadius;
 uniform vec2 uOrigin;
@@ -503,9 +519,37 @@ vec2 glowAt(sampler2D tex, vec4 map, vec4 size, vec2 p) {
   return textureLod(tex, f / (size.zw * ${CELL}.0), 0.0).rg;
 }
 
+// Spread noise, ported from PreviewMorph: value-noise fbm, centred to -1..1.
+float hash21(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float valueNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash21(i), hash21(i + vec2(1.0, 0.0)), u.x), mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0)), u.x), u.y);
+}
+
+float spreadNoise(vec2 p) {
+  float v = 0.0;
+  float a = 0.5;
+  for (int i = 0; i < 4; i++) {
+    v += a * valueNoise(p);
+    p *= 2.0;
+    a *= 0.5;
+  }
+  return v / 0.46875 - 1.0;
+}
+
+// Outline displacement at this pixel (px, positive pushes the box outline out). Set once per pixel in main, 0 outside a ragged boundary.
+float rag = 0.0;
+
 float box(vec2 p) {
   vec2 q = abs(p - uBox.xy) - uBox.zw + uBoxRadius;
-  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - uBoxRadius;
+  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - uBoxRadius - rag;
 }
 
 float shape(vec2 p, float k) {
@@ -653,6 +697,20 @@ void main() {
   vec2 pr = p - ripple(p, surge);
   float k = uMorph >= 1.0 ? 1.0 : smoothstep(0.0, 1.0, clamp(uMorph * 1.7 - 0.35 + 0.35 * wobble(p / uUnit * 0.018, 41u), 0.0, 1.0));
   float transit = uMorph >= 1.0 ? 0.0 : sin(3.14159265 * uMorph);
+  // Uneven spread: the field is evaluated only where it shows, near the displaced outline and near the picture front.
+  // A bulging direction also reveals early. The displacement fades out away from the outline, so the deep inside keeps the plain box.
+  float uneven = 0.0;
+  float spreadAt = 0.0;
+  if (uBoundary > 0.0 && (uRag > 0.0 || uImage > 0.0)) {
+    float swing = uRag * ${SPREAD_EDGE.toFixed(3)} * uUnit;
+    float near = uRag > 0.0 ? smoothstep(swing + uUnit * 48.0, swing + uUnit * 16.0, abs(box(pr))) : 0.0;
+    spreadAt = length((pr - uBox.xy) / max(uBox.zw, vec2(1.0)));
+    bool front = uImage > 0.0 && uSurface > 0.0 && abs(uReveal * (1.75 + ${SPREAD_FRONT.toFixed(3)}) - spreadAt) < uReveal * ${SPREAD_FRONT.toFixed(3)} + 0.45;
+    if (near > 0.0 || front) {
+      uneven = spreadNoise((pr - uBox.xy) / max(uBox.w, 1.0) * ${SPREAD_SCALE.toFixed(3)} + uRagSeed + t * ${SPREAD_DRIFT.toFixed(3)});
+      rag = swing * uneven * near;
+    }
+  }
   float base = shape(pr, k);
 
   vec2 toHover = p - uHover.xy;
@@ -729,10 +787,11 @@ void main() {
     float sheet = inside * (0.16 + 0.5 * rim) * (1.0 + 0.45 * slow + 0.3 * fine);
     // Picture: a front grows from the box centre (distance in box half-sizes, ragged by the fine noise). Behind it the picture shows,
     // on it rides a band of brighter surface, and the edge keeps a strip of light as wide as the strands are thick.
+    // The spread field moves the front by up to SPREAD_FRONT x reveal either way; at full reveal the lagging side still clears the corners.
     float shown = 0.0;
     float band = 0.0;
     if (uImage > 0.0) {
-      float ahead = uReveal * 1.75 + 0.06 * fine - length((pr - uBox.xy) / max(uBox.zw, vec2(1.0)));
+      float ahead = uReveal * (1.75 + ${SPREAD_FRONT.toFixed(3)} * (1.0 + uneven)) + 0.06 * fine - spreadAt;
       float keep = uStrandWidth > 0.0 ? smoothstep(0.35, 1.0, -base / (uUnit * 12.0 * uStrandWidth)) : 1.0;
       shown = smoothstep(0.0, 0.25, ahead) * keep;
       float crest = (ahead - 0.08) / 0.09;
@@ -746,7 +805,9 @@ void main() {
       // Straight-alpha sRGB texels go under the light as premultiplied colour, untinted. The liquid wobble dies with the strands.
       vec2 uv = (pr + flow * uUnit * 2.0 * uStrandWidth - uImageBox.xy) / (2.0 * uImageBox.zw) + 0.5;
       vec4 texel = textureLod(tImage, uv, uImageLod);
-      float a = texel.a * shown * inside;
+      // A bulge past the picture's edge shows light, not stretched edge texels. Inside the picture (and so at the handoff) this is 1.
+      vec2 past = max(-uv, uv - 1.0) * 2.0 * uImageBox.zw;
+      float a = texel.a * shown * inside * clamp(1.0 - max(past.x, past.y) / uUnit, 0.0, 1.0);
       color += texel.rgb * a * (1.0 - alpha);
       alpha += a * (1.0 - alpha);
     }
@@ -790,7 +851,7 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
   useImperativeHandle(ref, () => ({
     beginBoundary: (next) => engineRef.current?.beginBoundary(next) ?? false,
     setBoundaryTarget: (next) => engineRef.current?.setBoundaryTarget(next),
-    seekBoundary: (progress, fill, reveal, strands) => engineRef.current?.seekBoundary(progress, fill, reveal, strands),
+    seekBoundary: (progress, fill, reveal, strands, ragged) => engineRef.current?.seekBoundary(progress, fill, reveal, strands, ragged),
     endBoundary: () => engineRef.current?.endBoundary()
   }), []);
   const settingsRef = useRef<Settings | null>(null);
@@ -992,6 +1053,8 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
       uImageLod: { value: 0 },
       uReveal: { value: 0 },
       uStrandWidth: { value: 1 },
+      uRag: { value: 0 },
+      uRagSeed: { value: [0, 0] },
       uBox: { value: [0, 0, 0, 0] },
       uBoxRadius: { value: 0 },
       uOrigin: { value: [0, 0] }
@@ -1210,6 +1273,8 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
         uniforms.uSurface.value = boundary ? boundary.fill : 0;
         uniforms.uReveal.value = boundary ? boundary.reveal : 0;
         uniforms.uStrandWidth.value = boundary ? boundary.strands : 1;
+        uniforms.uRag.value = boundary ? boundary.ragged : 0;
+        if (boundary) uniforms.uRagSeed.value = boundary.seed;
         const picture = boundary?.target.image;
         const src = picture ? picture.source.currentSrc || picture.source.src : '';
         let ready = !!picture && picture.source.complete && picture.source.naturalWidth > 0 && src !== photoBroken;
@@ -1334,7 +1399,7 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
           // Freeze what is on screen now, including a half-finished morph, as the start shape.
           const from = morph < 1 ? slots[1 - target].shape : null;
           const near = place(to, s);
-          boundary = { progress: 0, fill: 0, reveal: 0, strands: 1, target: next, room: [0, 0], near: recentre(near, -1), far: recentre(from ? place(from, s) : near, -1), overflow: container.style.overflow };
+          boundary = { progress: 0, fill: 0, reveal: 0, strands: 1, ragged: 0, seed: [Math.random() * 64, Math.random() * 64], target: next, room: [0, 0], near: recentre(near, -1), far: recentre(from ? place(from, s) : near, -1), overflow: container.style.overflow };
           sparks.length = 0;
           container.style.overflow = 'visible';
         }
@@ -1342,13 +1407,14 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
         return true;
       },
       setBoundaryTarget: aim,
-      seekBoundary: (progress, fill = 0, reveal = 0, strands = 1) => {
+      seekBoundary: (progress, fill = 0, reveal = 0, strands = 1, ragged = 0) => {
         if (!boundary) return;
         const unit = (value: number) => Math.min(1, Math.max(0, value));
         boundary.progress = unit(progress);
         boundary.fill = unit(fill);
         boundary.reveal = unit(reveal);
         boundary.strands = unit(strands);
+        boundary.ragged = unit(ragged);
         paint();
       },
       endBoundary: () => {

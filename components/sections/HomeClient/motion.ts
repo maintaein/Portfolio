@@ -32,9 +32,12 @@ const BALL_GAP = 16;
 export const LOGO_SECONDS = 1.5;
 // About 로고에서 프리뷰로 가는 구간(진행도 1–2)만의 시간. 사용자 요청(2026-10-23)으로 1.5초에서 40% 느리게 했다. 드문 설명 전환이라 길다.
 export const PREVIEW_SECONDS = 2.1;
-// 진행도 t까지 오는 데 드는 시간(Hero 0에서). 1을 지나는 한 트윈도 구간마다 제 빠르기로 돈다.
-const secondsAt = (t: number) => LOGO_SECONDS * Math.min(t, 1) + PREVIEW_SECONDS * Math.max(t - 1, 0);
-const progressAt = (s: number) => s <= LOGO_SECONDS ? s / LOGO_SECONDS : 1 + (s - LOGO_SECONDS) / PREVIEW_SECONDS;
+// 같은 구간을 거꾸로(프리뷰 그림 → 움직이는 로고) 도는 시간. 사용자 요청(2026-10-24)으로 되돌기만 빠르다. 떠나는 쪽이라 설명할 것이 없다.
+export const PREVIEW_RETURN_SECONDS = 1.4;
+// 진행도 t까지 오는 데 드는 시간(Hero 0에서). 1을 지나는 한 트윈도 구간마다 제 빠르기로 돈다. 진행도를 내려가는 트윈(back)은 프리뷰 구간을 되돌기 빠르기로 돈다.
+const previewSeconds = (back: boolean) => back ? PREVIEW_RETURN_SECONDS : PREVIEW_SECONDS;
+const secondsAt = (t: number, back: boolean) => LOGO_SECONDS * Math.min(t, 1) + previewSeconds(back) * Math.max(t - 1, 0);
+const progressAt = (s: number, back: boolean) => s <= LOGO_SECONDS ? s / LOGO_SECONDS : 1 + (s - LOGO_SECONDS) / previewSeconds(back);
 // 로고는 About 본문이 나타나기 시작하는 스크롤 R보다 화면 높이의 이만큼 먼저 떠나 본문보다 먼저 내려앉는다.
 // 1.2초 때의 .12에서 비행 시간과 같은 비율로 늘렸다. 앞섬 / 비행 시간(이보다 느리게 굴리면 R 전에 내려앉는 빠르기)이 같다.
 const LOGO_LEAD = .15;
@@ -43,6 +46,9 @@ const LOGO_LEAD = .15;
 const LOGO_BACK = 24;
 // Hero로 돌아선 로고는 마지막으로 올라온 자리에서 이만큼 내려와야 다시 난다(px). 경로 지점에서 1–2px 떨어도 Hero와 About을 오가지 않는다.
 const LOGO_SLACK = 4;
+// Projects에서 위로 갈 때 되돌기가 시작하는 선(header 아래 화면의 비율). Projects 위끝이 이 선 아래로 내려가면 돈다.
+// 사용자 요청(2026-10-24)으로 경로의 읽기선(.4)보다 덜 올라와도 돈다. 경로와 nav 표시는 그대로 읽기선을 쓴다.
+const RETURN_LINE_RATIO = .15;
 // 볼이 접혀 드는 작은 고리의 지름(Hero 앵커 비율). 이 지름에서 Electric 원이 넘겨받는다.
 export const CORE = .22;
 // 원이 펼쳐지는 지름(About 앵커 비율). ElectricLogo가 로고를 그리는 크기(scale .7)와 같다.
@@ -88,7 +94,9 @@ export function logoPhases(p: number) {
 // 빛의 면(사용자 선택 A 2026-10-23): 옮겨 가는 동안 기호 속이 빛으로 차(채움 0–.2) 면으로 퍼지고, 다 퍼진 자리에서
 // 빛(로고 캔버스와 그 테두리 전기)이 가라앉는 만큼 미디어·캡션이 떠오른다(.65–.9). 둘은 한 곡선의 보수라 빈 프레임도 겹쳐 밝은 프레임도 없다.
 // 그림 안의 면(사용자 선택 (가) + (i) 2026-10-23): 프리뷰 그림이 받아져 있으면 처음부터 그 그림이 모양 안에서 가운데부터 드러난다(앞선 0–.8,
-// 10%에 이미 3분의 1). 테두리 전기는 굵기째 가늘어져 사라지고(.6–.9) 면은 정착(.82–.94)에서 프리뷰 상자에 들어앉는다.
+// 10%에 이미 3분의 1). 테두리 전기는 굵기째 가늘어져 사라지고(.3–.6, Task 5에서 .6–.9보다 앞당김) 면은 정착(.82–.94)에서 프리뷰 상자에 들어앉는다.
+// 방향마다 고르지 않은 퍼짐(Task 5, 사용자 요청 2026-10-24): 앞선과 외곽선이 같은 잡음 장을 따라 어떤 쪽은 앞서고 어떤 쪽은 처진다(ElectricLogo).
+// 외곽선의 일그러짐(ragged)은 .45까지 다 실리고 정착이 시작하는 .82에 0이라 정착한 상자가 정확하다.
 // .94–1은 넘김이다(Task 4 수정 1): 제자리에 멈춘 GL 그림 아래 DOM 틀(그림·캡션)이 다 서고 캔버스가 빠진다. 둘이 같은 자리라 같은 그림이 차츰
 // 또렷해지고 캡션이 떠오른다. 한 프레임 바꿈은 DPR이 1.25를 넘으면 흐린 GL 그림이 또렷한 DOM 그림으로 툭 바뀌었다. 위 교차(media·logo)는 그림이 없는 방문의 몫이다.
 export function previewPhases(q: number) {
@@ -101,7 +109,8 @@ export function previewPhases(q: number) {
     face: inOut(span(.1, .65, q)),
     corner: inOut(span(.25, .65, q)),
     reveal: out(span(0, .8, q)),
-    strands: 1 - smooth(span(.6, .9, q)),
+    strands: 1 - smooth(span(.3, .6, q)),
+    ragged: 1 - smooth(span(.45, .82, q)),
     media,
     list: smooth(span(.7, .9, q)),
     settle: inOut(span(.82, .94, q)),
@@ -150,9 +159,9 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     && !!projectsSection?.contains(target) && !!target.closest('button, a, input, select, textarea, [tabindex]:not([tabindex="-1"])');
   const list = projectsSection?.querySelector<HTMLElement>('[data-part="index"]') ?? null;
   // Hero 이름 글자 크기(0이면 CSS 값), nav 자리(화면 좌표), 로고가 떠나는 스크롤 지점, 두 로고 앵커(문서 좌표).
-  // aboutTop·line: useSectionNav가 About을 고르는 읽기선(About 위끝 <= 스크롤 + 읽기선).
+  // aboutTop·line: useSectionNav가 About을 고르는 읽기선(About 위끝 <= 스크롤 + 읽기선). back: Projects에서 되도는 선(RETURN_LINE_RATIO).
   // previewAt·projectsTop: 프리뷰로 떠나는 지점과 Projects 위끝(경로 판정), preview·radius: 프리뷰 상자와 모서리.
-  let m = { nameSize: 0, nav: EMPTY, logoAt: Infinity, aboutTop: Infinity, line: 0, hero: EMPTY, about: EMPTY, origin: EMPTY,
+  let m = { nameSize: 0, nav: EMPTY, logoAt: Infinity, aboutTop: Infinity, line: 0, back: 0, hero: EMPTY, about: EMPTY, origin: EMPTY,
     previewAt: Infinity, projectsTop: Infinity, preview: EMPTY, radius: 0 };
   let side: 'hero' | 'nav' = 'hero';
   let flip: gsap.core.Tween | null = null;
@@ -211,13 +220,16 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     const projectsLock = projectsTop - (projects ? parseFloat(getComputedStyle(projects).scrollMarginTop) || header.offsetHeight : 0);
     // 프리뷰는 소수점까지 잰다. 도착에서 GL 그림이 DOM 그림과 화소째 겹쳐야 한다(정수 offset으로는 반 화소 어긋났다). 프리뷰 조상에는 transform이 없다.
     const preview = previewAnchor ? rectBox(previewAnchor, window.scrollY) : EMPTY;
+    const previewAt = preview.w ? Math.min(projectsLock - 1, Math.max(lock + 1, projectsLock - window.innerHeight / 2 - LOGO_LEAD * window.innerHeight)) : Infinity;
+    const headerHeight = header.getBoundingClientRect().height;
     m = {
       nameSize: size, nav: rectBox(header.querySelector('[data-motion-anchor="nav-name"]')),
       logoAt: Math.min(lock - 1, Math.max(NAME_DOWN, reveal - LOGO_LEAD * window.innerHeight)),
-      aboutTop, line: readingLineY(window.innerHeight, header.getBoundingClientRect().height),
+      aboutTop, line: readingLineY(window.innerHeight, headerHeight),
+      // 되돌기 선. 되돌기 스크롤(Projects 위끝 - 선)은 떠나는 지점보다 LOGO_SLACK 넘게 위에 묶는다. 둘이 한 자리에서 다투지 않는다.
+      back: Math.min(readingLineY(window.innerHeight, headerHeight, RETURN_LINE_RATIO), projectsTop - previewAt - LOGO_SLACK),
       hero: heroObject, about: target, origin: layoutBox(logoHost.offsetParent),
-      previewAt: preview.w ? Math.min(projectsLock - 1, Math.max(lock + 1, projectsLock - window.innerHeight / 2 - LOGO_LEAD * window.innerHeight)) : Infinity,
-      projectsTop, preview, radius: frame ? parseFloat(getComputedStyle(frame).borderTopLeftRadius) || 0 : 0,
+      previewAt, projectsTop, preview, radius: frame ? parseFloat(getComputedStyle(frame).borderTopLeftRadius) || 0 : 0,
     };
     if (m.about.w) {
       logoHost.style.width = `${m.about.w}px`;
@@ -318,7 +330,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     // 그림은 처음부터 정착할 상자(프리뷰 × 지금 배율)에 DOM과 같은 cover로 깔리고 모양이 그 창이다. 끝에서 DOM 그림과 같은 자리다.
     const aimBox = () => {
       logo!.setBoundaryTarget(photo ? { ...box, image: { source: photo, width: preview.w * over, height: preview.h * over } } : box);
-      logo!.seekBoundary(view.shell, view.fill, view.reveal, view.strands);
+      logo!.seekBoundary(view.shell, view.fill, view.reveal, view.strands, view.ragged);
     };
     // 지금 구간의 것이 아닌 경계를 먼저 닫는다. ElectricLogo는 경계를 잡은 채 다시 begin하면 새로 잡지 않고 다시 겨누기만 해서,
     // 한 트윈이 About을 지나 반대쪽 구간으로 넘어갈 때 뒤에 닫으면 새 구간의 경계까지 지웠다(Task 1 리뷰 I1).
@@ -389,11 +401,13 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     else {
       // 되돌아갈 때는 지난 진행도만큼의 시간만 쓴다. 진행도는 구간마다 시간에 선형이고 구간마다 제 곡선을 쓴다(logoPhases·previewPhases).
       // 트윈은 시간 축(secondsAt)을 고르게 돌고 진행도로 되옮긴다. 끝은 ease가 정확히 1이라 target 그대로다.
+      // 시간 축은 이 트윈의 방향 것이다. 도중에 돌아서면 지금 진행도에서 새 방향의 빠르기로 다시 재므로 진행도가 뛰지 않는다.
       const from = pose.t;
-      const [start, end] = [secondsAt(from), secondsAt(target)];
+      const back = target < from;
+      const [start, end] = [secondsAt(from, back), secondsAt(target, back)];
       travel = gsap.to(pose, {
         t: target, duration: Math.abs(end - start), onUpdate: renderLogo,
-        ease: (p: number) => p >= 1 ? 1 : (progressAt(start + (end - start) * p) - from) / (target - from),
+        ease: (p: number) => p >= 1 ? 1 : (progressAt(start + (end - start) * p, back) - from) / (target - from),
         onComplete: () => { travel = null; renderLogo(); },
       });
     }
@@ -406,25 +420,27 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   // 그 사이에서는 아래로 움직이면 About(첫 하강처럼 R 전에 내려앉는다), 경로 지점을 넘어 올라왔으면 Hero, 그 밖에는 지금 쪽이다.
   // 경로가 About이면 언제나 About이다. 부르는 곳 모두가 지난 스크롤 갱신을 원해 여기서 lastY를 바꾼다.
   // 다시 날기(아래로 움직임, 경로 About)는 LOGO_SLACK만큼 늦춘다. 되돌기는 경로 지점 그대로다.
-  // Projects(2)도 같은 규칙이다. 경로가 Projects에서 About으로 바뀌는 프레임에 되돌고, 그 아래 띠에서 내려가면 다시 난다.
+  // Projects(2)도 같은 규칙이되 선이 되돌기 선(m.back)이다(Task 5). Projects 위끝이 그 선 아래로 내려가는 프레임에 되돌고, 그 아래 띠에서 내려가면 다시 난다.
   const logoSide = () => {
     const y = window.scrollY;
     const was = lastY;
     lastY = y;
     if (y < was) lowY = y;
     const routed = (top: number, at: number) => top <= at + m.line;
-    if (y >= m.previewAt && (routed(m.projectsTop, y - LOGO_SLACK) || y >= lowY + LOGO_SLACK)) return 2;
-    // 포커스가 Projects 컨트롤에 있는 동안은 경로가 Projects이거나, 포커스가 선 자리(그 뒤 가장 아래)에서 LOGO_SLACK 넘게 위로 굴리지 않았으면 머문다.
+    const held = (at: number) => m.projectsTop <= at + m.back;
+    if (y >= m.previewAt && (held(y - LOGO_SLACK) || y >= lowY + LOGO_SLACK)) return 2;
+    // 포커스가 Projects 컨트롤에 있는 동안은 Projects 위끝이 되돌기 선 위이거나, 포커스가 선 자리(그 뒤 가장 아래)에서 LOGO_SLACK 넘게 위로 굴리지 않았으면 머문다.
+    // 포커스가 없을 때와 같은 지점에서 돈다. 경로 지점까지 머물면 포커스 유무로 되돌기 자리가 달랐다.
     // Tab의 scroll-into-view는 옛 문턱(지점 - 24) 아래에 설 수 있다(재리뷰 N2). 풀림은 넘는 한 프레임이 아니라 상태로 본다(재리뷰 N4).
     // 지난 스크롤도 내려간 자리로 친다. 깊은 데서 한 번에 뛰어올라도 그 프레임에 놓는다(재리뷰 3 N5).
     if (goal === 2 && focusedControl()) {
-      if (routed(m.projectsTop, y) || y >= Math.max(holdFrom, was) - LOGO_SLACK) {
+      if (held(y) || y >= Math.max(holdFrom, was) - LOGO_SLACK) {
         holdFrom = Math.max(holdFrom, y);
         return 2;
       }
       // 아래 규칙은 언제나 Projects가 아니다(clamp는 1까지). 다시 숨는 컨트롤에 보이지 않는 포커스를 남기지 않는다. 다음 Tab은 그 자리에서 이어진다.
       (document.activeElement as HTMLElement).blur();
-    } else if (goal === 2 && y > m.previewAt - LOGO_BACK && !(routed(m.projectsTop, was) && !routed(m.projectsTop, y))) return 2;
+    } else if (goal === 2 && y > m.previewAt - LOGO_BACK && !(held(was) && !held(y))) return 2;
     if (y >= m.logoAt && (routed(m.aboutTop, y - LOGO_SLACK) || y >= lowY + LOGO_SLACK)) return 1;
     if (y <= m.logoAt - LOGO_BACK || (routed(m.aboutTop, was) && !routed(m.aboutTop, y))) return 0;
     return clamp(goal);

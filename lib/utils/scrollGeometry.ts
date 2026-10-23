@@ -7,10 +7,10 @@ function nonnegativeFinite(value: number): number {
   return Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
-export function readingLineY(viewportHeight: number, headerHeight: number): number {
+export function readingLineY(viewportHeight: number, headerHeight: number, ratio = READING_LINE_RATIO): number {
   const viewport = nonnegativeFinite(viewportHeight);
   const header = Math.min(viewport, nonnegativeFinite(headerHeight));
-  return header + (viewport - header) * READING_LINE_RATIO;
+  return header + (viewport - header) * ratio;
 }
 
 export function resolveCurrentSection(input: {

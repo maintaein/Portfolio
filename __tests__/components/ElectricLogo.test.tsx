@@ -544,3 +544,29 @@ it('deletes the picture texture on unmount', () => {
   unmount();
   expect(gpu.deleted).toBe(deleted + 1);
 });
+
+// M4 Task 5 (user request 2026-10-24): the outline advances unevenly by direction while it spreads. The displacement rides on the
+// seek (clamped, default 0) and is 0 outside a boundary. Each boundary gets its own noise offset, so the pattern differs per visit.
+it('a boundary seek carries the outline displacement, clamped; it is 0 without it and outside a boundary, and each boundary gets a new noise offset', () => {
+  const { ref } = mount('rag-a.svg');
+  expect(last().uRag).toBe(0);
+  ref.current!.beginBoundary(box);
+  for (const [rag, expected] of [[0.5, 0.5], [2, 1], [-1, 0], [1, 1]]) {
+    ref.current!.seekBoundary(0.6, 1, 0.5, 0.5, rag);
+    tick();
+    expect(last().uRag).toBe(expected);
+  }
+  const first = last().uRagSeed;
+  ref.current!.seekBoundary(0.6, 1, 0.5, 0.5);
+  tick();
+  expect(last().uRag).toBe(0);
+  // The offset holds for the whole boundary.
+  expect(last().uRagSeed).toEqual(first);
+  ref.current!.endBoundary();
+  tick();
+  expect(last().uRag).toBe(0);
+  ref.current!.beginBoundary(box);
+  ref.current!.seekBoundary(0.6, 1, 0.5, 0.5, 1);
+  tick();
+  expect(last().uRagSeed).not.toEqual(first);
+});

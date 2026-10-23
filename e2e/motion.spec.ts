@@ -327,8 +327,8 @@ test.describe('Native motion activity', () => {
     // Hero에 내려앉은 로고는 R 아래에서도 본문을 다시 열지 않는다.
     await expect(entered).toHaveAttribute('data-entered', 'false');
   });
-  // M4 Task 1. About 로고가 지금 고른 프로젝트 프리뷰로 한 번 재생해 내려앉고, 위로 경로가 About으로 바뀌는 스크롤에서 되돌아간다.
-  test('About→Projects 경계는 지점에서 로고를 프리뷰로 옮겨 내용을 그 뒤에 보이고, 경로가 About으로 바뀌면 되돌린다', async ({ page }) => {
+  // M4 Task 1. About 로고가 지금 고른 프로젝트 프리뷰로 한 번 재생해 내려앉고, 위로 Projects 위끝이 되돌기 선(Task 5) 아래로 내려가는 스크롤에서 되돌아간다.
+  test('About→Projects 경계는 지점에서 로고를 프리뷰로 옮겨 내용을 그 뒤에 보이고, Projects 위끝이 되돌기 선 아래로 내려가면 되돌린다', async ({ page }) => {
     // 쉬는 자리마다 소프트웨어 GL 프레임을 기다린다. 성공 조건이 아니라 실패 상한이다.
     test.setTimeout(240_000);
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -353,9 +353,12 @@ test.describe('Native motion activity', () => {
       return {
         start: Math.min(projectsLock - 1, Math.max(aboutLock + 1, projectsLock - innerHeight / 2 - .15 * innerHeight)),
         route: top('[data-section="projects"]') - (header + (innerHeight - header) * .4),
+        // Task 5: 되돌기 선은 header 아래 화면의 15%다. 경로(40%)보다 덜 올라와도 돈다.
+        back: top('[data-section="projects"]') - (header + (innerHeight - header) * .15),
       };
     });
     expect(points.route).toBeGreaterThan(points.start);
+    expect(points.back).toBeGreaterThan(points.route);
     // 매 프레임 주인과 내용 불투명도를 같이 읽는다. 날기 전에는 내용이 숨어 있고, 날기 시작한 프레임에도 숨어 있다.
     const gate = page.evaluate(() => new Promise<{ flying: number; early: number; firstFlying: number }>(resolve => {
       const counts = { flying: 0, early: 0, firstFlying: -1 };
@@ -384,23 +387,24 @@ test.describe('Native motion activity', () => {
     const boxes = await page.evaluate(() => [document.querySelector('[data-motion-anchor="projects-preview"]')!, document.querySelector('[data-part="preview-open"]')!].map(el => el.getBoundingClientRect().toJSON()));
     expect(boxes[1]).toEqual(boxes[0]);
 
-    // 경로가 Projects인 동안은 머물고, About으로 바뀌는 스크롤에서 되돌기가 시작한다. 내용은 되돌기 시작보다 먼저 사라지지 않는다.
-    await page.evaluate(y => window.scrollTo({ top: y, behavior: 'instant' }), Math.ceil(points.route) + 2);
+    // Projects 위끝이 되돌기 선 위인 동안은 머물고, 그 아래로 내려가는 스크롤에서 되돌기가 시작한다. 내용은 되돌기 시작보다 먼저 사라지지 않는다.
+    // 경로와 nav 표시는 그대로라 되돌기가 시작한 자리에서도 Projects다.
+    await page.evaluate(y => window.scrollTo({ top: y, behavior: 'instant' }), Math.ceil(points.back) + 2);
     await expectActive(page, 'projects');
     await expect(owner).toHaveAttribute('data-logo-owner', 'projects');
     // 주인 표시는 React가 다음 커밋에 쓰고 불투명도는 경계가 바로 쓴다. 그래서 "되돌기 시작 전"을 주인이 아니라 스크롤로 잰다.
-    const leave = page.evaluate(route => new Promise<number>(resolve => {
+    const leave = page.evaluate(back => new Promise<number>(resolve => {
       let early = 0;
       const read = () => {
-        if (scrollY >= route && Number(getComputedStyle(document.querySelector('#projects [data-part="index"]')!).opacity) < 1) early++;
+        if (scrollY >= back && Number(getComputedStyle(document.querySelector('#projects [data-part="index"]')!).opacity) < 1) early++;
         if (document.querySelector('.portfolio-document')!.getAttribute('data-logo-owner') !== 'projects') return resolve(early);
         requestAnimationFrame(read);
       };
       read();
-    }), points.route);
-    await page.evaluate(y => window.scrollTo({ top: y, behavior: 'instant' }), Math.floor(points.route) - 2);
+    }), points.back);
+    await page.evaluate(y => window.scrollTo({ top: y, behavior: 'instant' }), Math.floor(points.back) - 2);
     expect(await leave).toBe(0);
-    await expectActive(page, 'about');
+    await expectActive(page, 'projects');
     await page.evaluate(() => new Promise<void>(resolve => {
       const read = () => {
         if (document.querySelector('.portfolio-document')!.getAttribute('data-logo-owner') !== 'preview') resolve();
