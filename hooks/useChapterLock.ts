@@ -9,7 +9,7 @@ const WHEEL_PAUSE_MS = 56;
 const WHEEL_FRAME_MS = 20;
 
 // 공유 로고와 이 섹션의 관계. flying: 이 섹션으로 날아오는 중(잠금을 미룬다), landed: 이 섹션에 내려앉았다(미룬 잠금을 건다),
-// away: 다른 자리에 있다(미룬 잠금을 버린다. 잠금 자체는 막지 않는다).
+// away: 다른 자리에 있다(미룬 잠금을 버린다. awayDefers가 없으면 잠금 자체는 막지 않는다).
 export type ChapterLogo = 'flying' | 'landed' | 'away';
 
 export interface ChapterLockOptions {
@@ -19,6 +19,8 @@ export interface ChapterLockOptions {
   current: () => number;
   choose: (index: number) => void;
   logo: ChapterLogo;
+  // away도 새 잠금을 미룬다. 로고가 다른 자리에서 이 섹션으로 날아올 일이 남아 있는 섹션(Projects)의 것이다.
+  awayDefers?: boolean;
   // 한 걸음 뒤 다음 걸음까지의 최소 간격. 섹션의 전환 시간이다.
   stepMs: number;
   disabled: boolean;
@@ -35,7 +37,7 @@ export interface ChapterLockOptions {
 // 오면 문서 스크롤로 돌려준다. 잠금은 섹션 위에서만 capture wheel·touchmove를
 // 막는다. 시안에 있던 "마운트 때 섹션 아래면 섹션으로 되돌린다"는 직접 해시와
 // 명시적 이동을 끌어오므로 옮기지 않았다. About에서 Projects와 같이 쓰려고 꺼냈다(M4 Task 7).
-export function useChapterLock({ ref, count, current, choose, logo, stepMs, disabled: forced, blocked, fits, onScroll }: ChapterLockOptions) {
+export function useChapterLock({ ref, count, current, choose, logo, awayDefers = false, stepMs, disabled: forced, blocked, fits, onScroll }: ChapterLockOptions) {
   const [locked, setLocked] = useState(false);
   const [plain, setPlain] = useState(false);
   // 렌더마다 바뀌는 값은 잠금을 다시 세우지 않고 최신 것을 읽는다.
@@ -44,7 +46,7 @@ export function useChapterLock({ ref, count, current, choose, logo, stepMs, disa
   const selectRef = useRef<(index: number) => void>(() => {});
   const releaseRef = useRef(() => {});
   const enterRef = useRef<(index?: number) => void>(() => {});
-  const landedRef = useRef(logo !== 'flying');
+  const landedRef = useRef(logo === 'landed' || (logo === 'away' && !awayDefers));
   const landRef = useRef<(apply: boolean) => void>(() => {});
   const offsetRef = useRef<() => number | null>(() => null);
   // 창·탭에 돌아오면 브라우저가 떠날 때 포커스가 있던 요소에 focus를 다시 보낸다(relatedTarget 없음).
@@ -57,9 +59,9 @@ export function useChapterLock({ ref, count, current, choose, logo, stepMs, disa
     return () => window.removeEventListener('blur', leave);
   }, []);
   useEffect(() => {
-    landedRef.current = logo !== 'flying';
-    if (landedRef.current) landRef.current(logo === 'landed');
-  }, [logo]);
+    landedRef.current = logo === 'landed' || (logo === 'away' && !awayDefers);
+    if (logo !== 'flying') landRef.current(logo === 'landed');
+  }, [logo, awayDefers]);
 
   useEffect(() => {
     const element = ref.current;
@@ -240,9 +242,12 @@ export function useChapterLock({ ref, count, current, choose, logo, stepMs, disa
       held = null;
       if (apply && index !== null && !disabled && !blocked && phase !== 'locked' && Math.abs(window.scrollY - start) < window.innerHeight / 2) lock(index, performance.now());
     };
+    // 미룬 잠금을 버릴 때도 위치로 앞뒤를 정한다. 미룬 잠금은 잠금 자리를 지나친 채 앞(before)을 남겨, 같은 stroke의 늦은 wheel이
+    // 진입으로 읽혀 처음 index로 잠그고 끌어왔다(Projects의 날아오는 동안 누른 이름, Task 7 수정 1). 미룬 잠금은 로고가 날 때만 생긴다.
     releaseRef.current = () => {
+      const dropped = held !== null;
       closeOvershoot(); pendingGesture = false; held = null;
-      if (phase === 'locked') setPhase(window.scrollY > start ? 'after' : 'before');
+      if (phase === 'locked' || dropped) setPhase(window.scrollY > start ? 'after' : 'before');
     };
     offsetRef.current = () => disabled ? null : window.scrollY - start;
     measure();
@@ -251,6 +256,9 @@ export function useChapterLock({ ref, count, current, choose, logo, stepMs, disa
     // 위쪽 섹션 높이가 바뀌어도 이 섹션의 문서 위치가 움직이므로 문서 전체를 본다.
     resize?.observe(element);
     resize?.observe(document.documentElement);
+    // 글꼴이 바뀌면 줄 높이가 바뀌어 fits가 달라질 수 있다. 관찰하는 상자의 크기는 그대로일 수 있어 따로 잰다.
+    let alive = true;
+    document.fonts?.ready.then(() => { if (alive) measure(); });
     window.addEventListener('wheel', wheel, { passive: true, capture: true });
     window.addEventListener('keydown', key);
     window.addEventListener('touchstart', touchStart, { passive: true });
@@ -260,6 +268,7 @@ export function useChapterLock({ ref, count, current, choose, logo, stepMs, disa
     window.addEventListener('resize', measure);
     short?.addEventListener('change', measure);
     return () => {
+      alive = false;
       resize?.disconnect();
       window.removeEventListener('wheel', lockedWheel, true);
       window.removeEventListener('touchmove', lockedTouchMove, true);

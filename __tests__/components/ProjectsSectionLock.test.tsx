@@ -227,6 +227,66 @@ describe('ProjectsSection 읽기 잠금 (M4 Task 7)', () => {
     expect(window.scrollTo).not.toHaveBeenCalled();
   });
 
+  // Task 7 리뷰 B1. 날아오는 동안 잠금 자리를 지나쳐 미룬 잠금이 있어도, 그사이 누른 이름은 착지 때 첫 프로젝트로 되돌아가지 않고 페이지도 옮기지 않는다.
+  it('날아오는 동안 미룬 잠금이 있어도 그사이 누른 이름은 착지 뒤에도 그대로이고 페이지를 끌어오지 않는다', () => {
+    const { update } = mount(START - 100, { logoOwner: 'preview' });
+    wheel(120, 20_000);
+    expect(isLocked()).toBe(false);
+    fireEvent.click(name(3));
+    update({ logoOwner: 'projects' });
+    expect(selected()).toBe(3);
+    expect(window.scrollTo).not.toHaveBeenCalled();
+  });
+
+  // 헤드 실측(fix1): 빠른 노치는 잠금 자리를 지나치고, 누른 뒤에도 남은 노치가 늦게 온다. 그 wheel이 진입으로 읽혀 첫 프로젝트로 잠그면 안 된다.
+  it('날아오는 동안 잠금 자리를 지나쳐 누른 이름은 착지 뒤에 늦게 온 같은 stroke의 wheel에도 되돌아가지 않는다', () => {
+    const { update } = mount(START - 100, { logoOwner: 'preview' });
+    wheel(120, 20_000);
+    scrollAt(START + 270, 20_050);
+    fireEvent.click(name(3));
+    update({ logoOwner: 'projects' });
+    wheel(125, 20_120);
+    scrollAt(START + 300, 20_150);
+    expect(selected()).toBe(3);
+    expect(isLocked()).toBe(false);
+    expect(window.scrollTo).not.toHaveBeenCalled();
+  });
+
+  // Task 7 리뷰 B2. 키 한 번은 로고가 아직 About(또는 Hero와 오가는 중)에 있을 때도 잠금 자리에 닿는다. 그때는 잠그지 않고 기다렸다가
+  // 로고가 프리뷰에 내려앉을 때 잠근다. 날아가는 동안 보이지 않는 목록을 넘기지 않는다.
+  it.each(['about', 'boundary', 'hero'] as const)('로고가 %s에 있을 때 키로 들어오면 잠그지도 넘기지도 않고 프리뷰에 내려앉을 때 첫 프로젝트로 잠근다', (owner) => {
+    const { update } = mount(START - 700, { logoOwner: owner });
+    expect(key('ArrowDown', 20_000).defaultPrevented).toBe(false);
+    expect(isLocked()).toBe(false);
+    update({ logoOwner: 'preview' });
+    documentY = START - 100;
+    expect(key('PageDown', 20_000 + PROJECT_STEP_MS + 100).defaultPrevented).toBe(false);
+    expect(key(' ', 20_000 + 2 * PROJECT_STEP_MS + 200).defaultPrevented).toBe(false);
+    expect(isLocked()).toBe(false);
+    expect(selected()).toBe(0);
+    expect(window.scrollTo).not.toHaveBeenCalled();
+    update({ logoOwner: 'projects' });
+    expect(isLocked()).toBe(true);
+    expect(window.scrollTo).toHaveBeenLastCalledWith({ top: START, behavior: 'instant' });
+    expect(selected()).toBe(0);
+  });
+
+  // Task 7 리뷰 N1. 글꼴이 바뀌면 줄 높이가 바뀌어 휠 자리가 달라진다. 섹션 상자가 그대로여도 다시 잰다.
+  it('글꼴이 준비되면 맞는지 다시 재 잠금을 켠다', async () => {
+    let ready!: () => void;
+    Object.defineProperty(document, 'fonts', { configurable: true, value: { ready: new Promise<void>(resolve => { ready = resolve; }) } });
+    try {
+      listBottom = 760;
+      mount(START);
+      expect(isLocked()).toBe(false);
+      listBottom = 700;
+      await act(async () => { ready(); await Promise.resolve(); });
+      expect(isLocked()).toBe(true);
+    } finally {
+      delete (document as { fonts?: unknown }).fonts;
+    }
+  });
+
   it('Tab으로 이름 목록에 닿으면 그 이름의 프로젝트로 잠근다', async () => {
     mount(START - 600);
     for (let i = 0; i < 4 && !document.activeElement?.hasAttribute('data-name'); i += 1) await userEvent.tab();
