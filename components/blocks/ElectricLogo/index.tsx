@@ -26,6 +26,9 @@ const SPREAD_FRONT = 1.0;
 const SPREAD_EDGE = 14;
 // Drift of the field per shader time unit (2.5 per second), so the pattern moves slowly during the leg.
 const SPREAD_DRIFT = 0.05;
+// Cyan energy in a picture boundary (M4 Task 6, user request 2026-10-24): the band on the picture front, the light sheet ahead of it, the edge strip
+// and the rim. 0 leaves the picture as the only fill; 1 restores the Task 5 look. The light-only fallback is unaffected.
+const PICTURE_ENERGY = 0;
 const MORPH_DURATION = ELECTRIC_LOGO_MORPH_SECONDS;
 const EMPTY_PRELOAD_SRCS: string[] = [];
 
@@ -486,6 +489,7 @@ uniform float uBoundary;
 uniform float uSurface;
 uniform sampler2D tImage;
 uniform float uImage;
+uniform float uPictureEnergy;
 uniform vec4 uImageBox;
 uniform float uImageLod;
 uniform float uReveal;
@@ -792,15 +796,20 @@ void main() {
     float band = 0.0;
     if (uImage > 0.0) {
       float ahead = uReveal * (1.75 + ${SPREAD_FRONT.toFixed(3)} * (1.0 + uneven)) + 0.06 * fine - spreadAt;
-      float keep = uStrandWidth > 0.0 ? smoothstep(0.35, 1.0, -base / (uUnit * 12.0 * uStrandWidth)) : 1.0;
+      // uPictureEnergy scales the band, the sheet outside the front, the strip and the rim. At 0 the picture is the only fill and the strip is gone.
+      float keep = uPictureEnergy > 0.0 && uStrandWidth > 0.0 ? mix(1.0, smoothstep(0.35, 1.0, -base / (uUnit * 12.0 * uStrandWidth)), uPictureEnergy) : 1.0;
       shown = smoothstep(0.0, 0.25, ahead) * keep;
-      float crest = (ahead - 0.08) / 0.09;
-      band = exp(-crest * crest);
-      sheet = sheet * (1.0 - shown) + inside * band * (0.45 + 0.25 * fine);
+      if (uPictureEnergy > 0.0) {
+        float crest = (ahead - 0.08) / 0.09;
+        band = exp(-crest * crest) * uPictureEnergy;
+      }
+      sheet = (sheet * (1.0 - shown) + inside * band * (0.45 + 0.25 * fine)) * uPictureEnergy;
     }
-    float lit = (1.0 - exp(-max(sheet, 0.0) * gain * 1.5)) * uSurface * (1.0 - ink * 0.82);
-    color += mix(uGlowColor, uColor, max(rim, band) * 0.7) * lit * (1.0 - alpha);
-    alpha += lit * (1.0 - alpha);
+    if (uImage <= 0.0 || uPictureEnergy > 0.0) {
+      float lit = (1.0 - exp(-max(sheet, 0.0) * gain * 1.5)) * uSurface * (1.0 - ink * 0.82);
+      color += mix(uGlowColor, uColor, max(rim, band) * 0.7) * lit * (1.0 - alpha);
+      alpha += lit * (1.0 - alpha);
+    }
     if (shown > 0.0) {
       // Straight-alpha sRGB texels go under the light as premultiplied colour, untinted. The liquid wobble dies with the strands.
       vec2 uv = (pr + flow * uUnit * 2.0 * uStrandWidth - uImageBox.xy) / (2.0 * uImageBox.zw) + 0.5;
@@ -1049,6 +1058,7 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
       uSurface: { value: 0 },
       tImage: { value: photo },
       uImage: { value: 0 },
+      uPictureEnergy: { value: 1 },
       uImageBox: { value: [0, 0, 1, 1] },
       uImageLod: { value: 0 },
       uReveal: { value: 0 },
@@ -1310,6 +1320,7 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
           uniforms.uImageLod.value = Math.max(0, Math.log2(1 / (cover * renderer.dpr)) - 1);
         }
         uniforms.uImage.value = ready ? 1 : 0;
+        uniforms.uPictureEnergy.value = ready ? PICTURE_ENERGY : 1;
         if (boundary) {
           const { width: w, height: h, radius } = boundary.target;
           uniforms.uBox.value = [width / 2, height / 2, w / 2, h / 2];

@@ -462,6 +462,32 @@ it('falls back to light only without a picture, or with a picture that has not l
   expect([gpu.uploads, gpu.textures]).toEqual([uploads, textures]);
 });
 
+// M4 Task 6 (user request 2026-10-24): no cyan energy band while a picture morphs. The constant reaches the shader as uPictureEnergy only in
+// picture mode; the light-only fallback and everything outside a boundary keep full energy (1 restores the Task 5 look).
+it('a picture boundary draws with no band, sheet or strip (uPictureEnergy 0), and every other path keeps energy 1', () => {
+  const plain = render(<ElectricLogo src="energy-plain.svg" />);
+  loadImages(200);
+  tick();
+  expect(last().uPictureEnergy).toBe(1);
+  plain.unmount();
+  const { ref } = mount('energy-a.svg');
+  expect(last().uPictureEnergy).toBe(1);
+  ref.current!.beginBoundary(box);
+  ref.current!.seekBoundary(0.5, 1, 0.5, 0.5);
+  tick();
+  expect([last().uImage, last().uPictureEnergy]).toEqual([0, 1]);
+  ref.current!.setBoundaryTarget(withPicture(picture('/_next/image?late', 1000, 500, false)));
+  tick();
+  expect([last().uImage, last().uPictureEnergy]).toEqual([0, 1]);
+  ref.current!.setBoundaryTarget(withPicture(picture('/_next/image?energy', 1000, 500)));
+  ref.current!.seekBoundary(0.6, 1, 0.5, 0.5);
+  tick();
+  expect([last().uImage, last().uPictureEnergy]).toEqual([1, 0]);
+  ref.current!.endBoundary();
+  tick();
+  expect([last().uImage, last().uPictureEnergy]).toEqual([0, 1]);
+});
+
 it('follows a new picture: same size re-uploads into the texture, a new size deletes it and makes a new one', () => {
   const { ref } = mount('img-swap.svg');
   ref.current!.beginBoundary(withPicture(picture('/_next/image?a', 1000, 500)));
