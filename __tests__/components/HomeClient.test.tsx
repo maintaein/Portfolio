@@ -27,13 +27,14 @@ vi.mock('@/components/sections/BootSequence', async () => {
   };
 });
 const projectsGate = vi.hoisted(() => ({ before: null as null | ((run: () => void) => void), release: vi.fn() }));
+const projectsLock = vi.hoisted(() => ({ release: vi.fn(), props: null as null | { navigationPending?: boolean; logoOwner?: string } }));
 vi.mock('@/components/sections', async () => {
   const { forwardRef, useImperativeHandle } = await import('react');
   const About = forwardRef<unknown, { onChapterChange: (index: number) => void; logoOwner: string }>(function About({ onChapterChange, logoOwner }, ref) {
     useImperativeHandle(ref, () => ({ release: projectsGate.release }), []);
     return <p data-logo-owner-prop={logoOwner} onClick={() => onChapterChange(2)}>About original body</p>;
   });
-  return { AboutSection: About, ProjectsSection: ({ beforeAction }: { beforeAction?: (run: () => void) => void }) => { projectsGate.before = beforeAction ?? null; return <p>Projects original body</p>; }, ExperienceSection: () => <p>Experience original body</p>, SkillsSection: () => <p>Skills original body</p>, AwardAndCertificateSection: () => <p>Awards original body</p>, Footer: () => <footer>Contacts</footer> };
+  return { AboutSection: About, ProjectsSection: ({ ref, beforeAction, navigationPending, logoOwner }: { ref?: import('react').Ref<unknown>; beforeAction?: (run: () => void) => void; navigationPending?: boolean; logoOwner?: string }) => { projectsGate.before = beforeAction ?? null; projectsLock.props = { navigationPending, logoOwner }; useImperativeHandle(ref, () => ({ release: projectsLock.release }), []); return <p>Projects original body</p>; }, ExperienceSection: () => <p>Experience original body</p>, SkillsSection: () => <p>Skills original body</p>, AwardAndCertificateSection: () => <p>Awards original body</p>, Footer: () => <footer>Contacts</footer> };
 });
 vi.mock('@/components/sections/HomeClient/motion', () => ({
   createPortfolioMotion: (options: { onLogoOwnerChange: (owner: 'hero' | 'about' | 'boundary' | 'preview' | 'projects' | 'none') => void }) => {
@@ -516,4 +517,17 @@ it('the gate passed to Projects is stable across renders', async () => {
   const first = projectsGate.before;
   view.rerender(<HomeClient />);
   expect(projectsGate.before).toBe(first);
+});
+
+// M4 Task 7. Projects도 About처럼 읽기 잠금을 가진다. 명시적 이동 직전에 둘 다 풀고, 이동 중 표시와 로고 자리를 About과 같이 넘긴다.
+it('releases the Projects reading lock with About before a nav move and passes it the navigation and logo state', async () => {
+  render(<HomeClient />); await flush();
+  expect(projectsLock.props).toEqual({ navigationPending: false, logoOwner: 'none' });
+  act(() => motion.owner!('projects'));
+  expect(projectsLock.props!.logoOwner).toBe('projects');
+  projectsGate.release.mockClear(); projectsLock.release.mockClear();
+  fireEvent.click(screen.getAllByRole('button', { name: HOME_SECTION_CONFIG[2].label })[0]);
+  expect(projectsGate.release).toHaveBeenCalledTimes(1);
+  expect(projectsLock.release).toHaveBeenCalledTimes(1);
+  expect(projectsLock.props!.navigationPending).toBe(true);
 });

@@ -64,7 +64,8 @@ export function useChapterLock({ ref, count, current, choose, logo, stepMs, disa
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
-    const short = window.matchMedia('(max-height: 640px)');
+    // matchMedia가 없는 환경(일부 테스트 환경)은 짧은 화면이 아닌 것으로 본다.
+    const short = window.matchMedia?.('(max-height: 640px)') ?? null;
     let disabled = false;
     let start = 0;
     let phase: 'before' | 'locked' | 'after' = 'before';
@@ -98,7 +99,7 @@ export function useChapterLock({ ref, count, current, choose, logo, stepMs, disa
       const wasDisabled = disabled;
       // 헤더 아래 여백은 해시 이동과 같은 scroll-margin-top을 쓴다.
       start = Math.round(window.scrollY + element.getBoundingClientRect().top - (parseFloat(getComputedStyle(element).scrollMarginTop) || 0));
-      disabled = forced || short.matches || !(latest.current.fits?.(start) ?? true);
+      disabled = forced || !!short?.matches || !(latest.current.fits?.(start) ?? true);
       setPlain(disabled);
       // 정적 모드는 잠금을 들고 가지 않는다. 그동안 읽은 위치를 돌아올 때 끌어오지 않도록 위치로 앞뒤를 정한다.
       if (disabled && phase === 'locked') phase = window.scrollY > start ? 'after' : 'before';
@@ -257,7 +258,7 @@ export function useChapterLock({ ref, count, current, choose, logo, stepMs, disa
     window.addEventListener('scroll', scroll, { passive: true });
     window.addEventListener('popstate', closeOvershoot);
     window.addEventListener('resize', measure);
-    short.addEventListener('change', measure);
+    short?.addEventListener('change', measure);
     return () => {
       resize?.disconnect();
       window.removeEventListener('wheel', lockedWheel, true);
@@ -265,7 +266,7 @@ export function useChapterLock({ ref, count, current, choose, logo, stepMs, disa
       window.removeEventListener('wheel', wheel, true); window.removeEventListener('keydown', key);
       window.removeEventListener('touchstart', touchStart); window.removeEventListener('touchmove', touchMove, true);
       window.removeEventListener('scroll', scroll); window.removeEventListener('popstate', closeOvershoot); window.removeEventListener('resize', measure);
-      short.removeEventListener('change', measure);
+      short?.removeEventListener('change', measure);
       releaseRef.current = () => {};
       enterRef.current = () => {};
       landRef.current = () => {};

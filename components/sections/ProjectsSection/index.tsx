@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState, useCallback, type Ref } from 'react';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { isProjectModalReady } from '@/lib/utils/projectContract';
@@ -9,6 +9,7 @@ import { SECTION_IDS } from '@/lib/constants';
 import { setProjectModalObscured } from '@/hooks/useProjectModalObscured';
 import { useSectionActivity } from '@/components/common/SectionActivityContext';
 import { useSectionVisibility } from '@/hooks/useSectionVisibility';
+import { useChapterLock } from '@/hooks/useChapterLock';
 import type { Flip, gsap } from '@/lib/gsap';
 import type { PreviewMorphHandle } from '@/components/blocks/PreviewMorph';
 
@@ -229,13 +230,23 @@ function snapshotMedia(
   return canvas;
 }
 
+// 읽기 잠금(M4 Task 7)의 한 걸음 간격. PreviewMorph의 녹음(DURATION_S .72초)과 이름 휠의 감쇠(WHEEL_SMOOTHING_MS의 네 배,
+// 98%)가 둘 다 끝난 뒤에 다음 프로젝트로 간다. 녹는 도중에 다음 녹음이 끼면 앞 그림이 반쯤 녹은 채 끊긴다.
+// PreviewMorph를 정적으로 부르면 three가 첫 번들에 딸려 와서 값을 가져오지 않고 적는다(테스트가 둘을 견준다).
+export const PROJECT_STEP_MS = 800;
+
+export interface ProjectsSectionHandle { release(): void }
 // 스크롤 인계 중의 입력이 원래 동작을 한 번만 하게 하는 관문(M4 Task 2). 셸이 정착을 마친 뒤 runOriginal을 동기로 한 번 부른다.
 // 없으면 바로 실행한다. 의도(눌린 인덱스, 이미 고른 이름인지, 방향)는 정착 전에 잡아 closure에 담는다.
 export interface ProjectsSectionProps {
   beforeAction?: (runOriginal: () => void) => void;
+  // 명시적 이동 중이면 새 읽기 잠금을 잡지 않는다(About과 같다).
+  navigationPending?: boolean;
+  // 공유 로고의 자리(HomeClient motion.ts의 LogoOwner). 프리뷰로 날아오는 동안(preview)은 잠금을 미루고 내려앉으면(projects) 건다.
+  logoOwner?: 'hero' | 'about' | 'boundary' | 'preview' | 'projects' | 'none';
 }
 
-export default function ProjectsSection({ beforeAction }: ProjectsSectionProps = {}) {
+export default function ProjectsSection({ ref, beforeAction, navigationPending = false, logoOwner = 'none' }: ProjectsSectionProps & { ref?: Ref<ProjectsSectionHandle> } = {}) {
   const { routeResolved, motionReady, reducedMotion, pageVisible, obscured } =
     useSectionActivity();
   const { ref: visibilityRef, visible, hasEntered } = useSectionVisibility<HTMLElement>();
@@ -543,6 +554,8 @@ export default function ProjectsSection({ beforeAction }: ProjectsSectionProps =
   // wasOpenRef가 없으면 첫 mount에서도 돌아 페이지를 열자마자 Projects
   // 이름 버튼으로 포커스를 훔쳐 간다
   const wasOpenRef = useRef(false);
+  // 돌려주는 포커스가 읽기 잠금을 걸어 닫힌 자리에서 페이지를 끌어오지 않게 한다(M4 Task 7)
+  const restoringFocusRef = useRef(false);
 
   useEffect(() => {
     if (modalOpen) {
@@ -557,7 +570,9 @@ export default function ProjectsSection({ beforeAction }: ProjectsSectionProps =
       const usable =
         !!opener?.isConnected && !opener.closest('[inert], [aria-hidden="true"]');
       const fallback = sectionRef.current?.closest<HTMLElement>('[data-section]') ?? null;
+      restoringFocusRef.current = true;
       (usable ? opener : fallback)?.focus({ preventScroll: true });
+      restoringFocusRef.current = false;
     });
     return () => cancelAnimationFrame(raf);
   }, [modalOpen, activeIndex]);
@@ -1214,6 +1229,39 @@ export default function ProjectsSection({ beforeAction }: ProjectsSectionProps =
 
   const runAction = useCallback((run: () => void) => (beforeAction ? beforeAction(run) : run()), [beforeAction]);
 
+  // About과 같은 읽기 잠금(M4 Task 7). 제스처 하나가 goTo 한 번이고 끝을 넘는 제스처는 문서로 돌려준다(순환하지 않는다).
+  // 위에서 들어오면 첫 프로젝트, Experience에서 올라오면 마지막 프로젝트다. 포커스가 목록에 있으면 고른 이름으로 따라간다.
+  const chapterLock = useChapterLock({
+    ref: sectionRef,
+    count: N,
+    current: () => activeIndexRef.current,
+    choose: index => goTo(index, { focus: !!sectionRef.current?.querySelector('[data-part="index"]')?.contains(document.activeElement) }),
+    // 프리뷰로 날아오는 동안은 미루고 프리뷰(또는 GL 로고 없음)에 내려앉으면 건다. About·Hero 쪽에 내려앉으면 미룬 잠금을 버린다.
+    logo: logoOwner === 'preview' ? 'flying' : logoOwner === 'projects' || logoOwner === 'none' ? 'landed' : 'away',
+    stepMs: PROJECT_STEP_MS,
+    disabled: reducedMotion,
+    blocked: navigationPending || obscured,
+    // 잠긴 동안은 스크롤할 수 없으니 잠금 자리에서 프리뷰나 이름이 header 밑이나 화면 아래로 잘리면 잠그지 않는다.
+    // 이름은 휠 자리로 잰다. 휠은 고른 이름을 목록 한가운데에 두고 먼 이름을 R sin(d·기울기)만큼 민다(applyWheel).
+    // 첫·마지막 프로젝트에서 가장 먼 이름이 목록 상자 밖으로 가장 멀리 나가므로 그 자리가 들어와야 한다.
+    // 안 그러면 그 이름이 잘리고, Home·End로 포커스를 주면 브라우저가 그 이름을 보이려고 스크롤해 잠금이 풀린다.
+    // 크기가 없는(배치되지 않은) 프리뷰는 잠글 자리가 없다.
+    fits: start => {
+      const preview = previewRef.current?.getBoundingClientRect();
+      const list = sectionRef.current?.querySelector('[data-part="index"]')?.getBoundingClientRect();
+      if (!preview?.width || !list) return false;
+      const shift = window.scrollY - start;
+      const row = list.height / N;
+      const tilt = (WHEEL_TILT_DEG * Math.PI) / 180;
+      const reach = (row / tilt) * Math.sin(Math.min(Math.PI / 2, (N - 1) * tilt)) + row / 2;
+      const centre = (list.top + list.bottom) / 2 + shift;
+      const header = document.querySelector('[data-scroll-header]')?.getBoundingClientRect().bottom ?? 0;
+      return Math.min(preview.top + shift, centre - reach) >= header && Math.max(preview.bottom + shift, centre + reach) <= window.innerHeight;
+    },
+  });
+  const { release: releaseLock, select: selectProject } = chapterLock;
+  useImperativeHandle(ref, () => ({ release: releaseLock }), [releaseLock]);
+
   // 첫 클릭은 선택만 옮긴다. 이미 고른 이름을 다시 클릭해야 상세를 연다 -
   // 목록을 훑다가 실수로 상세가 펼쳐지지 않게 하는 장치다. 이미 그 항목인지는
   // activeIndex state가 아니라 activeIndexRef.current로 본다. goTo가 그 ref를
@@ -1224,7 +1272,10 @@ export default function ProjectsSection({ beforeAction }: ProjectsSectionProps =
     (i: number) => {
       const alreadyActive = i === activeIndexRef.current;
       runAction(() => {
-        goTo(i);
+        // 잠기지 않았으면 그 프로젝트로 잠근다(About의 chapter 단어 클릭과 같다). 잠금이 꺼져 있으면 고르기만 한다.
+        // 로고가 프리뷰로 날아오는 동안의 클릭은 관문이 비행을 제자리에 정착시키고 고르기만 한다(Task 2). 잠금이 착지를 기다리듯 페이지를 옮기지 않는다
+        if (logoOwner === 'preview') goTo(i);
+        else selectProject(i);
         if (alreadyActive && isProjectModalReady(projects[i])) {
           // 비행보다 먼저다. 출발 rect를 뜨는 것이 openModal 안이라 순서가 계약이다
           if (!reducedMotion) snapWheel(i);
@@ -1232,7 +1283,7 @@ export default function ProjectsSection({ beforeAction }: ProjectsSectionProps =
         }
       });
     },
-    [runAction, goTo, openModal, snapWheel, reducedMotion]
+    [runAction, selectProject, goTo, logoOwner, openModal, snapWheel, reducedMotion]
   );
 
   // 프리뷰 클릭은 이름의 두 번째 클릭과 같다. 이미 고른 프로젝트를 다시
@@ -1249,6 +1300,9 @@ export default function ProjectsSection({ beforeAction }: ProjectsSectionProps =
 
   const handleIndexKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLElement>) => {
+      // 읽기 잠금이 켜진 화면에서 위아래 방향키는 잠금의 것이다(About의 chapter 단어와 같다). 한 번에 한 걸음이고
+      // 끝에서는 순환하지 않고 문서로 돌려준다. 여기서도 받으면 한 번 누름이 두 걸음이 된다. Home·End는 늘 목록의 것이다
+      if (!chapterLock.plain && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) return;
       let next: number | null = null;
       if (event.key === 'ArrowUp') next = (activeIndex - 1 + N) % N;
       else if (event.key === 'ArrowDown') next = (activeIndex + 1) % N;
@@ -1260,13 +1314,14 @@ export default function ProjectsSection({ beforeAction }: ProjectsSectionProps =
       const to = next;
       runAction(() => goTo(to, { focus: true }));
     },
-    [activeIndex, goTo, runAction]
+    [activeIndex, goTo, runAction, chapterLock.plain]
   );
 
   return (
     <section
       ref={node => { sectionRef.current = node; visibilityRef.current = node; }}
       id={SECTION_IDS.PROJECTS}
+      data-locked={chapterLock.locked}
       // The document section supplies viewport height while content can grow.
       className="py-6 px-10 min-h-full flex flex-col"
     >
@@ -1410,6 +1465,11 @@ export default function ProjectsSection({ beforeAction }: ProjectsSectionProps =
             aria-label="프로젝트 목록"
             className="flex flex-col"
             onKeyDown={handleIndexKeyDown}
+            // Tab으로 목록에 닿으면 그 이름의 프로젝트로 잠근다. 모달을 닫고 돌려받은 포커스는 사용자가 옮긴 것이 아니라 거른다
+            onFocus={event => {
+              const index = Number((event.target as HTMLElement).dataset.name);
+              if (!restoringFocusRef.current && Number.isInteger(index)) chapterLock.focus(event, index);
+            }}
           >
             {projects.map((project, i) => {
               const isActive = i === activeIndex;

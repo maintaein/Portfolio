@@ -10,6 +10,7 @@ import Navigation from '@/components/blocks/Navigation';
 import { SectionActivityProvider } from '@/components/common/SectionActivityContext';
 import { AboutSection, AwardAndCertificateSection, ExperienceSection, Footer, ProjectsSection, SkillsSection } from '@/components/sections';
 import type { AboutSectionHandle } from '@/components/sections/AboutSection';
+import type { ProjectsSectionHandle } from '@/components/sections/ProjectsSection';
 import BootSequence, { type BootSequenceHandle, type IntroTargets } from '@/components/sections/BootSequence';
 import { useMotionPreference } from '@/hooks/useMotionPreference';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
@@ -41,6 +42,7 @@ export default function HomeClient() {
   const pageVisible = usePageVisibility();
   const obscured = useProjectModalObscured();
   const aboutRef = useRef<AboutSectionHandle>(null);
+  const projectsRef = useRef<ProjectsSectionHandle>(null);
   const wordmarkRef = useRef<HTMLButtonElement>(null);
   const logoHostRef = useRef<HTMLDivElement>(null);
   const heroStaticRef = useRef<HTMLDivElement>(null);
@@ -70,8 +72,8 @@ export default function HomeClient() {
   const [ballLive, setBallLive] = useState(false);
   const ballDone = useCallback(() => setBallReady(true), []);
   const motionRef = useRef<PortfolioMotion | null>(null);
-  // 명시적 이동 직전에 About의 읽기 잠금을 풀어 목적지로 가는 스크롤을 붙잡지 않는다.
-  const { active, routeResolved, navigationTarget, navigate } = useSectionNav({ rootRef, headerRef, blocked: obscured, reducedMotion, onBeforeNavigate: () => { bootRef.current?.finish(); aboutRef.current?.release(); } });
+  // 명시적 이동 직전에 About과 Projects의 읽기 잠금을 풀어 목적지로 가는 스크롤을 붙잡지 않는다.
+  const { active, routeResolved, navigationTarget, navigate } = useSectionNav({ rootRef, headerRef, blocked: obscured, reducedMotion, onBeforeNavigate: () => { bootRef.current?.finish(); aboutRef.current?.release(); projectsRef.current?.release(); } });
   const motionReady = routeResolved && preferenceReady;
   // 프리뷰로 날아가는 동안의 Projects 입력: About 잠금을 풀고 비행을 끝 자리로 정착시킨 뒤 원래 동작을 한 번 부른다(다시 관문으로 보내지 않는다).
   const beforeProjectsAction = useCallback((run: () => void) => { aboutRef.current?.release(); motionRef.current?.settleProjects(); run(); }, []);
@@ -178,7 +180,7 @@ export default function HomeClient() {
         {HOME_SECTION_CONFIG.map(({ id, label }) => {
           const Section = id === SECTION_IDS.ABOUT || id === SECTION_IDS.PROJECTS ? null : SECTION_COMPONENTS[id];
           return <div key={id} data-section={id} role="region" aria-label={label} tabIndex={-1} className="document-section">
-            {id === SECTION_IDS.PROJECTS ? <ProjectsSection beforeAction={beforeProjectsAction} /> : Section ? <Section /> : <AboutSection ref={aboutRef} onChapterChange={setAboutChapter} navigationPending={navigationTarget !== null} logoOwner={logoOwner} />}
+            {id === SECTION_IDS.PROJECTS ? <ProjectsSection ref={projectsRef} beforeAction={beforeProjectsAction} navigationPending={navigationTarget !== null} logoOwner={logoOwner} /> : Section ? <Section /> : <AboutSection ref={aboutRef} onChapterChange={setAboutChapter} navigationPending={navigationTarget !== null} logoOwner={logoOwner} />}
           </div>;
         })}
         {/* 공유 로고 host. About의 원형 마스크와 overflow-x: clip 밖, 문서 좌표에 산다.
