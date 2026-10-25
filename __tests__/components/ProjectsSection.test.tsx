@@ -4,6 +4,7 @@ vi.mock('@/hooks/useSectionVisibility', () => ({ useSectionVisibility: () => ({ 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import ProjectsSection from '@/components/sections/ProjectsSection';
+import { drumItem } from '@/components/sections/ProjectsSection/wheel';
 import { SectionActivityProvider } from '@/components/common/SectionActivityContext';
 import { projects } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
@@ -111,21 +112,28 @@ describe('ProjectsSection 접힘 레이아웃', () => {
     expect(section.className).toContain('px-10');
   });
 
-  it('격자가 lg에서 3fr:2fr이다', async () => {
+  // M4 Task 8. 휠 열은 가장 긴 이름만큼(auto)이고 나머지는 전부 프리뷰 열이다
+  it('격자가 lg에서 프리뷰 열(남는 폭)과 휠 열(이름 폭)이다', async () => {
     const { readFileSync } = await import('node:fs');
     const { resolve } = await import('node:path');
     const source = readFileSync(
       resolve(process.cwd(), 'components/sections/ProjectsSection/index.tsx'),
       'utf8'
     );
-    expect(source).toContain('lg:grid-cols-[3fr_2fr]');
+    expect(source).toContain('lg:grid-cols-[minmax(0,1fr)_auto]');
   });
 
-  it('프리뷰가 열 폭의 0.8배 16:9다', () => {
+  it('프리뷰가 열 폭 전체를 쓰는 16:9다', () => {
     renderSection();
     const preview = document.querySelector('[data-part="preview"]')!;
-    expect(preview.className).toContain('w-[80%]');
+    expect(preview.className).toContain('w-full');
     expect(preview.className).toContain('aspect-video');
+  });
+
+  it('이름 휠은 lg 위에만 있다. lg 아래에서는 목록 전체가 display none이라 초점도 못 받는다', () => {
+    renderSection();
+    const list = document.querySelector('[data-part="index"]')!;
+    expect(list.parentElement!.className.split(/\s+/)).toContain('max-lg:hidden');
   });
 
   it('이름이 프로젝트 수만큼 있고 전부 role=tab이다', () => {
@@ -133,11 +141,12 @@ describe('ProjectsSection 접힘 레이아웃', () => {
     expect(document.querySelectorAll('[role="tab"]')).toHaveLength(N);
   });
 
-  it('활성 이름은 text-t1 lg:text-d3이고 비활성 이름은 MUTED 밝기다', () => {
+  // M4 Task 8. 글자 크기가 곧 드럼 크기라 화면 높이로 잡는다. 이름은 목록의 크기를 물려받는다
+  it('이름 크기는 화면 높이를 따르고(목록의 clamp) 비활성 이름은 MUTED 밝기다', () => {
     renderSection();
     const active = document.querySelector<HTMLElement>('[aria-selected="true"]')!;
-    expect(active.className).toContain('text-t1');
-    expect(active.className).toContain('lg:text-d3');
+    expect(document.querySelector('[data-part="index"]')!.className).toContain('text-[clamp(2.5rem,min(6.6svh,4.2vw),4.5rem)]');
+    expect(active.className).not.toMatch(/(?:^|\s)(lg:)?text-[td]\d\b/);
     const inactive = document.querySelector<HTMLElement>('[aria-selected="false"]')!;
     // 휠이 --pj-wheel-p로 활성색을 섞어 넣지만 비활성은 그 비율이 0이라 색은
     // 여전히 MUTED다. 기본값 0이 식 안에 박혀 있어야 휠이 아직 한 프레임도
@@ -186,13 +195,8 @@ describe('ProjectsSection 접힘 레이아웃', () => {
     // 밀어낼 버튼이 없는 이름 목록에는 오지 않는다
     expect(name.className).not.toContain('truncate');
 
-    // 이름 자신의 크기 계약: text-t1/lg:text-d3 정확히 그 둘뿐이다
-    const extractTextSizeTokens = (classAttr: string) =>
-      new Set(
-        (classAttr.match(/(?:^|\s)(lg:)?text-[td]\d\b/g) ?? []).map((t) => t.trim())
-      );
-    const nameTokens = extractTextSizeTokens(name.className);
-    expect(nameTokens).toEqual(new Set(['text-t1', 'lg:text-d3']));
+    // 이름의 크기는 목록이 화면 높이로 준다(M4 Task 8). 줄 높이 비율은 d3 토큰 대신 이름 자신의 leading이 같은 숫자로 준다
+    expect(name.className).toContain(`leading-[${d3LineHeight}]`);
   });
 
   it('첫 클릭이 프리뷰를 그 프로젝트로 갈아 끼운다', () => {
@@ -255,7 +259,10 @@ describe('ProjectsSection 이름 목록', () => {
     ).filter((el) => el.tabIndex === 0 && !el.hasAttribute('disabled'));
     const nameStops = stops.filter((el) => el.hasAttribute('data-name'));
     expect(nameStops).toHaveLength(1);
-    const otherStops = stops.filter((el) => !el.hasAttribute('data-name'));
+    // lg 아래의 이전·다음 단추 둘(M4 Task 8). 이름 목록은 lg 위에서만, 이 둘은 lg 아래에서만 보인다
+    const stepStops = stops.filter((el) => el.hasAttribute('data-step'));
+    expect(stepStops).toHaveLength(2);
+    const otherStops = stops.filter((el) => !el.hasAttribute('data-name') && !el.hasAttribute('data-step'));
     expect(otherStops).toHaveLength(isProjectModalReady(projects[0]) ? 1 : 0);
 
     const names = document.querySelectorAll<HTMLElement>('[data-name]');
@@ -296,20 +303,21 @@ describe('ProjectsSection 이름 목록', () => {
     expect(status).toHaveTextContent(
       `${String(initialIndex + 1).padStart(2, '0')} / ${String(count).padStart(2, '0')}`
     );
-    expect(status).toHaveTextContent(projects[(initialIndex + 1) % count].title);
+    // 지금 프로젝트의 이름을 알린다. 끝에서 순환하지 않으므로(M4 Task 8) "다음 프로젝트"는 마지막에서 틀린 말이 된다
+    expect(status).toHaveTextContent(projects[initialIndex].title);
 
     fireEvent.keyDown(row, { key: 'End' });
     expect(status).toHaveTextContent(
       `${String(count).padStart(2, '0')} / ${String(count).padStart(2, '0')}`
     );
-    expect(status).toHaveTextContent(projects[0].title);
+    expect(status).toHaveTextContent(projects[count - 1].title);
 
     fireEvent.keyDown(row, { key: 'ArrowDown' });
 
     expect(status).toHaveTextContent(
       `${String(1).padStart(2, '0')} / ${String(count).padStart(2, '0')}`
     );
-    expect(status).toHaveTextContent(projects[1].title);
+    expect(status).toHaveTextContent(projects[0].title);
     expect(document.querySelector('[aria-selected="true"]')).toHaveAttribute(
       'data-name',
       '0'
@@ -939,7 +947,8 @@ describe('ProjectsSection 프리뷰 캡션', () => {
 
     // 눈으로도 주종이 갈려야 한다. typeRamp는 실제 px다. 캡션이 이름보다
     // 작아야 한다(사다리 스텝 비교가 아니라 크기 비교다)
-    const nameRamp = typeRamp(document.querySelector('[data-name="0"]')!);
+    // 이름은 목록의 clamp를 물려받는다(M4 Task 8). 그 바닥값(rem)이 이름이 가장 작을 때다
+    const nameRamp = Number(/text-\[clamp\(([\d.]+)rem/.exec(document.querySelector('[data-part="index"]')!.className)![1]) * 16;
     const forbiddenT4 = FONT_SIZE_PX.get('text-t4')!;
     const lines = Array.from(caption().querySelectorAll('p'));
     expect(lines.length).toBeGreaterThan(0);
@@ -1370,12 +1379,14 @@ describe('ProjectsSection 프리뷰 셰이더 모프', () => {
 // 크롬 실측값으로 세우고 rAF를 손으로 몰아 프레임을 결정적으로 만든다.
 // 픽셀은 여전히 못 잡는다. 여기서 잠그는 것은 배치의 원인이다
 const WHEEL_ROW_H = 69; // 크롬 실측(48px 글자 + py-2)
-const WHEEL_TILT_DEG = 7;
-const WHEEL_BLUR_PX = 1.6;
-const WHEEL_FADE = 0.3;
-const WHEEL_MIN_OPACITY = 0.18;
 // 소스의 CENTER와 같은 식이다. 활성 항목이 항상 오는 목록의 세로 한가운데
 const WHEEL_CENTER = (N - 1) / 2;
+// 드럼 배치(M4 Task 8)는 순수 함수 drumItem이 정한다. 그 값 자체는 ProjectsWheel.test.ts가 잠그고, 여기서는 그 값이
+// 이름 단추에 그대로 실리는지와 목록 흐름 자리를 드럼 가운데로 옮기는 항((CENTER - i) * 줄 높이)을 본다
+const drum = (i: number, pos: number, rowH = WHEEL_ROW_H) => {
+  const s = drumItem(i, pos, N, rowH);
+  return { ...s, y: s.y + (WHEEL_CENTER - i) * rowH };
+};
 
 function installWheelRig(rowH = WHEEL_ROW_H) {
   const spies: Array<{ mockRestore: () => void }> = [];
@@ -1434,7 +1445,7 @@ function nameEl(i: number) {
 
 function wheelStyle(i: number) {
   const el = nameEl(i);
-  const m = /^translate\((-?[\d.]+)px, (-?[\d.]+)px\) rotate\((-?[\d.]+)deg\)$/.exec(
+  const m = /^translate\((-?[\d.]+)px, (-?[\d.]+)px\) rotate\((-?[\d.]+)deg\) scale\(([\d.]+), ([\d.]+)\)$/.exec(
     el.style.transform
   );
   const b = /^blur\(([\d.]+)px\)$/.exec(el.style.filter);
@@ -1443,6 +1454,8 @@ function wheelStyle(i: number) {
     x: m ? Number(m[1]) : null,
     y: m ? Number(m[2]) : null,
     rot: m ? Number(m[3]) : null,
+    scale: m ? Number(m[4]) : null,
+    scaleY: m ? Number(m[5]) : null,
     opacity: el.style.opacity === '' ? null : Number(el.style.opacity),
     filter: el.style.filter,
     blur: el.style.filter === 'none' ? 0 : b ? Number(b[1]) : null,
@@ -1470,9 +1483,9 @@ function renderWheel(reduced = false) {
 }
 
 describe('ProjectsSection 이름 휠', () => {
-  // 이 작업이 존재하는 이유 그 자체다. 평평하게 쌓인 단추 줄이 원호를 따라
-  // 휘고, 고른 것에서 멀어질수록 흐려지고 번진다
-  it('활성에서 멀어질수록 기울고 흐려지고 번진다. 위아래 양쪽 다', () => {
+  // 이 작업이 존재하는 이유 그 자체다. 이름 줄이 오른쪽 끝에 붙은 드럼 위에 앉는다(M4 Task 8).
+  // 고른 것에서 멀어질수록 오른쪽 끝으로 휘어 들어가고 작아지고 납작해지고 기울고 번지고 흐려진다
+  it('이름마다 드럼 배치(drumItem)가 단추에 그대로 실린다. 위아래 양쪽 다', () => {
     const rig = installWheelRig();
     try {
       renderWheel();
@@ -1484,14 +1497,14 @@ describe('ProjectsSection 이름 휠', () => {
       expect(mid).toBeGreaterThan(0);
       expect(mid).toBeLessThan(N - 1);
 
-      // 활성 항목은 x, rot이 항등이다. 제목 비행의 출발 rect가 여기서
-      // 나온다. y만은 항등이 아니다. 목록의 세로 한가운데로 고정되는
-      // centerShift가 얹힌다(활성이 어디 있든 같은 자리로 온다는 계약은
-      // 바로 아래 별도 테스트가 본다)
+      // 활성 항목은 기울지도 줄지도 않는다. 제목 비행의 출발 rect가 여기서 나온다.
+      // x는 0이 아니다. 드럼 앞면이라 프리뷰 쪽으로 가장 멀리 부푼다
       const active = wheelStyle(mid);
-      expect(active.x).toBe(0);
+      expect(active.x).toBeLessThan(0);
       expect(active.y).toBeCloseTo((WHEEL_CENTER - mid) * WHEEL_ROW_H, 6);
       expect(active.rot).toBe(0);
+      expect(active.scale).toBe(1);
+      expect(active.scaleY).toBe(1);
       expect(active.opacity).toBe(1);
       expect(active.blur).toBe(0);
       // 'none'이지 blur(0px)가 아니다. filter는 값이 무엇이든 새 스택 문맥을
@@ -1499,87 +1512,53 @@ describe('ProjectsSection 이름 휠', () => {
       // 손잡이가 들어 있으므로 활성에서는 속성 자체가 없어야 한다
       expect(nameEl(mid).style.filter).toBe('none');
 
-      // 회전축은 글자가 시작하는 왼쪽 모서리이고 상자는 글자 너비다. 축이
-      // 오른쪽으로 가면 한 칸마다 수십 px씩 위아래로 튀고, 상자가 열 전체
-      // 너비로 넓어지면 글자 뒤의 빈 영역이 실려 올라가 남의 줄 위를 덮어
-      // 이름을 겨냥하지 않은 자리에서 엉뚱한 프로젝트가 잡힌다(크롬 실측:
-      // 상자 527px, 글자 87~321px). jsdom에는 레이아웃이 없어 그 결과를 못
-      // 재니 축과 상자 폭을 문자열로 잠근다. 약한 대리 검사임을 안다
+      // 오른쪽에 붙은 거울상이라 회전축은 글자가 끝나는 오른쪽 모서리이고 상자는 글자 너비다.
+      // 상자가 열 전체 너비로 넓어지면 글자 밖의 빈 영역이 실려 남의 줄 위를 덮어 이름을 겨냥하지
+      // 않은 자리에서 엉뚱한 프로젝트가 잡힌다. jsdom에는 레이아웃이 없어 축과 상자 폭을 문자열로 잠근다.
+      // 약한 대리 검사임을 안다
       for (let i = 0; i < N; i += 1) {
         const cls = nameEl(i).className.split(/\s+/);
-        expect(cls, `item ${i} origin`).toContain('origin-left');
+        expect(cls, `item ${i} origin`).toContain('origin-right');
         expect(cls, `item ${i} box`).toContain('w-fit');
         expect(cls, `item ${i} box`).not.toContain('w-full');
         // rowH가 첫 항목 하나로 모든 줄의 간격을 대표하려면 어떤 이름도
-        // 줄바꿈하면 안 된다. jsdom은 레이아웃이 없어 줄바꿈이 실제로
-        // 일어나는지 못 재니, 줄바꿈을 막는 클래스가 있는지로 대신 잠근다.
-        // 약한 대리 검사다
+        // 줄바꿈하면 안 된다. 약한 대리 검사다
         expect(cls, `item ${i} wrap`).toContain('whitespace-nowrap');
       }
 
-      // 부류로 본다. 값을 손으로 나열하면 나열 안 한 항목에서 샌다
       for (let i = 0; i < N; i += 1) {
         const s = wheelStyle(i);
+        const want = drum(i, mid);
+        expect(s.x!, `item ${i} x`).toBeCloseTo(want.x, 2);
+        expect(s.y!, `item ${i} y`).toBeCloseTo(want.y, 2);
+        expect(s.rot!, `item ${i} rot`).toBeCloseTo(want.rot, 3);
+        expect(s.scale!, `item ${i} scale`).toBeCloseTo(want.scale, 4);
+        expect(s.scaleY!, `item ${i} scaleY`).toBeCloseTo(want.scaleY, 4);
+        expect(s.blur!, `item ${i} blur`).toBeCloseTo(want.blur, 2);
+        expect(s.opacity!, `item ${i} opacity`).toBeCloseTo(want.opacity, 4);
+        // 회전 부호는 위와 아래가 반대다. 오른쪽 거울상이라 위(d < 0)가 +다
         const d = i - mid;
-        expect(s.rot, `item ${i} rot`).not.toBeNull();
-        // 회전 부호는 위와 아래가 반대다. 한쪽만 보면 전부 같은 방향으로
-        // 기우는 구현(호가 아니라 미끄러짐)을 놓친다
-        // d === 0을 따로 쓰는 것은 -Math.sign(0)이 -0이라 Object.is가 0과
-        // 갈라지기 때문이다. 부호 계약 자체는 그대로다
         expect(Math.sign(s.rot!), `item ${i} rot sign`).toBe(d === 0 ? 0 : -Math.sign(d));
-        // 부풂은 양쪽 다 같은 방향(오른쪽)이다. 원기둥이 한쪽으로 누워야
-        // 휠로 읽힌다. side='right'이므로 부호는 +다
-        expect(s.x!, `item ${i} x`).toBeGreaterThanOrEqual(0);
-        expect(s.blur!, `item ${i} blur`).toBeCloseTo(Math.abs(d) * WHEEL_BLUR_PX, 2);
-        expect(s.opacity!, `item ${i} opacity`).toBeCloseTo(
-          Math.max(WHEEL_MIN_OPACITY, 1 - Math.abs(d) * WHEEL_FADE),
-          4
-        );
-      }
-      // 거리에 따라 단조롭게 세진다. 이웃보다 먼 항목이 덜 기울면 호가 아니다
-      for (let d = 1; mid + d < N && mid - d >= 0; d += 1) {
-        expect(Math.abs(wheelStyle(mid + d).rot!)).toBeGreaterThan(
-          Math.abs(wheelStyle(mid + d - 1).rot!)
-        );
-        expect(Math.abs(wheelStyle(mid - d).rot!)).toBeGreaterThan(
-          Math.abs(wheelStyle(mid - d + 1).rot!)
-        );
-        expect(wheelStyle(mid + d).x!).toBeGreaterThan(wheelStyle(mid + d - 1).x!);
-        expect(wheelStyle(mid - d).x!).toBeGreaterThan(wheelStyle(mid - d + 1).x!);
+        // 부풂은 고른 이름이 가장 크다. 나머지는 오른쪽 끝으로 돌아간다
+        expect(s.x!, `item ${i} x`).toBeGreaterThanOrEqual(active.x!);
       }
     } finally {
       rig.uninstall();
     }
   });
 
-  // 브리프가 못박은 네 숫자를 값 자체가 아니라 그 숫자가 만드는 결과에서
-  // 되짚어 잠근다. 상수 하나를 바꾸면 여기서 갈린다
-  it('기울기 7도, 번짐 1.6px, 감쇠 0.3, 바닥 투명도 0.18이다', () => {
+  // 순환하지 않으므로 첫 프로젝트에서는 고른 이름 위가 비고 마지막에서는 아래가 빈다.
+  // 보이는 자리 = 흐름 자리(i * 줄 높이) + transform y. 고른 이름의 보이는 자리와 견준다
+  it('첫 프로젝트에서는 위 칸이, 마지막 프로젝트에서는 아래 칸이 빈다', () => {
     const rig = installWheelRig();
     try {
       renderWheel();
       rig.settle();
-      // 활성은 0번이다. d = i
-      expect(Math.abs(wheelStyle(1).rot!)).toBeCloseTo(WHEEL_TILT_DEG, 3);
-      expect(Math.abs(wheelStyle(2).rot!)).toBeCloseTo(WHEEL_TILT_DEG * 2, 3);
-      expect(wheelStyle(1).blur!).toBeCloseTo(WHEEL_BLUR_PX, 3);
-      expect(1 - wheelStyle(1).opacity!).toBeCloseTo(WHEEL_FADE, 4);
-      // 세 칸 이상은 식이 0.18 아래로 내려간다. 바닥이 없으면 여기서 갈린다
-      expect(1 - 3 * WHEEL_FADE).toBeLessThan(WHEEL_MIN_OPACITY);
-      for (let i = 3; i < N; i += 1) {
-        expect(wheelStyle(i).opacity!, `item ${i}`).toBeCloseTo(WHEEL_MIN_OPACITY, 4);
-      }
-      // 반지름은 이웃 사이 호의 길이가 줄 높이와 같아지게 잡는다. 그래서
-      // 세로 어긋남은 sin 압축분만큼만 나고 줄 간격 자체는 안 바뀐다
-      const tiltRad = (WHEEL_TILT_DEG * Math.PI) / 180;
-      const R = WHEEL_ROW_H / tiltRad;
-      // 활성은 0번이라(pos=0) centerShift는 WHEEL_CENTER * WHEEL_ROW_H다
-      const centerShift = WHEEL_CENTER * WHEEL_ROW_H;
-      expect(wheelStyle(2).y!).toBeCloseTo(
-        R * Math.sin(2 * tiltRad) - 2 * WHEEL_ROW_H + centerShift,
-        1
-      );
-      expect(wheelStyle(2).x!).toBeCloseTo(R * (1 - Math.cos(2 * tiltRad)), 1);
+      const seen = (i: number) => i * WHEEL_ROW_H + wheelStyle(i).y!;
+      for (let i = 1; i < N; i += 1) expect(seen(i), `item ${i} below`).toBeGreaterThan(seen(0));
+      fireEvent.keyDown(document.querySelector('[role="tablist"]')!, { key: 'End' });
+      rig.settle();
+      for (let i = 0; i < N - 1; i += 1) expect(seen(i), `item ${i} above`).toBeLessThan(seen(N - 1));
     } finally {
       rig.uninstall();
     }
@@ -1672,17 +1651,20 @@ describe('ProjectsSection 이름 휠', () => {
       expect(atOpen, 'openModal이 실제로 불렸다').not.toBeNull();
       // y는 0이 아니라 목록 세로 한가운데로의 centerShift다. ready가
       // 몇 번이든 이 자리가 못박기의 목표다
+      // x는 드럼 앞면의 부풂이다(M4 Task 8). 회전과 배율은 항등이다
       const expectedY = ((WHEEL_CENTER - ready) * WHEEL_ROW_H).toFixed(2);
-      expect(atOpen).toBe(`translate(0.00px, ${expectedY}px) rotate(0.000deg)`);
+      const expectedX = drum(ready, ready).x.toFixed(2);
+      expect(atOpen).toBe(`translate(${expectedX}px, ${expectedY}px) rotate(0.000deg) scale(1.0000, 1.0000)`);
 
       const snapped = wheelStyle(ready);
-      expect(snapped.x).toBe(0);
+      expect(snapped.x).toBeCloseTo(drum(ready, ready).x, 2);
       expect(snapped.y).toBeCloseTo((WHEEL_CENTER - ready) * WHEEL_ROW_H, 6);
       expect(snapped.rot).toBe(0);
+      expect(snapped.scale).toBe(1);
       expect(snapped.blur).toBe(0);
       expect(snapped.opacity).toBe(1);
       // 못박기는 눌린 항목만이 아니라 판 전체를 목표 배치로 옮긴다
-      expect(Math.abs(wheelStyle(0).rot!)).toBeCloseTo(ready * WHEEL_TILT_DEG, 3);
+      expect(wheelStyle(0).rot!).toBeCloseTo(drum(0, ready).rot, 3);
     } finally {
       rig.uninstall();
     }
@@ -1863,7 +1845,7 @@ describe('ProjectsSection 이름 휠', () => {
       // y는 0이 아니라 목록 세로 한가운데로의 centerShift다(pos=1)
       const expectedY = ((WHEEL_CENTER - 1) * WHEEL_ROW_H).toFixed(2);
       expect(wheelStyle(1).transform).toBe(
-        `translate(0.00px, ${expectedY}px) rotate(0.000deg)`
+        `translate(${drum(1, 1).x.toFixed(2)}px, ${expectedY}px) rotate(0.000deg) scale(1.0000, 1.0000)`
       );
     } finally {
       rig.uninstall();
@@ -1903,7 +1885,8 @@ describe('ProjectsSection 이름 휠', () => {
         expect(s.rot, `item ${i} rot`).toBe(0);
       }
       // 그래도 거리 표현은 살아 있다. 높이를 모르는 것은 호일 뿐이다
-      expect(wheelStyle(1).blur).toBeCloseTo(WHEEL_BLUR_PX, 3);
+      expect(wheelStyle(1).blur).toBeCloseTo(drumItem(1, 0, N, 0).blur, 2);
+      expect(wheelStyle(1).blur).toBeGreaterThan(0);
       expect(wheelStyle(0).opacity).toBe(1);
     } finally {
       rig.uninstall();
@@ -1915,26 +1898,6 @@ describe('ProjectsSection 이름 휠', () => {
 // 활성 자리에서 갈라져 안쪽(제목이 날아가는 쪽)이 비어 보인다. applyWheel은
 // wheelSpreadRef.current.v(0→1)를 추가항으로만 쓰므로, spread=0이면 이
 // 파일의 다른 휠 테스트가 이미 잠근 값과 바이트 단위로 같아야 한다
-describe('ProjectsSection mobile wheel blur', () => {
-  it('narrow viewports reduce blur while keeping the wheel curve', () => {
-    const rig = installWheelRig();
-    try {
-      renderWheel();
-      rig.settle();
-      const desktopRotation = wheelStyle(1).rot;
-
-      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
-      fireEvent(window, new Event('resize'));
-      rig.settle();
-
-      expect(wheelStyle(1).blur).toBeCloseTo(WHEEL_BLUR_PX * 0.45, 3);
-      expect(wheelStyle(1).rot).toBeCloseTo(desktopRotation!, 3);
-    } finally {
-      rig.uninstall();
-    }
-  });
-});
-
 describe('ProjectsSection 휠 벌어짐(spread)', { timeout: 30_000 }, () => {
   it('모달이 열리는 비행에서 spread가 1이면 활성 아닌 항목만 갈라지고, 0이면 기존 값 그대로다', async () => {
     // 이 파일의 top beforeEach는 matchMedia.matches를 늘 false로 고정해
@@ -2050,4 +2013,139 @@ it('holds an unfinished preview swap through temporary inactivity and never repl
   rerender(view()); expect(swaps).toHaveBeenCalledTimes(2);
   fireEvent.click(screen.getAllByRole('tab')[3]);
   const last = swaps.mock.results.at(-1)!.value as gsap.core.Tween; unmount(); expect(last.parent).toBeNull();
+});
+
+// M4 Task 8. lg 아래에는 휠이 없다. 프리뷰를 가로로 끌면 이전·다음 프로젝트로 녹아 넘어가고, 끝에서는 고무줄처럼 돌아온다.
+// 포인터가 없는 사용자와 보조기기 사용자는 프리뷰 아래의 조용한 n / N과 이전·다음 단추로 넘긴다.
+// jsdom에는 PointerEvent가 없어 MouseEvent에 pointerId만 얹은 것으로 대신한다. 이 파일의 matchMedia는 늘 좁은 화면이다.
+describe('ProjectsSection 모바일 가로 끌기 (M4 Task 8)', { timeout: 30_000 }, () => {
+  class FakePointerEvent extends MouseEvent {
+    pointerId: number;
+    pointerType: string;
+    constructor(type: string, init: PointerEventInit = {}) {
+      super(type, init);
+      this.pointerId = init.pointerId ?? 1;
+      this.pointerType = init.pointerType ?? 'touch';
+    }
+  }
+  beforeEach(() => { vi.stubGlobal('PointerEvent', FakePointerEvent); });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  const surface = () => document.querySelector<HTMLElement>('[data-part="preview-swipe"]')!;
+  const selected = () => Number(document.querySelector('[aria-selected="true"]')!.getAttribute('data-name'));
+  const status = () => document.querySelector('[data-part="mobile-status"]')!;
+  const prev = () => screen.getByRole('button', { name: '이전 프로젝트' });
+  const next = () => screen.getByRole('button', { name: '다음 프로젝트' });
+  let clock = 0;
+  const pointer = (type: 'pointerDown' | 'pointerMove' | 'pointerUp', x: number, y = 300, target: Element = surface()) => {
+    clock += 16;
+    const event = new FakePointerEvent(type.toLowerCase(), { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, pointerId: 7 });
+    Object.defineProperty(event, 'timeStamp', { value: clock });
+    act(() => { target.dispatchEvent(event); });
+  };
+  // 끌기 한 번: 누르고, 한 걸음씩 옮기고, 뗀 뒤 브라우저가 보내는 click까지
+  const drag = (from: number, to: number, steps = 6, dy = 0) => {
+    pointer('pointerDown', from);
+    for (let k = 1; k <= steps; k += 1) pointer('pointerMove', from + ((to - from) * k) / steps, 300 + (dy * k) / steps);
+    pointer('pointerUp', to, 300 + dy);
+    // 포인터가 만든 click은 detail이 1이다. 키보드의 click은 0이라 끌기 뒤에도 삼키지 않는다
+    fireEvent.click(document.querySelector('[data-part="preview-open"]')!, { detail: 1 });
+  };
+
+  it('왼쪽으로 끌면 다음, 오른쪽으로 끌면 이전 프로젝트로 넘어가고 끌기는 상세를 열지 않는다', () => {
+    const push = vi.spyOn(window.history, 'pushState');
+    renderSection();
+    drag(300, 150);
+    expect(selected()).toBe(1);
+    drag(100, 260);
+    expect(selected()).toBe(0);
+    expect(push).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('끄는 동안 프리뷰가 저항을 받으며 따라오고 떼면 제자리로 돌아간다', () => {
+    renderSection();
+    pointer('pointerDown', 300);
+    pointer('pointerMove', 260);
+    pointer('pointerMove', 200);
+    const shift = Number(/translateX\((-?[\d.]+)px\)/.exec(surface().style.transform)?.[1]);
+    expect(shift).toBeLessThan(0);
+    expect(shift).toBeGreaterThan(-100);
+    pointer('pointerUp', 200);
+    expect(surface().style.transform).toBe('');
+  });
+
+  it('끝에서는 순환하지 않고 고무줄처럼 돌아온다', () => {
+    renderSection();
+    drag(100, 300);
+    expect(selected()).toBe(0);
+    for (let i = 1; i < N; i += 1) drag(300, 150);
+    expect(selected()).toBe(N - 1);
+    pointer('pointerDown', 300);
+    pointer('pointerMove', 100);
+    expect(surface().style.transform).toMatch(/translateX\(-/);
+    pointer('pointerUp', 100);
+    expect(selected()).toBe(N - 1);
+    expect(surface().style.transform).toBe('');
+  });
+
+  it('세로로 끄는 것은 페이지 스크롤에 넘기고 프로젝트를 안 바꾼다', () => {
+    renderSection();
+    drag(300, 280, 6, -160);
+    expect(selected()).toBe(0);
+    expect(surface().style.transform).toBe('');
+  });
+
+  it('탭은 그대로 상세를 연다', () => {
+    const ready = projects.findIndex(isProjectModalReady);
+    expect(ready).toBeGreaterThanOrEqual(0);
+    const push = vi.spyOn(window.history, 'pushState');
+    renderSection();
+    for (let i = 0; i < ready; i += 1) fireEvent.click(next());
+    expect(selected()).toBe(ready);
+    pointer('pointerDown', 200);
+    pointer('pointerMove', 203);
+    pointer('pointerUp', 203);
+    fireEvent.click(document.querySelector('[data-part="preview-open"]')!, { detail: 1 });
+    expect(push).toHaveBeenCalledTimes(1);
+  });
+
+  it('넓은 화면(lg)에서는 끌기를 받지 않는다. 휠이 맡는다', () => {
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({ matches: query === '(min-width: 1024px)', media: query, addEventListener: () => {}, removeEventListener: () => {} })));
+    renderSection();
+    drag(300, 100);
+    expect(selected()).toBe(0);
+    expect(surface().style.transform).toBe('');
+  });
+
+  it('이전·다음 단추가 관문을 지나 한 칸씩 넘기고 n / N과 지금 프로젝트 이름을 알린다. 끝에서는 순환하지 않는다', () => {
+    const gate = vi.fn((run: () => void) => run());
+    render(
+      <SectionActivityProvider obscured={false} pageVisible routeResolved motionReady reducedMotion={false}>
+        <ProjectsSection beforeAction={gate} />
+      </SectionActivityProvider>
+    );
+    expect(status()).toHaveAttribute('aria-live', 'polite');
+    expect(status()).toHaveTextContent(`01 / ${String(N).padStart(2, '0')}`);
+    expect(status()).toHaveTextContent(projects[0].title);
+    expect(prev()).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(prev());
+    expect(selected()).toBe(0);
+    fireEvent.click(next());
+    expect(gate).toHaveBeenCalledTimes(1);
+    expect(selected()).toBe(1);
+    expect(status()).toHaveTextContent(`02 / ${String(N).padStart(2, '0')}`);
+    expect(status()).toHaveTextContent(projects[1].title);
+    for (let i = 2; i < N + 2; i += 1) fireEvent.click(next());
+    expect(selected()).toBe(N - 1);
+    expect(next()).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(prev());
+    expect(selected()).toBe(N - 2);
+    // 단추는 보이는 44px 표적이고 이름표가 있다. 숨겨 둔 채 초점만 받는 단추가 아니다
+    for (const button of [prev(), next()]) {
+      expect(button.className).toContain('size-11');
+      expect(button.className).not.toContain('sr-only');
+      expect(button.parentElement!.className.split(/\s+/)).toContain('lg:hidden');
+    }
+  });
 });

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { enter, expectActive } from './helpers';
+import { enter, expectActive, SLOW } from './helpers';
 import { projects } from '@/lib/data/projects';
 import { coreValues } from '@/lib/data/profile';
 
@@ -76,17 +76,16 @@ test.describe('접근성', () => {
     }
   });
 
+  // M4 Task 8. lg 아래에는 이름 목록이 없고 프리뷰 캡션이 지금 프로젝트의 제목을 보여 준다
   test('긴 프로젝트 제목이 모바일 화면 안에 보인다', async ({ page }) => {
+    const longest = projects.reduce((at, project, i) => project.title.length > projects[at].title.length ? i : at, 0);
     for (const width of [320, 375, 390]) {
       await page.setViewportSize({ width, height: 812 });
       await enter(page, 'projects');
-      const longestTitle = projects.reduce((longest, project) =>
-        project.title.length > longest.length ? project.title : longest, ''
-      );
-      const tab = page.getByRole('tab', { name: longestTitle, exact: true });
-      if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
-      const title = page.locator('#projects [data-flip-id^="title-"]');
-      await expect(title).toHaveText(longestTitle);
+      await expect(page.locator('#projects [data-part="index"]')).toBeHidden();
+      for (let i = 0; i < longest; i += 1) await page.getByRole('button', { name: '다음 프로젝트' }).click();
+      const title = page.locator('#projects [data-part="preview-caption-text"] p').first();
+      await expect(title).toHaveText(projects[longest].title);
       const bounds = await title.boundingBox();
       expect(bounds).not.toBeNull();
       expect(bounds!.x).toBeGreaterThanOrEqual(0);
@@ -94,25 +93,58 @@ test.describe('접근성', () => {
     }
   });
 
-  test('모바일 Projects 진행 안내가 키보드 선택과 함께 갱신된다', async ({ page }) => {
+  // M4 Task 8. lg 아래에서 포인터 없이 넘기는 길은 보이는 이전·다음 단추다. 끝에서는 순환하지 않는다
+  test('모바일 Projects 진행 안내가 키보드의 이전·다음과 함께 갱신된다', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 812 });
     await enter(page, 'projects');
     const status = page.locator('#projects [data-part="mobile-status"]');
-    const tabs = page.locator('#projects [role="tab"]');
-    const count = await tabs.count();
-    const firstTitle = (await tabs.nth(0).innerText()).trim();
-    const secondTitle = (await tabs.nth(1).innerText()).trim();
-    await page.locator('#projects [role="tab"][aria-selected="true"]').focus();
-    await page.keyboard.press('End');
-    await expect(status).toContainText(
-      `${String(count).padStart(2, '0')} / ${String(count).padStart(2, '0')}`
-    );
-    await expect(status).toContainText(`다음 프로젝트: ${firstTitle}`);
-    await page.keyboard.press('ArrowDown');
-    await expect(status).toContainText(
-      `${String(1).padStart(2, '0')} / ${String(count).padStart(2, '0')}`
-    );
-    await expect(status).toContainText(`다음 프로젝트: ${secondTitle}`);
+    const count = projects.length;
+    const of = (n: number) => `${String(n).padStart(2, '0')} / ${String(count).padStart(2, '0')}`;
+    const next = page.getByRole('button', { name: '다음 프로젝트' });
+    const prev = page.getByRole('button', { name: '이전 프로젝트' });
+    for (const button of [prev, next]) {
+      const box = (await button.boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+    await expect(status).toContainText(of(1));
+    await expect(status).toContainText(projects[0].title);
+    await next.focus();
+    for (let i = 1; i < count + 1; i += 1) await page.keyboard.press('Enter');
+    await expect(status).toContainText(of(count));
+    await expect(status).toContainText(projects[count - 1].title);
+    await expect(next).toHaveAttribute('aria-disabled', 'true');
+    await expect(next).toBeFocused();
+    await prev.focus();
+    await page.keyboard.press('Enter');
+    await expect(status).toContainText(of(count - 1));
+    await expect(status).toContainText(projects[count - 2].title);
+  });
+
+  // M4 Task 8. lg 아래에서는 프리뷰를 가로로 끌어 넘긴다. 실제 터치(CDP)로 끌고, 끝에서는 순환하지 않고, 탭은 상세를 연다
+  test('모바일(390x844)에서 프리뷰를 가로로 끌면 이웃 프로젝트로 넘어가고 끝에서는 돌아온다', async ({ page, browserName }) => {
+    test.skip(browserName !== 'chromium', 'CDP 터치 입력');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await enter(page, 'projects');
+    await expect(page.locator('#projects')).toHaveAttribute('data-locked', 'false');
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+    const status = page.locator('#projects [data-part="mobile-status"]');
+    const box = (await page.locator('[data-part="preview-swipe"]').boundingBox())!;
+    const y = Math.round(box.y + box.height / 2);
+    const swipe = async (from: number, dx: number) => {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: from, y, id: 1 }] });
+      for (let k = 1; k <= 10; k += 1) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: Math.round(from + (dx * k) / 10), y, id: 1 }] });
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    };
+    const start = await page.evaluate(() => window.scrollY);
+    await swipe(120, 200);
+    await expect(status).toContainText(`01 / `);
+    await swipe(300, -200);
+    await expect(status).toContainText(`02 / `, SLOW);
+    await expect(status).toContainText(projects[1].title);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(await page.evaluate(() => window.scrollY)).toBe(start);
   });
 
   test('모바일 Skills에서 선택 기술 설명과 적용 근거가 첫 화면에 보인다', async ({ page }) => {

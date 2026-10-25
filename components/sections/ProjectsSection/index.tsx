@@ -10,6 +10,7 @@ import { setProjectModalObscured } from '@/hooks/useProjectModalObscured';
 import { useSectionActivity } from '@/components/common/SectionActivityContext';
 import { useSectionVisibility } from '@/hooks/useSectionVisibility';
 import { useChapterLock } from '@/hooks/useChapterLock';
+import { drumItem, swipeOffset, swipeTarget, SWIPE_SLOP_PX } from './wheel';
 import type { Flip, gsap } from '@/lib/gsap';
 import type { PreviewMorphHandle } from '@/components/blocks/PreviewMorph';
 
@@ -90,25 +91,13 @@ export function reconcileProjectModal(historyState: unknown): string | null {
 
 const MUTED = 'rgb(255 255 255 / 0.62)';
 
-// 이름 목록의 휠 조형. 조형의 정본은
-// .claude/designRefactoring/optionWheel/optionWheel.tsx의 runFrame이고,
-// 여기로 옮겨 온 것은 배치 수학뿐이다. 휠 스크롤도 드래그도 순환도 안
-// 가져온다. 이 섹션에는 중첩 스크롤 계약이 이미 있어서 이름 위에서
-// wheel을 막으면 페이지 스크롤이 죽고, 여섯 개짜리 목록이 순환하면
-// 어디가 처음인지 사라진다. 선택은 클릭과 방향키로만 옮긴다. 호버도
-// 포커스도 선택을 옮기지 않는다.
-//
-// 값은 optionWheel의 기본값(항목 12개, 3rem 글자)이 아니라 우리 목록
-// (항목 여섯, 26px 글자)에 맞춘 것이다
-const WHEEL_TILT_DEG = 7; // 기본 6은 항목 12개의 곡률이다. 여섯이면 호가 직선으로 보인다
-const WHEEL_CURVE = 1;
-const WHEEL_BLUR_PX = 1.6; // 기본 2는 두 칸만 멀어져도 글자가 뭉갠다
-const WHEEL_FADE = 0.3; // 기본 0.25보다 세게. 항목이 적어 대비를 더 줘야 활성이 산다
-const WHEEL_MIN_OPACITY = 0.18; // 기본 0.05는 사실상 안 보인다. 몇 개인지가 이 목록의 정보다
+// 이름 목록의 휠. 화면 오른쪽 끝에 붙은 드럼이고 배치 수학은 ./wheel.ts의
+// drumItem이다(M4 Task 8). 휠 스크롤도 드래그도 순환도 optionWheel에서
+// 안 가져온다. 이 섹션의 세로 스크롤은 읽기 잠금(useChapterLock)의 것이고,
+// 여섯 개짜리 목록이 순환하면 어디가 처음인지 사라진다. 선택은 잠금의
+// 걸음, 클릭, 방향키로 옮기고 휠은 그 선택을 따라 돈다. 호버도 포커스도
+// 선택을 옮기지 않는다
 const WHEEL_SMOOTHING_MS = 200;
-// optionWheel의 side='right'. 호가 오른쪽으로 부풀어 활성 이름이 프리뷰에
-// 가장 가까운 자리에 남는다. 반대 부호였다면 먼 항목이 프리뷰 열을 침범한다
-const WHEEL_MIRROR = -1;
 // 모달이 열릴 때 휠의 나머지 이름이 벌어지는 폭과 블러. spread(0→1)가
 // 이 상수들에 곱해진다. 활성 항목(dist 0)은 안 받는다. 비행 손잡이가
 // 거기 있다
@@ -566,7 +555,11 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
     wasOpenRef.current = false;
 
     const raf = requestAnimationFrame(() => {
-      const opener = nameRefs.current[activeIndex];
+      // lg 아래에는 이름 목록이 없다(M4 Task 8). 그 화면에서 상세를 여는 것은 프리뷰 단추다
+      const name = nameRefs.current[activeIndex];
+      const opener = name?.checkVisibility?.() === false
+        ? sectionRef.current?.querySelector<HTMLElement>('[data-part="preview-open"]')
+        : name;
       const usable =
         !!opener?.isConnected && !opener.closest('[inert], [aria-hidden="true"]');
       const fallback = sectionRef.current?.closest<HTMLElement>('[data-section]') ?? null;
@@ -1056,63 +1049,47 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 휠 배치 한 프레임. 단추는 흐름에 그대로 서 있고 여기서 주는 것은 그
-  // 평평한 자리에서의 어긋남이다. d가 0인 활성 항목은 x와 rot은 항등이지만
-  // y는 아니다. 휠의 중심은 목록의 세로 한가운데로 고정이고, 활성 항목이
-  // 항상 그 자리에 오도록 centerShift((CENTER - pos) * rowH)를 더한다.
-  // reduce 경로는 이 인라인 스타일을 안 걸기만 하면 지금의 평평한 목록으로
-  // 그대로 돌아간다.
+  // 휠 배치 한 프레임. 단추는 흐름에 그대로 서 있고(오른쪽 정렬) 여기서
+  // 주는 것은 그 평평한 자리에서 드럼 위 자리로의 어긋남이다(./wheel.ts
+  // drumItem). 드럼의 가운데는 목록의 세로 한가운데로 고정이고, i번째
+  // 이름의 흐름 자리를 그리로 옮기는 (CENTER - i) * rowH를 더한다. 활성
+  // 이름은 기울기·배율이 항등이고 x만 프리뷰 쪽으로 부푼다. 그 부풂만큼
+  // 목록 왼쪽에 여백이 잡혀 있다(JSX의 pl). reduce 경로는 이 인라인
+  // 스타일을 안 걸기만 하면 평평한 오른쪽 정렬 목록으로 돌아간다.
   //
   // filter와 opacity는 단추가 받고 안쪽 span은 깨끗이 둔다. filter가 걸린
   // 요소는 새 스택 문맥을 만들고 자손의 fixed 기준을 바꾸는데, 그 span이
   // 제목 비행의 손잡이다
   const applyWheel = useCallback((pos: number) => {
     const els = nameRefs.current;
-    // 줄 높이는 단추의 실제 높이로 잰다. 글자 크기가 lg에서 갈리므로 상수로
-    // 박으면 좁은 화면에서 호가 어긋난다. 첫 항목 하나로 전부를 대표하는 것은
-    // 단추의 whitespace-nowrap이 모든 줄을 한 줄로 지켜 줄 간격을 균일하게
-    // 만들기 때문이다
+    // 줄 높이는 단추의 실제 높이로 잰다. 글자 크기가 화면 높이를 따라가므로
+    // 상수로 박을 수 없다. 첫 항목 하나로 전부를 대표하는 것은 단추의
+    // whitespace-nowrap이 모든 줄을 한 줄로 지켜 줄 간격을 균일하게
+    // 만들기 때문이다. 못 재면(첫 그림, 숨은 목록) 0이고 drumItem이 자리를
+    // 안 옮긴다
     const rowH = els[0]?.offsetHeight ?? 0;
-    const tiltRad = (WHEEL_TILT_DEG * Math.PI) / 180;
-    // 이웃 두 항목 사이 호의 길이가 줄 높이와 같아지는 반지름. tilt가 곧
-    // 얼마나 말리는가다
-    // 줄 높이를 아직 못 재면(첫 그림, 숨은 섹션) rowH가 0이고 R도 0이라
-    // 아래 R > 0 가지가 통째로 안 돈다. 호만 안 걸리고 거리 표현은 산다
-    const R = rowH / tiltRad;
-    // 고른 항목은 흐름상 pos * rowH 자리에 있다. 이 항을 더하면 그 자리가
-    // 항상 정확히 목록의 세로 한가운데(CENTER * rowH)로 옮겨진다, pos가
-    // 무엇이든 같다. rowH가 0이면 이 항도 0이라 위 NaN 방지와 안 부딪힌다
-    const centerShift = (CENTER - pos) * rowH;
     // 모달이 열리며 벌어지는 정도(0→1). handleStageMount·closeModal의
     // tween이 이 값을 매 프레임 바꾸고 applyWheel을 다시 부른다
     const spread = wheelSpreadRef.current.v;
-    const blurScale = window.innerWidth < 1024 ? 0.45 : 1;
     for (let i = 0; i < N; i += 1) {
       const el = els[i];
       if (!el) continue;
       const d = i - pos;
       const dist = Math.abs(d);
-      let x = 0;
-      let y = centerShift;
-      let rot = 0;
-      if (R > 0) {
-        const ang = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, d * tiltRad));
-        y = R * Math.sin(ang) - d * rowH + centerShift;
-        x = -WHEEL_MIRROR * R * (1 - Math.cos(ang)) * WHEEL_CURVE;
-        rot = (WHEEL_MIRROR * ang * 180) / Math.PI;
-      }
-      let opacity = Math.max(WHEEL_MIN_OPACITY, 1 - dist * WHEEL_FADE);
+      const item = drumItem(i, pos, N, rowH);
+      let y = item.y + (CENTER - i) * rowH;
+      let opacity = item.opacity;
       // 활성 항목에는 blur를 아예 안 건다. blur(0px)도 none이 아닌 이상
       // 겹을 하나 만들고, 이 단추 안에 비행 출발 손잡이가 들어 있다
-      let blurPx = dist > 0 ? dist * WHEEL_BLUR_PX * blurScale : 0;
+      let blurPx = item.blur;
       // spread는 활성이 아닌 항목만 받는다. 활성(dist 0)의 span은 S-5가
       // 따로 감춘다. 여기서 더 손대면 그 감춤과 겹친다
       if (dist > 0) {
         y += spread * d * WHEEL_SPLIT_PX;
         opacity *= 1 - spread;
-        blurPx += spread * WHEEL_SPLIT_BLUR_PX * blurScale;
+        blurPx += spread * WHEEL_SPLIT_BLUR_PX;
       }
-      el.style.transform = `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) rotate(${rot.toFixed(3)}deg)`;
+      el.style.transform = `translate(${item.x.toFixed(2)}px, ${y.toFixed(2)}px) rotate(${item.rot.toFixed(3)}deg) scale(${item.scale.toFixed(4)}, ${item.scaleY.toFixed(4)})`;
       el.style.opacity = String(opacity);
       el.style.filter = blurPx > 0 ? `blur(${blurPx.toFixed(2)}px)` : 'none';
       el.style.setProperty(
@@ -1244,23 +1221,9 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
     stepMs: PROJECT_STEP_MS,
     disabled: reducedMotion,
     blocked: navigationPending || obscured,
-    // 잠긴 동안은 스크롤할 수 없으니 잠금 자리에서 프리뷰나 이름이 header 밑이나 화면 아래로 잘리면 잠그지 않는다.
-    // 이름은 휠 자리로 잰다. 휠은 고른 이름을 목록 한가운데에 두고 먼 이름을 R sin(d·기울기)만큼 민다(applyWheel).
-    // 첫·마지막 프로젝트에서 가장 먼 이름이 목록 상자 밖으로 가장 멀리 나가므로 그 자리가 들어와야 한다.
-    // 안 그러면 그 이름이 잘리고, Home·End로 포커스를 주면 브라우저가 그 이름을 보이려고 스크롤해 잠금이 풀린다.
-    // 크기가 없는(배치되지 않은) 프리뷰는 잠글 자리가 없다.
-    fits: start => {
-      const preview = previewRef.current?.getBoundingClientRect();
-      const list = sectionRef.current?.querySelector('[data-part="index"]')?.getBoundingClientRect();
-      if (!preview?.width || !list) return false;
-      const shift = window.scrollY - start;
-      const row = list.height / N;
-      const tilt = (WHEEL_TILT_DEG * Math.PI) / 180;
-      const reach = (row / tilt) * Math.sin(Math.min(Math.PI / 2, (N - 1) * tilt)) + row / 2;
-      const centre = (list.top + list.bottom) / 2 + shift;
-      const header = document.querySelector('[data-scroll-header]')?.getBoundingClientRect().bottom ?? 0;
-      return Math.min(preview.top + shift, centre - reach) >= header && Math.max(preview.bottom + shift, centre + reach) <= window.innerHeight;
-    },
+    // 휠은 lg 위에만 있고 글자 크기(곧 드럼 크기)를 화면 높이로 잡아 늘 들어온다(M4 Task 8). 그래서 잠금은 About과 같이
+    // 모션 감소와 짧은 화면에서만 꺼지고, 휠이 없는 lg 아래에서는 세로 스크롤을 잡지 않는다(가로 끌기로 넘긴다).
+    fits: () => window.matchMedia?.(WIDE_QUERY).matches ?? true,
   });
   const { release: releaseLock, select: selectProject } = chapterLock;
   useImperativeHandle(ref, () => ({ release: releaseLock }), [releaseLock]);
@@ -1321,6 +1284,85 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
     [activeIndex, goTo, runAction, chapterLock.plain]
   );
 
+  // lg 아래의 이전·다음(M4 Task 8). 휠이 없는 화면에서 포인터 없이 넘기는 길이다. 끝에서는 순환하지 않는다
+  const stepProject = useCallback((dir: 1 | -1) => {
+    const to = activeIndexRef.current + dir;
+    if (to >= 0 && to < N) runAction(() => goTo(to));
+  }, [goTo, runAction]);
+
+  // lg 아래의 가로 끌기(M4 Task 8). 프리뷰를 왼쪽으로 끌면 다음, 오른쪽이면 이전 프로젝트로 녹아 넘어간다(goTo의 모프).
+  // touch-action: pan-y라 세로 끌기는 브라우저가 페이지 스크롤로 가져가고 pointercancel이 온다. 끄는 동안 프리뷰는 저항을
+  // 받으며 따라오고 끝에서는 고무줄처럼 늘었다가 돌아온다. 끈 뒤에 오는 click은 삼켜 끌기가 상세를 열지 않게 한다.
+  // 따라오는 것은 프리뷰 상자의 바깥 틀이다. 프리뷰 상자는 로고 착지의 앵커이자 FLIP 손잡이이고, 그 첫 자식은 motion.ts가 쓴다
+  const swipeRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ id: number; x: number; y: number; lastX: number; lastT: number; v: number; horizontal: boolean | null } | null>(null);
+  const draggedRef = useRef(false);
+  const handleSwipeDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    draggedRef.current = false;
+    dragRef.current = null;
+    if (event.button !== 0 || window.matchMedia?.(WIDE_QUERY).matches) return;
+    dragRef.current = { id: event.pointerId, x: event.clientX, y: event.clientY, lastX: event.clientX, lastT: event.timeStamp, v: 0, horizontal: null };
+  }, []);
+  const handleSwipeMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || event.pointerId !== drag.id) return;
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+    if (drag.horizontal === null) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_SLOP_PX) return;
+      drag.horizontal = Math.abs(dx) > Math.abs(dy);
+      if (!drag.horizontal) { dragRef.current = null; return; }
+      draggedRef.current = true;
+      swipeRef.current?.setPointerCapture?.(event.pointerId);
+    }
+    const dt = event.timeStamp - drag.lastT;
+    if (dt > 0) drag.v = (event.clientX - drag.lastX) / dt;
+    drag.lastX = event.clientX;
+    drag.lastT = event.timeStamp;
+    const el = swipeRef.current;
+    if (el && !reducedMotion) {
+      el.style.transition = 'none';
+      el.style.transform = `translateX(${swipeOffset(dx, activeIndexRef.current, N).toFixed(1)}px)`;
+    }
+  }, [reducedMotion]);
+  const handleSwipeEnd = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || event.pointerId !== drag.id) return;
+    dragRef.current = null;
+    if (!drag.horizontal) return;
+    const el = swipeRef.current;
+    if (el) {
+      // 놓으면 제자리로. 감속 곡선은 SITE_EASE_CUBIC(lib/gsap)과 같은 값이고 길이는 --animate-duration-base다.
+      // gsap을 정적으로 부르지 않으려고 값만 옮겨 적는다
+      el.style.transition = `transform ${PREVIEW_SWAP_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
+      el.style.removeProperty('transform');
+    }
+    if (event.type !== 'pointerup') return;
+    // 손을 멈췄다 놓았으면 튕긴 것이 아니다. 마지막 움직임이 100ms보다 오래됐으면 속도를 버린다
+    const velocity = event.timeStamp - drag.lastT > 100 ? 0 : drag.v;
+    const to = swipeTarget(event.clientX - drag.x, velocity, activeIndexRef.current, N);
+    if (to !== null) runAction(() => goTo(to));
+  }, [goTo, runAction]);
+  const stepButton = (dir: 1 | -1) => (
+    <button
+      type="button"
+      data-step={dir}
+      aria-label={dir < 0 ? '이전 프로젝트' : '다음 프로젝트'}
+      aria-disabled={dir < 0 ? activeIndex === 0 : activeIndex === N - 1}
+      onClick={() => stepProject(dir)}
+      className="size-11 grid place-items-center text-t5 text-[var(--color-text-secondary)] aria-disabled:opacity-30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)]"
+    >
+      <span aria-hidden="true">{dir < 0 ? '‹' : '›'}</span>
+    </button>
+  );
+  // 끌기 뒤 click이 안 오는 경우(터치)에 표시가 남아도 키보드의 click(detail 0)은 삼키지 않는다
+  const handleSwipeClick = useCallback((event: React.MouseEvent) => {
+    if (!draggedRef.current || event.detail === 0) return;
+    draggedRef.current = false;
+    event.preventDefault();
+    event.stopPropagation();
+  }, []);
+
   return (
     <section
       ref={node => { sectionRef.current = node; visibilityRef.current = node; }}
@@ -1331,10 +1373,22 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
     >
       <h2 className="sr-only">Projects</h2>
 
-      <div className="my-auto grid grid-cols-1 lg:grid-cols-[3fr_2fr]">
-        {/* 좁은 화면에서는 프리뷰가 w-full이라 justify-center가 할 일이 없다.
-            lg에서만 3fr 열 안의 80% 프리뷰를 가로 가운데로 민다 */}
-        <div className="flex items-center justify-center">
+      {/* lg에서는 프리뷰가 왼쪽 열 전체를 쓰고 이름 휠이 화면 오른쪽 끝(px-10 여백 안)에
+          붙는다(M4 Task 8). 휠 열은 가장 긴 이름만큼만 차지하고 나머지는 전부 프리뷰다.
+          두 열 다 세로 가운데라 드럼의 가운데와 프리뷰의 가운데가 같은 높이다 */}
+      <div className="my-auto grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+        {/* lg 아래의 가로 끌기 표면. 끄는 동안 이 틀이 손가락을 따라간다(handleSwipeMove).
+            pan-y라 세로 끌기는 페이지 스크롤로 간다 */}
+        <div
+          ref={swipeRef}
+          data-part="preview-swipe"
+          className="flex items-center justify-center max-lg:touch-pan-y"
+          onPointerDown={handleSwipeDown}
+          onPointerMove={handleSwipeMove}
+          onPointerUp={handleSwipeEnd}
+          onPointerCancel={handleSwipeEnd}
+          onClickCapture={handleSwipeClick}
+        >
           {/* 같은 data-flip-id를 가진 노드가 화면에 둘이면 Flip이 짝을 못
               짓는다. 펼침이 살아 있는 동안은 접힘 쪽 손잡이를 뗀다.
               About 로고가 이 상자로 내려앉는다(HomeClient motion.ts). 경계는
@@ -1345,7 +1399,7 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
             data-motion-anchor="projects-preview"
             aria-hidden="true"
             data-flip-id={modalOpen ? undefined : `pv-${activeProject.title}`}
-            className="w-full lg:w-[80%] aspect-video"
+            className="w-full aspect-video"
           >
             {/* 자르는 쪽이 여기다. 그림은 object-cover로 상자를 넘치므로
                 반경만 줘서는 모서리가 안 깎인다. rounded-media는 상세 판
@@ -1451,23 +1505,34 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
           </div>
         </div>
 
-        <p
-          aria-live="polite"
-          aria-atomic="true"
-          data-part="mobile-status"
-          className="mt-3 text-t7 text-[var(--color-text-secondary)] lg:hidden"
-        >
-          {String(activeIndex + 1).padStart(2, '0')} / {String(N).padStart(2, '0')} · 다음 프로젝트:{' '}
-          {projects[(activeIndex + 1) % N].title}
-        </p>
+        {/* lg 아래에서 끌기 말고 넘기는 길(M4 Task 8). 포인터 없는 사용자와 보조기기
+            사용자의 것이라 보이는 44px 단추로 둔다. 조용한 n / N 하나와 양옆 화살표뿐이다.
+            끝에서는 순환하지 않는다. disabled 대신 aria-disabled라 끝에 닿아도 포커스가
+            단추에 남는다. 지금 프로젝트 이름은 화면에는 캡션이 이미 보여 줘서 읽기만 한다 */}
+        <div className="mt-2 flex items-center justify-center lg:hidden">
+          {stepButton(-1)}
+          <p
+            aria-live="polite"
+            aria-atomic="true"
+            data-part="mobile-status"
+            className="px-2 text-t7 tabular-nums text-[var(--color-text-secondary)]"
+          >
+            {String(activeIndex + 1).padStart(2, '0')} / {String(N).padStart(2, '0')}
+            <span className="sr-only"> · {activeProject.title}</span>
+          </p>
+          {stepButton(1)}
+        </div>
 
-        <div className="lg:pl-10">
+        <div className="max-lg:hidden pl-10">
+          {/* 글자 크기가 곧 드럼 크기다. 화면 높이(6.6svh)로 잡아 휠이 늘 화면에 들어오고,
+              lg 바로 위의 좁은 창에서는 폭(4.2vw)이 막아 프리뷰 자리를 남긴다. 왼쪽 여백
+              1.75em은 고른 이름이 프리뷰 쪽으로 부푸는 폭(drumItem의 x, 줄 높이의 1.27배)이다 */}
           <div
             data-part="index"
             role="tablist"
             aria-orientation="vertical"
             aria-label="프로젝트 목록"
-            className="flex flex-col"
+            className="flex flex-col items-end pl-[1.75em] text-[clamp(2.5rem,min(6.6svh,4.2vw),4.5rem)]"
             onKeyDown={handleIndexKeyDown}
             // Tab으로 목록에 닿으면 그 이름의 프로젝트로 잠근다. 모달을 닫고 돌려받은 포커스는 사용자가 옮긴 것이 아니라 거른다
             onFocus={event => {
@@ -1494,13 +1559,14 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
                   // 띠가 생겨, 그 자리를 클릭해도 아무 이름도 안 잡힌다.
                   // py가 단추에 남아 있어야 줄과 줄 사이가 전부 과녁이다
                   //
-                  // 휠의 회전축은 글자가 시작하는 왼쪽 모서리다. 그래서 상자가
-                  // 오른쪽으로 넓을수록 그 오른쪽 끝이 세로로 크게 실린다.
-                  // 상자를 열 전체 너비로 쥐면 글자가 끝난 뒤의 빈 영역이
-                  // 통째로 실려 올라가 남의 줄 위를 덮고, 이름을 겨냥하지 않은
-                  // 자리에서 엉뚱한 프로젝트가 잡힌다. 과녁을 글자 너비로
-                  // 줄이면 보이는 것과 잡히는 것이 같아진다
-                  className={`block w-fit max-lg:max-w-full origin-left whitespace-nowrap max-lg:whitespace-normal max-lg:[overflow-wrap:anywhere] text-left text-t1 max-sm:text-[clamp(1.25rem,6.5vw,1.625rem)] lg:text-d3 font-bold tracking-[-0.02em] py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)] ${
+                  // 휠의 회전축은 글자가 끝나는 오른쪽 모서리다(오른쪽에 붙은
+                  // 드럼). 그래서 상자가 왼쪽으로 넓을수록 그 왼쪽 끝이 세로로
+                  // 크게 실린다. 상자를 열 전체 너비로 쥐면 글자 밖의 빈 영역이
+                  // 통째로 실려 남의 줄 위를 덮고, 이름을 겨냥하지 않은 자리에서
+                  // 엉뚱한 프로젝트가 잡힌다. 과녁을 글자 너비로 줄이면 보이는
+                  // 것과 잡히는 것이 같아진다. 세로 여백도 em이라 줄 높이가
+                  // 글자 크기와 같이 간다(1.35em)
+                  className={`block w-fit origin-right whitespace-nowrap text-right leading-[1.1] font-bold tracking-[-0.02em] py-[0.125em] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)] ${
                     isActive ? 'text-[var(--color-text-primary)]' : ''
                   }`}
                   // 휠이 도는 동안 색도 같이 간다. --pj-wheel-p는 활성에서

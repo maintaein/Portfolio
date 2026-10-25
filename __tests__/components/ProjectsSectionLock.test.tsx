@@ -29,18 +29,17 @@ const N = projects.length;
 const START = 1500;
 let documentY = 0;
 let clock = 10_000;
-// 잠금 자리에서 목록 아래끝까지의 거리. 목록 위끝은 300이고 이름은 N줄이다. 휠 끝의 먼 이름까지 화면(900) 안이어야 잠근다.
-let listBottom = 700;
-
 beforeEach(() => {
-  documentY = 0; clock = 10_000; listBottom = 700;
+  documentY = 0; clock = 10_000;
   Object.defineProperty(window, 'scrollY', { configurable: true, get: () => documentY });
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
   Object.defineProperty(window, 'innerHeight', { configurable: true, value: 900 });
   vi.spyOn(window, 'scrollTo').mockImplementation(((options: ScrollToOptions) => { documentY = options.top ?? documentY; }) as typeof window.scrollTo);
   vi.spyOn(performance, 'now').mockImplementation(() => clock);
+  // 화면 크기로 답한다. 잠금은 lg(1024) 이상에서만 걸리고 짧은 화면(640 이하)에서는 꺼진다(M4 Task 8).
   vi.stubGlobal('matchMedia', vi.fn().mockImplementation((query: string) => ({
-    matches: false, media: query, addEventListener: () => {}, removeEventListener: () => {},
+    matches: query === '(min-width: 1024px)' ? window.innerWidth >= 1024 : query === '(max-height: 640px)' ? window.innerHeight <= 640 : false,
+    media: query, addEventListener: () => {}, removeEventListener: () => {},
   })));
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
     const box = (top: number, height: number, width = 600) => ({
@@ -48,7 +47,7 @@ beforeEach(() => {
     }) as DOMRect;
     if (this.id === SECTION_IDS.PROJECTS) return box(START, 900);
     if (this.matches('[data-motion-anchor="projects-preview"]')) return box(START + 250, 370);
-    if (this.matches('[data-part="index"]')) return box(START + 300, listBottom - 300);
+    if (this.matches('[data-part="index"]')) return box(START + 300, 400);
     return box(0, 0, 0);
   });
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
@@ -271,20 +270,31 @@ describe('ProjectsSection 읽기 잠금 (M4 Task 7)', () => {
     expect(selected()).toBe(0);
   });
 
-  // Task 7 리뷰 N1. 글꼴이 바뀌면 줄 높이가 바뀌어 휠 자리가 달라진다. 섹션 상자가 그대로여도 다시 잰다.
-  it('글꼴이 준비되면 맞는지 다시 재 잠금을 켠다', async () => {
-    let ready!: () => void;
-    Object.defineProperty(document, 'fonts', { configurable: true, value: { ready: new Promise<void>(resolve => { ready = resolve; }) } });
-    try {
-      listBottom = 760;
-      mount(START);
-      expect(isLocked()).toBe(false);
-      listBottom = 700;
-      await act(async () => { ready(); await Promise.resolve(); });
-      expect(isLocked()).toBe(true);
-    } finally {
-      delete (document as { fonts?: unknown }).fonts;
-    }
+  // M4 Task 8. 휠은 화면 높이로 크기를 잡아 늘 들어오므로 잠금은 About처럼 노트북 화면에서도 걸린다.
+  it.each([[1280, 720], [1024, 768], [1440, 900]])('%ix%i에서 잠근다', (width, height) => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: height });
+    mount(START - 60);
+    wheel(100, 20_000);
+    expect(isLocked()).toBe(true);
+    expect(selected()).toBe(0);
+    key('ArrowDown', 20_000 + PROJECT_STEP_MS);
+    expect(selected()).toBe(1);
+    expect(window.scrollY).toBe(START);
+  });
+
+  // lg 아래에는 휠이 없고 가로 끌기로 넘긴다. 세로 스크롤은 잠그지 않고 그대로 지나간다.
+  it('lg 아래(390x844)에서는 잠그지 않고 세로 입력이 문서로 지나간다', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 844 });
+    mount(START);
+    expect(isLocked()).toBe(false);
+    expect(wheel(100, 20_000).defaultPrevented).toBe(false);
+    const touch = (y: number, at: number, type: string) => stamp(Object.assign(new Event(type, { cancelable: true }), { touches: [{ clientY: y }] }), at);
+    touch(500, 20_100, 'touchstart');
+    expect(touch(400, 20_116, 'touchmove').defaultPrevented).toBe(false);
+    expect(window.scrollTo).not.toHaveBeenCalled();
+    expect(selected()).toBe(0);
   });
 
   it('Tab으로 이름 목록에 닿으면 그 이름의 프로젝트로 잠근다', async () => {
@@ -337,10 +347,9 @@ describe('ProjectsSection 읽기 잠금 (M4 Task 7)', () => {
   it.each([
     ['모션 감소', { reducedMotion: true }, () => {}],
     ['짧은 화면', {}, () => vi.stubGlobal('matchMedia', vi.fn().mockImplementation((media: string) => ({
-      matches: media === '(max-height: 640px)', media, addEventListener: () => {}, removeEventListener: () => {},
+      matches: media === '(max-height: 640px)' || media === '(min-width: 1024px)', media, addEventListener: () => {}, removeEventListener: () => {},
     })))],
-    // 목록 상자(300-760)는 화면(900) 안이지만 한 줄이 76.7px이면 휠 끝의 가장 먼 이름은 아래끝이 928px까지 간다.
-    ['목록 상자는 들어와도 휠 끝의 먼 이름이 잠금 자리에서 화면 아래로 잘리는 화면', {}, () => { listBottom = 760; }],
+    ['lg 아래 화면', {}, () => { Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1023 }); }],
   ] as const)('%s이면 잠그지 않고 목록의 방향키는 그대로 순환한다', (_, props, setup) => {
     setup();
     mount(START, props);
