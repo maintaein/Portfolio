@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DRUM_MIN_OPACITY,
+  MUTED_ALPHA,
   DRUM_STEP_DEG,
   drumItem,
   swipeOffset,
@@ -16,21 +17,25 @@ const ROW = 70;
 const COUNT = 6;
 const at = (i: number, pos: number) => drumItem(i, pos, COUNT, ROW);
 
-describe('reference wheel tuning', () => {
-  it.each([1, 2])('keeps neighbour %i near full scale', distance => {
+describe('기준 그림에 맞춘 휠', () => {
+  it.each([1, 2])('이웃 %i칸의 크기를 거의 그대로 둔다', distance => {
     expect(at(distance, 0).scale).toBeGreaterThanOrEqual(0.95);
   });
-  it.each([[1, 1, 1.5], [2, 4, 6]])('softens row %i', (distance, min, max) => {
+  it.each([[1, 1, 1.5], [2, 4, 6]])('%i칸 떨어진 이름을 부드럽게 흐린다', (distance, min, max) => {
     expect(at(distance, 0).blur).toBeGreaterThanOrEqual(min);
     expect(at(distance, 0).blur).toBeLessThanOrEqual(max);
   });
-  it('tilts two rows by 10 to 15 degrees', () => {
+  it('두 칸 떨어진 이름은 10~15도 기울인다', () => {
     expect(at(2, 0).rot).toBeLessThanOrEqual(-10);
     expect(at(2, 0).rot).toBeGreaterThanOrEqual(-15);
   });
-  it('keeps a visible horizon floor of 0.12', () => {
-    expect(DRUM_MIN_OPACITY).toBe(0.12);
-    expect(at(5, 0).opacity).toBe(DRUM_MIN_OPACITY);
+  it.each([0, 5])('선택 %i에서 모든 이름의 번짐은 6px 이하다', pos => {
+    for (let i = 0; i < COUNT; i += 1) expect(at(i, pos).blur).toBeLessThanOrEqual(6);
+  });
+  it.each([0, 5])('선택 %i에서 비활성 이름의 실제 알파는 0.15 이상이다', pos => {
+    for (let i = 0; i < COUNT; i += 1) {
+      if (i !== pos) expect(at(i, pos).opacity * MUTED_ALPHA).toBeGreaterThanOrEqual(0.15);
+    }
   });
 });
 

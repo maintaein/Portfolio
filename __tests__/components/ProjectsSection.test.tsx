@@ -123,7 +123,7 @@ describe('ProjectsSection 접힘 레이아웃', () => {
     expect(source).toContain('lg:grid-cols-[minmax(0,1fr)_auto]');
   });
 
-  it('uses 1.5em rows and a smaller desktop preview at 16:9', () => {
+  it('줄 간격은 1.5em이고 데스크톱 프리뷰는 작은 16:9다', () => {
     renderSection();
     expect(document.querySelector('[data-name="0"]')!.className).toContain('py-[0.2em]');
     const preview = document.querySelector('[data-part="preview"]')!;

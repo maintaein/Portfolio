@@ -10,7 +10,7 @@ import { setProjectModalObscured } from '@/hooks/useProjectModalObscured';
 import { useSectionActivity } from '@/components/common/SectionActivityContext';
 import { useSectionVisibility } from '@/hooks/useSectionVisibility';
 import { useChapterLock } from '@/hooks/useChapterLock';
-import { drumItem, swipeOffset, swipeTarget, SWIPE_SLOP_PX } from './wheel';
+import { MUTED_ALPHA, drumItem, swipeOffset, swipeTarget, SWIPE_SLOP_PX } from './wheel';
 import type { Flip, gsap } from '@/lib/gsap';
 import type { PreviewMorphHandle } from '@/components/blocks/PreviewMorph';
 
@@ -89,7 +89,7 @@ export function reconcileProjectModal(historyState: unknown): string | null {
   return id;
 }
 
-const MUTED = 'rgb(255 255 255 / 0.5)';
+const MUTED = `rgb(255 255 255 / ${MUTED_ALPHA})`;
 
 // 이름 목록의 휠. 화면 오른쪽 끝에 붙은 드럼이고 배치 수학은 ./wheel.ts의
 // drumItem이다(M4 Task 8). 휠 스크롤도 드래그도 순환도 optionWheel에서
@@ -1387,7 +1387,9 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
     >
       <h2 className="sr-only">Projects</h2>
 
-      {/* The wheel hugs the right edge; both columns share the vertical centre. */}
+      {/* 프리뷰는 왼쪽 열을 쓰고 휠은 오른쪽 끝에 붙는다.
+          휠 열은 가장 긴 이름의 굵은 글자 너비를 확보해 선택이 바뀌어도 폭이 같다.
+          두 열은 세로 가운데를 공유한다 */}
       <div className="my-auto grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
         {/* lg 아래의 가로 끌기 표면. 끄는 동안 이 틀이 손가락을 따라간다(handleSwipeMove).
             pan-y라 세로 끌기는 페이지 스크롤로 간다 */}
@@ -1411,7 +1413,7 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
             data-motion-anchor="projects-preview"
             aria-hidden="true"
             data-flip-id={modalOpen ? undefined : `pv-${activeProject.title}`}
-            // Desktop preview uses 75% of its column; keep mobile full width.
+            // 데스크톱 프리뷰는 왼쪽 열의 75%로 줄이고 모바일은 전체 폭을 쓴다
             className="w-full lg:w-3/4 aspect-video"
           >
             {/* 자르는 쪽이 여기다. 그림은 object-cover로 상자를 넘치므로
@@ -1553,6 +1555,12 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
               if (!restoringFocusRef.current && Number.isInteger(index)) chapterLock.focus(event, index);
             }}
           >
+            {/* 굵은 이름을 같은 칸에 겹쳐 열 너비만 확보하고 회전 과녁과 비행 손잡이는 그대로 둔다 */}
+            <div aria-hidden="true" className="invisible grid h-0 pointer-events-none font-bold leading-[1.1] tracking-[-0.02em]">
+              {projects.map(project => (
+                <span key={project.title} className="col-start-1 row-start-1 whitespace-nowrap">{project.title}</span>
+              ))}
+            </div>
             {projects.map((project, i) => {
               const isActive = i === activeIndex;
               return (

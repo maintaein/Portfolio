@@ -5,22 +5,26 @@
 // 이름 하나는 드럼 위의 각도 하나다. 자리(y), 오른쪽 끝으로 휘어 들어가는 정도(x), 크기, 위아래로 눌린 정도, 기울기,
 // 번짐, 투명도가 전부 그 각도에서 나온다. 평평한 목록에 기울기만 준 것과 갈리는 지점이 이것이다.
 
+// 비활성 글자색의 알파. 드럼 투명도와 곱한 실제 밝기를 검사할 때도 같은 값을 쓴다
+export const MUTED_ALPHA = 0.5;
 // 이웃 사이 드럼 각. 여섯 이름이면 가장 먼 이름이 75도라 지평선(90도) 바로 앞에서 납작하게 남는다
 export const DRUM_STEP_DEG = 15;
-// 드럼 반지름에 대한 옆 휨의 깊이. 고른 이름이 프리뷰 쪽으로 부푸는 정도다. 기준 그림에서 두세 칸 먼 이름이 들어가는 폭에 맞췄다
+// 기준 그림을 좌우로 비춘 휨의 깊이. 반지름의 0.65배로 고른 이름이 줄 높이의 약 1.84배만큼 프리뷰 쪽으로 부푼다
 export const DRUM_CURVE = 0.65;
-// Shrink toward the horizon using sin to the fourth power.
+// sin의 네제곱으로 줄여 이웃 크기는 유지하고 지평선 가까이에서 주로 작아진다
 export const DRUM_SHRINK = 0.5;
 // 위아래로 눌리는 정도(원근의 단축). 1이면 지평선에서 선이 되고, 0.65면 가장 먼 이름도 글자 모양이 남는다
 export const DRUM_SQUASH = 0.65;
 // 드럼 각에 대한 글자 기울기의 비. 각도를 그대로 쓰면 먼 이름이 수십 도 누워 읽히지 않는다
 export const DRUM_TILT = 0.4;
-// 지평선에서의 번짐. 기준 그림처럼 바로 옆 이름부터 살짝 번지고 멀수록 빨리 번진다(sin²)
+// sin²으로 번져 이웃은 약 1.2px, 두 칸은 4.5px이고 먼 이름은 아래 상한에서 멈춘다
 export const DRUM_BLUR_PX = 18;
-// 앞면에서 멀어지며 흐려지는 비율(sin에 곱한다). 기준 그림의 바로 옆 이름이 절반 남짓 밝기다
+// 먼 이름도 단어로 읽히도록 번짐을 6px에서 막는다
+export const DRUM_MAX_BLUR_PX = 6;
+// opacity와 MUTED 알파가 곱해져 바로 옆 이름의 실제 밝기는 약 0.36이다(sin에 곱한다)
 export const DRUM_FADE = 1.1;
 // 투명도의 바닥. 몇 개인지가 이 목록의 정보라 가장 먼 이름도 셀 수 있게 남긴다
-export const DRUM_MIN_OPACITY = 0.12;
+export const DRUM_MIN_OPACITY = 0.3;
 
 export interface DrumItem {
   // 오른쪽 끝(흐름 자리)에서의 가로 어긋남. 늘 0 이하이고 고른 이름이 가장 왼쪽이다
@@ -44,7 +48,7 @@ export function drumItem(i: number, pos: number, count: number, rowH: number): D
   const cos = Math.cos(ang);
   const sin = Math.abs(Math.sin(ang));
   const opacity = Math.max(DRUM_MIN_OPACITY, 1 - DRUM_FADE * sin);
-  const blur = DRUM_BLUR_PX * sin * sin;
+  const blur = Math.min(DRUM_MAX_BLUR_PX, DRUM_BLUR_PX * sin * sin);
   if (!(rowH > 0)) return { x: 0, y: 0, rot: 0, scale: 1, scaleY: 1, opacity, blur };
   const R = rowH / step;
   const far = Math.cos(Math.min(Math.PI / 2, (count - 1) * step));
