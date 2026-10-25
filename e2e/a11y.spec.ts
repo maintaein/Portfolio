@@ -252,3 +252,38 @@ test.describe('접근성', () => {
     expect(cls).toBeLessThan(0.1);
   });
 });
+
+for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+  test('Projects open controls and aria-hidden-focus at ' + viewport.width + 'x' + viewport.height, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await enter(page, 'projects');
+    await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
+    const violations = await page.evaluate(async () => {
+      const axe = (window as unknown as { axe: typeof import('axe-core') }).axe;
+      return (await axe.run('#projects', { runOnly: { type: 'rule', values: ['aria-hidden-focus'] } })).violations;
+    });
+    expect(violations).toEqual([]);
+    const preview = page.locator('#projects [data-part="preview-open"]');
+    if (viewport.width >= 1024) {
+      await expect(preview).toHaveAttribute('tabindex', '-1');
+      return;
+    }
+    await page.getByRole('button', { name: '다음 프로젝트' }).click();
+    const opener = page.getByRole('button', { name: projects[1].title + ' 자세히 보기' });
+    const box = (await opener.boundingBox())!;
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    await expect(page.locator('#projects [data-part="preview-media"]')).toHaveAttribute('aria-hidden', 'true');
+    await page.getByRole('button', { name: '이전 프로젝트' }).focus();
+    await page.keyboard.press('Shift+Tab');
+    await expect(opener).toBeFocused();
+    await expect(opener).toHaveCSS('outline-style', 'solid');
+    await expect(opener).toHaveCSS('outline-offset', '-2px');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('dialog')).toBeAttached(SLOW);
+    await expect(page.locator('#pm-title')).toHaveText(projects[1].title, SLOW);
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0, SLOW);
+    await expect(opener).toBeFocused(SLOW);
+  });
+}

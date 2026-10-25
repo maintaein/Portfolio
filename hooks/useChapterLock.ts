@@ -7,6 +7,8 @@ const GESTURE_IDLE_MS = 220;
 const WHEEL_PAUSE_MS = 56;
 // 다시 프레임 간격으로 붙는 wheel. 느리거나 보통 속도로 굴린 마우스 노치는 이보다 길다. 빠르게 튕긴 노치는 10-20ms로 올 수 있다.
 const WHEEL_FRAME_MS = 20;
+// Smooth key scrolls can cross late on slow frames (900ms); expire no-op keys without relying on scrollend.
+const KEY_SCROLL_PENDING_MS = 1500;
 
 // 공유 로고와 이 섹션의 관계. flying: 이 섹션으로 날아오는 중(잠금을 미룬다), landed: 이 섹션에 내려앉았다(미룬 잠금을 건다),
 // away: 다른 자리에 있다(미룬 잠금을 버린다. awayDefers가 없으면 잠금 자체는 막지 않는다).
@@ -85,8 +87,8 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
     let lastNativeInput = -Infinity;
     // 문서로 넘긴 키 스크롤이 아직 진행 중일 수 있다. 브라우저의 한 걸음은 아래 .8 화면 추정보다 길고(PageUp 약 .875), 굴러가는 중의
     // 누름은 남은 목표에 더해진다. 그래서 키가 잠금 자리를 넘는지는 실제로 넘은 스크롤 이벤트로 정하고, 다른 입력이 오거나 스크롤이
-    // 끝나면(scrollend) 닫는다. 시간 창(350ms)은 느린 프레임에서 그 이벤트를 놓쳤다(Task 8 리뷰).
-    let keyPending = false;
+    // 끝나면(scrollend) 닫는다. 짧은 시간 창(350ms)은 느린 프레임에서 그 이벤트를 놓쳤으므로 더 긴 상한을 둔다.
+    let keyPendingUntil = -Infinity;
     // 로고가 날아가는 동안 미룬 잠금의 index. 없으면 null.
     let held: number | null = null;
     const last = () => latest.current.count - 1;
@@ -116,7 +118,7 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
     const lock = (index: number, time: number) => {
       held = landedRef.current ? null : index;
       if (held !== null) return;
-      keyPending = false;
+      keyPendingUntil = -Infinity;
       setPhase('locked'); lastInput = time; lastStep = time;
       pendingGesture = false;
       choose(index);
@@ -148,7 +150,7 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
     const editable = (target: EventTarget | null) => target instanceof HTMLElement
       && !!target.closest('input, textarea, select, [contenteditable="true"]');
     const wheelInput = (event: WheelEvent) => {
-      keyPending = false;
+      keyPendingUntil = -Infinity;
       if (event.ctrlKey || editable(event.target)) return false;
       const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1);
       if (delta === 0) return false;
@@ -182,8 +184,8 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
     function lockedWheel(event: WheelEvent) {
       if (wheelInput(event) && event.cancelable) event.preventDefault();
     }
-    const closeOvershoot = () => { lastNativeInput = -Infinity; keyPending = false; };
-    const closeKey = () => { keyPending = false; };
+    const closeOvershoot = () => { lastNativeInput = -Infinity; keyPendingUntil = -Infinity; };
+    const closeKey = () => { keyPendingUntil = -Infinity; };
     const key = (event: KeyboardEvent) => {
       closeOvershoot();
       if (editable(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
@@ -193,9 +195,9 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
       if (!direction) return;
       if (event.repeat && phase === 'locked') { event.preventDefault(); return; }
       if (input(direction * window.innerHeight * .8, event.timeStamp, true)) event.preventDefault();
-      else keyPending = phase !== 'locked';
+      else keyPendingUntil = phase !== 'locked' ? performance.now() + KEY_SCROLL_PENDING_MS : -Infinity;
     };
-    const touchStart = (event: TouchEvent) => { keyPending = false; touchY = event.touches[0]?.clientY ?? 0; touchConsumed = false; };
+    const touchStart = (event: TouchEvent) => { keyPendingUntil = -Infinity; touchY = event.touches[0]?.clientY ?? 0; touchConsumed = false; };
     const touchInput = (event: TouchEvent, blocking: boolean) => {
       if (event.touches.length !== 1 || editable(event.target)) return;
       const nextY = event.touches[0].clientY;
@@ -217,7 +219,7 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
       // 스크롤 때문에 수백 px까지 간다. 스크롤바는 입력이 없고, History·명시적 이동·다른 키는
       // 이 창을 닫으므로 끌려오지 않는다.
       const overshoot = !blocked && performance.now() - lastNativeInput < 350;
-      if ((overshoot || (keyPending && !blocked)) && phase !== 'locked' && (phase === 'before' ? offset > 0 : offset < 0)) {
+      if ((overshoot || (performance.now() < keyPendingUntil && !blocked)) && phase !== 'locked' && (phase === 'before' ? offset > 0 : offset < 0)) {
         lock(phase === 'after' ? last() : 0, performance.now());
         return;
       }

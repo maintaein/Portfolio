@@ -949,8 +949,8 @@ describe('ProjectsSection 프리뷰 캡션', () => {
     renderSection();
     const preview = document.querySelector<HTMLElement>('[data-part="preview"]')!;
     // 같은 제목이 화면에 둘이다. 스크린리더에는 이름 목록 쪽만 준다
-    expect(preview.getAttribute('aria-hidden')).toBe('true');
-    expect(caption().closest('[aria-hidden="true"]')).toBe(preview);
+    expect(preview.closest('[aria-hidden="true"]')).toBeNull();
+    expect(caption().closest('[aria-hidden="true"]')).toBe(document.querySelector('[data-part="preview-media"]'));
 
     // 눈으로도 주종이 갈려야 한다. typeRamp는 실제 px다. 캡션이 이름보다
     // 작아야 한다(사다리 스텝 비교가 아니라 크기 비교다)
@@ -2175,4 +2175,31 @@ describe('ProjectsSection 모바일 가로 끌기 (M4 Task 8)', { timeout: 30_00
       expect(button.parentElement!.className.split(/\s+/)).toContain('lg:hidden');
     }
   });
+});
+
+it('mobile preview is labelled and reachable, and its open action waits for the Task 2 gate', () => {
+  let proceed: (() => void) | undefined;
+  const push = vi.spyOn(window.history, 'pushState');
+  render(<SectionActivityProvider obscured={false} pageVisible routeResolved motionReady reducedMotion={false}>
+    <ProjectsSection beforeAction={run => { proceed = run; }} />
+  </SectionActivityProvider>);
+  const opener = screen.getByRole('button', { name: projects[0].title + ' 자세히 보기' });
+  expect(opener.tabIndex).toBe(0);
+  expect(opener.closest('[aria-hidden="true"]')).toBeNull();
+  fireEvent.click(opener);
+  expect(push).not.toHaveBeenCalled();
+  act(() => proceed!());
+  expect(push.mock.calls.at(-1)![0].projectModalId).toBe(projects[0].title);
+});
+
+it('desktop preview stays mouse-clickable without adding a tab stop', () => {
+  vi.stubGlobal('matchMedia', vi.fn().mockImplementation((media: string) => ({
+    matches: media === '(min-width: 1024px)', media, addEventListener: () => {}, removeEventListener: () => {},
+  })));
+  const push = vi.spyOn(window.history, 'pushState');
+  renderSection();
+  const opener = document.querySelector<HTMLButtonElement>('[data-part="preview-open"]')!;
+  expect(opener.tabIndex).toBe(-1);
+  fireEvent.click(opener);
+  expect(push.mock.calls.at(-1)![0].projectModalId).toBe(projects[0].title);
 });

@@ -265,6 +265,15 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
   const spreadTweenRef = useRef<{ kill: () => void } | null>(null);
   const sectionRef = useRef<HTMLElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
+  const previewOpenRef = useRef<HTMLButtonElement | null>(null);
+  const [wide, setWide] = useState(true);
+  useEffect(() => {
+    const query = window.matchMedia?.(WIDE_QUERY);
+    const update = () => setWide(query?.matches ?? true);
+    update();
+    query?.addEventListener('change', update);
+    return () => query?.removeEventListener('change', update);
+  }, []);
   // 프로젝트 전환 tween이 붙는 겹. previewRef 자신이 아니라 그 안쪽이다 -
   // openModal이 Flip.getState(previewRef)로 뜨는 것은 previewRef의
   // getBoundingClientRect이고, 자식에 걸린 transform은 거기 안 섞인다.
@@ -556,13 +565,13 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
 
     const raf = requestAnimationFrame(() => {
       // lg 아래에는 이름 목록이 없다(M4 Task 8). 숨은 이름에 focus()를 보내면 아무 일도 없이 포커스가 문서 바닥으로 떨어진다.
-      // 그때는 섹션으로 돌려준다(프리뷰 단추는 aria-hidden 상자 안이라 아래 usable이 어차피 거른다)
+      // 그때는 모바일의 열기 단추로 돌려준다.
       const name = nameRefs.current[activeIndex];
       // checkVisibility가 없는 브라우저(Safari 17.4 전)는 목록 칸이 display none인지로 본다. offsetParent·getClientRects는 jsdom에서 늘 비어 쓰지 않는다
       const hidden = !!name && (typeof name.checkVisibility === 'function'
         ? !name.checkVisibility()
         : getComputedStyle(name.closest('[data-part="index"]')?.parentElement ?? name).display === 'none');
-      const opener = hidden ? null : name;
+      const opener = hidden ? previewOpenRef.current : name;
       const usable =
         !!opener?.isConnected && !opener.closest('[inert], [aria-hidden="true"]');
       const fallback = sectionRef.current?.closest<HTMLElement>('[data-section]') ?? null;
@@ -1411,7 +1420,6 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
             ref={previewRef}
             data-part="preview"
             data-motion-anchor="projects-preview"
-            aria-hidden="true"
             data-flip-id={modalOpen ? undefined : `pv-${activeProject.title}`}
             // 데스크톱 프리뷰는 왼쪽 열의 75%로 줄이고 모바일은 전체 폭을 쓴다
             className="w-full lg:w-3/4 aspect-video"
@@ -1425,7 +1433,7 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
               className="relative h-full w-full overflow-hidden rounded-media"
               style={{ background: 'rgb(255 255 255 / 0.06)' }}
             >
-            <div ref={mediaLayerRef} data-part="preview-media" className="absolute inset-0">
+            <div ref={mediaLayerRef} data-part="preview-media" aria-hidden="true" className="absolute inset-0">
               {mediaError ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-center px-4">
                   <span className="text-[13px] tabular-nums" style={{ color: MUTED }}>
@@ -1479,7 +1487,7 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
                 >
                   {/* 자리를 옮기는 것은 이 안쪽 묶음뿐이다. 바깥 띠까지 같이
                       밀면 민 폭만큼 오른쪽 끝이 안 어두운 채로 남아서, 띠는
-                      clip으로 연다. 프리뷰 컨테이너에 aria-hidden이 걸려
+                      clip으로 연다. 미디어 겹에 aria-hidden이 걸려
                       있으므로 이 글자는 장식이고, 같은 내용을 오른쪽 이름
                       목록이 이미 스크린리더에 준다. 그래서 이름 목록보다 작고
                       흐리다. 같은 제목이 화면에 둘이니 어느 쪽이 주인공인지
@@ -1509,12 +1517,14 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
                 과녁만 덧대 얹는다. 자르는 조상이 이미 있어 사각형 모서리가
                 따로 튀지 않는다 */}
             <button
+              ref={previewOpenRef}
               type="button"
               data-part="preview-open"
+              tabIndex={wide ? -1 : 0}
               onClick={handlePreviewClick}
               aria-label={`${activeProject.title} 자세히 보기`}
               disabled={!isProjectModalReady(activeProject)}
-              className="absolute inset-0 block h-full w-full border-0 bg-transparent p-0 text-left [font:inherit] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)]"
+              className="absolute inset-0 block h-full w-full min-h-11 min-w-11 border-0 bg-transparent p-0 text-left [font:inherit] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-cyan-core)]"
             />
             </div>
           </div>

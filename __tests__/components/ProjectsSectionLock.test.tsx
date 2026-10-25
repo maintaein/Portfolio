@@ -386,7 +386,7 @@ describe('ProjectsSection 읽기 잠금 (M4 Task 7)', () => {
 
   // Task 8 리뷰. 브라우저의 PageUp 한 번은 화면의 .8보다 길고(크롬은 약 .875), 느린 프레임에서는 그 스크롤 이벤트가 350ms보다 늦게 온다.
   // 키 스크롤이 잠금 자리를 넘는지는 추정이 아니라 실제로 넘은 스크롤 이벤트로 정한다. 다른 입력이 오면 그 키의 몫은 끝난다.
-  it('잠금 자리 바로 아래에서 PageUp이 .8 화면 추정으로는 못 닿아도 늦게 온 스크롤이 잠금 자리를 넘으면 마지막 프로젝트로 잠근다', () => {
+  it('a late key crossing at 900ms still locks the last project', () => {
     mount(START + 765);
     expect(isLocked()).toBe(false);
     expect(key('PageUp', 20_000).defaultPrevented).toBe(false);
@@ -408,9 +408,26 @@ describe('ProjectsSection 읽기 잠금 (M4 Task 7)', () => {
     expect(window.scrollTo).not.toHaveBeenCalled();
   });
 
-  // Task 8 리뷰 N3. lg 아래에서는 이름 목록이 display none이다. checkVisibility가 없는 브라우저(Safari 17.4 전)에서도 모달을 닫으면
-  // 포커스가 숨은 이름이 아니라 섹션(문서의 data-section 상자)으로 돌아온다. jsdom에는 checkVisibility가 없어 이 경로가 곧 대체 판정이다
-  it('이름 목록이 숨은 화면에서 모달을 닫으면 checkVisibility 없이도 포커스가 숨은 이름이 아니라 섹션으로 돌아온다', async () => {
+  it('pending key expires after 1500ms so an input-free crossing does not pull the page', () => {
+    mount(START + 765);
+    expect(key('PageUp', 20_000).defaultPrevented).toBe(false);
+    scrollAt(START - 22, 21_501);
+    expect(isLocked()).toBe(false);
+    expect(window.scrollTo).not.toHaveBeenCalled();
+  });
+
+  it.each(['scrollend', 'pointerdown', 'touchstart', 'popstate', 'release'] as const)('%s clears a pending key before a late crossing', closer => {
+    const { handle } = mount(START + 765);
+    expect(key('PageUp', 20_000).defaultPrevented).toBe(false);
+    if (closer === 'release') act(() => handle.current!.release());
+    else stamp(Object.assign(new Event(closer), { touches: [{ clientY: 500 }] }), 20_400);
+    scrollAt(START - 22, 20_900);
+    expect(isLocked()).toBe(false);
+    expect(window.scrollTo).not.toHaveBeenCalled();
+  });
+
+  // Hidden names must return focus to the mobile opener, including without checkVisibility.
+  it('이름 목록이 숨은 화면에서 모달을 닫으면 checkVisibility 없이도 포커스가 프리뷰 열기 단추로 돌아온다', async () => {
     expect('checkVisibility' in Element.prototype).toBe(false);
     const ready = projects.findIndex(isProjectModalReady);
     documentY = START + 300;
@@ -425,6 +442,6 @@ describe('ProjectsSection 읽기 잠금 (M4 Task 7)', () => {
     expect(await screen.findByRole('dialog', {}, { timeout: 20_000 })).toBeTruthy();
     fireEvent.keyDown(document, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull(), { timeout: 20_000 });
-    await waitFor(() => expect(document.activeElement).toBe(document.querySelector('[data-section="projects"]')), { timeout: 5_000 });
+    await waitFor(() => expect(document.activeElement).toBe(document.querySelector('[data-part="preview-open"]')), { timeout: 5_000 });
   }, 30_000);
 });
