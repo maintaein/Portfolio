@@ -269,23 +269,24 @@ describe('ProjectsSection 이름 목록', () => {
     expect(Array.from(names).filter((c) => c.tabIndex === 0)).toHaveLength(1);
   });
 
-  it('ArrowDown이 끝에서 처음으로 감긴다', () => {
+  // 휠은 순환하지 않는다(M4 Task 8). 잠금이 꺼진 화면(짧은 lg, 모션 감소)의 목록 방향키도 끝에서 멈춘다
+  it('ArrowDown이 끝에서 멈춘다', () => {
     renderSection();
     const row = document.querySelector('[role="tablist"]')!;
     for (let i = 0; i < N; i += 1) fireEvent.keyDown(row, { key: 'ArrowDown' });
-    // N번 누르면 제자리다. 순환이 안 되면 마지막에 멈춘다
-    expect(
-      document.querySelector('[aria-selected="true"]')!.getAttribute('data-name')
-    ).toBe('0');
-  });
-
-  it('ArrowUp이 처음에서 끝으로 감긴다', () => {
-    renderSection();
-    const row = document.querySelector('[role="tablist"]')!;
-    fireEvent.keyDown(row, { key: 'ArrowUp' });
     expect(
       document.querySelector('[aria-selected="true"]')!.getAttribute('data-name')
     ).toBe(String(N - 1));
+  });
+
+  it('ArrowUp이 처음에서 멈추고 끝에서는 키를 막지 않는다', () => {
+    renderSection();
+    const row = document.querySelector('[role="tablist"]')!;
+    const pressed = fireEvent.keyDown(row, { key: 'ArrowUp' });
+    expect(
+      document.querySelector('[aria-selected="true"]')!.getAttribute('data-name')
+    ).toBe('0');
+    expect(pressed).toBe(true);
   });
 
   it('현재 위치와 다음 프로젝트 안내가 선택에 맞춰 바뀐다', () => {
@@ -312,15 +313,15 @@ describe('ProjectsSection 이름 목록', () => {
     );
     expect(status).toHaveTextContent(projects[count - 1].title);
 
-    fireEvent.keyDown(row, { key: 'ArrowDown' });
+    fireEvent.keyDown(row, { key: 'ArrowUp' });
 
     expect(status).toHaveTextContent(
-      `${String(1).padStart(2, '0')} / ${String(count).padStart(2, '0')}`
+      `${String(count - 1).padStart(2, '0')} / ${String(count).padStart(2, '0')}`
     );
-    expect(status).toHaveTextContent(projects[0].title);
+    expect(status).toHaveTextContent(projects[count - 2].title);
     expect(document.querySelector('[aria-selected="true"]')).toHaveAttribute(
       'data-name',
-      '0'
+      String(count - 2)
     );
   });
 
@@ -812,9 +813,10 @@ describe('ProjectsSection beforeAction 관문', { timeout: 30_000 }, () => {
     fireEvent.keyDown(name(N - 1), { key: 'Home' });
     expect(selected()).toBe('0');
     expect(document.activeElement).toBe(name(0));
+    // 처음에서 위로는 순환하지 않아 아무것도 안 하고 관문도 안 지난다(M4 Task 8)
     fireEvent.keyDown(name(0), { key: 'ArrowUp' });
-    expect(selected()).toBe(String(N - 1));
-    expect(gate.calls).toBe(5);
+    expect(selected()).toBe('0');
+    expect(gate.calls).toBe(4);
   });
 
   it('다른 키는 관문을 지나지 않고, closure 안에서 다시 관문으로 가지 않는다', () => {
@@ -2037,9 +2039,9 @@ describe('ProjectsSection 모바일 가로 끌기 (M4 Task 8)', { timeout: 30_00
   const prev = () => screen.getByRole('button', { name: '이전 프로젝트' });
   const next = () => screen.getByRole('button', { name: '다음 프로젝트' });
   let clock = 0;
-  const pointer = (type: 'pointerDown' | 'pointerMove' | 'pointerUp', x: number, y = 300, target: Element = surface()) => {
+  const pointer = (type: 'pointerDown' | 'pointerMove' | 'pointerUp' | 'pointerCancel', x: number, y = 300, target: Element = surface(), pointerId = 7) => {
     clock += 16;
-    const event = new FakePointerEvent(type.toLowerCase(), { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, pointerId: 7 });
+    const event = new FakePointerEvent(type.toLowerCase(), { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, pointerId });
     Object.defineProperty(event, 'timeStamp', { value: clock });
     act(() => { target.dispatchEvent(event); });
   };
@@ -2108,6 +2110,26 @@ describe('ProjectsSection 모바일 가로 끌기 (M4 Task 8)', { timeout: 30_00
     pointer('pointerUp', 203);
     fireEvent.click(document.querySelector('[data-part="preview-open"]')!, { detail: 1 });
     expect(push).toHaveBeenCalledTimes(1);
+  });
+
+  // Task 8 리뷰 N2. 두 번째 손가락이 닿거나 브라우저가 끌기를 가져가면(pointercancel) 따라오던 프리뷰가 제자리로 돌아온다
+  it('끄는 도중 두 번째 손가락이 닿거나 pointercancel이 오면 따라오던 자리를 지우고 넘기지 않는다', () => {
+    renderSection();
+    pointer('pointerDown', 300);
+    pointer('pointerMove', 200);
+    expect(surface().style.transform).toMatch(/translateX\(-/);
+    pointer('pointerDown', 100, 300, surface(), 8);
+    expect(surface().style.transform).toBe('');
+    pointer('pointerMove', 100, 300, surface(), 8);
+    pointer('pointerUp', 100, 300, surface(), 8);
+    pointer('pointerUp', 150);
+    expect(surface().style.transform).toBe('');
+    expect(selected()).toBe(0);
+    pointer('pointerDown', 300);
+    pointer('pointerMove', 200);
+    pointer('pointerCancel', 200);
+    expect(surface().style.transform).toBe('');
+    expect(selected()).toBe(0);
   });
 
   it('넓은 화면(lg)에서는 끌기를 받지 않는다. 휠이 맡는다', () => {

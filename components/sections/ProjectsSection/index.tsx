@@ -555,11 +555,14 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
     wasOpenRef.current = false;
 
     const raf = requestAnimationFrame(() => {
-      // lg 아래에는 이름 목록이 없다(M4 Task 8). 그 화면에서 상세를 여는 것은 프리뷰 단추다
+      // lg 아래에는 이름 목록이 없다(M4 Task 8). 숨은 이름에 focus()를 보내면 아무 일도 없이 포커스가 문서 바닥으로 떨어진다.
+      // 그때는 섹션으로 돌려준다(프리뷰 단추는 aria-hidden 상자 안이라 아래 usable이 어차피 거른다)
       const name = nameRefs.current[activeIndex];
-      const opener = name?.checkVisibility?.() === false
-        ? sectionRef.current?.querySelector<HTMLElement>('[data-part="preview-open"]')
-        : name;
+      // checkVisibility가 없는 브라우저(Safari 17.4 전)는 목록 칸이 display none인지로 본다. offsetParent·getClientRects는 jsdom에서 늘 비어 쓰지 않는다
+      const hidden = !!name && (typeof name.checkVisibility === 'function'
+        ? !name.checkVisibility()
+        : getComputedStyle(name.closest('[data-part="index"]')?.parentElement ?? name).display === 'none');
+      const opener = hidden ? null : name;
       const usable =
         !!opener?.isConnected && !opener.closest('[inert], [aria-hidden="true"]');
       const fallback = sectionRef.current?.closest<HTMLElement>('[data-section]') ?? null;
@@ -1271,8 +1274,9 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
       // 끝에서는 순환하지 않고 문서로 돌려준다. 여기서도 받으면 한 번 누름이 두 걸음이 된다. Home·End는 늘 목록의 것이다
       if (!chapterLock.plain && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) return;
       let next: number | null = null;
-      if (event.key === 'ArrowUp') next = (activeIndex - 1 + N) % N;
-      else if (event.key === 'ArrowDown') next = (activeIndex + 1) % N;
+      // 끝에서 순환하지 않는다(M4 Task 8). 휠이 돌아 처음으로 감기면 어디가 처음인지 사라진다. 끝의 누름은 페이지에 그대로 둔다
+      if (event.key === 'ArrowUp') next = activeIndex > 0 ? activeIndex - 1 : null;
+      else if (event.key === 'ArrowDown') next = activeIndex < N - 1 ? activeIndex + 1 : null;
       else if (event.key === 'Home') next = 0;
       else if (event.key === 'End') next = N - 1;
 
@@ -1297,12 +1301,27 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
   const swipeRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ id: number; x: number; y: number; lastX: number; lastT: number; v: number; horizontal: boolean | null } | null>(null);
   const draggedRef = useRef(false);
+  // 끌기를 그만두고 따라오던 자리를 제자리로 돌린다
+  const settleSwipe = useCallback(() => {
+    const el = swipeRef.current;
+    if (!el) return;
+    // 감속 곡선은 SITE_EASE_CUBIC(lib/gsap)과 같은 값이고 길이는 --animate-duration-base다. gsap을 정적으로 부르지 않으려고 값만 옮겨 적는다
+    el.style.transition = `transform ${PREVIEW_SWAP_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
+    el.style.removeProperty('transform');
+  }, []);
   const handleSwipeDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    draggedRef.current = false;
+    // 끌기가 남아 있는데 또 눌렸으면 따라오던 자리를 지운다. 두 번째 손가락(isPrimary 아님)은 끌기를 그만두게만 한다(핀치일 수 있다).
+    // 첫 손가락의 떼기를 놓친 채 새로 누른 주 포인터는 새 끌기를 시작한다
+    const stale = dragRef.current;
     dragRef.current = null;
+    if (stale) {
+      settleSwipe();
+      if (!event.isPrimary) return;
+    }
+    draggedRef.current = false;
     if (event.button !== 0 || window.matchMedia?.(WIDE_QUERY).matches) return;
     dragRef.current = { id: event.pointerId, x: event.clientX, y: event.clientY, lastX: event.clientX, lastT: event.timeStamp, v: 0, horizontal: null };
-  }, []);
+  }, [settleSwipe]);
   const handleSwipeMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
     if (!drag || event.pointerId !== drag.id) return;
@@ -1325,24 +1344,19 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
       el.style.transform = `translateX(${swipeOffset(dx, activeIndexRef.current, N).toFixed(1)}px)`;
     }
   }, [reducedMotion]);
+  // pointercancel(브라우저가 세로 스크롤로 가져감)도 이 길로 와서 제자리로 돌아가고 넘기지는 않는다
   const handleSwipeEnd = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
     if (!drag || event.pointerId !== drag.id) return;
     dragRef.current = null;
     if (!drag.horizontal) return;
-    const el = swipeRef.current;
-    if (el) {
-      // 놓으면 제자리로. 감속 곡선은 SITE_EASE_CUBIC(lib/gsap)과 같은 값이고 길이는 --animate-duration-base다.
-      // gsap을 정적으로 부르지 않으려고 값만 옮겨 적는다
-      el.style.transition = `transform ${PREVIEW_SWAP_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
-      el.style.removeProperty('transform');
-    }
+    settleSwipe();
     if (event.type !== 'pointerup') return;
     // 손을 멈췄다 놓았으면 튕긴 것이 아니다. 마지막 움직임이 100ms보다 오래됐으면 속도를 버린다
     const velocity = event.timeStamp - drag.lastT > 100 ? 0 : drag.v;
     const to = swipeTarget(event.clientX - drag.x, velocity, activeIndexRef.current, N);
     if (to !== null) runAction(() => goTo(to));
-  }, [goTo, runAction]);
+  }, [goTo, runAction, settleSwipe]);
   const stepButton = (dir: 1 | -1) => (
     <button
       type="button"

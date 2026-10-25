@@ -83,6 +83,10 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
     let touchY = 0;
     let touchConsumed = false;
     let lastNativeInput = -Infinity;
+    // 문서로 넘긴 키 스크롤이 아직 진행 중일 수 있다. 브라우저의 한 걸음은 아래 .8 화면 추정보다 길고(PageUp 약 .875), 굴러가는 중의
+    // 누름은 남은 목표에 더해진다. 그래서 키가 잠금 자리를 넘는지는 실제로 넘은 스크롤 이벤트로 정하고, 다른 입력이 오거나 스크롤이
+    // 끝나면(scrollend) 닫는다. 시간 창(350ms)은 느린 프레임에서 그 이벤트를 놓쳤다(Task 8 리뷰).
+    let keyPending = false;
     // 로고가 날아가는 동안 미룬 잠금의 index. 없으면 null.
     let held: number | null = null;
     const last = () => latest.current.count - 1;
@@ -112,6 +116,7 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
     const lock = (index: number, time: number) => {
       held = landedRef.current ? null : index;
       if (held !== null) return;
+      keyPending = false;
       setPhase('locked'); lastInput = time; lastStep = time;
       pendingGesture = false;
       choose(index);
@@ -143,6 +148,7 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
     const editable = (target: EventTarget | null) => target instanceof HTMLElement
       && !!target.closest('input, textarea, select, [contenteditable="true"]');
     const wheelInput = (event: WheelEvent) => {
+      keyPending = false;
       if (event.ctrlKey || editable(event.target)) return false;
       const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1);
       if (delta === 0) return false;
@@ -176,7 +182,8 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
     function lockedWheel(event: WheelEvent) {
       if (wheelInput(event) && event.cancelable) event.preventDefault();
     }
-    const closeOvershoot = () => { lastNativeInput = -Infinity; };
+    const closeOvershoot = () => { lastNativeInput = -Infinity; keyPending = false; };
+    const closeKey = () => { keyPending = false; };
     const key = (event: KeyboardEvent) => {
       closeOvershoot();
       if (editable(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
@@ -186,8 +193,9 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
       if (!direction) return;
       if (event.repeat && phase === 'locked') { event.preventDefault(); return; }
       if (input(direction * window.innerHeight * .8, event.timeStamp, true)) event.preventDefault();
+      else keyPending = phase !== 'locked';
     };
-    const touchStart = (event: TouchEvent) => { touchY = event.touches[0]?.clientY ?? 0; touchConsumed = false; };
+    const touchStart = (event: TouchEvent) => { keyPending = false; touchY = event.touches[0]?.clientY ?? 0; touchConsumed = false; };
     const touchInput = (event: TouchEvent, blocking: boolean) => {
       if (event.touches.length !== 1 || editable(event.target)) return;
       const nextY = event.touches[0].clientY;
@@ -209,7 +217,7 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
       // 스크롤 때문에 수백 px까지 간다. 스크롤바는 입력이 없고, History·명시적 이동·다른 키는
       // 이 창을 닫으므로 끌려오지 않는다.
       const overshoot = !blocked && performance.now() - lastNativeInput < 350;
-      if (overshoot && phase !== 'locked' && (phase === 'before' ? offset > 0 : offset < 0)) {
+      if ((overshoot || (keyPending && !blocked)) && phase !== 'locked' && (phase === 'before' ? offset > 0 : offset < 0)) {
         lock(phase === 'after' ? last() : 0, performance.now());
         return;
       }
@@ -240,7 +248,11 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
     landRef.current = apply => {
       const index = held;
       held = null;
-      if (apply && index !== null && !disabled && !blocked && phase !== 'locked' && Math.abs(window.scrollY - start) < window.innerHeight / 2) lock(index, performance.now());
+      if (index === null) return;
+      if (apply && !disabled && !blocked && phase !== 'locked' && Math.abs(window.scrollY - start) < window.innerHeight / 2) lock(index, performance.now());
+      // 버릴 때도 위치로 앞뒤를 정한다(release와 같다). 날아오는 동안 잠금 자리를 지나치면 앞(before)이 남아, 다음 노치가 진입으로 읽혀
+      // 반 화면 넘게 떨어진 페이지를 잠금 자리로 끌어왔다(Task 8 리뷰 B1).
+      else if (phase !== 'locked') setPhase(window.scrollY > start ? 'after' : 'before');
     };
     // 미룬 잠금을 버릴 때도 위치로 앞뒤를 정한다. 미룬 잠금은 잠금 자리를 지나친 채 앞(before)을 남겨, 같은 stroke의 늦은 wheel이
     // 진입으로 읽혀 처음 index로 잠그고 끌어왔다(Projects의 날아오는 동안 누른 이름, Task 7 수정 1). 미룬 잠금은 로고가 날 때만 생긴다.
@@ -256,7 +268,8 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
     // 위쪽 섹션 높이가 바뀌어도 이 섹션의 문서 위치가 움직이므로 문서 전체를 본다.
     resize?.observe(element);
     resize?.observe(document.documentElement);
-    // 글꼴이 바뀌면 줄 높이가 바뀌어 fits가 달라질 수 있다. 관찰하는 상자의 크기는 그대로일 수 있어 따로 잰다.
+    // 글꼴이 준비되면 한 번 더 잰다. 줄 높이가 바뀌어도 관찰하는 상자의 크기는 그대로일 수 있어서다. 레이아웃을 재는 fits를 위한 것이고,
+    // 지금 두 섹션(About은 fits 없음, Projects는 화면 폭 media query)에서는 대개 같은 값이 다시 나온다.
     let alive = true;
     document.fonts?.ready.then(() => { if (alive) measure(); });
     window.addEventListener('wheel', wheel, { passive: true, capture: true });
@@ -265,6 +278,8 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
     window.addEventListener('touchmove', touchMove, { passive: true, capture: true });
     window.addEventListener('scroll', scroll, { passive: true });
     window.addEventListener('popstate', closeOvershoot);
+    window.addEventListener('pointerdown', closeKey, { passive: true });
+    window.addEventListener('scrollend', closeKey);
     window.addEventListener('resize', measure);
     short?.addEventListener('change', measure);
     return () => {
@@ -275,6 +290,7 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
       window.removeEventListener('wheel', wheel, true); window.removeEventListener('keydown', key);
       window.removeEventListener('touchstart', touchStart); window.removeEventListener('touchmove', touchMove, true);
       window.removeEventListener('scroll', scroll); window.removeEventListener('popstate', closeOvershoot); window.removeEventListener('resize', measure);
+      window.removeEventListener('pointerdown', closeKey); window.removeEventListener('scrollend', closeKey);
       short?.removeEventListener('change', measure);
       releaseRef.current = () => {};
       enterRef.current = () => {};

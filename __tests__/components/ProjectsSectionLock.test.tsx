@@ -350,13 +350,81 @@ describe('ProjectsSection 읽기 잠금 (M4 Task 7)', () => {
       matches: media === '(max-height: 640px)' || media === '(min-width: 1024px)', media, addEventListener: () => {}, removeEventListener: () => {},
     })))],
     ['lg 아래 화면', {}, () => { Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1023 }); }],
-  ] as const)('%s이면 잠그지 않고 목록의 방향키는 그대로 순환한다', (_, props, setup) => {
+  ] as const)('%s이면 잠그지 않고 목록의 방향키는 끝에서 멈춘다(순환하지 않는다)', (_, props, setup) => {
     setup();
     mount(START, props);
     expect(isLocked()).toBe(false);
     expect(wheel(100, 20_000).defaultPrevented).toBe(false);
     expect(window.scrollTo).not.toHaveBeenCalled();
     fireEvent.keyDown(name(0), { key: 'ArrowUp' });
+    expect(selected()).toBe(0);
+    fireEvent.keyDown(name(0), { key: 'End' });
+    fireEvent.keyDown(name(N - 1), { key: 'ArrowDown' });
     expect(selected()).toBe(N - 1);
+    fireEvent.keyDown(name(N - 1), { key: 'ArrowUp' });
+    expect(selected()).toBe(N - 2);
   });
+
+  // Task 8 리뷰 B1. 로고가 프리뷰로 날아오는 동안 잠금 자리를 반 화면 넘게 지나치면 착지에서 미룬 잠금을 버린다.
+  // 버릴 때 앞뒤를 위치로 다시 정하지 않으면 다음 노치가 진입으로 읽혀 페이지를 잠금 자리로 400px 넘게 끌어올렸다.
+  it('날아오는 동안 잠금 자리를 반 화면 넘게 지나쳐 착지에서 미룬 잠금을 버리면 다음 노치가 페이지를 끌어오지 않는다', () => {
+    const { update } = mount(START - 600, { logoOwner: 'about' });
+    update({ logoOwner: 'preview' });
+    documentY = START - 60;
+    expect(wheel(100, 20_000).defaultPrevented).toBe(false);
+    scrollAt(START + 200, 20_100);
+    expect(wheel(100, 20_250).defaultPrevented).toBe(false);
+    scrollAt(START + 500, 20_300);
+    update({ logoOwner: 'projects' });
+    expect(isLocked()).toBe(false);
+    expect(window.scrollTo).not.toHaveBeenCalled();
+    expect(wheel(100, 21_000).defaultPrevented).toBe(false);
+    expect(window.scrollTo).not.toHaveBeenCalled();
+    expect(isLocked()).toBe(false);
+    expect(window.scrollY).toBe(START + 500);
+  });
+
+  // Task 8 리뷰. 브라우저의 PageUp 한 번은 화면의 .8보다 길고(크롬은 약 .875), 느린 프레임에서는 그 스크롤 이벤트가 350ms보다 늦게 온다.
+  // 키 스크롤이 잠금 자리를 넘는지는 추정이 아니라 실제로 넘은 스크롤 이벤트로 정한다. 다른 입력이 오면 그 키의 몫은 끝난다.
+  it('잠금 자리 바로 아래에서 PageUp이 .8 화면 추정으로는 못 닿아도 늦게 온 스크롤이 잠금 자리를 넘으면 마지막 프로젝트로 잠근다', () => {
+    mount(START + 765);
+    expect(isLocked()).toBe(false);
+    expect(key('PageUp', 20_000).defaultPrevented).toBe(false);
+    scrollAt(START + 400, 20_400);
+    expect(isLocked()).toBe(false);
+    scrollAt(START - 22, 20_900);
+    expect(isLocked()).toBe(true);
+    expect(selected()).toBe(N - 1);
+    expect(window.scrollTo).toHaveBeenLastCalledWith({ top: START, behavior: 'instant' });
+  });
+
+  it('키 스크롤 뒤에 다른 입력(wheel)이 오면 그 뒤에 잠금 자리를 넘는 스크롤은 키의 것이 아니라 잠그지 않는다', () => {
+    mount(START + 765);
+    key('PageUp', 20_000);
+    scrollAt(START + 400, 20_400);
+    wheel(-1, 20_500);
+    scrollAt(START - 22, 21_200);
+    expect(isLocked()).toBe(false);
+    expect(window.scrollTo).not.toHaveBeenCalled();
+  });
+
+  // Task 8 리뷰 N3. lg 아래에서는 이름 목록이 display none이다. checkVisibility가 없는 브라우저(Safari 17.4 전)에서도 모달을 닫으면
+  // 포커스가 숨은 이름이 아니라 섹션(문서의 data-section 상자)으로 돌아온다. jsdom에는 checkVisibility가 없어 이 경로가 곧 대체 판정이다
+  it('이름 목록이 숨은 화면에서 모달을 닫으면 checkVisibility 없이도 포커스가 숨은 이름이 아니라 섹션으로 돌아온다', async () => {
+    expect('checkVisibility' in Element.prototype).toBe(false);
+    const ready = projects.findIndex(isProjectModalReady);
+    documentY = START + 300;
+    render(
+      <SectionActivityProvider obscured={false} pageVisible routeResolved motionReady reducedMotion={false}>
+        <div data-section="projects" tabIndex={-1}><ProjectsSection /></div>
+      </SectionActivityProvider>
+    );
+    if (ready > 0) fireEvent.click(name(ready));
+    (document.querySelector('[data-part="index"]')!.parentElement as HTMLElement).style.display = 'none';
+    fireEvent.click(document.querySelector('[data-part="preview-open"]')!);
+    expect(await screen.findByRole('dialog', {}, { timeout: 20_000 })).toBeTruthy();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull(), { timeout: 20_000 });
+    await waitFor(() => expect(document.activeElement).toBe(document.querySelector('[data-section="projects"]')), { timeout: 5_000 });
+  }, 30_000);
 });
