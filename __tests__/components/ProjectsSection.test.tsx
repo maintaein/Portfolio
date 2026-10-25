@@ -123,11 +123,13 @@ describe('ProjectsSection 접힘 레이아웃', () => {
     expect(source).toContain('lg:grid-cols-[minmax(0,1fr)_auto]');
   });
 
-  it('프리뷰가 열 폭 전체를 쓰는 16:9다', () => {
+  it('uses 1.5em rows and a smaller desktop preview at 16:9', () => {
     renderSection();
+    expect(document.querySelector('[data-name="0"]')!.className).toContain('py-[0.2em]');
     const preview = document.querySelector('[data-part="preview"]')!;
     expect(preview.className).toContain('w-full');
     expect(preview.className).toContain('aspect-video');
+    expect(preview.className).toContain('lg:w-3/4');
   });
 
   it('이름 휠은 lg 위에만 있다. lg 아래에서는 목록 전체가 display none이라 초점도 못 받는다', () => {
@@ -145,13 +147,16 @@ describe('ProjectsSection 접힘 레이아웃', () => {
   it('이름 크기는 화면 높이를 따르고(목록의 clamp) 비활성 이름은 MUTED 밝기다', () => {
     renderSection();
     const active = document.querySelector<HTMLElement>('[aria-selected="true"]')!;
-    expect(document.querySelector('[data-part="index"]')!.className).toContain('text-[clamp(2.5rem,min(6.6svh,4.2vw),4.5rem)]');
+    expect(document.querySelector('[data-part="index"]')!.className).toContain('text-[clamp(2.5rem,min(6svh,4.2vw),4.5rem)]');
     expect(active.className).not.toMatch(/(?:^|\s)(lg:)?text-[td]\d\b/);
     const inactive = document.querySelector<HTMLElement>('[aria-selected="false"]')!;
     // 휠이 --pj-wheel-p로 활성색을 섞어 넣지만 비활성은 그 비율이 0이라 색은
     // 여전히 MUTED다. 기본값 0이 식 안에 박혀 있어야 휠이 아직 한 프레임도
     // 안 돈 첫 그림에서도 이 밝기 계약이 지켜진다
-    expect(inactive.style.color).toContain('rgb(255 255 255 / 0.62)');
+    expect(inactive.style.color).toContain('rgb(255 255 255 / 0.5)');
+    expect(active.className).toContain('font-bold');
+    expect(inactive.className).toContain('font-normal');
+    expect(active.className).toContain('py-[0.2em]');
     expect(inactive.style.color).toContain('var(--pj-wheel-p, 0)');
   });
 

@@ -89,7 +89,7 @@ export function reconcileProjectModal(historyState: unknown): string | null {
   return id;
 }
 
-const MUTED = 'rgb(255 255 255 / 0.62)';
+const MUTED = 'rgb(255 255 255 / 0.5)';
 
 // 이름 목록의 휠. 화면 오른쪽 끝에 붙은 드럼이고 배치 수학은 ./wheel.ts의
 // drumItem이다(M4 Task 8). 휠 스크롤도 드래그도 순환도 optionWheel에서
@@ -1387,16 +1387,14 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
     >
       <h2 className="sr-only">Projects</h2>
 
-      {/* lg에서는 프리뷰가 왼쪽 열 전체를 쓰고 이름 휠이 화면 오른쪽 끝(px-10 여백 안)에
-          붙는다(M4 Task 8). 휠 열은 가장 긴 이름만큼만 차지하고 나머지는 전부 프리뷰다.
-          두 열 다 세로 가운데라 드럼의 가운데와 프리뷰의 가운데가 같은 높이다 */}
+      {/* The wheel hugs the right edge; both columns share the vertical centre. */}
       <div className="my-auto grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
         {/* lg 아래의 가로 끌기 표면. 끄는 동안 이 틀이 손가락을 따라간다(handleSwipeMove).
             pan-y라 세로 끌기는 페이지 스크롤로 간다 */}
         <div
           ref={swipeRef}
           data-part="preview-swipe"
-          className="flex items-center justify-center max-lg:touch-pan-y"
+          className="flex items-center justify-center lg:justify-start max-lg:touch-pan-y"
           onPointerDown={handleSwipeDown}
           onPointerMove={handleSwipeMove}
           onPointerUp={handleSwipeEnd}
@@ -1413,7 +1411,8 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
             data-motion-anchor="projects-preview"
             aria-hidden="true"
             data-flip-id={modalOpen ? undefined : `pv-${activeProject.title}`}
-            className="w-full aspect-video"
+            // Desktop preview uses 75% of its column; keep mobile full width.
+            className="w-full lg:w-3/4 aspect-video"
           >
             {/* 자르는 쪽이 여기다. 그림은 object-cover로 상자를 넘치므로
                 반경만 줘서는 모서리가 안 깎인다. rounded-media는 상세 판
@@ -1443,7 +1442,7 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
                   src={activeProject.image}
                   alt={activeProject.title}
                   fill
-                  sizes="(max-width: 1024px) 100vw, 660px"
+                  sizes="(min-width: 1024px) 45vw, calc(100vw - 80px)"
                   className="object-cover pointer-events-none"
                   onError={handleMediaError}
                 />
@@ -1538,15 +1537,15 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
         </div>
 
         <div className="max-lg:hidden pl-10">
-          {/* 글자 크기가 곧 드럼 크기다. 화면 높이(6.6svh)로 잡아 휠이 늘 화면에 들어오고,
+          {/* 글자 크기가 곧 드럼 크기다. 화면 높이(6svh)로 잡아 휠이 늘 화면에 들어오고,
               lg 바로 위의 좁은 창에서는 폭(4.2vw)이 막아 프리뷰 자리를 남긴다. 왼쪽 여백
-              1.75em은 고른 이름이 프리뷰 쪽으로 부푸는 폭(drumItem의 x, 줄 높이의 1.27배)이다 */}
+              2.8em은 고른 이름이 프리뷰 쪽으로 부푸는 폭(drumItem의 x, 줄 높이의 1.84배)이다 */}
           <div
             data-part="index"
             role="tablist"
             aria-orientation="vertical"
             aria-label="프로젝트 목록"
-            className="flex flex-col items-end pl-[1.75em] text-[clamp(2.5rem,min(6.6svh,4.2vw),4.5rem)]"
+            className="flex flex-col items-end pl-[2.8em] text-[clamp(2.5rem,min(6svh,4.2vw),4.5rem)]"
             onKeyDown={handleIndexKeyDown}
             // Tab으로 목록에 닿으면 그 이름의 프로젝트로 잠근다. 모달을 닫고 돌려받은 포커스는 사용자가 옮긴 것이 아니라 거른다
             onFocus={event => {
@@ -1579,9 +1578,9 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
                   // 통째로 실려 남의 줄 위를 덮고, 이름을 겨냥하지 않은 자리에서
                   // 엉뚱한 프로젝트가 잡힌다. 과녁을 글자 너비로 줄이면 보이는
                   // 것과 잡히는 것이 같아진다. 세로 여백도 em이라 줄 높이가
-                  // 글자 크기와 같이 간다(1.35em)
-                  className={`block w-fit origin-right whitespace-nowrap text-right leading-[1.1] font-bold tracking-[-0.02em] py-[0.125em] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)] ${
-                    isActive ? 'text-[var(--color-text-primary)]' : ''
+                  // 글자 크기와 같이 간다(1.5em)
+                  className={`block w-fit origin-right whitespace-nowrap text-right leading-[1.1] tracking-[-0.02em] py-[0.2em] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)] ${
+                    isActive ? 'font-bold text-[var(--color-text-primary)]' : 'font-normal'
                   }`}
                   // 휠이 도는 동안 색도 같이 간다. --pj-wheel-p는 활성에서
                   // 1이고 한 칸만 멀어져도 0이라, 선택이 옮겨 가는 사이

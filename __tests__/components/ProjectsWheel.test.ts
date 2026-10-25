@@ -16,6 +16,24 @@ const ROW = 70;
 const COUNT = 6;
 const at = (i: number, pos: number) => drumItem(i, pos, COUNT, ROW);
 
+describe('reference wheel tuning', () => {
+  it.each([1, 2])('keeps neighbour %i near full scale', distance => {
+    expect(at(distance, 0).scale).toBeGreaterThanOrEqual(0.95);
+  });
+  it.each([[1, 1, 1.5], [2, 4, 6]])('softens row %i', (distance, min, max) => {
+    expect(at(distance, 0).blur).toBeGreaterThanOrEqual(min);
+    expect(at(distance, 0).blur).toBeLessThanOrEqual(max);
+  });
+  it('tilts two rows by 10 to 15 degrees', () => {
+    expect(at(2, 0).rot).toBeLessThanOrEqual(-10);
+    expect(at(2, 0).rot).toBeGreaterThanOrEqual(-15);
+  });
+  it('keeps a visible horizon floor of 0.12', () => {
+    expect(DRUM_MIN_OPACITY).toBe(0.12);
+    expect(at(5, 0).opacity).toBe(DRUM_MIN_OPACITY);
+  });
+});
+
 describe('drumItem: 드럼 위의 각도가 배치를 정한다', () => {
   it('고른 이름은 드럼 앞면이다. 기울지 않고 줄지 않고 번지지 않고 가장 왼쪽(프리뷰 쪽)으로 부푼다', () => {
     const front = at(2, 2);
@@ -84,7 +102,7 @@ describe('drumItem: 드럼 위의 각도가 배치를 정한다', () => {
 
   it('몇 개인지가 정보라 가장 먼 이름도 바닥 투명도 아래로 안 내려간다', () => {
     for (let i = 0; i < COUNT; i += 1) expect(at(i, 0).opacity, `item ${i}`).toBeGreaterThanOrEqual(DRUM_MIN_OPACITY);
-    expect(DRUM_MIN_OPACITY).toBeGreaterThanOrEqual(0.18);
+    expect(DRUM_MIN_OPACITY).toBeGreaterThanOrEqual(0.12);
   });
 
   it('돌아가는 도중(소수 자리)에도 이어진다. 정수 사이에서 값이 튀지 않는다', () => {
