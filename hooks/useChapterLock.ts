@@ -10,7 +10,8 @@ const WHEEL_FRAME_MS = 20;
 // 느린 프레임에서는 키 스크롤이 900ms 뒤에도 경계를 넘는다. scrollend가 없어도 움직이지 않은 키는 만료한다.
 const KEY_SCROLL_PENDING_MS = 1500;
 
-// 공유 로고와 이 섹션의 관계. flying: 이 섹션으로 날아오는 중(잠금을 미룬다), landed: 이 섹션에 내려앉았다(미룬 잠금을 건다),
+// 공유 로고와 이 섹션의 관계. flying: 이 섹션으로 날아오는 중(잠금을 미루거나 pinWhileFlying이면 먼저 고정하고 걸음만 기다린다),
+// landed: 이 섹션에 내려앉았다(미룬 잠금을 걸거나 고정된 자리에서 걸음을 시작한다),
 // away: 다른 자리에 있다(미룬 잠금을 버린다. awayDefers가 없으면 잠금 자체는 막지 않는다).
 export type ChapterLogo = 'flying' | 'landed' | 'away';
 
@@ -95,6 +96,18 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
     let held: number | null = null;
     const last = () => latest.current.count - 1;
     const choose = (index: number) => latest.current.choose(index);
+    let entryBlocking: boolean | null = null;
+    const scopeEntry = () => {
+      const offset = window.scrollY - start;
+      const next = pinWhileFlying && !disabled && !blocked && phase !== 'locked'
+        && (phase === 'before' ? offset <= 0 && offset >= -window.innerHeight : offset >= 0 && offset <= window.innerHeight);
+      if (next === entryBlocking) return;
+      entryBlocking = next;
+      window.removeEventListener('wheel', wheel, true);
+      window.removeEventListener('touchmove', touchMove, true);
+      window.addEventListener('wheel', wheel, { passive: !next, capture: true });
+      window.addEventListener('touchmove', touchMove, { passive: !next, capture: true });
+    };
     const setPhase = (next: typeof phase) => {
       phase = next;
       setLocked(phase === 'locked');
@@ -104,6 +117,7 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
         window.addEventListener('wheel', lockedWheel, { passive: false, capture: true });
         window.addEventListener('touchmove', lockedTouchMove, { passive: false, capture: true });
       }
+      scopeEntry();
     };
     const measure = () => {
       const wasDisabled = disabled;
@@ -215,7 +229,8 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
     };
     const touchMove = (event: TouchEvent) => { if (phase !== 'locked') touchInput(event, pinWhileFlying); };
     function lockedTouchMove(event: TouchEvent) { touchInput(event, true); }
-    const scroll = () => {
+    const scroll = (event?: Event) => {
+      scopeEntry();
       if (disabled) return;
       const offset = window.scrollY - start;
       latest.current.onScroll?.(offset);
@@ -233,7 +248,11 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
       }
       if (Math.abs(offset) <= 1) {
         if (phase !== 'locked' && !blocked) {
-          if (!landedRef.current && pinWhileFlying) lock(phase === 'after' ? last() : 0, performance.now());
+          // 제자리에서 효과나 화면 크기 측정이 다시 시작되어도 비행 중 고른 이름은 유지한다.
+          if (!landedRef.current && pinWhileFlying) {
+            const index = event ? (phase === 'after' ? last() : 0) : latest.current.current();
+            lock(index, performance.now());
+          }
           else if (!landedRef.current) held = phase === 'after' ? last() : 0;
           else { setPhase('locked'); lastInput = -Infinity; lastStep = -Infinity; }
         }
@@ -252,8 +271,9 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
     // 마우스 클릭의 포커스는 거르고 클릭 선택에 맡긴다. 안 그러면 누르는 순간 다른 index로 한 번 넘어간다.
     // 진입 전 비행 중의 포커스는 클릭보다 먼저 올 수 있다. 위치를 먼저 당기지 않고 기존처럼 착지를 기다린다(Task 2).
     enterRef.current = index => { if (!disabled && !blocked && phase !== 'locked') lock(index ?? (window.scrollY > start ? last() : 0), performance.now(), pinWhileFlying && window.scrollY >= start); };
-    // 섹션에 내려앉으면 미룬 잠금을 건다. 다른 자리로 되돌아갔거나 그사이 반 화면 넘게 지나쳤으면 끌어오지 않는다.
+    // 섹션에 내려앉으면 미룬 잠금을 건다. 먼저 고정했어도 로고가 다른 자리로 떠나면 풀고, 멀리 지나친 미룬 잠금은 끌어오지 않는다.
     landRef.current = apply => {
+      if (!apply && pinWhileFlying && phase === 'locked') releaseRef.current();
       const index = held;
       held = null;
       if (index === null) return;
@@ -280,10 +300,8 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
     // 지금 두 섹션(About은 fits 없음, Projects는 화면 폭 media query)에서는 대개 같은 값이 다시 나온다.
     let alive = true;
     document.fonts?.ready.then(() => { if (alive) measure(); });
-    window.addEventListener('wheel', wheel, { passive: !pinWhileFlying, capture: true });
     window.addEventListener('keydown', key);
     window.addEventListener('touchstart', touchStart, { passive: true });
-    window.addEventListener('touchmove', touchMove, { passive: !pinWhileFlying, capture: true });
     window.addEventListener('scroll', scroll, { passive: true });
     window.addEventListener('popstate', closeOvershoot);
     window.addEventListener('pointerdown', closeKey, { passive: true });

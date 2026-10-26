@@ -88,6 +88,40 @@ const name = (i: number) => document.querySelector<HTMLElement>(`[data-name="${i
 const stepTo = (index: number, from: number) => { let at = from; for (let i = 0; i < N && selected() < index; i += 1) { at += PROJECT_STEP_MS; key('ArrowDown', at); } return at; };
 
 describe('ProjectsSection 읽기 잠금 (M4 Task 7)', () => {
+  it.each([-901, -900, 900, 901])('진입 자리에서 %ipx 떨어지면 한 화면 안에서만 비수동 진입 리스너를 등록한다', offset => {
+    const add = vi.spyOn(window, 'addEventListener');
+    mount(START + offset);
+    const blocking = add.mock.calls.filter(([type, , options]) => ['wheel', 'touchmove'].includes(type) && typeof options === 'object' && options.passive === false);
+    expect(blocking.map(([type]) => type)).toEqual(Math.abs(offset) <= 900 ? ['wheel', 'touchmove'] : []);
+  });
+
+  it('진입 구간을 떠나거나 잠금이 꺼지면 비수동 진입 리스너를 제거하고 수동 리스너로 돌린다', () => {
+    const add = vi.spyOn(window, 'addEventListener');
+    const remove = vi.spyOn(window, 'removeEventListener');
+    const { update, unmount } = mount(START - 1000);
+    add.mockClear();
+    scrollAt(START - 100, 20_000);
+    const entry = add.mock.calls.filter(([type, , options]) => ['wheel', 'touchmove'].includes(type) && typeof options === 'object' && options.passive === false);
+    expect(entry.map(([type]) => type)).toEqual(['wheel', 'touchmove']);
+    add.mockClear(); remove.mockClear();
+    scrollAt(START - 1000, 21_000);
+    for (const [type, listener] of entry) {
+      expect(remove).toHaveBeenCalledWith(type, listener, true);
+      expect(add).toHaveBeenCalledWith(type, listener, { passive: true, capture: true });
+    }
+    scrollAt(START - 100, 22_000);
+    add.mockClear(); remove.mockClear();
+    update({ reducedMotion: true });
+    for (const [type, listener] of entry) expect(remove).toHaveBeenCalledWith(type, listener, true);
+    expect(add.mock.calls.filter(([type, , options]) => ['wheel', 'touchmove'].includes(type) && typeof options === 'object' && options.passive === false)).toEqual([]);
+    add.mockClear(); remove.mockClear();
+    update({ reducedMotion: false });
+    const restored = add.mock.calls.filter(([type, , options]) => ['wheel', 'touchmove'].includes(type) && typeof options === 'object' && options.passive === false);
+    expect(restored.map(([type]) => type)).toEqual(['wheel', 'touchmove']);
+    unmount();
+    for (const [type, listener] of restored) expect(remove).toHaveBeenCalledWith(type, listener, true);
+  });
+
   it('한 걸음 간격은 PreviewMorph 녹는 시간보다 짧지 않다', () => {
     const source = readFileSync(resolve(process.cwd(), 'components/blocks/PreviewMorph/index.tsx'), 'utf8');
     const melt = Number(source.match(/const DURATION_S = ([\d.]+);/)![1]) * 1000;
@@ -277,6 +311,7 @@ describe('ProjectsSection 읽기 잠금 (M4 Task 7)', () => {
     expect(window.scrollY).toBe(START);
   });
 
+  // 헤드 실측(fix1): 빠른 노치 뒤에도 남은 노치가 늦게 온다. 그 wheel이 진입으로 읽혀 누른 이름을 첫 프로젝트로 되돌리면 안 된다.
   it('비행 중 고정된 자리에서 누른 이름은 착지 뒤에 늦게 온 같은 stroke의 wheel에도 되돌아가지 않는다', () => {
     const { update } = mount(START - 100, { logoOwner: 'preview' });
     wheel(120, 20_000);
@@ -290,13 +325,16 @@ describe('ProjectsSection 읽기 잠금 (M4 Task 7)', () => {
     expect(window.scrollY).toBe(START);
   });
 
-  // Task 7 B2: 로고 소유자가 아니라 진입 자리로 판단한다. 진입 전에는 키를 통과시키고 진입 뒤 걸음은 착지를 기다린다.
-  it.each(['about', 'boundary', 'hero'] as const)('로고가 %s에 있을 때 키는 진입 전에는 통과하고 진입에서만 고정한다', (owner) => {
-    const { update } = mount(START - 800, { logoOwner: owner });
-    expect(key('ArrowDown', 20_000).defaultPrevented).toBe(false);
-    expect(isLocked()).toBe(false);
+  // Task 7 B2: 로고가 About 쪽에 있어도 진입 자리를 넘는 키는 고정하고, 걸음만 착지를 기다린다.
+  it.each(['about', 'boundary', 'hero'] as const)('로고가 %s에 있을 때 진입 자리를 넘는 키는 고정하고 착지까지 걸음을 삼킨다', (owner) => {
+    const { update } = mount(START - 700, { logoOwner: owner });
+    expect(key('ArrowDown', 20_000).defaultPrevented).toBe(true);
+    expect(isLocked()).toBe(true);
+    expect(window.scrollY).toBe(START);
+    expect(selected()).toBe(0);
+    expect(key('PageDown', 20_000 + PROJECT_STEP_MS).defaultPrevented).toBe(true);
+    expect(selected()).toBe(0);
     update({ logoOwner: 'preview' });
-    documentY = START - 100;
     expect(key('PageDown', 20_000 + PROJECT_STEP_MS + 100).defaultPrevented).toBe(true);
     expect(key(' ', 20_000 + 2 * PROJECT_STEP_MS + 200).defaultPrevented).toBe(true);
     expect(isLocked()).toBe(true);
@@ -306,6 +344,57 @@ describe('ProjectsSection 읽기 잠금 (M4 Task 7)', () => {
     expect(isLocked()).toBe(true);
     expect(window.scrollTo).toHaveBeenLastCalledWith({ top: START, behavior: 'instant' });
     expect(selected()).toBe(0);
+    expect(window.scrollTo).toHaveBeenCalledTimes(1);
+    expect(window.scrollY).toBe(START);
+    expect(key('ArrowDown', 20_000 + 3 * PROJECT_STEP_MS + 300).defaultPrevented).toBe(true);
+    expect(selected()).toBe(1);
+    expect(window.scrollTo).toHaveBeenCalledTimes(1);
+    expect(window.scrollY).toBe(START);
+  });
+
+  it.each([-40, 0, 40])('비행 중 고정된 로고가 다른 자리로 떠나면 %ipx 위치에 맞춰 잠금을 풀고 입력을 통과시킨다', offset => {
+    const { update } = mount(START - 100, { logoOwner: 'preview' });
+    wheel(120, 20_000);
+    expect(isLocked()).toBe(true);
+    documentY = START + offset;
+    update({ logoOwner: 'about' });
+    expect(isLocked()).toBe(false);
+    expect(wheel(offset > 0 ? 10 : -10, 20_100).defaultPrevented).toBe(false);
+    scrollAt(START + (offset > 0 ? 200 : -200), 20_150);
+    expect(isLocked()).toBe(false);
+    expect(window.scrollTo).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['이동 대기', '화면 폭'] as const)('비행 중 이름을 고른 뒤 %s 변경으로 잠금을 다시 세워도 선택을 유지한다', change => {
+    const { update } = mount(START - 100, { logoOwner: 'preview' });
+    wheel(120, 20_000);
+    fireEvent.click(name(3));
+    expect(selected()).toBe(3);
+    if (change === '이동 대기') {
+      update({ logoOwner: 'preview', navigationPending: true });
+      update({ logoOwner: 'preview', navigationPending: false });
+    } else {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1023 });
+      stamp(new Event('resize'), 20_100);
+      expect(isLocked()).toBe(false);
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
+      stamp(new Event('resize'), 20_200);
+    }
+    expect(isLocked()).toBe(true);
+    expect(selected()).toBe(3);
+    const pins = vi.mocked(window.scrollTo).mock.calls.length;
+    update({ logoOwner: 'projects' });
+    expect(selected()).toBe(3);
+    expect(window.scrollTo).toHaveBeenCalledTimes(pins);
+    key('ArrowDown', 22_000);
+    expect(selected()).toBe(4);
+  });
+
+  it('비행 중 실제 스크롤로 아래에서 진입 자리에 닿으면 마지막 프로젝트로 고정한다', () => {
+    mount(START + 100, { logoOwner: 'preview' });
+    scrollAt(START, 20_000);
+    expect(isLocked()).toBe(true);
+    expect(selected()).toBe(N - 1);
   });
 
   // M4 Task 8. 휠은 화면 높이로 크기를 잡아 늘 들어오므로 잠금은 About처럼 노트북 화면에서도 걸린다.
@@ -390,7 +479,9 @@ describe('ProjectsSection 읽기 잠금 (M4 Task 7)', () => {
     ['lg 아래 화면', {}, () => { Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1023 }); }],
   ] as const)('%s이면 잠그지 않고 목록의 방향키는 끝에서 멈춘다(순환하지 않는다)', (_, props, setup) => {
     setup();
+    const add = vi.spyOn(window, 'addEventListener');
     mount(START, props);
+    expect(add.mock.calls.filter(([type, , options]) => ['wheel', 'touchmove'].includes(type) && typeof options === 'object' && options.passive === false)).toEqual([]);
     expect(isLocked()).toBe(false);
     expect(wheel(100, 20_000).defaultPrevented).toBe(false);
     expect(window.scrollTo).not.toHaveBeenCalled();
@@ -403,6 +494,7 @@ describe('ProjectsSection 읽기 잠금 (M4 Task 7)', () => {
     expect(selected()).toBe(N - 2);
   });
 
+  // Task 8 리뷰 B1: 반 화면 넘게 지나친 관성이 착지 뒤의 다음 노치를 새 진입으로 만들어 페이지를 끌어오던 회귀를 막는다.
   it('비행 중 반 화면 넘게 밀린 관성도 고정 위치로 되돌리고 착지에서 잠금을 버리지 않는다', () => {
     const { update } = mount(START - 600, { logoOwner: 'about' });
     update({ logoOwner: 'preview' });
