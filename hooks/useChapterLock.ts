@@ -7,7 +7,7 @@ const GESTURE_IDLE_MS = 220;
 const WHEEL_PAUSE_MS = 56;
 // 다시 프레임 간격으로 붙는 wheel. 느리거나 보통 속도로 굴린 마우스 노치는 이보다 길다. 빠르게 튕긴 노치는 10-20ms로 올 수 있다.
 const WHEEL_FRAME_MS = 20;
-// Smooth key scrolls can cross late on slow frames (900ms); expire no-op keys without relying on scrollend.
+// 느린 프레임에서는 키 스크롤이 900ms 뒤에도 경계를 넘는다. scrollend가 없어도 움직이지 않은 키는 만료한다.
 const KEY_SCROLL_PENDING_MS = 1500;
 
 // 공유 로고와 이 섹션의 관계. flying: 이 섹션으로 날아오는 중(잠금을 미룬다), landed: 이 섹션에 내려앉았다(미룬 잠금을 건다),

@@ -123,13 +123,14 @@ describe('ProjectsSection 접힘 레이아웃', () => {
     expect(source).toContain('lg:grid-cols-[minmax(0,1fr)_auto]');
   });
 
-  it('줄 간격은 1.5em이고 데스크톱 프리뷰는 작은 16:9다', () => {
+  it('커진 이름의 줄 간격은 1.26em이고 데스크톱 프리뷰는 작은 16:9다', () => {
     renderSection();
-    expect(document.querySelector('[data-name="0"]')!.className).toContain('py-[0.2em]');
+    expect(document.querySelector('[data-name="0"]')!.className).toContain('py-[0.08em]');
     const preview = document.querySelector('[data-part="preview"]')!;
     expect(preview.className).toContain('w-full');
     expect(preview.className).toContain('aspect-video');
     expect(preview.className).toContain('lg:w-3/4');
+    expect(preview.className).toContain('lg:ml-[8%]');
   });
 
   it('이름 휠은 lg 위에만 있다. lg 아래에서는 목록 전체가 display none이라 초점도 못 받는다', () => {
@@ -147,7 +148,7 @@ describe('ProjectsSection 접힘 레이아웃', () => {
   it('이름 크기는 화면 높이를 따르고(목록의 clamp) 비활성 이름은 MUTED 밝기다', () => {
     renderSection();
     const active = document.querySelector<HTMLElement>('[aria-selected="true"]')!;
-    expect(document.querySelector('[data-part="index"]')!.className).toContain('text-[clamp(2.5rem,min(6svh,4.2vw),4.5rem)]');
+    expect(document.querySelector('[data-part="index"]')!.className).toContain('text-[clamp(2.5rem,min(7.2svh,5.04vw),5.4rem)]');
     expect(active.className).not.toMatch(/(?:^|\s)(lg:)?text-[td]\d\b/);
     const inactive = document.querySelector<HTMLElement>('[aria-selected="false"]')!;
     // 휠이 --pj-wheel-p로 활성색을 섞어 넣지만 비활성은 그 비율이 0이라 색은
@@ -156,7 +157,7 @@ describe('ProjectsSection 접힘 레이아웃', () => {
     expect(inactive.style.color).toContain('rgb(255 255 255 / 0.5)');
     expect(active.className).toContain('font-bold');
     expect(inactive.className).toContain('font-normal');
-    expect(active.className).toContain('py-[0.2em]');
+    expect(active.className).toContain('py-[0.08em]');
     expect(inactive.style.color).toContain('var(--pj-wheel-p, 0)');
   });
 
@@ -872,7 +873,8 @@ describe('ProjectsSection 미디어 모서리', () => {
     expect(RADIUS_TOKEN_CLASSES.length).toBeGreaterThan(0);
     renderSection();
     const rounded = roundedInPreview();
-    expect(rounded).toHaveLength(1);
+    expect(rounded).toHaveLength(2);
+    expect(rounded[1]).toBe(document.querySelector('[data-part="preview-open"]'));
 
     // object-cover 영상은 상자를 넘쳐 흐른다. 반경과 자르기가 같은 요소에
     // 있지 않으면 모서리는 하나도 안 깎인다
@@ -948,7 +950,7 @@ describe('ProjectsSection 프리뷰 캡션', () => {
   it('캡션이 이름 목록에 종속돼 읽힌다', () => {
     renderSection();
     const preview = document.querySelector<HTMLElement>('[data-part="preview"]')!;
-    // 같은 제목이 화면에 둘이다. 스크린리더에는 이름 목록 쪽만 준다
+    // 같은 제목이 화면에 둘이다. 스크린리더에는 데스크톱 이름 목록 또는 모바일 열기 단추가 제목을 준다
     expect(preview.closest('[aria-hidden="true"]')).toBeNull();
     expect(caption().closest('[aria-hidden="true"]')).toBe(document.querySelector('[data-part="preview-media"]'));
 
@@ -2177,7 +2179,7 @@ describe('ProjectsSection 모바일 가로 끌기 (M4 Task 8)', { timeout: 30_00
   });
 });
 
-it('mobile preview is labelled and reachable, and its open action waits for the Task 2 gate', () => {
+it('모바일 프리뷰는 이름표와 탭 순서를 갖고 열기는 Task 2 관문을 기다린다', () => {
   let proceed: (() => void) | undefined;
   const push = vi.spyOn(window.history, 'pushState');
   render(<SectionActivityProvider obscured={false} pageVisible routeResolved motionReady reducedMotion={false}>
@@ -2192,7 +2194,7 @@ it('mobile preview is labelled and reachable, and its open action waits for the 
   expect(push.mock.calls.at(-1)![0].projectModalId).toBe(projects[0].title);
 });
 
-it('desktop preview stays mouse-clickable without adding a tab stop', () => {
+it('데스크톱 프리뷰는 탭 순서와 접근성 트리에서 빠지고 마우스로는 열린다', () => {
   vi.stubGlobal('matchMedia', vi.fn().mockImplementation((media: string) => ({
     matches: media === '(min-width: 1024px)', media, addEventListener: () => {}, removeEventListener: () => {},
   })));
@@ -2200,6 +2202,32 @@ it('desktop preview stays mouse-clickable without adding a tab stop', () => {
   renderSection();
   const opener = document.querySelector<HTMLButtonElement>('[data-part="preview-open"]')!;
   expect(opener.tabIndex).toBe(-1);
+  expect(opener).toHaveAttribute('aria-hidden', 'true');
+  expect(screen.queryByRole('button', { name: projects[0].title + ' 자세히 보기' })).toBeNull();
   fireEvent.click(opener);
   expect(push.mock.calls.at(-1)![0].projectModalId).toBe(projects[0].title);
+});
+
+it('lg 경계를 오가면 프리뷰 열기 단추의 접근성과 탭 순서가 함께 바뀌고 구독을 정리한다', () => {
+  const query = new EventTarget() as EventTarget & { matches: boolean };
+  query.matches = true;
+  vi.stubGlobal('matchMedia', vi.fn((media: string) => media === '(min-width: 1024px)' ? query : {
+    matches: false, media, addEventListener: () => {}, removeEventListener: () => {},
+  }));
+  const { unmount } = renderSection();
+  const opener = document.querySelector<HTMLButtonElement>('[data-part="preview-open"]')!;
+  expect(opener).toHaveAttribute('aria-hidden', 'true');
+  expect(opener.tabIndex).toBe(-1);
+  act(() => { query.matches = false; query.dispatchEvent(new Event('change')); });
+  expect(screen.getByRole('button', { name: projects[0].title + ' 자세히 보기' })).toBe(opener);
+  expect(opener).not.toHaveAttribute('aria-hidden');
+  expect(opener.tabIndex).toBe(0);
+  act(() => opener.focus());
+  expect(opener).toHaveFocus();
+  act(() => { query.matches = true; query.dispatchEvent(new Event('change')); });
+  expect(opener).toHaveAttribute('aria-hidden', 'true');
+  expect(opener.tabIndex).toBe(-1);
+  const remove = vi.spyOn(query, 'removeEventListener');
+  unmount();
+  expect(remove).toHaveBeenCalledWith('change', expect.any(Function));
 });

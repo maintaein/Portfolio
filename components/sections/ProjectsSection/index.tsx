@@ -1421,8 +1421,8 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
             data-part="preview"
             data-motion-anchor="projects-preview"
             data-flip-id={modalOpen ? undefined : `pv-${activeProject.title}`}
-            // 데스크톱 프리뷰는 왼쪽 열의 75%로 줄이고 모바일은 전체 폭을 쓴다
-            className="w-full lg:w-3/4 aspect-video"
+            // 데스크톱 프리뷰는 폭 75%를 유지하고 열 너비의 8%만큼 오른쪽으로 옮긴다. 모바일은 전체 폭이다
+            className="w-full lg:w-3/4 lg:ml-[8%] aspect-video"
           >
             {/* 자르는 쪽이 여기다. 그림은 object-cover로 상자를 넘치므로
                 반경만 줘서는 모서리가 안 깎인다. rounded-media는 상세 판
@@ -1488,8 +1488,8 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
                   {/* 자리를 옮기는 것은 이 안쪽 묶음뿐이다. 바깥 띠까지 같이
                       밀면 민 폭만큼 오른쪽 끝이 안 어두운 채로 남아서, 띠는
                       clip으로 연다. 미디어 겹에 aria-hidden이 걸려
-                      있으므로 이 글자는 장식이고, 같은 내용을 오른쪽 이름
-                      목록이 이미 스크린리더에 준다. 그래서 이름 목록보다 작고
+                      있으므로 이 글자는 장식이다. 데스크톱은 오른쪽 이름 목록이,
+                      모바일은 프리뷰 열기 단추가 제목을 읽어 준다. 그래서 이름 목록보다 작고
                       흐리다. 같은 제목이 화면에 둘이니 어느 쪽이 주인공인지
                       크기와 색으로 갈라야 한다. subtitle은 선택 필드이고 TDS
                       것에는 리터럴 줄바꿈이 들어 있는데, HTML 공백 접기가
@@ -1521,10 +1521,11 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
               type="button"
               data-part="preview-open"
               tabIndex={wide ? -1 : 0}
+              aria-hidden={wide || undefined}
               onClick={handlePreviewClick}
               aria-label={`${activeProject.title} 자세히 보기`}
               disabled={!isProjectModalReady(activeProject)}
-              className="absolute inset-0 block h-full w-full min-h-11 min-w-11 border-0 bg-transparent p-0 text-left [font:inherit] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-cyan-core)]"
+              className="absolute inset-0 block h-full w-full rounded-media border-0 bg-transparent p-0 text-left [font:inherit] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-cyan-core)]"
             />
             </div>
           </div>
@@ -1549,15 +1550,15 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
         </div>
 
         <div className="max-lg:hidden pl-10">
-          {/* 글자 크기가 곧 드럼 크기다. 화면 높이(6svh)로 잡아 휠이 늘 화면에 들어오고,
-              lg 바로 위의 좁은 창에서는 폭(4.2vw)이 막아 프리뷰 자리를 남긴다. 왼쪽 여백
+          {/* 글자는 기존보다 20% 키우되 줄 여백을 줄여 양 끝 이름도 헤더 아래 화면 안에 둔다. 화면 높이(7.2svh)로 잡고,
+              lg 바로 위의 좁은 창에서는 폭(5.04vw)이 막아 프리뷰 자리를 남긴다. 왼쪽 여백
               2.8em은 고른 이름이 프리뷰 쪽으로 부푸는 폭(drumItem의 x, 줄 높이의 1.84배)이다 */}
           <div
             data-part="index"
             role="tablist"
             aria-orientation="vertical"
             aria-label="프로젝트 목록"
-            className="flex flex-col items-end pl-[2.8em] text-[clamp(2.5rem,min(6svh,4.2vw),4.5rem)]"
+            className="flex flex-col items-end pl-[2.8em] text-[clamp(2.5rem,min(7.2svh,5.04vw),5.4rem)]"
             onKeyDown={handleIndexKeyDown}
             // Tab으로 목록에 닿으면 그 이름의 프로젝트로 잠근다. 모달을 닫고 돌려받은 포커스는 사용자가 옮긴 것이 아니라 거른다
             onFocus={event => {
@@ -1596,8 +1597,8 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
                   // 통째로 실려 남의 줄 위를 덮고, 이름을 겨냥하지 않은 자리에서
                   // 엉뚱한 프로젝트가 잡힌다. 과녁을 글자 너비로 줄이면 보이는
                   // 것과 잡히는 것이 같아진다. 세로 여백도 em이라 줄 높이가
-                  // 글자 크기와 같이 간다(1.5em)
-                  className={`block w-fit origin-right whitespace-nowrap text-right leading-[1.1] tracking-[-0.02em] py-[0.2em] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)] ${
+                  // 글자 크기와 같이 간다(1.26em)
+                  className={`block w-fit origin-right whitespace-nowrap text-right leading-[1.1] tracking-[-0.02em] py-[0.08em] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)] ${
                     isActive ? 'font-bold text-[var(--color-text-primary)]' : 'font-normal'
                   }`}
                   // 휠이 도는 동안 색도 같이 간다. --pj-wheel-p는 활성에서

@@ -386,7 +386,7 @@ describe('ProjectsSection 읽기 잠금 (M4 Task 7)', () => {
 
   // Task 8 리뷰. 브라우저의 PageUp 한 번은 화면의 .8보다 길고(크롬은 약 .875), 느린 프레임에서는 그 스크롤 이벤트가 350ms보다 늦게 온다.
   // 키 스크롤이 잠금 자리를 넘는지는 추정이 아니라 실제로 넘은 스크롤 이벤트로 정한다. 다른 입력이 오면 그 키의 몫은 끝난다.
-  it('a late key crossing at 900ms still locks the last project', () => {
+  it('키 스크롤이 900ms 뒤에 경계를 넘어도 마지막 프로젝트를 잠근다', () => {
     mount(START + 765);
     expect(isLocked()).toBe(false);
     expect(key('PageUp', 20_000).defaultPrevented).toBe(false);
@@ -408,7 +408,7 @@ describe('ProjectsSection 읽기 잠금 (M4 Task 7)', () => {
     expect(window.scrollTo).not.toHaveBeenCalled();
   });
 
-  it('pending key expires after 1500ms so an input-free crossing does not pull the page', () => {
+  it('대기 중인 키는 1500ms 뒤에 만료되어 입력 없는 경계 통과가 페이지를 끌지 않는다', () => {
     mount(START + 765);
     expect(key('PageUp', 20_000).defaultPrevented).toBe(false);
     scrollAt(START - 22, 21_501);
@@ -416,7 +416,7 @@ describe('ProjectsSection 읽기 잠금 (M4 Task 7)', () => {
     expect(window.scrollTo).not.toHaveBeenCalled();
   });
 
-  it.each(['scrollend', 'pointerdown', 'touchstart', 'popstate', 'release'] as const)('%s clears a pending key before a late crossing', closer => {
+  it.each(['scrollend', 'pointerdown', 'touchstart', 'popstate', 'release'] as const)('%s가 대기 중인 키를 지워 뒤늦은 경계 통과를 잠그지 않는다', closer => {
     const { handle } = mount(START + 765);
     expect(key('PageUp', 20_000).defaultPrevented).toBe(false);
     if (closer === 'release') act(() => handle.current!.release());
@@ -426,9 +426,14 @@ describe('ProjectsSection 읽기 잠금 (M4 Task 7)', () => {
     expect(window.scrollTo).not.toHaveBeenCalled();
   });
 
-  // Hidden names must return focus to the mobile opener, including without checkVisibility.
-  it('이름 목록이 숨은 화면에서 모달을 닫으면 checkVisibility 없이도 포커스가 프리뷰 열기 단추로 돌아온다', async () => {
+  // Safari 17.4와 jsdom에는 checkVisibility가 없다. 대체 검사로도 숨은 이름 대신 모바일 열기 단추에 포커스를 돌려야 한다.
+  it('모달을 연 채 lg 아래로 넘어가 닫으면 checkVisibility 없이도 포커스가 프리뷰 열기 단추로 돌아온다', async () => {
     expect('checkVisibility' in Element.prototype).toBe(false);
+    const query = new EventTarget() as EventTarget & { matches: boolean };
+    query.matches = true;
+    vi.stubGlobal('matchMedia', vi.fn((media: string) => media === '(min-width: 1024px)' ? query : {
+      matches: false, media, addEventListener: () => {}, removeEventListener: () => {},
+    }));
     const ready = projects.findIndex(isProjectModalReady);
     documentY = START + 300;
     render(
@@ -437,9 +442,12 @@ describe('ProjectsSection 읽기 잠금 (M4 Task 7)', () => {
       </SectionActivityProvider>
     );
     if (ready > 0) fireEvent.click(name(ready));
-    (document.querySelector('[data-part="index"]')!.parentElement as HTMLElement).style.display = 'none';
     fireEvent.click(document.querySelector('[data-part="preview-open"]')!);
     expect(await screen.findByRole('dialog', {}, { timeout: 20_000 })).toBeTruthy();
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    (document.querySelector('[data-part="index"]')!.parentElement as HTMLElement).style.display = 'none';
+    act(() => { query.matches = false; query.dispatchEvent(new Event('change')); });
+    expect(document.querySelector('[data-part="preview-open"]')).not.toHaveAttribute('aria-hidden');
     fireEvent.keyDown(document, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull(), { timeout: 20_000 });
     await waitFor(() => expect(document.activeElement).toBe(document.querySelector('[data-part="preview-open"]')), { timeout: 5_000 });
