@@ -12,6 +12,9 @@ const KEY_SCROLL_PENDING_MS = 1500;
 // 지금 잠긴 인스턴스의 풀기. About과 Projects의 잠금 자리는 한 화면 안팎이라(1440x900 실측 808·1632) 이미 잠긴 쪽이 삼킨 휠로
 // 다른 쪽도 잠가, 넘침 창 안에서 둘이 서로 잠금 자리로 되돌리며 오갔다(Task 13). 잠금은 한 번에 하나다.
 let holder: (() => void) | null = null;
+// 잠긴 쪽이 마지막 index에서 같은 입력으로 풀릴 때 이어 잠글 다른 쪽. 같은 입력은 같은 timeStamp다. 리스너 순서가 어떻든
+// 다른 쪽은 먼저 입력을 맡아 두고(Projects는 기본 스크롤도 막는다), 풀리는 쪽이 그 입력으로 풀리는 순간 넘겨받는다(Task 13 수정 1 B1).
+let handoff: { time: number; owner: () => void; take: () => void } | null = null;
 
 // 공유 로고와 이 섹션의 관계. flying: 이 섹션으로 날아오는 중(잠금을 미루거나 pinWhileFlying이면 먼저 고정하고 걸음만 기다린다),
 // landed: 이 섹션에 내려앉았다(미룬 잠금을 걸거나 고정된 자리에서 걸음을 시작한다),
@@ -156,11 +159,21 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
       if (phase !== 'locked') {
         // applied: 컴포지터가 이미 이 입력만큼 스크롤했다. 그때 y+delta는 같은 입력을 두 번 세어 입력이 닿지 않은 잠금 자리까지
         // 당겼다(헤드 실측: 3340에서 -960 wheel을 2572에서 받아 1632로 당겼다, Task 13). 이미 옮겨진 위치로 판단한다.
-        const y = window.scrollY - (applied ? delta : 0);
-        const entering = phase === 'before' && delta > 0 && y + delta >= start;
-        const returning = phase === 'after' && delta < 0 && y >= start && y + delta <= start;
-        // 미룬 잠금은 입력을 막지 않고, 먼저 고정한 잠금은 착지 전에도 입력을 막는다. 다른 섹션이 잠겨 있으면 이 입력은 그쪽 것이다.
-        if ((entering || returning) && !other()) { lock(returning ? last() : 0, time); return held === null; }
+        const crosses = (y: number) => phase === 'before' ? delta > 0 && y + delta >= start : delta < 0 && y >= start && y + delta <= start;
+        if (crosses(window.scrollY - (applied ? delta : 0))) {
+          const index = phase === 'after' ? last() : 0;
+          // 다른 섹션이 잠겨 있으면 이 입력은 먼저 그쪽 것이다. 그쪽이 이 입력으로 풀리면 그때 잠근다. 풀리지 않으면 아무 일도 없다.
+          if (other()) {
+            handoff = { time, owner: yieldLock, take: () => { if (phase !== 'locked' && !disabled && !blocked && !other()) lock(index, time); } };
+            return pinWhileFlying;
+          }
+          // 미룬 잠금은 입력을 막지 않고, 먼저 고정한 잠금은 착지 전에도 입력을 막는다.
+          lock(index, time);
+          return held === null;
+        }
+        // 이미 옮겨졌다는 추정이 틀려 스크롤이 나중에 적용될 수 있다(cancelable은 Chrome의 추정). 그러면 실제로 넘는 스크롤을
+        // 350ms 넘침 창이 아니라 키 스크롤의 긴 창으로 기다린다. scrollend·다른 입력·pointerdown이 닫는다(Task 13 수정 1 N1).
+        if (applied && crosses(window.scrollY)) keyPendingUntil = performance.now() + KEY_SCROLL_PENDING_MS;
         return false;
       }
       if (pinWhileFlying && !landedRef.current) { lastInput = time; pendingGesture = false; return true; }
@@ -170,7 +183,13 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
       if (!pendingGesture || time - lastStep < latest.current.stepMs) return true;
       pendingGesture = false;
       const next = latest.current.current() + (delta > 0 ? 1 : -1);
-      if (next < 0 || next > last()) { setPhase(next < 0 ? 'before' : 'after'); return false; }
+      if (next < 0 || next > last()) {
+        setPhase(next < 0 ? 'before' : 'after');
+        const pending = handoff;
+        handoff = null;
+        if (pending?.time === time) pending.take();
+        return false;
+      }
       lastStep = time;
       choose(next);
       return true;
@@ -323,6 +342,7 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
     return () => {
       alive = false;
       if (holder === yieldLock) holder = null;
+      if (handoff?.owner === yieldLock) handoff = null;
       resize?.disconnect();
       window.removeEventListener('wheel', lockedWheel, true);
       window.removeEventListener('touchmove', lockedTouchMove, true);

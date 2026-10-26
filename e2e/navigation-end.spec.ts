@@ -213,3 +213,37 @@ test('About과 Projects 사이를 세게 오가도 두 잠금이 함께 서지 �
   const both = await page.evaluate(() => (window as unknown as { __task13: { both: number } }).__task13.both);
   expect({ both, teleports }).toEqual({ both: 0, teleports: [] });
 });
+
+// M4 Task 13 수정 1 B1. About을 푸는 wheel과 Projects로 들어가는 wheel이 같은 하나다(따로 100px로 먼저 풀지 않는다).
+// About의 문항 클릭이 About의 잠금 wheel 리스너를 Projects 진입 리스너 뒤로 다시 단다. 예전에는 Projects가 아직 잠긴 About을 보고 먼저 거절해
+// 아무도 기본 스크롤을 막지 않았고, 넘친 페이지를 넘침 창에서 한 화면 넘게 되돌리거나(350ms 안) 아예 지나쳤다(350ms 뒤).
+for (const [width, height] of [[1440, 900], [1280, 720]]) test(`About 마지막 문항에서 큰 wheel 하나로 About을 풀며 Projects에 들어가면 같은 wheel로 고정하고 넘치지 않는다 (${width}x${height})`, async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width, height });
+  await enter(page, 'about');
+  await expect(page.locator('.portfolio-document')).toHaveAttribute('data-logo-owner', 'about', SLOW);
+  await page.getByRole('navigation', { name: 'About 문항' }).getByRole('button').last().click();
+  await expect(page.locator('#about [data-motion-layout="reading"]')).toHaveAttribute('data-locked', 'true', SLOW);
+  const start = await page.locator('#projects').evaluate(el => Math.round(scrollY + el.getBoundingClientRect().top - parseFloat(getComputedStyle(el).scrollMarginTop)));
+  // document의 scroll 리스너는 window에 단 잠금의 리스너보다 먼저 돌아, 잠금이 되돌리기 전의 위치를 본다. window 거품 단계의 wheel 리스너는 모든 캡처 리스너 뒤다.
+  await page.evaluate(() => {
+    const seen = { maxY: scrollY, prevented: null as boolean | null };
+    document.addEventListener('scroll', () => { seen.maxY = Math.max(seen.maxY, scrollY); }, { passive: true });
+    addEventListener('wheel', event => { seen.prevented = event.defaultPrevented; }, { passive: true });
+    Object.assign(window, { __task13b1: seen });
+  });
+  // 걸음 간격(1초)이 지나야 마지막 문항의 새 제스처가 About을 푼다.
+  await page.waitForTimeout(1100);
+  await page.mouse.move(width / 2, height / 2);
+  await page.mouse.wheel(0, height * 2);
+  await expect(projectsLocked(page)).toHaveCount(1, SLOW);
+  await expect(page.locator('.portfolio-document')).toHaveAttribute('data-logo-owner', 'projects', SLOW);
+  await page.waitForTimeout(500);
+  const seen = await page.evaluate(() => (window as unknown as { __task13b1: { maxY: number; prevented: boolean } }).__task13b1);
+  expect(seen.prevented).toBe(true);
+  expect(seen.maxY).toBeLessThanOrEqual(start + 1);
+  expect(await page.evaluate(() => scrollY)).toBe(start);
+  await expect(projectsLocked(page)).toHaveCount(1);
+  await expect(page.locator('#about [data-motion-layout="reading"]')).toHaveAttribute('data-locked', 'false');
+  expect(await project(page)).toBe('0');
+});
