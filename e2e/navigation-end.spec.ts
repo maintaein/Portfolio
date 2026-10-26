@@ -138,3 +138,78 @@ for (const [width, height] of [[1440, 900], [1280, 720]]) test(`About에서 빠�
   await page.mouse.wheel(0, Math.round(950 * height / 900));
   await expectActive(page, 'experience');
 });
+
+// M4 Task 13. About과 Projects 사이를 세게 오가는 휠. 두 잠금이 같은 휠로 함께 잠그면 넘친 거리를 서로 되돌리며 오갔고,
+// 비차단으로 늦게 받은 휠은 이미 스크롤된 거리를 한 번 더 세어 입력이 닿지 않은 잠금 자리까지 당겼다(헤드 실측, task-13 probe).
+// 무작위 열(seed 1)만으로는 헤드리스에서 늘 재현되지 않아 두 원인을 곧바로 일으키는 휠을 앞뒤에 둔다. 휠은 probe처럼 CDP로 바로 보낸다.
+// 한 프레임에 반 화면 넘게 움직였는데 최근 입력으로 설명되지 않으면 순간이동이다. 원인으로 치는 입력은 막히지 않은 휠과,
+// 막혔어도 그때 아무 잠금도 없던 휠(잠금 진입)이다. 이미 잠긴 쪽이 삼킨 휠은 페이지를 옮길 까닭이 아니다. 두 잠금이 한순간이라도 함께 서도 실패다.
+test('About과 Projects 사이를 세게 오가도 두 잠금이 함께 서지 않고 입력이 만들지 않은 반 화면 넘는 순간이동이 없다 (seed 1, 1440x900)', async ({ page }) => {
+  test.setTimeout(360_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await enter(page, 'about');
+  await expect(page.locator('.portfolio-document')).toHaveAttribute('data-logo-owner', 'about', SLOW);
+  await page.getByRole('navigation', { name: 'About 문항' }).getByRole('button').first().click();
+  await expect(page.locator('#about [data-motion-layout="reading"]')).toHaveAttribute('data-locked', 'true', SLOW);
+  const { about, projects, vh } = await page.evaluate(() => {
+    const lockAt = (selector: string) => { const el = document.querySelector(selector)!; return Math.round(el.getBoundingClientRect().top + scrollY - parseFloat(getComputedStyle(el).scrollMarginTop)); };
+    return { about: lockAt('#about'), projects: lockAt('#projects'), vh: innerHeight };
+  });
+  await page.evaluate(() => {
+    const reading = document.querySelector('#about [data-motion-layout="reading"]')!;
+    const section = document.querySelector('#projects')!;
+    const locked = () => reading.getAttribute('data-locked') === 'true' || section.getAttribute('data-locked') === 'true';
+    const state = { frames: [] as { t: number; y: number }[], wheels: [] as { t: number; dy: number; cause: boolean; event?: WheelEvent }[], both: 0 };
+    const read = () => { if (state.frames.at(-1)?.y !== scrollY) state.frames.push({ t: performance.now(), y: scrollY }); requestAnimationFrame(read); };
+    requestAnimationFrame(read);
+    const observer = new MutationObserver(() => { if (reading.getAttribute('data-locked') === 'true' && section.getAttribute('data-locked') === 'true') state.both += 1; });
+    for (const target of [reading, section]) observer.observe(target, { attributes: true, attributeFilter: ['data-locked'] });
+    addEventListener('wheel', event => state.wheels.push({ t: event.timeStamp, dy: event.deltaY, cause: !locked(), event }), { capture: true, passive: true });
+    addEventListener('wheel', event => { const last = state.wheels.at(-1); if (last?.event === event) { last.cause ||= !event.defaultPrevented; delete last.event; } }, { passive: true });
+    Object.assign(window, { __task13: state });
+  });
+  const cdp = await page.context().newCDPSession(page);
+  const wheel = (deltaY: number) => cdp.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: 720, y: 450, deltaX: 0, deltaY });
+  // 잠긴 About의 첫 문항에서 두 잠금 자리 사이보다 긴 휠 하나와 그 관성. 수정 전에는 Projects도 잠가 둘이 서로 되돌렸다.
+  await page.waitForTimeout(1100);
+  await wheel(projects - about + 100);
+  for (let i = 0; i < 4; i += 1) { await wheel(100); await page.waitForTimeout(30); }
+  await page.waitForTimeout(1500);
+  let seed = 1;
+  const random = () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  let direction = 1;
+  for (let burst = 0; burst < 30; burst += 1) {
+    const y = await page.evaluate(() => scrollY);
+    if (y < about - .3 * vh) direction = 1; else if (y > projects + vh) direction = -1; else if (random() < .7) direction = -direction;
+    const kind = random();
+    const [count, size, gap] = kind < .6 ? [3 + Math.floor(random() * 12), () => 100, () => 8 + random() * 27]
+      : kind < .85 ? [2 + Math.floor(random() * 5), () => 300 + random() * 600, () => 8 + random() * 12] : [1, () => 100 + random() * 100, () => 0];
+    for (let i = 0; i < count; i += 1) { await wheel(direction * Math.round(size())); const ms = gap(); if (ms) await page.waitForTimeout(ms); }
+    const pause = random();
+    await page.waitForTimeout(pause < .35 ? random() * 80 : pause < .75 ? 150 + random() * 300 : 600 + random() * 600);
+  }
+  // 프레임 기록을 비우며 그때까지의 순간이동을 거둔다. 아래 프로그램 이동은 입력이 아니므로 두 구간 사이에서 비운다.
+  const collect = () => page.evaluate(half => {
+    const state = (window as unknown as { __task13: { frames: { t: number; y: number }[]; wheels: { t: number; dy: number; cause: boolean }[]; both: number } }).__task13;
+    const { frames, wheels } = state;
+    const teleports: { from: number; to: number; caused: number }[] = [];
+    for (let i = 1; i < frames.length; i += 1) {
+      const dy = frames[i].y - frames[i - 1].y;
+      const caused = wheels.filter(w => w.cause && w.t > frames[i - 1].t - 700 && w.t <= frames[i].t).reduce((sum, w) => sum + Math.abs(w.dy), 0);
+      if (Math.abs(dy) > half && Math.abs(dy) > caused + 50) teleports.push({ from: frames[i - 1].y, to: frames[i].y, caused });
+    }
+    state.frames = [{ t: performance.now(), y: scrollY }];
+    return teleports;
+  }, vh / 2);
+  await page.waitForTimeout(1500);
+  const teleports = await collect();
+  // Experience 쪽 한 화면 밖(수동 리스너뿐이라 비차단)에서 잠금 자리에 못 미치는 위 휠. 수정 전에는 y+delta를 한 번 더 세어 잠금 자리까지 당겼다.
+  await page.evaluate(top => window.scrollTo({ top, behavior: 'instant' }), projects + 1300);
+  await page.waitForTimeout(1500);
+  await collect();
+  await wheel(-700);
+  await page.waitForTimeout(2000);
+  teleports.push(...await collect());
+  const both = await page.evaluate(() => (window as unknown as { __task13: { both: number } }).__task13.both);
+  expect({ both, teleports }).toEqual({ both: 0, teleports: [] });
+});

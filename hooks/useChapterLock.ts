@@ -9,6 +9,9 @@ const WHEEL_PAUSE_MS = 56;
 const WHEEL_FRAME_MS = 20;
 // 느린 프레임에서는 키 스크롤이 900ms 뒤에도 경계를 넘는다. scrollend가 없어도 움직이지 않은 키는 만료한다.
 const KEY_SCROLL_PENDING_MS = 1500;
+// 지금 잠긴 인스턴스의 풀기. About과 Projects의 잠금 자리는 한 화면 안팎이라(1440x900 실측 808·1632) 이미 잠긴 쪽이 삼킨 휠로
+// 다른 쪽도 잠가, 넘침 창 안에서 둘이 서로 잠금 자리로 되돌리며 오갔다(Task 13). 잠금은 한 번에 하나다.
+let holder: (() => void) | null = null;
 
 // 공유 로고와 이 섹션의 관계. flying: 이 섹션으로 날아오는 중(잠금을 미루거나 pinWhileFlying이면 먼저 고정하고 걸음만 기다린다),
 // landed: 이 섹션에 내려앉았다(미룬 잠금을 걸거나 고정된 자리에서 걸음을 시작한다),
@@ -108,8 +111,14 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
       window.addEventListener('wheel', wheel, { passive: !next, capture: true });
       window.addEventListener('touchmove', touchMove, { passive: !next, capture: true });
     };
+    const yieldLock = () => releaseRef.current();
+    const other = () => holder !== null && holder !== yieldLock;
     const setPhase = (next: typeof phase) => {
+      // 클릭·Tab으로 거는 잠금은 다른 쪽 잠금을 푼다. 입력으로 거는 잠금은 다른 쪽이 잠겨 있으면 아예 걸지 않는다(other).
+      if (next === 'locked' && other()) holder?.();
       phase = next;
+      if (phase === 'locked') holder = yieldLock;
+      else if (holder === yieldLock) holder = null;
       setLocked(phase === 'locked');
       window.removeEventListener('wheel', lockedWheel, true);
       window.removeEventListener('touchmove', lockedTouchMove, true);
@@ -141,15 +150,17 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
       window.scrollTo({ top: start, behavior: 'instant' });
     };
     // 진입 제스처는 자리만 잡는다. 그 관성은 index를 넘기지 못한다.
-    const input = (delta: number, time: number, fresh = false) => {
+    const input = (delta: number, time: number, fresh = false, applied = false) => {
       if (disabled || blocked || delta === 0) return false;
       lastNativeInput = performance.now();
       if (phase !== 'locked') {
-        const y = window.scrollY;
+        // applied: 컴포지터가 이미 이 입력만큼 스크롤했다. 그때 y+delta는 같은 입력을 두 번 세어 입력이 닿지 않은 잠금 자리까지
+        // 당겼다(헤드 실측: 3340에서 -960 wheel을 2572에서 받아 1632로 당겼다, Task 13). 이미 옮겨진 위치로 판단한다.
+        const y = window.scrollY - (applied ? delta : 0);
         const entering = phase === 'before' && delta > 0 && y + delta >= start;
         const returning = phase === 'after' && delta < 0 && y >= start && y + delta <= start;
-        // 미룬 잠금은 입력을 막지 않고, 먼저 고정한 잠금은 착지 전에도 입력을 막는다.
-        if (entering || returning) { lock(returning ? last() : 0, time); return held === null; }
+        // 미룬 잠금은 입력을 막지 않고, 먼저 고정한 잠금은 착지 전에도 입력을 막는다. 다른 섹션이 잠겨 있으면 이 입력은 그쪽 것이다.
+        if ((entering || returning) && !other()) { lock(returning ? last() : 0, time); return held === null; }
         return false;
       }
       if (pinWhileFlying && !landedRef.current) { lastInput = time; pendingGesture = false; return true; }
@@ -195,7 +206,8 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
       earlierDelta = Math.abs(lastWheelDelta);
       lastWheelDelta = delta;
       lastWheelGap = gap;
-      return input(delta, event.timeStamp, reversed || renewed);
+      // 비차단으로 보낸 wheel은 cancelable이 false이고 컴포지터가 메인 스레드를 기다리지 않고 이미 스크롤했다(헤드 실측).
+      return input(delta, event.timeStamp, reversed || renewed, !event.cancelable);
     };
     // 먼저 고정할 때는 진입 이벤트의 기본 스크롤도 막는다. 늦게 도착한 네이티브 스크롤이 고정을 벗어나면 안 된다.
     const wheel = (event: WheelEvent) => { if (phase !== 'locked' && wheelInput(event) && pinWhileFlying && event.cancelable) event.preventDefault(); };
@@ -238,7 +250,7 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
       // 스크롤 때문에 수백 px까지 간다. 스크롤바는 입력이 없고, History·명시적 이동·다른 키는
       // 이 창을 닫으므로 끌려오지 않는다.
       const overshoot = !blocked && performance.now() - lastNativeInput < 350;
-      if ((overshoot || (performance.now() < keyPendingUntil && !blocked)) && phase !== 'locked' && (phase === 'before' ? offset > 0 : offset < 0)) {
+      if ((overshoot || (performance.now() < keyPendingUntil && !blocked)) && phase !== 'locked' && !other() && (phase === 'before' ? offset > 0 : offset < 0)) {
         lock(phase === 'after' ? last() : 0, performance.now());
         return;
       }
@@ -247,7 +259,7 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
         return;
       }
       if (Math.abs(offset) <= 1) {
-        if (phase !== 'locked' && !blocked) {
+        if (phase !== 'locked' && !blocked && !other()) {
           // 제자리에서 효과나 화면 크기 측정이 다시 시작되어도 비행 중 고른 이름은 유지한다.
           if (!landedRef.current && pinWhileFlying) {
             const index = event ? (phase === 'after' ? last() : 0) : latest.current.current();
@@ -277,7 +289,7 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
       const index = held;
       held = null;
       if (index === null) return;
-      if (apply && !disabled && !blocked && phase !== 'locked' && Math.abs(window.scrollY - start) < window.innerHeight / 2) lock(index, performance.now());
+      if (apply && !disabled && !blocked && !other() && phase !== 'locked' && Math.abs(window.scrollY - start) < window.innerHeight / 2) lock(index, performance.now());
       // 버릴 때도 위치로 앞뒤를 정한다(release와 같다). 날아오는 동안 잠금 자리를 지나치면 앞(before)이 남아, 다음 노치가 진입으로 읽혀
       // 반 화면 넘게 떨어진 페이지를 잠금 자리로 끌어왔다(Task 8 리뷰 B1).
       else if (phase !== 'locked') setPhase(window.scrollY > start ? 'after' : 'before');
@@ -310,6 +322,7 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
     short?.addEventListener('change', measure);
     return () => {
       alive = false;
+      if (holder === yieldLock) holder = null;
       resize?.disconnect();
       window.removeEventListener('wheel', lockedWheel, true);
       window.removeEventListener('touchmove', lockedTouchMove, true);
