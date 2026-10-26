@@ -23,6 +23,8 @@ export interface ChapterLockOptions {
   logo: ChapterLogo;
   // away도 새 잠금을 미룬다. 로고가 다른 자리에서 이 섹션으로 날아올 일이 남아 있는 섹션(Projects)의 것이다.
   awayDefers?: boolean;
+  // 진입에서 위치와 입력을 먼저 잡고, 로고가 내려앉을 때까지 걸음만 기다린다(Projects).
+  pinWhileFlying?: boolean;
   // 한 걸음 뒤 다음 걸음까지의 최소 간격. 섹션의 전환 시간이다.
   stepMs: number;
   disabled: boolean;
@@ -39,7 +41,7 @@ export interface ChapterLockOptions {
 // 오면 문서 스크롤로 돌려준다. 잠금은 섹션 위에서만 capture wheel·touchmove를
 // 막는다. 시안에 있던 "마운트 때 섹션 아래면 섹션으로 되돌린다"는 직접 해시와
 // 명시적 이동을 끌어오므로 옮기지 않았다. About에서 Projects와 같이 쓰려고 꺼냈다(M4 Task 7).
-export function useChapterLock({ ref, count, current, choose, logo, awayDefers = false, stepMs, disabled: forced, blocked, fits, onScroll }: ChapterLockOptions) {
+export function useChapterLock({ ref, count, current, choose, logo, awayDefers = false, pinWhileFlying = false, stepMs, disabled: forced, blocked, fits, onScroll }: ChapterLockOptions) {
   const [locked, setLocked] = useState(false);
   const [plain, setPlain] = useState(false);
   // 렌더마다 바뀌는 값은 잠금을 다시 세우지 않고 최신 것을 읽는다.
@@ -115,8 +117,8 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
       if (wasDisabled && !disabled) scroll();
       else if (phase === 'locked' && !disabled) window.scrollTo({ top: start, behavior: 'instant' });
     };
-    const lock = (index: number, time: number) => {
-      held = landedRef.current ? null : index;
+    const lock = (index: number, time: number, pin = pinWhileFlying) => {
+      held = landedRef.current || pin ? null : index;
       if (held !== null) return;
       keyPendingUntil = -Infinity;
       setPhase('locked'); lastInput = time; lastStep = time;
@@ -132,10 +134,11 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
         const y = window.scrollY;
         const entering = phase === 'before' && delta > 0 && y + delta >= start;
         const returning = phase === 'after' && delta < 0 && y >= start && y + delta <= start;
-        // 미룬 잠금은 입력을 막지 않는다.
+        // 미룬 잠금은 입력을 막지 않고, 먼저 고정한 잠금은 착지 전에도 입력을 막는다.
         if (entering || returning) { lock(returning ? last() : 0, time); return held === null; }
         return false;
       }
+      if (pinWhileFlying && !landedRef.current) { lastInput = time; pendingGesture = false; return true; }
       const newGesture = fresh || time - lastInput > GESTURE_IDLE_MS;
       lastInput = time;
       pendingGesture ||= newGesture;
@@ -180,7 +183,8 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
       lastWheelGap = gap;
       return input(delta, event.timeStamp, reversed || renewed);
     };
-    const wheel = (event: WheelEvent) => { if (phase !== 'locked') wheelInput(event); };
+    // 먼저 고정할 때는 진입 이벤트의 기본 스크롤도 막는다. 늦게 도착한 네이티브 스크롤이 고정을 벗어나면 안 된다.
+    const wheel = (event: WheelEvent) => { if (phase !== 'locked' && wheelInput(event) && pinWhileFlying && event.cancelable) event.preventDefault(); };
     function lockedWheel(event: WheelEvent) {
       if (wheelInput(event) && event.cancelable) event.preventDefault();
     }
@@ -209,7 +213,7 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
         if (blocking && event.cancelable) event.preventDefault();
       }
     };
-    const touchMove = (event: TouchEvent) => { if (phase !== 'locked') touchInput(event, false); };
+    const touchMove = (event: TouchEvent) => { if (phase !== 'locked') touchInput(event, pinWhileFlying); };
     function lockedTouchMove(event: TouchEvent) { touchInput(event, true); }
     const scroll = () => {
       if (disabled) return;
@@ -229,7 +233,8 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
       }
       if (Math.abs(offset) <= 1) {
         if (phase !== 'locked' && !blocked) {
-          if (!landedRef.current) held = phase === 'after' ? last() : 0;
+          if (!landedRef.current && pinWhileFlying) lock(phase === 'after' ? last() : 0, performance.now());
+          else if (!landedRef.current) held = phase === 'after' ? last() : 0;
           else { setPhase('locked'); lastInput = -Infinity; lastStep = -Infinity; }
         }
       } else if (phase !== 'locked' || Math.abs(offset) > 2) {
@@ -245,7 +250,8 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
     };
     // Tab으로 섹션의 컨트롤에 닿으면 진입 제스처처럼 잠근다. index가 없으면 위에서 오면 처음, 아래에서 오면 마지막이다.
     // 마우스 클릭의 포커스는 거르고 클릭 선택에 맡긴다. 안 그러면 누르는 순간 다른 index로 한 번 넘어간다.
-    enterRef.current = index => { if (!disabled && !blocked && phase !== 'locked') lock(index ?? (window.scrollY > start ? last() : 0), performance.now()); };
+    // 진입 전 비행 중의 포커스는 클릭보다 먼저 올 수 있다. 위치를 먼저 당기지 않고 기존처럼 착지를 기다린다(Task 2).
+    enterRef.current = index => { if (!disabled && !blocked && phase !== 'locked') lock(index ?? (window.scrollY > start ? last() : 0), performance.now(), pinWhileFlying && window.scrollY >= start); };
     // 섹션에 내려앉으면 미룬 잠금을 건다. 다른 자리로 되돌아갔거나 그사이 반 화면 넘게 지나쳤으면 끌어오지 않는다.
     landRef.current = apply => {
       const index = held;
@@ -274,10 +280,10 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
     // 지금 두 섹션(About은 fits 없음, Projects는 화면 폭 media query)에서는 대개 같은 값이 다시 나온다.
     let alive = true;
     document.fonts?.ready.then(() => { if (alive) measure(); });
-    window.addEventListener('wheel', wheel, { passive: true, capture: true });
+    window.addEventListener('wheel', wheel, { passive: !pinWhileFlying, capture: true });
     window.addEventListener('keydown', key);
     window.addEventListener('touchstart', touchStart, { passive: true });
-    window.addEventListener('touchmove', touchMove, { passive: true, capture: true });
+    window.addEventListener('touchmove', touchMove, { passive: !pinWhileFlying, capture: true });
     window.addEventListener('scroll', scroll, { passive: true });
     window.addEventListener('popstate', closeOvershoot);
     window.addEventListener('pointerdown', closeKey, { passive: true });
@@ -299,7 +305,7 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
       landRef.current = () => {};
       offsetRef.current = () => null;
     };
-  }, [ref, forced, blocked]);
+  }, [ref, forced, blocked, pinWhileFlying]);
 
   const [actions] = useState(() => ({
     select: (index: number) => selectRef.current(index),

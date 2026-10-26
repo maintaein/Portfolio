@@ -162,29 +162,65 @@ describe('ProjectsSection 읽기 잠금 (M4 Task 7)', () => {
     expect(selected()).toBe(0);
   });
 
-  it('로고가 프리뷰로 날아오는 동안에는 입력을 막지 않고 기다렸다가 내려앉을 때 첫 프로젝트로 잠근다', () => {
-    const { update } = mount(START - 100, { logoOwner: 'preview' });
+  it.each(['boundary', 'preview'] as const)('로고가 %s에 있어도 빠른 wheel은 진입에서 고정되고 착지 전에는 넘기지 않는다', owner => {
+    const { update } = mount(START - 100, { logoOwner: owner });
+    wheel(60, 19_984);
     documentY = START - 40;
-    expect(wheel(120, 20_000).defaultPrevented).toBe(false);
-    scrollAt(START + 80, 20_100);
-    expect(isLocked()).toBe(false);
-    expect(window.scrollTo).not.toHaveBeenCalled();
-    update({ logoOwner: 'projects' });
+    expect(wheel(1200, 20_000).defaultPrevented).toBe(true);
     expect(isLocked()).toBe(true);
     expect(window.scrollTo).toHaveBeenLastCalledWith({ top: START, behavior: 'instant' });
+    for (let i = 1; i <= 80; i += 1) expect(wheel(1200, 20_000 + i * 16).defaultPrevented).toBe(true);
+    expect(key('ArrowDown', 22_000).defaultPrevented).toBe(true);
+    expect(selected()).toBe(0);
+    expect(window.scrollY).toBe(START);
+    const pins = vi.mocked(window.scrollTo).mock.calls.length;
+    update({ logoOwner: 'projects' });
+    expect(window.scrollTo).toHaveBeenCalledTimes(pins);
+    let at = 23_000;
+    for (let i = 1; i < N; i += 1) {
+      expect(wheel(100, at).defaultPrevented).toBe(true);
+      expect(selected()).toBe(i);
+      expect(window.scrollY).toBe(START);
+      at += PROJECT_STEP_MS;
+    }
+    expect(wheel(100, at).defaultPrevented).toBe(false);
+    expect(isLocked()).toBe(false);
+  });
+
+  it('비행 중 실제 스크롤이 진입 자리를 넘으면 overshoot 경로도 즉시 고정한다', () => {
+    mount(START - 100, { logoOwner: 'boundary' });
+    wheel(20, 20_000);
+    scrollAt(START + 700, 20_100);
+    expect(isLocked()).toBe(true);
+    expect(window.scrollY).toBe(START);
+    expect(window.scrollTo).toHaveBeenLastCalledWith({ top: START, behavior: 'instant' });
+    expect(wheel(1200, 20_116).defaultPrevented).toBe(true);
     expect(selected()).toBe(0);
   });
 
-  it('로고가 About으로 되돌아가 내려앉으면 미룬 잠금을 버린다', () => {
+  it('비행 중 아래에서 들어와도 마지막 프로젝트로 고정하고 touch 입력은 착지까지 삼킨다', () => {
+    mount(START + 60, { logoOwner: 'preview' });
+    const touch = (y: number, at: number, type: string) => stamp(Object.assign(new Event(type, { cancelable: true }), { touches: [{ clientY: y }] }), at);
+    touch(400, 20_000, 'touchstart');
+    expect(touch(500, 20_016, 'touchmove').defaultPrevented).toBe(true);
+    expect(isLocked()).toBe(true);
+    expect(window.scrollY).toBe(START);
+    expect(selected()).toBe(N - 1);
+    touch(400, 21_000, 'touchstart');
+    expect(touch(500, 21_016, 'touchmove').defaultPrevented).toBe(true);
+    expect(selected()).toBe(N - 1);
+  });
+
+  it('비행 중 스크롤바로 About에 돌아가면 고정을 풀고 착지에서도 끌어오지 않는다', () => {
     const { update } = mount(START - 100, { logoOwner: 'preview' });
     documentY = START - 40;
     wheel(120, 20_000);
-    scrollAt(START - 200, 20_300);
+    scrollAt(START - 200, 20_500);
     update({ logoOwner: 'about' });
     update({ logoOwner: 'preview' });
     update({ logoOwner: 'projects' });
     expect(isLocked()).toBe(false);
-    expect(window.scrollTo).not.toHaveBeenCalled();
+    expect(window.scrollTo).toHaveBeenCalledTimes(1);
   });
 
   it('잠긴 동안 방향키 한 번은 한 걸음이고 포커스가 따라간다. 끝에서는 순환하지 않고 문서로 돌려준다. Home·End는 목록의 것이다', () => {
@@ -220,25 +256,28 @@ describe('ProjectsSection 읽기 잠금 (M4 Task 7)', () => {
   // Task 2: 날아오는 도중의 클릭은 비행을 제자리에 정착시키고 고르기만 한다. 잠금이 착지를 기다리듯 페이지를 옮기지 않는다.
   it('로고가 프리뷰로 날아오는 동안 이름을 누르면 고르기만 하고 잠그거나 페이지를 옮기지 않는다', () => {
     mount(START - 500, { logoOwner: 'preview' });
+    act(() => name(2).focus({ preventScroll: true }));
     fireEvent.click(name(2));
     expect(selected()).toBe(2);
     expect(isLocked()).toBe(false);
     expect(window.scrollTo).not.toHaveBeenCalled();
   });
 
-  // Task 7 리뷰 B1. 날아오는 동안 잠금 자리를 지나쳐 미룬 잠금이 있어도, 그사이 누른 이름은 착지 때 첫 프로젝트로 되돌아가지 않고 페이지도 옮기지 않는다.
-  it('날아오는 동안 미룬 잠금이 있어도 그사이 누른 이름은 착지 뒤에도 그대로이고 페이지를 끌어오지 않는다', () => {
+  // Task 2·7 B1: 진입에서 고정한 뒤 누른 이름은 착지에서도 유지하고 추가 스크롤을 만들지 않는다.
+  it('비행 중 고정된 자리에서 이름 3을 누르면 잠금을 유지하고 착지에서도 선택과 위치를 유지한다', () => {
     const { update } = mount(START - 100, { logoOwner: 'preview' });
     wheel(120, 20_000);
-    expect(isLocked()).toBe(false);
+    expect(isLocked()).toBe(true);
+    expect(window.scrollY).toBe(START);
     fireEvent.click(name(3));
+    expect(isLocked()).toBe(true);
     update({ logoOwner: 'projects' });
     expect(selected()).toBe(3);
-    expect(window.scrollTo).not.toHaveBeenCalled();
+    expect(window.scrollTo).toHaveBeenCalledTimes(1);
+    expect(window.scrollY).toBe(START);
   });
 
-  // 헤드 실측(fix1): 빠른 노치는 잠금 자리를 지나치고, 누른 뒤에도 남은 노치가 늦게 온다. 그 wheel이 진입으로 읽혀 첫 프로젝트로 잠그면 안 된다.
-  it('날아오는 동안 잠금 자리를 지나쳐 누른 이름은 착지 뒤에 늦게 온 같은 stroke의 wheel에도 되돌아가지 않는다', () => {
+  it('비행 중 고정된 자리에서 누른 이름은 착지 뒤에 늦게 온 같은 stroke의 wheel에도 되돌아가지 않는다', () => {
     const { update } = mount(START - 100, { logoOwner: 'preview' });
     wheel(120, 20_000);
     scrollAt(START + 270, 20_050);
@@ -247,23 +286,22 @@ describe('ProjectsSection 읽기 잠금 (M4 Task 7)', () => {
     wheel(125, 20_120);
     scrollAt(START + 300, 20_150);
     expect(selected()).toBe(3);
-    expect(isLocked()).toBe(false);
-    expect(window.scrollTo).not.toHaveBeenCalled();
+    expect(isLocked()).toBe(true);
+    expect(window.scrollY).toBe(START);
   });
 
-  // Task 7 리뷰 B2. 키 한 번은 로고가 아직 About(또는 Hero와 오가는 중)에 있을 때도 잠금 자리에 닿는다. 그때는 잠그지 않고 기다렸다가
-  // 로고가 프리뷰에 내려앉을 때 잠근다. 날아가는 동안 보이지 않는 목록을 넘기지 않는다.
-  it.each(['about', 'boundary', 'hero'] as const)('로고가 %s에 있을 때 키로 들어오면 잠그지도 넘기지도 않고 프리뷰에 내려앉을 때 첫 프로젝트로 잠근다', (owner) => {
-    const { update } = mount(START - 700, { logoOwner: owner });
+  // Task 7 B2: 로고 소유자가 아니라 진입 자리로 판단한다. 진입 전에는 키를 통과시키고 진입 뒤 걸음은 착지를 기다린다.
+  it.each(['about', 'boundary', 'hero'] as const)('로고가 %s에 있을 때 키는 진입 전에는 통과하고 진입에서만 고정한다', (owner) => {
+    const { update } = mount(START - 800, { logoOwner: owner });
     expect(key('ArrowDown', 20_000).defaultPrevented).toBe(false);
     expect(isLocked()).toBe(false);
     update({ logoOwner: 'preview' });
     documentY = START - 100;
-    expect(key('PageDown', 20_000 + PROJECT_STEP_MS + 100).defaultPrevented).toBe(false);
-    expect(key(' ', 20_000 + 2 * PROJECT_STEP_MS + 200).defaultPrevented).toBe(false);
-    expect(isLocked()).toBe(false);
+    expect(key('PageDown', 20_000 + PROJECT_STEP_MS + 100).defaultPrevented).toBe(true);
+    expect(key(' ', 20_000 + 2 * PROJECT_STEP_MS + 200).defaultPrevented).toBe(true);
+    expect(isLocked()).toBe(true);
     expect(selected()).toBe(0);
-    expect(window.scrollTo).not.toHaveBeenCalled();
+    expect(window.scrollTo).toHaveBeenCalledTimes(1);
     update({ logoOwner: 'projects' });
     expect(isLocked()).toBe(true);
     expect(window.scrollTo).toHaveBeenLastCalledWith({ top: START, behavior: 'instant' });
@@ -365,23 +403,21 @@ describe('ProjectsSection 읽기 잠금 (M4 Task 7)', () => {
     expect(selected()).toBe(N - 2);
   });
 
-  // Task 8 리뷰 B1. 로고가 프리뷰로 날아오는 동안 잠금 자리를 반 화면 넘게 지나치면 착지에서 미룬 잠금을 버린다.
-  // 버릴 때 앞뒤를 위치로 다시 정하지 않으면 다음 노치가 진입으로 읽혀 페이지를 잠금 자리로 400px 넘게 끌어올렸다.
-  it('날아오는 동안 잠금 자리를 반 화면 넘게 지나쳐 착지에서 미룬 잠금을 버리면 다음 노치가 페이지를 끌어오지 않는다', () => {
+  it('비행 중 반 화면 넘게 밀린 관성도 고정 위치로 되돌리고 착지에서 잠금을 버리지 않는다', () => {
     const { update } = mount(START - 600, { logoOwner: 'about' });
     update({ logoOwner: 'preview' });
     documentY = START - 60;
-    expect(wheel(100, 20_000).defaultPrevented).toBe(false);
+    expect(wheel(100, 20_000).defaultPrevented).toBe(true);
     scrollAt(START + 200, 20_100);
-    expect(wheel(100, 20_250).defaultPrevented).toBe(false);
+    expect(wheel(100, 20_250).defaultPrevented).toBe(true);
     scrollAt(START + 500, 20_300);
     update({ logoOwner: 'projects' });
-    expect(isLocked()).toBe(false);
-    expect(window.scrollTo).not.toHaveBeenCalled();
-    expect(wheel(100, 21_000).defaultPrevented).toBe(false);
-    expect(window.scrollTo).not.toHaveBeenCalled();
-    expect(isLocked()).toBe(false);
-    expect(window.scrollY).toBe(START + 500);
+    expect(isLocked()).toBe(true);
+    expect(window.scrollY).toBe(START);
+    const pins = vi.mocked(window.scrollTo).mock.calls.length;
+    expect(wheel(100, 21_000).defaultPrevented).toBe(true);
+    expect(selected()).toBe(1);
+    expect(window.scrollTo).toHaveBeenCalledTimes(pins);
   });
 
   // Task 8 리뷰. 브라우저의 PageUp 한 번은 화면의 .8보다 길고(크롬은 약 .875), 느린 프레임에서는 그 스크롤 이벤트가 350ms보다 늦게 온다.

@@ -1225,11 +1225,10 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
     count: N,
     current: () => activeIndexRef.current,
     choose: index => goTo(index, { focus: !!sectionRef.current?.querySelector('[data-part="index"]')?.contains(document.activeElement) }),
-    // 프리뷰로 날아오는 동안은 미루고 프리뷰(또는 GL 로고 없음)에 내려앉으면 건다. About·Hero 쪽으로 돌아가면 미룬 잠금을 버린다.
-    // 로고가 About·Hero 쪽에 있는 동안에도 새 잠금은 미룬다(awayDefers). 키 한 번(화면 .8)은 프리뷰로 떠나는 지점 전에 잠금 자리에 닿는다.
-    // 그때 잠그면 페이지가 뛰고 이어지는 걸음이 날고 있는 동안 보이지 않는 목록을 넘겼다(Task 7 리뷰 B2). 착지에서 건다.
+    // 진입 자리에서 먼저 고정한다. About·Hero 쪽에 있거나 날아오는 동안에는 걸음만 막고, 프리뷰에 내려앉으면 넘긴다.
     logo: logoOwner === 'preview' ? 'flying' : logoOwner === 'projects' || logoOwner === 'none' ? 'landed' : 'away',
     awayDefers: true,
+    pinWhileFlying: true,
     stepMs: PROJECT_STEP_MS,
     disabled: reducedMotion,
     blocked: navigationPending || obscured,
@@ -1251,9 +1250,9 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
       const alreadyActive = i === activeIndexRef.current;
       runAction(() => {
         // 잠기지 않았으면 그 프로젝트로 잠근다(About의 chapter 단어 클릭과 같다). 잠금이 꺼져 있으면 고르기만 한다.
-        // 로고가 프리뷰로 날아오는 동안의 클릭은 관문이 비행을 제자리에 정착시키고 고르기만 한다(Task 2). 잠금이 착지를 기다리듯 페이지를 옮기지 않는다
-        // 날아오는 동안 미룬 잠금이 있으면 버린다. 안 그러면 착지에서 첫 프로젝트로 잠가 누른 것을 되돌리고 페이지를 옮긴다(Task 7 리뷰 B1)
-        if (logoOwner === 'preview') { releaseLock(); goTo(i); }
+        // 로고가 프리뷰로 날아오는 동안의 클릭은 관문이 비행을 제자리에 정착시키고 고르기만 한다(Task 2). 페이지를 옮기지 않는다.
+        // 진입에서 이미 고정했다면 그대로 유지한다. 진입 전의 미룬 잠금만 버려 착지가 누른 이름을 되돌리지 않게 한다(Task 2·7 B1).
+        if (logoOwner === 'preview') { if (!chapterLock.locked) releaseLock(); goTo(i); }
         else selectProject(i);
         if (alreadyActive && isProjectModalReady(projects[i])) {
           // 비행보다 먼저다. 출발 rect를 뜨는 것이 openModal 안이라 순서가 계약이다
@@ -1262,7 +1261,7 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
         }
       });
     },
-    [runAction, selectProject, releaseLock, goTo, logoOwner, openModal, snapWheel, reducedMotion]
+    [runAction, selectProject, releaseLock, goTo, logoOwner, openModal, snapWheel, reducedMotion, chapterLock.locked]
   );
 
   // 프리뷰 클릭은 이름의 두 번째 클릭과 같다. 이미 고른 프로젝트를 다시

@@ -86,3 +86,55 @@ for (const [width, height] of [[1440, 900], [1280, 720]]) test(`Projects reading
   await page.mouse.wheel(0, -Math.round(950 * height / 900));
   await expectActive(page, 'about');
 });
+
+for (const [width, height] of [[1440, 900], [1280, 720]]) test(`About에서 빠르게 여러 화면을 굴려도 Projects를 고정하고 모든 인덱스를 거쳐야 Experience에 닿는다 (${width}x${height})`, async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width, height });
+  await enter(page, 'about');
+  await page.getByRole('navigation', { name: 'About 문항' }).getByRole('button').last().click();
+  await expect(page.locator('.portfolio-document')).toHaveAttribute('data-logo-owner', 'about', SLOW);
+  await page.waitForTimeout(STEP_GAP);
+  await page.mouse.move(width / 2, height / 2);
+  await page.mouse.wheel(0, 100);
+  await expect(page.locator('#about [data-motion-layout="reading"]')).toHaveAttribute('data-locked', 'false', SLOW);
+  const start = await page.locator('#projects').evaluate(el => Math.round(scrollY + el.getBoundingClientRect().top - parseFloat(getComputedStyle(el).scrollMarginTop)));
+  // 착지 순간의 문서 위치와 중심을 페이지 안에서 잰다. 프로토콜 지연 뒤의 정착한 장면만 검사하지 않는다.
+  await page.evaluate(() => {
+    const root = document.querySelector('.portfolio-document')!;
+    const samples: { owner: string | null; locked: string | null; y: number; dx: number; dy: number }[] = [];
+    const observer = new MutationObserver(() => {
+      const logo = document.querySelector('[data-logo-host]')!.getBoundingClientRect();
+      const preview = document.querySelector('[data-motion-anchor="projects-preview"]')!.getBoundingClientRect();
+      samples.push({ owner: root.getAttribute('data-logo-owner'), locked: document.querySelector('#projects')!.getAttribute('data-locked'), y: scrollY,
+        dx: logo.x + logo.width / 2 - preview.x - preview.width / 2, dy: logo.y + logo.height / 2 - preview.y - preview.height / 2 });
+    });
+    observer.observe(root, { attributes: true, attributeFilter: ['data-logo-owner'] });
+    Object.assign(window, { __task12Landing: samples });
+  });
+  await Promise.all(Array.from({ length: 12 }, () => page.mouse.wheel(0, height * 2)));
+  await expect(projectsLocked(page)).toHaveCount(1, SLOW);
+  await expect.poll(() => page.evaluate(() => scrollY), SLOW).toBe(start);
+  await expect(page.locator('.portfolio-document')).toHaveAttribute('data-logo-owner', 'projects', SLOW);
+  const samples = await page.evaluate(() => (window as unknown as { __task12Landing: { owner: string; locked: string; y: number; dx: number; dy: number }[] }).__task12Landing);
+  expect(samples.some(sample => sample.owner === 'preview' && sample.locked === 'true' && sample.y === start)).toBe(true);
+  const landing = samples.find(sample => sample.owner === 'projects')!;
+  expect(landing).toBeDefined();
+  expect(landing.y).toBe(start);
+  expect(landing.locked).toBe('true');
+  expect(Math.abs(landing.dx)).toBeLessThanOrEqual(1);
+  expect(Math.abs(landing.dy)).toBeLessThanOrEqual(1);
+  expect(await project(page)).toBe('0');
+  const count = await page.locator('#projects [role="tab"]').count();
+  for (let i = 1; i < count; i += 1) {
+    await page.waitForTimeout(STEP_GAP);
+    await page.mouse.wheel(0, 100);
+    await expect.poll(() => project(page), SLOW).toBe(String(i));
+    expect(await page.evaluate(() => scrollY)).toBe(start);
+    await expect(projectsLocked(page)).toHaveCount(1);
+  }
+  await page.waitForTimeout(STEP_GAP);
+  await page.mouse.wheel(0, 100);
+  await expect(projectsLocked(page)).toHaveCount(0, SLOW);
+  await page.mouse.wheel(0, Math.round(950 * height / 900));
+  await expectActive(page, 'experience');
+});
