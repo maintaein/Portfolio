@@ -148,7 +148,7 @@ describe('ProjectsSection 접힘 레이아웃', () => {
   it('이름 크기는 화면 높이를 따르고(목록의 clamp) 비활성 이름은 MUTED 밝기다', () => {
     renderSection();
     const active = document.querySelector<HTMLElement>('[aria-selected="true"]')!;
-    expect(document.querySelector('[data-part="index"]')!.className).toContain('text-[clamp(2.5rem,min(7.2svh,5.04vw),5.4rem)]');
+    expect(document.querySelector('[data-part="index"]')!.className).toContain('text-[clamp(2.5rem,min(7svh,4.9vw),5.25rem)]');
     expect(active.className).not.toMatch(/(?:^|\s)(lg:)?text-[td]\d\b/);
     const inactive = document.querySelector<HTMLElement>('[aria-selected="false"]')!;
     // 휠이 --pj-wheel-p로 활성색을 섞어 넣지만 비활성은 그 비율이 0이라 색은

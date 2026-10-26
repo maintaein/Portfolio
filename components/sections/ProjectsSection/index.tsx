@@ -1550,15 +1550,15 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
         </div>
 
         <div className="max-lg:hidden pl-10">
-          {/* 글자는 기존보다 20% 키우되 줄 여백을 줄여 양 끝 이름도 헤더 아래 화면 안에 둔다. 화면 높이(7.2svh)로 잡고,
-              lg 바로 위의 좁은 창에서는 폭(5.04vw)이 막아 프리뷰 자리를 남긴다. 왼쪽 여백
+          {/* 글자는 기존보다 약 16.7% 키우되 줄 여백을 줄여 양 끝 이름과 헤더·화면 끝 사이에 여유를 둔다. 화면 높이(7svh)로 잡고,
+              lg 바로 위의 좁은 창에서는 폭(4.9vw)이 막아 프리뷰 자리를 남긴다. 왼쪽 여백
               2.8em은 고른 이름이 프리뷰 쪽으로 부푸는 폭(drumItem의 x, 줄 높이의 1.84배)이다 */}
           <div
             data-part="index"
             role="tablist"
             aria-orientation="vertical"
             aria-label="프로젝트 목록"
-            className="flex flex-col items-end pl-[2.8em] text-[clamp(2.5rem,min(7.2svh,5.04vw),5.4rem)]"
+            className="flex flex-col items-end pl-[2.8em] text-[clamp(2.5rem,min(7svh,4.9vw),5.25rem)]"
             onKeyDown={handleIndexKeyDown}
             // Tab으로 목록에 닿으면 그 이름의 프로젝트로 잠근다. 모달을 닫고 돌려받은 포커스는 사용자가 옮긴 것이 아니라 거른다
             onFocus={event => {
