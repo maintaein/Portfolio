@@ -11,6 +11,7 @@ import { useSectionActivity } from '@/components/common/SectionActivityContext';
 import { useSectionVisibility } from '@/hooks/useSectionVisibility';
 import { useChapterLock } from '@/hooks/useChapterLock';
 import { MUTED_ALPHA, drumItem, swipeOffset, swipeTarget, SWIPE_SLOP_PX } from './wheel';
+import { PREVIEW_CAPTION_SCRIM, clearCaptionReveal, hideCaption, revealCaption } from './captionReveal';
 import type { Flip, gsap } from '@/lib/gsap';
 import type { PreviewMorphHandle } from '@/components/blocks/PreviewMorph';
 
@@ -104,20 +105,6 @@ const WHEEL_SMOOTHING_MS = 200;
 const WHEEL_SPLIT_PX = 56;
 const WHEEL_SPLIT_BLUR_PX = 6;
 
-// 프리뷰 캡션 뒤 국소 그라데이션. 전면 카드로 덮지 않고 글자가 앉는
-// 아래쪽에만 깐다 - SkillsSection의 SKILL_DESCRIPTION_SCRIM, About의
-// ABOUT_SCRIMS_MOBILE와 같은 처방이고 방향(to top)도 같다. 알파 0.78도
-// SKILL_DESCRIPTION_SCRIM에서 가져온 값이다.
-//
-// 다만 저 둘과 달리 뒷배경이 Hyperspeed가 아니라 남의 앱 화면 녹화다.
-// 여섯 프로젝트 중 다섯이 밝은 테마라 캡션 뒤에 순백(255,255,255)이 그대로
-// 온다. 형제 섹션처럼 기울기를 계속 태우면 글자 윗줄이 알파 0.47 자리에
-// 앉아 대비가 3.25:1까지 내려간다(크롬 실측). 그래서 위 두 정지점의 알파를
-// 같게 두어 글자가 앉는 구간 전체를 평평한 0.78로 만들고, 기울기는 글자가
-// 없는 위쪽 여백(pt-12)에서만 진다. 어느 줄이 어디에 앉든 뒤가 같은 알파다
-const PREVIEW_CAPTION_SCRIM =
-  'linear-gradient(to top, rgb(0 0 0 / 0.78) 0%, rgb(0 0 0 / 0.78) 62%, rgb(0 0 0 / 0.3) 84%, rgb(0 0 0 / 0) 100%)';
-
 // 프로젝트가 갈릴 때 미디어 겹이 자리를 잡는 시간. --animate-duration-base와
 // 같은 값이다. 이름을 훑으면 매번 오는 전환이라 길면 걸리적거린다
 const PREVIEW_SWAP_MS = 300;
@@ -126,17 +113,6 @@ const PREVIEW_SWAP_MS = 300;
 // 정본은 styles/design-tokens.css의 워드마크 flip 지속 변수다. HomeClient도
 // 같은 값을 복제해 둔다. 숫자 하나 때문에 공유 모듈을 파지 않는다
 const FLIP_DURATION_MS = 500;
-
-// 상세에서 돌아온 뒤 캡션이 들어오는 시간. 비행(500ms)보다 길다. 이 등장은
-// 비행이 다 끝나고 혼자 도는 구간이라 서둘 이유가 없고, 천천히 열려야 띠와
-// 글자가 한 몸으로 읽힌다
-const CAPTION_ENTER_MS = 800;
-
-// 캡션이 왼쪽부터 열릴 때 쓰는 두 끝값. 오른쪽 변만 움직이므로 왼쪽 끝에
-// 붙은 채로 폭이 자란다. 네 값 모두 같은 단위로 적어야 GSAP이 문자열을
-// 숫자 단위로 갈라 보간한다
-const CAPTION_CLIP_CLOSED = 'inset(0% 100% 0% 0%)';
-const CAPTION_CLIP_OPEN = 'inset(0% 0% 0% 0%)';
 
 // 제목만 100ms 더 날린다. 사용자가 글자 비행을 조금 느리게 보고 싶다고
 // 했다. 100ms는 느리다고 느껴지되 이미지와 따로 논다고 느껴지지는 않는
@@ -161,6 +137,12 @@ function asKillable(value: unknown): { kill: () => void } | null {
   return value && typeof (value as { kill?: unknown }).kill === 'function'
     ? (value as { kill: () => void })
     : null;
+}
+
+// 캡션 드러냄을 끊는 자리(전환, 다시 열기, lg 경계, 모션 감소)가 함께 쓴다
+function clearPreviewCaption(layer: HTMLElement | null) {
+  const caption = layer?.querySelector<HTMLElement>('[data-part="preview-caption"]');
+  if (caption) clearCaptionReveal(caption);
 }
 
 // 비행 동안 stage와 셸 사이 조상들의 자르기를 걷어야 한다. 증거 열에 걸린
@@ -286,9 +268,6 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
   // 비행 앞뒤로 접힘 프리뷰(previewRef 자신)에 거는 opacity tween. 전환
   // tween(swapTweenRef, mediaLayerRef 담당)과는 대상도 시점도 다르다
   const previewTweenRef = useRef<{ kill: () => void } | null>(null);
-  // 닫기 비행에서만 도는 캡션 등장 tween. 프리뷰 상자 전체를 채우는
-  // previewTweenRef와 대상도 구간도 다르므로 ref를 따로 둔다
-  const captionTweenRef = useRef<{ kill: () => void } | null>(null);
   // 셰이더 모프의 명령형 손잡이. next/dynamic이 늦게 풀어 주므로 처음 몇
   // 프레임은 null이고, 그동안의 전환은 아래 gsap 폴백이 맡는다
   const morphHandleRef = useRef<PreviewMorphHandle | null>(null);
@@ -374,6 +353,8 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
     if (swappedIndexRef.current === activeIndex) return;
     swappedIndexRef.current = activeIndex;
     const layer = mediaLayerRef.current;
+    // 글자 줄이 새 프로젝트 것으로 갈린다. 반쯤 든 줄과 새 줄이 섞이지 않게 드러냄을 끝낸다
+    clearPreviewCaption(layer);
     swapTweenRef.current?.kill();
     swapTweenRef.current = null;
     // 이 전환을 셰이더 모프가 맡았으면 겹에는 아무것도 걸지 않는다. 두 화면을
@@ -414,6 +395,12 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
       swapTweenRef.current?.paused(!motionReady || !decorationActive);
     }
   }, [motionReady, reducedMotion, decorationActive]);
+
+  // lg 경계를 넘거나 모션 감소로 바뀌면 도는 캡션 드러냄을 끝낸다. 누가 시작했든(motion.ts의 첫 진입이든
+  // 상세에서 돌아온 것이든) 캡션 요소 하나에 묶여 있어 여기서 같이 걷힌다
+  useEffect(() => {
+    clearPreviewCaption(mediaLayerRef.current);
+  }, [wide, reducedMotion]);
 
   // 모달이 사라지면 남은 비행과 재진입 잠금을 푼다. 정상 닫기에서는 이미 끝난
   // tween을 한 번 더 kill할 뿐이지만, popstate가 비행 중에 모달을 걷어가는
@@ -460,50 +447,16 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
     // 프리뷰가 처음으로 온전히 보이는 순간이기 때문이다. 비행이 도는 500ms
     // 안에 열어 봐야 소용이 없다. 그 구간의 프리뷰 상자는 바로 위
     // previewTween이 투명에서 채우는 중인 데다, 착지하는 stage가 그 위를
-    // 덮고 내려앉아 무엇을 움직여도 화면에 안 나온다. 미리 닫아 두는 것은
+    // 덮고 내려앉아 무엇을 움직여도 화면에 안 나온다. 미리 감춰 두는 것은
     // closeModal이 비행을 띄우는 시점에 이미 해 두었다.
-    // 어둠 띠와 글자가 같은 길이로 같이 움직여 한 덩어리로 들어온다.
-    // 비행 도중에 모달이 걷혀 갔거나(popstate) 애초에 안 열렸다면 열 것이
-    // 없으니 인라인 값만 걷는다
-    captionTweenRef.current?.kill();
-    captionTweenRef.current = null;
+    // 드러냄은 처음 들어올 때(motion.ts)와 같은 함수다(M4 Task 14).
+    // 비행 도중에 모달이 걷혀 갔거나(popstate) 애초에 안 열렸다면 감춤만 걷는다
     const captionEl = mediaLayerRef.current?.querySelector<HTMLElement>(
       '[data-part="preview-caption"]'
     );
-    const captionTextEl = mediaLayerRef.current?.querySelector<HTMLElement>(
-      '[data-part="preview-caption-text"]'
-    );
-    const captionMod = flipModule();
-    if (captionEl && captionTextEl && returning && captionMod) {
-      const seconds = CAPTION_ENTER_MS / 1000;
-      const bandTween = captionMod.gsap.to(captionEl, {
-        clipPath: CAPTION_CLIP_OPEN,
-        duration: seconds,
-        ease: captionMod.SITE_EASE,
-        clearProps: 'clipPath',
-      });
-      const textTween = captionMod.gsap.to(captionTextEl, {
-        xPercent: 0,
-        opacity: 1,
-        duration: seconds,
-        ease: captionMod.SITE_EASE,
-        clearProps: 'transform,opacity',
-      });
-      captionTweenRef.current = {
-        kill: () => {
-          bandTween.kill();
-          textTween.kill();
-        },
-      };
-    } else {
-      if (captionEl) {
-        gsapModuleRef.current?.gsap.set(captionEl, { clearProps: 'clipPath' });
-      }
-      if (captionTextEl) {
-        gsapModuleRef.current?.gsap.set(captionTextEl, {
-          clearProps: 'transform,opacity',
-        });
-      }
+    if (captionEl) {
+      if (returning && flipModule()) revealCaption(captionEl);
+      else clearCaptionReveal(captionEl);
     }
 
     // 닫기 비행이 프리뷰 상자에 얹어 둔 다리를 크로스페이드로 걷는다
@@ -631,6 +584,8 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
     (i: number) => {
       const mod = flipModule();
       openedIndexRef.current = i;
+      // 상세가 덮는다. 들어오던 캡션은 끝값으로 두어야 닫고 돌아올 때 다시 감출 수 있다
+      clearPreviewCaption(mediaLayerRef.current);
       // 이름 노드는 눌린 인덱스로 집는다. handleNameClick이 goTo(i)를 먼저
       // 부르지만 그건 비동기 상태 갱신이라 이 시점 DOM의 활성 이름은 아직
       // 이전 것일 수 있다 - activeIndex로 집으면 엉뚱한 노드가 날아간다
@@ -805,27 +760,14 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
           })
         );
 
-        // 돌아간 화면에서 왼쪽부터 열릴 캡션을 지금 미리 닫아 둔다. 실제로
-        // 여는 것은 모달이 다 내려간 뒤이고(modalOpen 정리 effect), 닫기만
+        // 돌아간 화면에서 들어올 캡션을 지금 미리 감춰 둔다. 실제로
+        // 들여보내는 것은 모달이 다 내려간 뒤이고(modalOpen 정리 effect), 감추기만
         // 여기서 하는 이유는 이 순간의 프리뷰 상자가 아직 투명이라 캡션이
-        // 사라지는 장면 자체가 안 보이기 때문이다.
-        // 어둠 띠는 clip으로 연다. 띠를 글자처럼 밀면 민 폭만큼 오른쪽 끝이
-        // 안 어두운 채로 남는다. clip은 자리를 안 옮기니 그 구간이 안 생긴다.
-        // 그림도 모프 캔버스도 그대로다
+        // 사라지는 장면 자체가 안 보이기 때문이다. 그림도 모프 캔버스도 그대로다
         const captionEl = previewLayer?.querySelector<HTMLElement>(
           '[data-part="preview-caption"]'
         );
-        const captionTextEl = previewLayer?.querySelector<HTMLElement>(
-          '[data-part="preview-caption-text"]'
-        );
-        captionTweenRef.current?.kill();
-        captionTweenRef.current = null;
-        if (captionEl) {
-          mod.gsap.set(captionEl, { clipPath: CAPTION_CLIP_CLOSED });
-        }
-        if (captionTextEl) {
-          mod.gsap.set(captionTextEl, { xPercent: -8, opacity: 0 });
-        }
+        if (captionEl) hideCaption(captionEl);
 
         flightRef.current = asKillable(
           mod.Flip.fit(stageEl, previewEl, {
@@ -1473,8 +1415,8 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
 
               {/* 그림 아래쪽에 늘 깔리는 어둠 띠. 캡션 글자가 어느 그림 위에
                   앉든 같은 바닥을 받게 한다. 상세를 한 번도 안 연 화면과 갔다
-                  온 화면이 달라 보이면 안 되므로 띠는 상시로 있고, 상세에서
-                  돌아올 때만 clip으로 왼쪽부터 열린다.
+                  온 화면이 달라 보이면 안 되므로 띠는 상시로 있고, 처음 들어올 때와
+                  상세에서 돌아올 때만 잡음을 따라 아래부터 찬다(captionReveal).
                   absolute라 subtitle이 있든 없든 프리뷰 높이가 안 흔들린다
                   (FLIP 출발 좌표가 곧 이 높이다). 오류 화면에는 이미 제목이
                   크게 있어 통째로 뺀다 */}
@@ -1484,9 +1426,7 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
                   className="pointer-events-none absolute inset-x-0 bottom-0 px-5 pb-4 pt-12"
                   style={{ background: PREVIEW_CAPTION_SCRIM }}
                 >
-                  {/* 자리를 옮기는 것은 이 안쪽 묶음뿐이다. 바깥 띠까지 같이
-                      밀면 민 폭만큼 오른쪽 끝이 안 어두운 채로 남아서, 띠는
-                      clip으로 연다. 미디어 겹에 aria-hidden이 걸려
+                  {/* 떠오르는 것은 이 안쪽 묶음의 줄들뿐이다. 미디어 겹에 aria-hidden이 걸려
                       있으므로 이 글자는 장식이다. 데스크톱은 오른쪽 이름 목록이,
                       모바일은 프리뷰 열기 단추가 제목을 읽어 준다. 그래서 이름 목록보다 작고
                       흐리다. 같은 제목이 화면에 둘이니 어느 쪽이 주인공인지

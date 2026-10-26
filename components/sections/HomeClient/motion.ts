@@ -1,5 +1,6 @@
 import type { CrystalizedBallHandle } from '@/components/blocks/CrystalizedBall';
 import type { ElectricLogoHandle } from '@/components/blocks/ElectricLogo';
+import { clearCaptionReveal, revealCaption } from '@/components/sections/ProjectsSection/captionReveal';
 import { gsap, registerScrollTrigger, ScrollTrigger, SITE_EASE } from '@/lib/gsap';
 import { readingLineY } from '@/lib/utils/scrollGeometry';
 
@@ -34,6 +35,9 @@ export const LOGO_SECONDS = 1.5;
 export const PREVIEW_SECONDS = 2.1;
 // 같은 구간을 거꾸로(프리뷰 그림 → 움직이는 로고) 도는 시간. 사용자 요청(2026-10-24)으로 되돌기만 빠르다. 떠나는 쪽이라 설명할 것이 없다.
 export const PREVIEW_RETURN_SECONDS = 1.4;
+// 처음 들어올 때 캡션이 들어오는 시간(M4 Task 14). 넘김(.94–1)은 0.13초뿐이라 그 안에는 잡음이 안 읽힌다. 넘김에서 시작해
+// 도착 뒤 0.47초에 끝난다. 상세에서 돌아올 때(800ms)보다 짧은 것은 여기서는 그림이 이미 1초 넘게 자리를 잡아 온 끝이라서다.
+const ENTRY_CAPTION_MS = 600;
 // 진행도 t까지 오는 데 드는 시간(Hero 0에서). 1을 지나는 한 트윈도 구간마다 제 빠르기로 돈다. 진행도를 내려가는 트윈(back)은 프리뷰 구간을 되돌기 빠르기로 돈다.
 const previewSeconds = (back: boolean) => back ? PREVIEW_RETURN_SECONDS : PREVIEW_SECONDS;
 const secondsAt = (t: number, back: boolean) => LOGO_SECONDS * Math.min(t, 1) + previewSeconds(back) * Math.max(t - 1, 0);
@@ -176,6 +180,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   let boxed = false;
   // 이 방문에 GL 로고가 모양 안에 그리는 프리뷰 그림. 상자를 잡을 때 받아져 있을 때만 정하고, 아니면 그 방문은 빛 → 교차로 넘긴다.
   let photo: HTMLImageElement | null = null;
+  // 틀(그림·캡션)이 보이는 중인지. 보이기 시작하는 프레임에 캡션 드러냄을 부르고 숨는 프레임에 걷는다(M4 Task 14).
+  let captionShown = false;
   let owner: LogoOwner | null = null;
   let paused = false;
   let alive = true;
@@ -388,6 +394,16 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       }
       if (list) Object.assign(list.style, { opacity: String(view.list), pointerEvents: view.list > 0 ? '' : 'none' });
     }
+    // 캡션의 인라인 값은 captionReveal만 쓴다. 여기서는 틀 값(transform·clip·opacity)만 쓰고 드러냄은 부르기만 한다.
+    // 앞으로 나는 비행에서 틀이 보이기 시작하면(그림 방문은 .94, 아니면 교차 .65) 드러내고, 그 밖에 보이게 된 것(직접 해시, settleProjects)은 그냥 둔다.
+    // 되돌아 틀이 숨는 프레임에 걷는다. 그 프레임의 틀은 투명이라 걷어 끝값이 돼도 안 보인다. 넘김(.94–1) 동안 그림은 이미 제자리다.
+    const shown = pose.t >= 2 || media > 0;
+    if (shown !== captionShown) {
+      captionShown = shown;
+      const caption = frame?.querySelector<HTMLElement>('[data-part="preview-caption"]');
+      if (caption && shown && travel && goal > 1) revealCaption(caption, { duration: ENTRY_CAPTION_MS });
+      else if (caption) clearCaptionReveal(caption);
+    }
     report(leg === 2 ? 'preview' : leg ? 'boundary' : pose.t >= 2 ? 'projects' : t >= 1 ? 'about' : 'hero');
   };
 
@@ -566,6 +582,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       if (inner) inner.style.opacity = '';
       clearOrb();
       clearProjects();
+      const caption = frame?.querySelector<HTMLElement>('[data-part="preview-caption"]');
+      if (caption) clearCaptionReveal(caption);
     },
   };
 }

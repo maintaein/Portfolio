@@ -8,9 +8,25 @@ import { projects } from '@/lib/data';
 import { isProjectModalReady } from '@/lib/utils/projectContract';
 import { Flip, REVEAL_OUT_MS, SITE_EASE, gsap } from '@/lib/gsap';
 import {
+  clearCaptionReveal,
+  hideCaption,
+  revealCaption,
+} from '@/components/sections/ProjectsSection/captionReveal';
+import {
   setProjectModalObscured,
   useProjectModalObscured,
 } from '@/hooks/useProjectModalObscured';
+
+// 캡션 드러냄은 실제 구현을 그대로 돌리되 부른 자리를 보려고 감싼다(M4 Task 14)
+vi.mock('@/components/sections/ProjectsSection/captionReveal', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/components/sections/ProjectsSection/captionReveal')>();
+  return {
+    ...actual,
+    hideCaption: vi.fn(actual.hideCaption),
+    revealCaption: vi.fn(actual.revealCaption),
+    clearCaptionReveal: vi.fn(actual.clearCaptionReveal),
+  };
+});
 
 // ProjectsSection이 stage에 걸어 둔 콜백 ref를 붙잡는다. React가 fiber에
 // 넣어 둔 것을 밖에서 읽을 방법이 없어서, 진짜 ProjectModal을 그대로
@@ -716,35 +732,29 @@ describe('ProjectsFlip. 닫기 비행', { timeout: 30_000 }, () => {
     }
   });
 
-  it('비행 동안에는 캡션을 치워만 두고 모달이 내려간 뒤에 띠와 글자를 같이 들여보낸다', async () => {
+  it('비행 동안에는 캡션을 감춰만 두고 모달이 내려간 뒤에 잡음 띠와 흐림 글자로 들여보낸다', async () => {
     const reservations = stubDelayedCall();
     const fit = vi.spyOn(Flip, 'fit');
-    const set = vi.spyOn(gsap, 'set');
-    const to = vi.spyOn(gsap, 'to');
     const closeButton = await openAndGetCloseButton();
     vi.spyOn(window.history, 'back').mockImplementation(() => {});
+    vi.mocked(hideCaption).mockClear();
+    vi.mocked(revealCaption).mockClear();
 
     fireEvent.click(closeButton);
     act(() => {
       reservations[0].run();
     });
 
-    const band = document.querySelector('[data-part="preview-caption"]')!;
-    const text = document.querySelector('[data-part="preview-caption-text"]')!;
-    // 비행이 뜨는 순간에는 치우기만 한다. 이 구간의 프리뷰 상자는 아직
+    const caption = document.querySelector<HTMLElement>('[data-part="preview-caption"]')!;
+    // 비행이 뜨는 순간에는 감추기만 한다. 이 구간의 프리뷰 상자는 아직
     // 투명한 데다 착지하는 stage가 그 위를 덮으므로, 여기서 열면 아무도
     // 못 본다. 여기서 여는 코드로 되돌리면 이 어서션이 FAIL해야 한다
-    const bandStash = set.mock.calls.filter((call) => call[0] === band);
-    expect(bandStash).toHaveLength(1);
-    // 띠는 폭이 0인 채로 왼쪽 변에 붙어 있다. 오른쪽 변만 100퍼센트 안으로
-    // 들어와 있는 값이다
-    expect(bandStash[0][1]).toMatchObject({ clipPath: 'inset(0% 100% 0% 0%)' });
-    const textStash = set.mock.calls.filter((call) => call[0] === text);
-    expect(textStash).toHaveLength(1);
-    expect(textStash[0][1]).toMatchObject({ xPercent: -8, opacity: 0 });
-    expect(
-      to.mock.calls.some((call) => call[0] === band || call[0] === text)
-    ).toBe(false);
+    expect(hideCaption).toHaveBeenCalledTimes(1);
+    expect(hideCaption).toHaveBeenCalledWith(caption);
+    expect(caption.style.opacity).toBe('0');
+    expect(revealCaption).not.toHaveBeenCalled();
+    // 옛 띠 clip과 글자 밀기는 없다
+    expect(caption.style.clipPath).toBe('');
 
     // 착지 둘을 다 태워야 모달이 내려간다(S-1과 같은 순서)
     act(() => {
@@ -754,27 +764,56 @@ describe('ProjectsFlip. 닫기 비행', { timeout: 30_000 }, () => {
       (fit.mock.calls[1][2] as { onComplete: () => void }).onComplete();
     });
 
-    const open = to.mock.calls.find((call) => call[0] === band);
-    expect(open).toBeDefined();
-    const bandVars = open![1] as Record<string, unknown>;
-    expect(bandVars.clipPath).toBe('inset(0% 0% 0% 0%)');
-    // 인라인 값을 안 걷으면 다음 전환이 이 자리에서 시작한다
-    expect(bandVars.clearProps).toBe('clipPath');
+    expect(revealCaption).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(revealCaption).mock.calls[0][0]).toBe(caption);
+    // 감춤은 드러냄이 걷는다. 길이는 기본값(800ms)이다
+    expect(vi.mocked(revealCaption).mock.calls[0][1]?.duration).toBeUndefined();
+    expect(caption.style.opacity).toBe('');
+  });
 
-    const slide = to.mock.calls.find((call) => call[0] === text);
-    expect(slide).toBeDefined();
-    const textVars = slide![1] as Record<string, unknown>;
-    expect(textVars.xPercent).toBe(0);
-    expect(textVars.opacity).toBe(1);
-    expect(textVars.clearProps).toBe('transform,opacity');
+  it('돌아온 캡션이 들어오는 도중에 프로젝트를 바꾸거나 상세를 다시 열거나 모션 감소로 바뀌면 드러냄을 걷는다', async () => {
+    const reservations = stubDelayedCall();
+    const fit = vi.spyOn(Flip, 'fit');
+    const from = vi.spyOn(Flip, 'from');
+    vi.spyOn(window.history, 'back').mockImplementation(() => {});
+    const view = renderSection();
+    await flushGsapImport();
+    open();
+    await findDialog();
+    land(from);
+    fireEvent.click(screen.getByRole('button', { name: '닫기' }));
+    act(() => {
+      reservations[0].run();
+    });
+    act(() => {
+      (fit.mock.calls[0][2] as { onComplete: () => void }).onComplete();
+    });
+    act(() => {
+      (fit.mock.calls[1][2] as { onComplete: () => void }).onComplete();
+    });
+    const caption = document.querySelector<HTMLElement>('[data-part="preview-caption"]')!;
+    expect(revealCaption).toHaveBeenLastCalledWith(caption);
 
-    // 띠와 글자가 한 덩어리로 읽히려면 길이와 이징이 같아야 한다. 하나라도
-    // 어긋나면 어둠이 글자를 앞지르거나 뒤처져 두 겹으로 보인다
-    expect(bandVars.ease).toBe(SITE_EASE);
-    expect(textVars.ease).toBe(SITE_EASE);
-    expect(textVars.duration).toBe(bandVars.duration);
-    // 이 등장은 비행이 다 끝나고 혼자 도는 구간이라 비행(500ms)보다 길다
-    expect(textVars.duration as number).toBeGreaterThan(0.5);
+    // 프로젝트 전환. 글자 줄이 갈려 반쯤 든 줄과 새 줄이 섞이면 안 된다
+    vi.mocked(clearCaptionReveal).mockClear();
+    fireEvent.click(nameEl(OTHER_INDEX));
+    expect(clearCaptionReveal).toHaveBeenCalledWith(caption);
+
+    // 상세를 다시 연다
+    vi.mocked(clearCaptionReveal).mockClear();
+    open();
+    await findDialog();
+    expect(clearCaptionReveal).toHaveBeenCalledWith(caption);
+
+    // 모션 감소(lg 경계를 넘는 것과 같은 정리 자리다)
+    vi.mocked(clearCaptionReveal).mockClear();
+    view.rerender(
+      <SectionActivityProvider obscured={false} pageVisible routeResolved motionReady reducedMotion>
+        <ProjectsSection />
+        <ObscuredProbe />
+      </SectionActivityProvider>
+    );
+    expect(clearCaptionReveal).toHaveBeenCalledWith(caption);
   });
 
   it('붕괴 중에 모달이 걷혀 가면 예약된 비행이 취소된다', async () => {

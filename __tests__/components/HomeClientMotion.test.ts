@@ -3,6 +3,13 @@ import { gsap, ScrollTrigger } from '@/lib/gsap';
 import type { ElectricLogoHandle } from '@/components/blocks/ElectricLogo';
 import { CORE, LOGO_SECONDS, ORBIT, PREVIEW_OVER, PREVIEW_RETURN_SECONDS, PREVIEW_SECONDS, createPortfolioMotion, logoPhases, previewPhases, type LogoOwner, type PortfolioMotion } from '@/components/sections/HomeClient/motion';
 import { resolveCurrentSection } from '@/lib/utils/scrollGeometry';
+import { clearCaptionReveal, revealCaption } from '@/components/sections/ProjectsSection/captionReveal';
+
+// 캡션 드러냄은 실제 구현을 그대로 돌리되 부른 자리를 보려고 감싼다(M4 Task 14)
+vi.mock('@/components/sections/ProjectsSection/captionReveal', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/components/sections/ProjectsSection/captionReveal')>();
+  return { ...actual, revealCaption: vi.fn(actual.revealCaption), clearCaptionReveal: vi.fn(actual.clearCaptionReveal) };
+});
 
 // jsdom에는 레이아웃이 없어 실제 브라우저가 줄 offset 값을 요소마다 심는다.
 type Box = { x: number; y: number; w: number; h: number };
@@ -1204,6 +1211,65 @@ describe('About→Projects: 로고가 지금 고른 프로젝트 프리뷰가 �
     advance(3);
     expect(owners.at(-1)).toBe('about');
     expect([frame.style.opacity, inner.style.opacity]).toEqual(['0', '1']);
+  });
+
+  // M4 Task 14: 캡션은 틀이 보이기 시작하는 순간 그림의 녹음과 같은 결로 들어온다. 캡션의 인라인 값은 captionReveal이 갖고
+  // motion.ts는 부르기만 한다. 그림 방문의 틀은 .94에 GL 캔버스 아래 서므로 드러냄도 거기서 시작해 넘김(.94–1) 뒤로 조금 이어진다.
+  const addCaption = () => {
+    const caption = document.createElement('div');
+    caption.dataset.part = 'preview-caption';
+    media.appendChild(caption);
+    vi.mocked(revealCaption).mockClear(); vi.mocked(clearCaptionReveal).mockClear();
+    return caption;
+  };
+  it('그림 방문: 캡션 드러냄은 틀이 서는 .94에 600ms로 한 번 불리고, 되돌아 틀이 숨는 순간 걷힌다. 틀 값은 캡션에 안 섞인다', () => {
+    withImage();
+    const caption = addCaption();
+    restAtAbout();
+    scrollAt(PREVIEW_AT);
+    advance(.9 * PREVIEW_SECONDS);
+    expect(revealCaption).not.toHaveBeenCalled();
+    advance(.07 * PREVIEW_SECONDS);
+    expect(revealCaption).toHaveBeenCalledTimes(1);
+    expect(revealCaption).toHaveBeenCalledWith(caption, { duration: 600 });
+    advance(.05 * PREVIEW_SECONDS);
+    expect(owners.at(-1)).toBe('projects');
+    expect(revealCaption).toHaveBeenCalledTimes(1);
+    expect(clearCaptionReveal).not.toHaveBeenCalled();
+    expect(caption.style.cssText).toBe('');
+    // 되돌기: 넘김 가운데까지는 틀이 그대로라 캡션도 그대로다. 틀이 숨는 프레임에 걷는다
+    scrollAt(1800); scrollAt(1394);
+    advance(.03 * PREVIEW_RETURN_SECONDS);
+    expect(clearCaptionReveal).not.toHaveBeenCalled();
+    advance(.05 * PREVIEW_RETURN_SECONDS);
+    expect(clearCaptionReveal).toHaveBeenCalledWith(caption);
+    advance(3);
+    expect(revealCaption).toHaveBeenCalledTimes(1);
+  });
+
+  it('그림 없는 방문은 틀이 떠오르는 .65에 드러내고, 직접 해시·모션 감소·settleProjects는 드러내지 않으며 destroy는 걷는다', () => {
+    const caption = addCaption();
+    restAtAbout();
+    scrollAt(PREVIEW_AT);
+    advance(.6 * PREVIEW_SECONDS);
+    expect(revealCaption).not.toHaveBeenCalled();
+    advance(.1 * PREVIEW_SECONDS);
+    expect(revealCaption).toHaveBeenCalledWith(caption, { duration: 600 });
+    motion!.destroy(); motion = null;
+    expect(clearCaptionReveal).toHaveBeenCalledWith(caption);
+
+    vi.mocked(revealCaption).mockClear();
+    documentY = 1800;
+    create();
+    motion!.destroy(); motion = null;
+    create({ reduced: true });
+    scrollAt(900); scrollAt(1800);
+    motion!.destroy(); motion = null;
+    documentY = 0;
+    restAtAbout();
+    scrollAt(PREVIEW_AT); advance(.3 * PREVIEW_SECONDS);
+    motion!.settleProjects();
+    expect(revealCaption).not.toHaveBeenCalled();
   });
 
   // Task 4 리뷰 m2: 받아진 그림을 미리 풀어 둔다. 비행의 첫 GL 그리기가 동기 디코드를 하지 않는다. 그림이 바뀌면(load) 다시 푼다.
