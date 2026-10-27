@@ -98,6 +98,11 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
     // 누름은 남은 목표에 더해진다. 그래서 키가 잠금 자리를 넘는지는 실제로 넘은 스크롤 이벤트로 정하고, 다른 입력이 오거나 스크롤이
     // 끝나면(scrollend) 닫는다. 짧은 시간 창(350ms)은 느린 프레임에서 그 이벤트를 놓쳤으므로 더 긴 상한을 둔다.
     let keyPendingUntil = -Infinity;
+    // 막지 않은 진입 입력(About의 수동 리스너)으로 잡은 잠금은 그 입력의 네이티브 스크롤이 350ms 넘침 창 뒤에 착지할 수 있다(헤드 실측
+    // 1280x720: 881에서 -1031 wheel로 잠근 뒤 369ms 뒤 착지해 풀리고 0까지 갔다, Task 15). 그동안은 풀지 않고 잠금 자리로 되돌린다.
+    // 차단 리스너로 막는 길은 버렸다. 차단 wheel은 메인 스레드를 기다려 Hero-About 사이 100px 노치가 중앙값 221ms 늦었다.
+    let landingUntil = -Infinity;
+    let landingRepinned = false;
     // 로고가 날아가는 동안 미룬 잠금의 index. 없으면 null.
     let held: number | null = null;
     const last = () => latest.current.count - 1;
@@ -120,6 +125,7 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
       // 클릭·Tab으로 거는 잠금은 다른 쪽 잠금을 푼다. 입력으로 거는 잠금은 다른 쪽이 잠겨 있으면 아예 걸지 않는다(other).
       if (next === 'locked' && other()) holder?.();
       phase = next;
+      if (phase !== 'locked') landingUntil = -Infinity;
       if (phase === 'locked') holder = yieldLock;
       else if (holder === yieldLock) holder = null;
       setLocked(phase === 'locked');
@@ -152,6 +158,12 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
       choose(index);
       window.scrollTo({ top: start, behavior: 'instant' });
     };
+    // 먼저 고정하는 쪽(Projects)은 진입 wheel을 막으므로 착지 창이 필요 없다.
+    const armLanding = () => {
+      if (pinWhileFlying || phase !== 'locked') return;
+      landingUntil = performance.now() + KEY_SCROLL_PENDING_MS;
+      landingRepinned = false;
+    };
     // 진입 제스처는 자리만 잡는다. 그 관성은 index를 넘기지 못한다.
     const input = (delta: number, time: number, fresh = false, applied = false) => {
       if (disabled || blocked || delta === 0) return false;
@@ -164,11 +176,12 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
           const index = phase === 'after' ? last() : 0;
           // 다른 섹션이 잠겨 있으면 이 입력은 먼저 그쪽 것이다. 그쪽이 이 입력으로 풀리면 그때 잠근다. 풀리지 않으면 아무 일도 없다.
           if (other()) {
-            handoff = { time, owner: yieldLock, take: () => { if (phase !== 'locked' && !disabled && !blocked && !other()) lock(index, time); } };
+            handoff = { time, owner: yieldLock, take: () => { if (phase !== 'locked' && !disabled && !blocked && !other()) { lock(index, time); armLanding(); } } };
             return pinWhileFlying;
           }
           // 미룬 잠금은 입력을 막지 않고, 먼저 고정한 잠금은 착지 전에도 입력을 막는다.
           lock(index, time);
+          armLanding();
           return held === null;
         }
         // 이미 옮겨졌다는 추정이 틀려 스크롤이 나중에 적용될 수 있다(cancelable은 Chrome의 추정). 그러면 실제로 넘는 스크롤을
@@ -233,8 +246,10 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
     function lockedWheel(event: WheelEvent) {
       if (wheelInput(event) && event.cancelable) event.preventDefault();
     }
-    const closeOvershoot = () => { lastNativeInput = -Infinity; keyPendingUntil = -Infinity; };
-    const closeKey = () => { keyPendingUntil = -Infinity; };
+    const closeOvershoot = () => { lastNativeInput = -Infinity; keyPendingUntil = -Infinity; landingUntil = -Infinity; };
+    const closeKey = () => { keyPendingUntil = -Infinity; landingUntil = -Infinity; };
+    // 잠금 자리로 옮긴 scrollTo 자신의 scrollend는 착지보다 먼저 올 수 있다. 착지를 한 번 되돌린 뒤의 scrollend만 착지 창을 닫는다.
+    const scrollEnd = () => { keyPendingUntil = -Infinity; if (landingRepinned) landingUntil = -Infinity; };
     const key = (event: KeyboardEvent) => {
       closeOvershoot();
       if (editable(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
@@ -273,7 +288,9 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
         lock(phase === 'after' ? last() : 0, performance.now());
         return;
       }
-      if (overshoot && phase === 'locked' && Math.abs(offset) > 1) {
+      const landing = !blocked && performance.now() < landingUntil;
+      if ((overshoot || landing) && phase === 'locked' && Math.abs(offset) > 1) {
+        landingRepinned ||= landing;
         window.scrollTo({ top: start, behavior: 'instant' });
         return;
       }
@@ -308,7 +325,8 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
       const index = held;
       held = null;
       if (index === null) return;
-      if (apply && !disabled && !blocked && !other() && phase !== 'locked' && Math.abs(window.scrollY - start) < window.innerHeight / 2) lock(index, performance.now());
+      // 미룬 잠금의 입력도 막지 않았으므로 그 착지가 아직 올 수 있다(헤드 실측: 착지 454ms 뒤 잠근 다음 106ms에 와서 풀렸다, Task 15).
+      if (apply && !disabled && !blocked && !other() && phase !== 'locked' && Math.abs(window.scrollY - start) < window.innerHeight / 2) { lock(index, performance.now()); armLanding(); }
       // 버릴 때도 위치로 앞뒤를 정한다(release와 같다). 날아오는 동안 잠금 자리를 지나치면 앞(before)이 남아, 다음 노치가 진입으로 읽혀
       // 반 화면 넘게 떨어진 페이지를 잠금 자리로 끌어왔다(Task 8 리뷰 B1).
       else if (phase !== 'locked') setPhase(window.scrollY > start ? 'after' : 'before');
@@ -336,7 +354,7 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
     window.addEventListener('scroll', scroll, { passive: true });
     window.addEventListener('popstate', closeOvershoot);
     window.addEventListener('pointerdown', closeKey, { passive: true });
-    window.addEventListener('scrollend', closeKey);
+    window.addEventListener('scrollend', scrollEnd);
     window.addEventListener('resize', measure);
     short?.addEventListener('change', measure);
     return () => {
@@ -349,7 +367,7 @@ export function useChapterLock({ ref, count, current, choose, logo, awayDefers =
       window.removeEventListener('wheel', wheel, true); window.removeEventListener('keydown', key);
       window.removeEventListener('touchstart', touchStart); window.removeEventListener('touchmove', touchMove, true);
       window.removeEventListener('scroll', scroll); window.removeEventListener('popstate', closeOvershoot); window.removeEventListener('resize', measure);
-      window.removeEventListener('pointerdown', closeKey); window.removeEventListener('scrollend', closeKey);
+      window.removeEventListener('pointerdown', closeKey); window.removeEventListener('scrollend', scrollEnd);
       short?.removeEventListener('change', measure);
       releaseRef.current = () => {};
       enterRef.current = () => {};

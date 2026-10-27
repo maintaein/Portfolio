@@ -906,6 +906,43 @@ describe('AboutSection', () => {
       expect(wheel(100, 20_000).defaultPrevented).toBe(false);
     });
 
+    // M4 Task 15. 헤드 실측(1280x720, 잠금 628): 881에서 -1031 wheel로 TEAMWORK에 잠갔고, 막지 않은 그 wheel의 착지가 369ms 뒤에 와
+    // 350ms 넘침 창을 넘겼다. About이 풀려 0까지 갔다. 잠근 입력의 늦은 착지는 잠금 자리로 되돌린다. 아래로 들어올 때도 같다.
+    it.each([
+      ['위에서 돌아오며', START + 253, -1031, 0, 'TEAMWORK'],
+      ['Hero 쪽에서 들어오며', START - 60, 504, START + 504, 'BASICS'],
+    ] as const)('%s 잠근 wheel의 착지가 350ms 뒤에 와도 잠금 자리를 지킨다', (_, top, delta, landing, name) => {
+      const { container } = mount(top);
+      expect(wheel(delta, 20_000).defaultPrevented).toBe(false);
+      expect(isLocked(container)).toBe(true);
+      scrollAt(landing, 20_369);
+      expect(isLocked(container)).toBe(true);
+      expect(chapter(container)).toBe(name);
+      expect(window.scrollTo).toHaveBeenLastCalledWith({ top: START, behavior: 'instant' });
+      expect(documentY).toBe(START);
+    });
+
+    // M4 Task 15. 차단 wheel은 메인 스레드를 기다린다(헤드 실측 1280x720, Hero-About 사이 100px 노치 중앙값 221ms). 그래서 About은
+    // 진입 리스너를 잠금 자리 근처에서도 비수동으로 바꾸지 않고 늦은 착지를 되돌린다. 잠금이 꺼져도 수동이다.
+    it.each([
+      ['멀리 위', START - 2000, false],
+      ['바로 위', START - 60, false],
+      ['바로 아래', START + 60, false],
+      ['잠금이 꺼진 채 바로 위', START - 60, true],
+    ] as const)('진입 wheel·touchmove 리스너는 %s에서 수동이다', (_, top, reduced) => {
+      if (reduced) {
+        vi.stubGlobal('matchMedia', vi.fn().mockImplementation((media: string) => ({
+          matches: media === '(prefers-reduced-motion: reduce)' || media === '(min-width: 1024px)', media, addEventListener: () => {}, removeEventListener: () => {},
+        })));
+      }
+      const add = vi.spyOn(window, 'addEventListener');
+      mount(top);
+      scrollAt(top, 20_000);
+      const entry = add.mock.calls.filter(([type]) => ['wheel', 'touchmove'].includes(type));
+      expect(entry.length).toBeGreaterThan(0);
+      expect(entry.filter(([, , options]) => typeof options === 'object' && options.passive === false)).toEqual([]);
+    });
+
     it.each(['(prefers-reduced-motion: reduce)', '(max-height: 640px)'])('%s이면 모든 chapter를 정적 원문으로 둔다', (query) => {
       vi.stubGlobal('matchMedia', vi.fn().mockImplementation((media: string) => ({
         matches: media === query || media === '(min-width: 1024px)', media, addEventListener: () => {}, removeEventListener: () => {},

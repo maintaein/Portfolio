@@ -192,3 +192,79 @@ describe('useChapterLock 두 인스턴스 (M4 Task 13)', () => {
     expect(window.scrollTo).not.toHaveBeenCalled();
   });
 });
+
+// M4 Task 15. About은 진입 wheel을 막지 않는다(수동 리스너). 그 wheel의 네이티브 스크롤이 350ms 넘침 창 뒤에 착지하면 About이 풀려
+// 사용자 입력 방향으로 About을 지나쳤다(헤드 실측 1280x720: 881에서 -1031 wheel로 잠근 뒤 369ms 뒤 착지, 628 -> 0).
+describe('About 진입 wheel의 늦은 착지 (M4 Task 15)', () => {
+  it('Projects 첫 이름에서 위 wheel 하나로 About이 이어받아 잠그면, 그 wheel의 착지가 350ms 뒤에 와도 About 잠금 자리를 지킨다', () => {
+    mount(PROJECTS);
+    expect(wheel(-1010, 20_000).defaultPrevented).toBe(false);
+    expect(locked('about')).toBe(true);
+    expect(documentY).toBe(ABOUT);
+    scrollAt(0, 20_400);
+    expect(locked('about')).toBe(true);
+    expect(index('about')).toBe(2);
+    expect(documentY).toBe(ABOUT);
+  });
+
+  it('About 잠금 자리 바로 위에서 아래 wheel 하나로 About이 잠그면, 그 wheel의 착지가 350ms 뒤에 와도 About 잠금 자리를 지킨다', () => {
+    mount(ABOUT - 60);
+    expect(wheel(500, 20_000).defaultPrevented).toBe(false);
+    expect(locked('about')).toBe(true);
+    scrollAt(ABOUT + 500, 20_400);
+    expect(locked('about')).toBe(true);
+    expect(index('about')).toBe(0);
+    expect(locked('projects')).toBe(false);
+    expect(documentY).toBe(ABOUT);
+  });
+
+  it('로고가 날아오는 동안 미룬 About 잠금은 진입 wheel을 막지 않고 착지를 되돌리지도 않는다', () => {
+    mount(ABOUT - 60, { aboutLogo: 'flying' });
+    expect(wheel(500, 20_000).defaultPrevented).toBe(false);
+    expect(locked('about')).toBe(false);
+    scrollAt(ABOUT + 440, 20_400);
+    expect(locked('about')).toBe(false);
+    expect(window.scrollTo).not.toHaveBeenCalled();
+    expect(documentY).toBe(ABOUT + 440);
+  });
+
+  // 헤드 실측(1280x720, 아래 opener): 로고가 막 내려앉던 중이라 미룬 잠금이 454ms 뒤 착지에서 걸렸고, 그 뒤 106ms에 온 wheel의 착지로 풀렸다.
+  it('미룬 잠금이 로고 착지로 걸린 뒤 그 wheel의 착지가 늦게 와도 About 잠금 자리를 지킨다', () => {
+    const view = mount(ABOUT - 60, { aboutLogo: 'flying' });
+    expect(wheel(500, 20_000).defaultPrevented).toBe(false);
+    clock = 20_450;
+    view.rerender(<Pair aboutLogo="landed" projectsLogo="landed" />);
+    expect(locked('about')).toBe(true);
+    expect(documentY).toBe(ABOUT);
+    scrollAt(ABOUT + 500, 20_560);
+    expect(locked('about')).toBe(true);
+    expect(documentY).toBe(ABOUT);
+  });
+
+  it('잠금 자리 자신의 scrollend는 착지 창을 닫지 않고, 착지를 되돌린 뒤의 scrollend가 닫아 그 뒤 스크롤바 이동은 잠금에서 빠져나간다', () => {
+    mount(ABOUT - 60);
+    wheel(500, 20_000);
+    stamp(new Event('scrollend'), 20_050);
+    scrollAt(ABOUT + 500, 20_400);
+    expect(documentY).toBe(ABOUT);
+    stamp(new Event('scrollend'), 20_450);
+    scrollAt(ABOUT + 400, 20_600);
+    expect(locked('about')).toBe(false);
+    expect(documentY).toBe(ABOUT + 400);
+  });
+
+  it('착지가 오지 않으면 pointerdown이나 상한(1500ms)이 착지 창을 닫는다', () => {
+    const { unmount } = mount(ABOUT - 60);
+    wheel(500, 20_000);
+    stamp(new Event('pointerdown'), 20_100);
+    scrollAt(ABOUT + 400, 20_400);
+    expect(locked('about')).toBe(false);
+    expect(documentY).toBe(ABOUT + 400);
+    unmount();
+    mount(ABOUT - 60);
+    wheel(500, 30_000);
+    scrollAt(ABOUT + 400, 31_600);
+    expect(locked('about')).toBe(false);
+    expect(documentY).toBe(ABOUT + 400);
+  });
+});
