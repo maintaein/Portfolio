@@ -1,177 +1,160 @@
 'use client';
 
 import { useLayoutEffect, useRef, useState } from 'react';
-import type { KeyboardEvent, PointerEvent } from 'react';
-import gsap from 'gsap';
 import { experiences } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
-import ScrollArea from '@/components/common/ScrollArea';
 import { useSectionActivity } from '@/components/common/SectionActivityContext';
 import { useSectionVisibility } from '@/hooks/useSectionVisibility';
+import { readingLineY } from '@/lib/utils/scrollGeometry';
+import { computeTimelineState, type TimelineLayout } from './timeline';
 
+const kind = (type: string) => type === 'student' ? 'EDUCATION' : 'WORK';
+// transform을 뺀 레이아웃 y. 본문의 등장 이동과 sticky rail이 잰 값을 흔들지 않는다(둘 다 같은 조상까지 재서 빼면 sticky 밀림도 지워진다).
+const localTop = (element: HTMLElement, ancestor: HTMLElement) => {
+  let y = 0;
+  for (let node: HTMLElement | null = element; node && node !== ancestor; node = node.offsetParent as HTMLElement | null) y += node.offsetTop;
+  return y;
+};
+const headerHeight = () => document.querySelector('[data-scroll-header]')?.getBoundingClientRect().height ?? 0;
+
+// 좁은 rail(기관·직책)과 실제 높이의 넓은 본문. 선 끝·표식·본문 공개는 같은 읽기선(M1 readingLineY)에서 정한다(M5 Task 1).
+// 선 그룹 전체가 data-part="experience-line"이고 data-complete가 마지막 본문을 다 읽었는지다(Skills 경계가 읽는다).
 export default function ExperienceSection() {
-  const [selected, setSelected] = useState(0);
-  const dragStart = useRef<number | null>(null);
-  const lineRef = useRef<HTMLSpanElement>(null);
-  const markerRef = useRef<HTMLSpanElement>(null);
-  const itemsRef = useRef<(HTMLLIElement | null)[]>([]);
-  const motionRef = useRef<gsap.core.Timeline | null>(null);
-  const flowRef = useRef({ head: 0, tail: 0 });
-  const previousIndex = useRef<number | null>(null);
-  const { reducedMotion, pageVisible, motionReady, obscured } = useSectionActivity();
+  const { reducedMotion, motionReady } = useSectionActivity();
   const { ref, visible } = useSectionVisibility<HTMLElement>();
-  const active = visible && pageVisible && motionReady && !obscured;
-  const activityRef = useRef(active);
-  activityRef.current = active;
-  const select = (index: number) => setSelected((index + experiences.length) % experiences.length);
+  const layoutRef = useRef<HTMLDivElement>(null);
+  const lineRef = useRef<HTMLDivElement>(null);
+  const pathRef = useRef<HTMLSpanElement>(null);
+  const tipRef = useRef<HTMLSpanElement>(null);
+  const nodesRef = useRef<(HTMLSpanElement | null)[]>([]);
+  const labelsRef = useRef<(HTMLElement | null)[]>([]);
+  const articlesRef = useRef<(HTMLElement | null)[]>([]);
+  // 모션 감소는 선호를 확인한 뒤에만 전체 정적 공개다. 확인 전 기본값(reduced)으로 미래 이력을 한 번 보였다가 숨기지 않는다.
+  const staticMode = reducedMotion && motionReady;
+  // React 상태는 도달 index와 완료가 바뀔 때만 바꾼다. 선 끝과 자르기는 아래 효과가 요소에 바로 쓴다.
+  const [progress, setProgress] = useState({ reached: -1, complete: false });
+  const reached = staticMode ? experiences.length - 1 : progress.reached;
+  const complete = staticMode || progress.complete;
 
   useLayoutEffect(() => {
-    const line = lineRef.current;
-    const marker = markerRef.current;
-    const items = itemsRef.current;
-    if (!line || !marker || !items[0] || !items[experiences.length - 1]) return;
-    let mobile = window.innerWidth <= 760;
-    const position = (item: HTMLLIElement) => mobile
-      ? item.offsetLeft + item.offsetWidth / 2
-      : item.offsetTop + item.offsetHeight / 2;
-    const flow = flowRef.current;
-    const draw = () => gsap.set(marker, mobile
-      ? { left: (flow.head + flow.tail) / 2, width: Math.abs(flow.head - flow.tail) + 14 }
-      : { top: (flow.head + flow.tail) / 2, height: Math.abs(flow.head - flow.tail) + 14 });
+    const layout = layoutRef.current, line = lineRef.current, path = pathRef.current, tip = tipRef.current;
+    if (!layout || !line || !path || !tip) return;
+    let geometry: TimelineLayout = { articleTops: [], articleBottoms: [], nodeY: [] };
+    let header = 0;
+    let pathHeight = 0;
+    let frame = 0;
     const measure = () => {
-      const first = position(items[0]!);
-      const last = position(items[experiences.length - 1]!);
-      if (mobile) {
-        const top = items[0]!.offsetTop;
-        gsap.set(line, { left: first, top: top - 2, width: last - first, height: 4 });
-        gsap.set(marker, { top, height: 10 });
-      } else {
-        gsap.set(line, { left: 18, top: first, width: 4, height: last - first });
-        gsap.set(marker, { left: 15, width: 10 });
-      }
-      return position(items[selected]!);
+      // 760px 이하는 왼쪽 얇은 선 한 열이라 표식이 각 본문 제목 옆에 선다. 그 위로는 rail의 기관 이름 옆이다.
+      const mobile = window.matchMedia?.('(max-width: 760px)').matches ?? false;
+      const articles = articlesRef.current.filter((article): article is HTMLElement => !!article);
+      const groupTop = localTop(line, layout);
+      geometry = {
+        articleTops: articles.map(article => localTop(article, layout)),
+        articleBottoms: articles.map(article => localTop(article, layout) + article.offsetHeight),
+        nodeY: articles.map((article, index) => {
+          const anchor = mobile ? article.querySelector('h3') : labelsRef.current[index];
+          return anchor ? localTop(anchor, layout) - groupTop + anchor.offsetHeight / 2 : 0;
+        }),
+      };
+      header = headerHeight();
+      const first = geometry.nodeY[0] ?? 0;
+      path.style.top = `${first}px`;
+      pathHeight = Math.max(0, (geometry.nodeY.at(-1) ?? 0) - first);
+      path.style.height = `${pathHeight}px`;
+      nodesRef.current.forEach((node, index) => { if (node) node.style.top = `${geometry.nodeY[index] ?? 0}px`; });
     };
-    let target = measure();
-    motionRef.current?.kill();
-    motionRef.current = null;
-    if (previousIndex.current === null || reducedMotion ||
-      (flow.head === target && flow.tail === target)) {
-      flow.head = target;
-      flow.tail = target;
-      draw();
-    } else {
-      motionRef.current = gsap.timeline({ paused: !activityRef.current })
-        .to(flow, { head: target, duration: 0.55, ease: 'power2.inOut', onUpdate: draw }, 0)
-        .to(flow, { tail: target, duration: 0.55, ease: 'power2.inOut', onUpdate: draw }, 0.12);
-    }
-    previousIndex.current = selected;
-    const onResize = () => {
-      const wasMobile = mobile;
-      mobile = window.innerWidth <= 760;
-      const nextTarget = measure();
-      if (mobile === wasMobile && nextTarget === target) return;
-      target = nextTarget;
-      motionRef.current?.kill();
-      motionRef.current = null;
-      flow.head = target;
-      flow.tail = flow.head;
-      draw();
+    const draw = () => {
+      frame = 0;
+      const nodes = geometry.nodeY;
+      const lineY = readingLineY(window.innerHeight, header);
+      const state = staticMode
+        ? { tipY: nodes.at(-1) ?? 0, reached: nodes.length - 1, complete: true }
+        : computeTimelineState(geometry, lineY - layout.getBoundingClientRect().top, window.innerHeight - lineY);
+      // 그린 길이 밖은 잘라 숨긴다. 미래 경로의 희미한 바탕선을 남기지 않는다. 좌우는 광휘가 잘리지 않게 넓힌다.
+      const first = nodes[0] ?? 0;
+      path.style.clipPath = `inset(0px -12px ${Math.max(0, pathHeight - Math.max(0, state.tipY - first))}px -12px)`;
+      tip.style.transform = `translateY(${state.tipY}px)`;
+      setProgress(previous => previous.reached === state.reached && previous.complete === state.complete
+        ? previous : { reached: state.reached, complete: state.complete });
     };
-    window.addEventListener('resize', onResize);
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(draw); };
+    const refit = () => { measure(); draw(); };
+    refit();
+    const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(refit);
+    resize?.observe(layout);
+    window.addEventListener('resize', refit);
+    // 보이는 동안만 스크롤마다 다시 그린다.
+    if (visible) window.addEventListener('scroll', schedule, { passive: true });
     return () => {
-      window.removeEventListener('resize', onResize);
-      motionRef.current?.kill();
+      resize?.disconnect();
+      window.removeEventListener('resize', refit);
+      window.removeEventListener('scroll', schedule);
+      cancelAnimationFrame(frame);
+      // 화면을 떠나는 마지막 스크롤이 그리기 전에 끊겼을 수 있다. 떠난 자리(예: 한 번에 Skills로)의 완료 상태로 한 번 더 맞춘다.
+      if (visible) draw();
     };
-  }, [reducedMotion, selected]);
+  }, [visible, staticMode]);
 
-  useLayoutEffect(() => { motionRef.current?.paused(!active); }, [active]);
-
-  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-      event.preventDefault();
-      select(selected + (event.key === 'ArrowRight' ? 1 : -1));
-    }
-  }
-
-  function onPointerDown(event: PointerEvent<HTMLDivElement>) {
-    if (event.pointerType === 'mouse' && event.button !== 0) return;
-    dragStart.current = event.clientX;
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-  }
-
-  function onPointerUp(event: PointerEvent<HTMLDivElement>) {
-    if (dragStart.current === null) return;
-    const distance = event.clientX - dragStart.current;
-    dragStart.current = null;
-    if (Math.abs(distance) > 45) select(selected + (distance < 0 ? 1 : -1));
-  }
+  // 드러난 표식은 그 본문으로 돌아가는 이동 지점이다. 본문 위끝을 읽기선에 맞춘다.
+  const goTo = (index: number) => {
+    const layout = layoutRef.current, article = articlesRef.current[index];
+    if (!layout || !article) return;
+    const top = layout.getBoundingClientRect().top + window.scrollY + localTop(article, layout) - readingLineY(window.innerHeight, headerHeight());
+    window.scrollTo({ top: Math.ceil(top), behavior: reducedMotion ? 'auto' : 'smooth' });
+    article.focus({ preventScroll: true });
+  };
 
   return (
-    <section ref={ref} id={SECTION_IDS.EXPERIENCE} aria-label="경력" className="experience-depth">
-
-      <div className="experience-depth-layout">
-        <div className="experience-depth-rail">
-          <span ref={lineRef} className="experience-depth-line" aria-hidden="true" />
-          <span ref={markerRef} className="experience-depth-marker" aria-hidden="true" />
-          <ol className="experience-depth-timeline" aria-label="경력 시점">
+    <section ref={ref} id={SECTION_IDS.EXPERIENCE} aria-label="경력" className="experience-timeline">
+      <div ref={layoutRef} className="experience-timeline-layout">
+        <div className="experience-timeline-rail">
+          <div ref={lineRef} data-part="experience-line" data-complete={complete} className="experience-line">
+            <span ref={pathRef} data-part="line-path" className="experience-line-path" aria-hidden="true" />
+            <span ref={tipRef} data-part="line-tip" className="experience-line-tip" aria-hidden="true" />
             {experiences.map((experience, index) => (
-              <li key={experience.id} ref={(item) => { itemsRef.current[index] = item; }} data-active={index === selected}>
-                <button type="button" aria-current={index === selected ? 'true' : undefined} onClick={() => select(index)}>
-                  <small>{experience.type === 'student' ? 'EDUCATION' : 'WORK'}</small>
-                  <strong>{experience.company}</strong>
-                  <span>{experience.period}</span>
-                </button>
-              </li>
+              <span key={experience.id} ref={(node) => { nodesRef.current[index] = node; }} data-part="line-node"
+                data-reached={index <= reached ? '' : undefined} className="experience-line-node" aria-hidden="true" />
             ))}
-          </ol>
+            <ol className="experience-rail" aria-label="경력 시점">
+              {/* 아직 닿지 않은 표식은 자리만 남긴다(선 좌표를 재야 한다). 보이지도, 포커스되지도 않는다. */}
+              {experiences.map((experience, index) => (
+                <li key={experience.id} data-reached={index <= reached ? '' : undefined} inert={index > reached}>
+                  <button type="button" aria-current={index === reached ? 'step' : undefined} onClick={() => goTo(index)}>
+                    <strong ref={(node) => { labelsRef.current[index] = node; }}>{experience.company}</strong>
+                    <span>{experience.position}</span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+          </div>
         </div>
 
-        <div className="experience-depth-deck-wrap">
-          <div
-            className="experience-depth-deck"
-            role="group"
-            aria-roledescription="carousel"
-            aria-label="경력 깊이 캐러셀"
-            tabIndex={0}
-            data-section-swipe-ignore
-            onKeyDown={onKeyDown}
-            onPointerDown={onPointerDown}
-            onPointerUp={onPointerUp}
-            onPointerCancel={() => { dragStart.current = null; }}
-          >
-            {experiences.map((experience, index) => {
-              const depth = (index - selected + experiences.length) % experiences.length;
-              return (
-                <article
-                  key={experience.id}
-                  className="experience-depth-card"
-                  data-depth={depth}
-                  aria-labelledby={`experience-card-${experience.id}`}
-                >
-                  <ScrollArea className="experience-depth-card-scroll" tabIndex={depth === 0 ? 0 : -1}>
-                    <div className="experience-depth-card-meta">
-                      <span>{String(index + 1).padStart(2, '0')} / {String(experiences.length).padStart(2, '0')}</span>
-                      <span>{experience.period}</span>
-                    </div>
-                    <p className="experience-depth-kind">{experience.type === 'student' ? 'EDUCATION' : 'WORK'}</p>
-                    <h3 id={`experience-card-${experience.id}`}>{experience.company}</h3>
-                    <p className="experience-depth-position">{experience.position}</p>
-                    <p className="experience-depth-description">{experience.description}</p>
-                    <h4>주요 경험</h4>
-                    <ul className="experience-depth-responsibilities">
-                      {experience.responsibilities.map((item) => <li key={item}>{item}</li>)}
-                    </ul>
-                    <ul className="experience-depth-skills" aria-label="기술">
-                      {(experience.skills ?? []).map((skill) => <li key={skill}>{skill}</li>)}
-                    </ul>
-                  </ScrollArea>
-                </article>
-              );
-            })}
-          </div>
-          <div className="experience-depth-foot">
-            <span aria-live="polite">{String(selected + 1).padStart(2, '0')} / {String(experiences.length).padStart(2, '0')} · {experiences[selected].company}</span>
-          </div>
+        <div className="experience-bodies">
+          {experiences.map((experience, index) => (
+            <article
+              key={experience.id}
+              ref={(node) => { articlesRef.current[index] = node; }}
+              className="experience-body"
+              data-state={index < reached ? 'past' : index === reached ? 'current' : 'future'}
+              tabIndex={-1}
+              aria-labelledby={`experience-body-${experience.id}`}
+            >
+              <p className="experience-body-meta">
+                <span>{kind(experience.type)}</span>
+                <span>{experience.period}</span>
+              </p>
+              <h3 id={`experience-body-${experience.id}`}>{experience.company}</h3>
+              <p className="experience-body-position">{experience.position}</p>
+              <p className="experience-body-description">{experience.description}</p>
+              <h4>주요 경험</h4>
+              <ul className="experience-body-list">
+                {experience.responsibilities.map((item) => <li key={item}>{item}</li>)}
+              </ul>
+              <ul className="experience-body-skills" aria-label="기술">
+                {(experience.skills ?? []).map((skill) => <li key={skill}>{skill}</li>)}
+              </ul>
+            </article>
+          ))}
         </div>
       </div>
     </section>

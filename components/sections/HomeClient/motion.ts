@@ -62,6 +62,14 @@ export const ORBIT = .7;
 export const PREVIEW_OVER = 1.04;
 // 떠나는 타일의 모서리(로고 크기 비율). 참조 5.35초의 155px 타일이 45px 남짓 둥글다.
 const TILE_RADIUS = .3;
+// Projects 프리뷰에서 Experience 첫 세로축으로(M5 Task 1, 참조 background.mp4 6.17–7.0초의 면 수축과 이동). 진행도 하나를 이 시간 동안 돌린다.
+// About→Projects(2.1초)보다 짧다. 도착이 설명할 그림이 아니라 읽기 시작이라 붙잡지 않는다. 되돌기는 떠나는 쪽이라 더 짧다(PREVIEW_RETURN_SECONDS와 같은 규칙).
+export const LINE_SECONDS = 1.4;
+export const LINE_RETURN_SECONDS = .9;
+// 선 지점: 첫 본문 위끝이 화면 위에서 이 비율 자리에 오는 스크롤. 1440x900에서 프리뷰가 아직 nav 바로 아래에 다 남고 첫 표식 자리가 화면 안에 든다.
+// 두 끝이 다 보이는 자리라 외피가 화면 밖으로 빠지지 않는다. 읽기선(.4)보다 아래라 첫 본문 공개보다 먼저 떠난다.
+// Projects 잠금 자리보다 아래에 묶는다. 잠금은 마지막 프로젝트를 본 뒤에만 문서를 내려 주므로 이 지점은 풀린 뒤에만 넘는다. 되넘기는 LOGO_BACK만큼 위다.
+const LINE_ENTER = .8;
 
 type Box = { x: number; y: number; w: number; h: number };
 const EMPTY: Box = { x: 0, y: 0, w: 0, h: 0 };
@@ -123,6 +131,20 @@ export function previewPhases(q: number) {
   };
 }
 
+// 프리뷰(0)에서 첫 세로축(1)으로 가는 진행도 p의 구간. 참조 6.17–6.55초 넓은 면이 줄며 안의 글이 경계에 잘리고(고르게 줄지 않는다),
+// 6.6–7.0초 작은 조각이 아래로 옮겨 간다. 퇴장 0–.35: 미디어·캡션이 줄어드는 외피에 잘리며 사라진다. 사진을 선처럼 세로로 누르지 않는다.
+// 폭 0–.55: 가로가 먼저 선 굵기로 준다. 채움 .1–.6: 외곽선뿐이던 외피가 선 색으로 찬다. 이동 .2–.85, 길이 .35–.9: 세로로 긴 막대가
+// 첫 표식 자리로 가며 실제 첫 선 길이가 된다. .9–1은 실제 선과 같은 자리에 머물고 1에서 실제 선 그룹이 넘겨받는다.
+export function linePhases(p: number) {
+  return {
+    exit: smooth(span(0, .35, p)),
+    narrow: inOut(span(0, .55, p)),
+    fill: smooth(span(.1, .6, p)),
+    travel: inOut(span(.2, .85, p)),
+    length: inOut(span(.35, .9, p)),
+  };
+}
+
 // transform을 뺀 레이아웃 좌표. About 레일의 등장 transform이 잰 값을 흔들지 않는다.
 function layoutBox(element: Element | null): Box {
   if (!(element instanceof HTMLElement)) return EMPTY;
@@ -142,10 +164,12 @@ const rectBox = (element: Element | null, scroll = 0): Box => {
   return { x: rect.left, y: rect.top + scroll, w: rect.width, h: rect.height };
 };
 
-export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, reduced, onLogoOwnerChange }: {
+export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, shell, reduced, onLogoOwnerChange }: {
   root: HTMLElement; header: HTMLElement; wordmark: HTMLButtonElement; logoHost: HTMLElement; reduced: boolean;
   // GL 볼 손잡이(없으면 정적 볼). 볼은 진입 뒤에 늦게 떠서 ref로 받는다.
   ball?: { current: CrystalizedBallHandle | null };
+  // 페이지 전용 공유 외피(화면 좌표의 SVG, 앞 rect 광휘 + 뒤 rect 면). 프리뷰→선 경계만 쓴다. 없으면 외피 없이 틀과 선만 넘긴다.
+  shell?: SVGSVGElement | null;
   onLogoOwnerChange: (owner: LogoOwner) => void;
 }): PortfolioMotion {
   registerScrollTrigger();
@@ -162,11 +186,17 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   const focusedControl = (target: EventTarget | null = document.activeElement) => target instanceof Element && target !== projectsSection
     && !!projectsSection?.contains(target) && !!target.closest('button, a, input, select, textarea, [tabindex]:not([tabindex="-1"])');
   const list = projectsSection?.querySelector<HTMLElement>('[data-part="index"]') ?? null;
+  // Experience 선 그룹(ExperienceSection). 경계는 넘겨받기 전까지 그룹의 opacity만 쓰고, 선 자리와 길이는 그리는 요소에서 읽기만 한다.
+  const experienceLine = root.querySelector<HTMLElement>('[data-part="experience-line"]');
+  const linePath = experienceLine?.querySelector('[data-part="line-path"]') ?? null;
+  const lineTip = experienceLine?.querySelector('[data-part="line-tip"]') ?? null;
+  const firstArticle = experienceLine?.closest('section')?.querySelector('article');
+  const [shellGlow, shellFace] = shell ? Array.from(shell.querySelectorAll('rect')) : [];
   // Hero 이름 글자 크기(0이면 CSS 값), nav 자리(화면 좌표), 로고가 떠나는 스크롤 지점, 두 로고 앵커(문서 좌표).
   // aboutTop·line: useSectionNav가 About을 고르는 읽기선(About 위끝 <= 스크롤 + 읽기선). back: Projects에서 되도는 선(RETURN_LINE_RATIO).
   // previewAt·projectsTop: 프리뷰로 떠나는 지점과 Projects 위끝(경로 판정), preview·radius: 프리뷰 상자와 모서리.
   let m = { nameSize: 0, nav: EMPTY, logoAt: Infinity, aboutTop: Infinity, line: 0, back: 0, hero: EMPTY, about: EMPTY, origin: EMPTY,
-    previewAt: Infinity, projectsTop: Infinity, preview: EMPTY, radius: 0 };
+    previewAt: Infinity, projectsTop: Infinity, preview: EMPTY, radius: 0, lineAt: Infinity };
   let side: 'hero' | 'nav' = 'hero';
   let flip: gsap.core.Tween | null = null;
   // 로고 진행도 t: 0 Hero, 1 About, 2 Projects 프리뷰. 시간으로만 움직이고 goal은 지금 스크롤이 가리키는 쪽이다.
@@ -192,6 +222,10 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   let lowY = -Infinity;
   // Projects 컨트롤에 포커스가 선 스크롤(그 뒤 내려간 가장 아래). 이보다 위로 굴리면 포커스가 남아 있어도 Projects를 놓는다.
   let holdFrom = Infinity;
+  // 선 진행도 p: 0 프리뷰, 1 첫 세로축. 로고가 Projects(goal 2)에 있을 때만 움직이고 lineGoal은 지금 스크롤이 가리키는 쪽이다.
+  const linePose = { p: 0 };
+  let lineGoal = 0;
+  let lineTween: gsap.core.Tween | null = null;
 
   const measure = () => {
     const about = root.querySelector('[data-section="about"]');
@@ -228,6 +262,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     const preview = previewAnchor ? rectBox(previewAnchor, window.scrollY) : EMPTY;
     const previewAt = preview.w ? Math.min(projectsLock - 1, Math.max(lock + 1, projectsLock - window.innerHeight / 2 - LOGO_LEAD * window.innerHeight)) : Infinity;
     const headerHeight = header.getBoundingClientRect().height;
+    // 첫 본문 위끝은 offset으로 잰다. 아직 닿지 않은 본문의 등장 이동(transform)이 섞이지 않는다.
+    const lineAt = preview.w && firstArticle && linePath && lineTip ? Math.max(projectsLock + 1, layoutBox(firstArticle).y - LINE_ENTER * window.innerHeight) : Infinity;
     m = {
       nameSize: size, nav: rectBox(header.querySelector('[data-motion-anchor="nav-name"]')),
       logoAt: Math.min(lock - 1, Math.max(NAME_DOWN, reveal - LOGO_LEAD * window.innerHeight)),
@@ -235,7 +271,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       // 되돌기 선. 되돌기 스크롤(Projects 위끝 - 선)은 떠나는 지점보다 LOGO_SLACK 넘게 위에 묶는다. 둘이 한 자리에서 다투지 않는다.
       back: Math.min(readingLineY(window.innerHeight, headerHeight, RETURN_LINE_RATIO), projectsTop - previewAt - LOGO_SLACK),
       hero: heroObject, about: target, origin: layoutBox(logoHost.offsetParent),
-      previewAt, projectsTop, preview, radius: frame ? parseFloat(getComputedStyle(frame).borderTopLeftRadius) || 0 : 0,
+      previewAt, projectsTop, preview, radius: frame ? parseFloat(getComputedStyle(frame).borderTopLeftRadius) || 0 : 0, lineAt,
     };
     if (m.about.w) {
       logoHost.style.width = `${m.about.w}px`;
@@ -288,9 +324,62 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     if (frame) Object.assign(frame.style, { transform: '', opacity: '', clipPath: '', pointerEvents: '' });
     if (list) Object.assign(list.style, { opacity: '', pointerEvents: '' });
   };
+  const hideShell = () => { if (shell) Object.assign(shell.style, { visibility: '', opacity: '' }); };
+  // 프리뷰→첫 세로축. 틀(미디어·캡션)은 줄어드는 외피에 잘리며 사라지고, 외피는 세로 막대가 되어 실제 선 자리에 내려앉는다.
+  // 진행도 0에서는 경계가 쓴 값을 걷어 Projects 쉬는 자리다(로고가 프리뷰에 넘긴 자리의 clearProjects).
+  const renderLine = () => {
+    const p = linePose.p;
+    // 선 그룹은 넘겨받기 전까지 숨는다. 지점이 없으면(프리뷰나 선이 없다) 건드리지 않아 그대로 보인다.
+    if (experienceLine && Number.isFinite(m.lineAt)) experienceLine.style.opacity = p >= 1 ? '' : '0';
+    if (p <= 0 || !previewAnchor || !linePath || !lineTip) {
+      hideShell();
+      clearProjects();
+      return;
+    }
+    if (list) Object.assign(list.style, { opacity: '', pointerEvents: '' });
+    const phase = linePhases(p);
+    // 출발과 도착은 매 프레임 지금 화면 좌표로 잰다. 재생 중에 스크롤이 움직여도 프리뷰에서 떠나 실제 선(sticky rail)에 내려앉는다.
+    const from = previewAnchor.getBoundingClientRect();
+    const path = linePath.getBoundingClientRect();
+    const to = { x: path.left, y: path.top, w: path.width, h: lineTip.getBoundingClientRect().bottom - path.top };
+    const w = lerp(from.width, to.w, phase.narrow);
+    const h = lerp(from.height, to.h, phase.length);
+    const x = lerp(from.left + from.width / 2, to.x + to.w / 2, phase.travel) - w / 2;
+    const y = lerp(from.top + from.height / 2, to.y + to.h / 2, phase.travel) - h / 2;
+    const radius = Math.min(lerp(m.radius, to.w / 2, phase.narrow), w / 2, h / 2);
+    // 열기 단추는 떠나는 동안 눌리지 않는다. 상세의 FLIP과 이 경계가 같은 프리뷰를 함께 옮기지 않는다.
+    if (frame) Object.assign(frame.style, {
+      transform: '',
+      clipPath: `inset(${y - from.top}px ${from.right - x - w}px ${from.bottom - y - h}px ${x - from.left}px round ${radius}px)`,
+      opacity: String(1 - phase.exit),
+      pointerEvents: 'none',
+    });
+    if (!shell || !shellGlow || !shellFace) return;
+    // 외곽선은 첫 순간에 툭 서지 않고 짧게 떠오른다.
+    Object.assign(shell.style, { visibility: p < 1 ? 'visible' : '', opacity: String(smooth(span(0, .12, p))) });
+    for (const rect of [shellGlow, shellFace]) {
+      rect.setAttribute('x', String(x));
+      rect.setAttribute('y', String(y));
+      rect.setAttribute('width', String(w));
+      rect.setAttribute('height', String(h));
+      rect.setAttribute('rx', String(radius));
+    }
+    // 채움은 CSS의 쉬는 값(0)을 덮도록 style로 쓴다. 표현 속성은 CSS에 진다.
+    shellFace.style.fillOpacity = String(phase.fill);
+    shellFace.style.strokeOpacity = String(1 - phase.fill);
+  };
+  // 재생 없이 프리뷰 쪽(0)에 놓는다. 로고가 Projects를 떠날 때, Projects 컨트롤이 입력이나 포커스를 받을 때다.
+  const dropLine = () => {
+    lineTween?.kill();
+    lineTween = null;
+    lineGoal = 0;
+    linePose.p = 0;
+    renderLine();
+  };
+
   const renderLogo = () => {
     if (!logo) {
-      clearProjects();
+      renderLine();
       report('none');
       return;
     }
@@ -378,7 +467,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     // About 쪽에서 쉬거나 나는 동안은 숨고, 프리뷰에 넘긴 뒤에는 쓴 값을 걷는다. 숨은 틀은 옮기지 않는다.
     // 틀 안의 열기 단추가 보이지 않는 채 About·Hero 위로 옮겨 가 눌리면 안 된다. 숨은(0) 틀과 목록은 제자리에서도 포인터를 받지 않는다.
     // 되돌기 뒤 About 쪽에서 프리뷰 자리가 아직 화면 아래쪽에 남아 빈 배경을 누르면 상세가 열렸다(Task 1 리뷰 I2).
-    if (pose.t >= 2) clearProjects();
+    if (pose.t >= 2) renderLine();
     else {
       if (frame) {
         const sx = preview.w ? box.width / preview.w : 1;
@@ -409,6 +498,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
 
   const moveLogo = (target: number, animate: boolean) => {
     if (target === goal) return;
+    // 로고가 Projects를 떠나면 선은 재생 없이 0이다. 틀은 그 뒤 로고 비행이 쓴다.
+    if (target !== 2 && (linePose.p > 0 || lineGoal)) dropLine();
     goal = target;
     travel?.kill();
     travel = null;
@@ -429,6 +520,36 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     }
     renderLogo();
   };
+
+  // 선을 지금 쪽으로 옮긴다. 로고가 Projects에 넘긴 뒤에만 움직인다(그 밖에서는 moveLogo가 0에 놓는다).
+  // 되돌아갈 때는 지난 진행도만큼의 시간만 쓴다. 진행도는 시간에 선형이고 구간마다 제 곡선을 쓴다(linePhases).
+  const moveLine = (target: number, animate: boolean) => {
+    if (goal !== 2 || target === lineGoal) return;
+    lineGoal = target;
+    lineTween?.kill();
+    lineTween = null;
+    if (target === 1) {
+      // 프리뷰로 날던 로고는 끝 자리로 정착시키고 떠난다(settleProjects와 같은 길). 숨을 컨트롤에 보이지 않는 포커스를 남기지 않는다.
+      if (travel) {
+        travel.kill();
+        travel = null;
+        pose.t = 2;
+        renderLogo();
+      }
+      if (focusedControl()) (document.activeElement as HTMLElement).blur();
+      // 캡션 드러냄이 돌고 있으면 걷는다. 캡션은 틀째로 잘리며 사라진다. 캡션의 인라인 값은 captionReveal만 쓴다.
+      const caption = frame?.querySelector<HTMLElement>('[data-part="preview-caption"]');
+      if (caption) clearCaptionReveal(caption);
+    }
+    if (!animate || reduced || linePose.p === target) linePose.p = target;
+    else lineTween = gsap.to(linePose, {
+      p: target, duration: (target ? LINE_SECONDS : LINE_RETURN_SECONDS) * Math.abs(target - linePose.p), ease: 'none',
+      onUpdate: renderLine, onComplete: () => { lineTween = null; renderLine(); },
+    });
+    renderLine();
+  };
+  // 선 지점을 넘으면 1, LOGO_BACK 넘게 위로 돌아오면 0, 그 사이에서는 지금 쪽이다.
+  const lineSide = () => window.scrollY >= m.lineAt ? 1 : window.scrollY <= m.lineAt - LOGO_BACK ? 0 : clamp(lineGoal);
 
   // 지금 스크롤이 가리키는 쪽. 이름은 두 문턱 사이에서 지금 자리를 지킨다.
   const nameSide = () => window.scrollY >= NAME_DOWN ? 'nav' : window.scrollY <= NAME_UP ? 'hero' : side;
@@ -467,6 +588,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     const name = nameSide();
     if (name !== side) placeName(name, true);
     moveLogo(logoSide(), true);
+    moveLine(lineSide(), true);
   };
 
   // 크기·폰트가 바뀌면 앵커를 다시 잰다. 쉬는 이름·로고는 재생 없이 지금 쪽의 쉬는 자리에 둔다.
@@ -480,14 +602,22 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     else if (name !== side) placeName(name, true);
     else applyName();
     const next = logoSide();
+    const nextLine = lineSide();
     if (travel) {
       moveLogo(next, true);
       renderLogo();
+      moveLine(nextLine, true);
       return;
     }
     // 두 문턱 사이에서는 지금 쪽을 지킨다. 같은 쪽이라도 다시 놓도록 goal을 비운다.
     goal = -1;
     moveLogo(next, false);
+    // 도는 선은 끊지 않는다. 다음 갱신이 새 자리를 읽는다.
+    if (lineTween) moveLine(nextLine, true);
+    else {
+      lineGoal = -1;
+      moveLine(nextLine, false);
+    }
   };
 
   const context = gsap.context(() => {
@@ -518,6 +648,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   const reveal = (event: FocusEvent) => {
     if (!focusedControl(event.target)) return;
     holdFrom = window.scrollY;
+    // 선으로 떠난(떠나는) 프리뷰 안에 포커스가 서면 재생 없이 되돌려 놓는다. 보이지 않는 단추에 포커스가 서지 않는다.
+    if (alive && !paused && linePose.p > 0) dropLine();
     if (!alive || paused || !logo || pose.t >= 2 || (travel && goal === 2)) return;
     goal = -1;
     moveLogo(2, false);
@@ -535,10 +667,13 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     refresh: settle,
     setPaused: (next) => {
       paused = next;
+      // 상세가 열린 동안(M4 pause) 선 재생도 그 자리에 멈춘다.
+      lineTween?.paused(next);
       if (next || !alive) return;
       // 멈춘 사이 넘은 지점은 재생하지 않고 그쪽 자리에 둔다.
       if (nameSide() !== side) placeName(nameSide(), false);
       moveLogo(logoSide(), false);
+      moveLine(lineSide(), false);
     },
     // GL 손잡이가 오거나 떠날 때. 진행도는 그대로 두고 지금 자리에 놓는다.
     setLogo: (next) => {
@@ -557,6 +692,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     // 날고 있는 About↔Projects 비행을 Projects 쪽 끝 자리로 동기로 끝낸다. 스크롤은 건드리지 않는다.
     // 새 경로를 만들지 않는다: 쉬는 자리(t=2)로 놓는 renderLogo가 경계를 닫고 소유 속성을 걷는다. GL이 없으면 정적 자리 그대로다.
     settleProjects: () => {
+      // 선으로 떠나던 프리뷰도 재생 없이 Projects 쪽으로 돌려놓는다. 입력이 다룰 프리뷰가 보인다.
+      if (alive && linePose.p > 0) dropLine();
       if (!alive || (pose.t <= 1 && goal !== 2) || (pose.t >= 2 && !travel)) return;
       travel?.kill();
       travel = null;
@@ -571,6 +708,9 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       projectsSection?.removeEventListener('focusin', reveal);
       frame?.removeEventListener('load', onImageLoad, true);
       travel?.kill();
+      lineTween?.kill();
+      hideShell();
+      if (experienceLine) experienceLine.style.opacity = '';
       stopName();
       context.revert();
       side = 'hero';

@@ -423,6 +423,10 @@ html[data-name-side='nav'] .site-name { position: fixed; z-index: 51; left: max(
 .logo-host > div { width: 100%; height: 100%; opacity: 0; }
 /* 볼과 로고의 교대는 경계(motion.ts)의 변신이다. 볼이 Hero 앵커째로 작은 고리로 접히고 같은 지름의 Electric 원이 넘겨받아 About으로 간다. */
 [data-logo-live] .logo-host { opacity: 1; }
+/* 공유 외피(M5). 경계가 rect 좌표와 채움을 쓰고 도는 동안만 보인다. nav(z 50) 아래, 섹션 위다. */
+.motion-shell { position: fixed; inset: 0; z-index: 40; width: 100%; height: 100%; overflow: visible; pointer-events: none; visibility: hidden; }
+.motion-shell-face { fill: #03b3c3; fill-opacity: 0; stroke: #7fe3ee; stroke-width: 1.5; }
+.motion-shell-glow { fill: none; stroke: #03b3c3; stroke-width: 10; stroke-opacity: .22; }
 [data-logo-live] [data-motion-anchor] .about-electric-static { opacity: 0; }
 /* 가려진 실루엣의 충전 애니메이션도 멈춘다. GL과 겹쳐 돌면 첫 화면 프레임을 계속 다시 그린다(인트로 뒤 GL이 뜨면서 드러났다). */
 [data-logo-live] [data-motion-anchor] .about-electric-static-shape { animation: none; }
@@ -933,32 +937,6 @@ html[data-intro] .hero-ball { opacity: 0; }
     }
   }
 
-.experience-depth {
-  position: relative;
-  min-height: 100%;
-  overflow: clip;
-  padding: clamp(30px, 3vw, 44px) clamp(30px, 5vw, 70px);
-  color: #eef4f5;
-}
-
-.experience-depth-layout {
-  position: relative;
-}
-
-.experience-depth-kind {
-  color: #03b3c3;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-}
-
-.experience-depth-layout {
-  display: grid;
-  grid-template-columns: minmax(230px, 0.34fr) minmax(0, 0.66fr);
-  gap: 4vw;
-  align-items: start;
-}
-
 .scroll-area {
   overflow-y: auto;
   scrollbar-width: thin;
@@ -980,318 +958,228 @@ html[data-intro] .hero-ball { opacity: 0; }
   .scroll-area { scrollbar-width: auto; scrollbar-color: auto; }
 }
 
-.experience-depth-rail { position: relative; }
-.experience-depth-line,
-.experience-depth-marker {
+/* Experience 읽기 타임라인(M5 Task 1). 좁은 sticky rail(기관·직책)과 실제 높이의 넓은 본문.
+   선 끝·자르기·표식 위치는 ExperienceSection이 요소에 바로 쓴다. 여기는 모양과 공개 상태만 정한다. */
+.experience-timeline {
+  position: relative;
+  padding: clamp(30px, 3vw, 44px) clamp(30px, 5vw, 70px) clamp(96px, 14vh, 160px);
+  color: #eef4f5;
+}
+
+.experience-timeline-layout {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(220px, 0.3fr) minmax(0, 0.7fr);
+  gap: 4vw;
+  align-items: start;
+}
+
+/* nav(76px) 아래에 붙어 본문이 지나가는 동안 남는다. */
+.experience-timeline-rail { position: sticky; top: 116px; }
+.experience-line { position: relative; }
+
+.experience-line-path,
+.experience-line-tip,
+.experience-line-node {
   position: absolute;
-  left: 18px;
-  width: 4px;
-  border-radius: 999px;
+  top: 0;
   pointer-events: none;
 }
-.experience-depth-line {
-  background: linear-gradient(#12626d, #03b3c3 50%, #12626d);
-  box-shadow: 0 0 9px rgb(3 179 195 / .5), inset 0 0 2px rgb(127 227 238 / .55);
+
+.experience-line-path,
+.experience-line-tip {
+  left: 9px;
+  width: 4px;
+  border-radius: 999px;
 }
-.experience-depth-marker {
+
+.experience-line-path {
+  height: 0;
+  background: #03b3c3;
+  box-shadow: 0 0 9px rgb(3 179 195 / .5);
+}
+
+/* 선 끝 아래 짧게 흐려지는 꼬리. 지금 구간의 끝이지 미래 경로가 아니다. */
+.experience-line-tip {
+  height: 56px;
+  background: linear-gradient(#03b3c3, rgb(3 179 195 / 0));
+}
+
+.experience-line-node {
+  left: 11px;
   z-index: 1;
-  left: 15px;
-  width: 10px;
-  height: 14px;
-  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
   background: #7fe3ee;
-  box-shadow: 0 0 10px #03b3c3, 0 0 22px rgb(3 179 195 / .55);
+  box-shadow: 0 0 0 4px #000, 0 0 12px #03b3c3;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0);
+  transition: opacity .35s, transform .35s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.experience-depth-timeline {
-  margin: 0 0 0 20px;
-  padding: 0 0 0 25px;
+
+.experience-line-node[data-reached] { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+
+.experience-rail {
+  margin: 0;
+  padding: 0 0 0 36px;
   list-style: none;
 }
 
-.experience-depth-timeline li {
-  position: relative;
+.experience-rail li + li { margin-top: 72px; }
+
+.experience-rail li {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(6px);
+  transition: opacity .4s, transform .4s, visibility 0s .4s;
 }
 
-.experience-depth-timeline li + li {
-  margin-top: 26px;
+.experience-rail li[data-reached] {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition: opacity .4s, transform .4s;
 }
 
-.experience-depth-timeline li::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: -30px;
-  width: 10px;
-  height: 10px;
-  border: 1px solid #03b3c3;
-  border-radius: 50%;
-  background: #000;
-  box-shadow: 0 0 0 5px #000;
-  transform: translateY(-50%);
-}
-
-.experience-depth-timeline button {
+.experience-rail button {
+  display: block;
   width: 100%;
   min-height: 44px;
-  padding: 15px 12px;
+  padding: 4px 0;
   border: 0;
   background: transparent;
-  color: #b0bac5;
   text-align: left;
   cursor: pointer;
 }
 
-.experience-depth-timeline button:hover,
-.experience-depth-timeline li[data-active='true'] button {
-  color: #eef4f5;
-}
-
-.experience-depth-timeline small {
+.experience-rail strong {
   display: block;
-  margin-bottom: 9px;
-  color: #03b3c3;
-  font-size: 10px;
-  letter-spacing: 0.17em;
-}
-
-.experience-depth-timeline strong {
-  display: block;
-  font-size: clamp(17px, 1.8vw, 23px);
-  letter-spacing: -0.03em;
-}
-
-.experience-depth-timeline span {
-  display: block;
-  margin-top: 8px;
   color: #b0bac5;
-  font-size: 11px;
+  font-size: clamp(17px, 1.6vw, 21px);
+  letter-spacing: -0.02em;
+  line-height: 1.3;
 }
 
-.experience-depth-deck {
-  position: relative;
-  height: 490px;
-  perspective: 1200px;
-  touch-action: pan-y;
-  cursor: grab;
-}
+.experience-rail button[aria-current] strong,
+.experience-rail button:hover strong { color: #eef4f5; }
 
-.experience-depth-deck:active {
-  cursor: grabbing;
-}
-
-.experience-depth-card {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  z-index: 1;
-  width: min(100%, 640px);
-  min-height: 430px;
-  height: calc(100% - 44px);
-  isolation: isolate;
-  border: 2px solid transparent;
-  background: linear-gradient(150deg, rgb(3 179 195 / .11), rgb(3 179 195 / .02) 48%), #03141a;
-  box-shadow: 0 0 18px rgb(3 179 195 / .13), inset 0 0 18px rgb(3 179 195 / .05);
-  transform-style: preserve-3d;
-  transition: transform 0.6s cubic-bezier(0.22, 0.8, 0.24, 1), opacity 0.6s, filter 0.6s;
-}
-
-.experience-depth-card-scroll {
-  height: 100%;
-  padding: 29px clamp(25px, 3vw, 43px);
-}
-
-.experience-depth-card[data-depth='0'] {
-  z-index: 3;
-  transform: translate(-50%, -50%) translateX(0) translateZ(0) rotateY(0);
-  opacity: 1;
-  filter: brightness(1) blur(0);
-}
-
-.experience-depth-card[data-depth='1'] {
-  z-index: 2;
-  transform: translate(-50%, -50%) translateX(180px) translateZ(-160px) rotateY(16deg);
-  opacity: 0.72;
-  filter: brightness(0.7) blur(1px);
-  pointer-events: none;
-}
-
-.experience-depth-card[data-depth='2'] {
-  transform: translate(-50%, -50%) translateX(320px) translateZ(-300px) rotateY(25deg);
-  opacity: 0.48;
-  filter: brightness(0.48) blur(2px);
-  pointer-events: none;
-}
-
-.experience-depth-card-meta,
-.experience-depth-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 15px;
-  color: #b0bac5;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-}
-
-.experience-depth-card-meta span:first-child {
-  color: #03b3c3;
-  font-weight: 700;
-}
-
-.experience-depth-kind {
-  margin: 28px 0 0;
-}
-
-.experience-depth-card h3 {
-  margin: 12px 0 5px;
-  font-size: clamp(26px, 3vw, 44px);
-  letter-spacing: -0.05em;
-  line-height: 1.18;
-  overflow-wrap: anywhere;
-}
-
-.experience-depth-position {
-  margin: 0;
+.experience-rail span {
+  display: block;
+  margin-top: 6px;
   color: #7fe3ee;
   font-size: 13px;
 }
 
-.experience-depth-description {
-  margin: 23px 0;
-  color: #d5e2e7;
-  font-size: 14px;
-  line-height: 1.72;
+.experience-bodies {
+  display: grid;
+  gap: 112px;
 }
 
-.experience-depth-card h4 {
+.experience-body {
+  max-width: 760px;
+  transition: opacity .5s, transform .5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 미래 본문은 자리를 지키고 보이지 않는다. 읽은 본문은 위로 물러나며 흐려진다. */
+.experience-body[data-state='future'] { opacity: 0; transform: translateY(16px); }
+.experience-body[data-state='past'] { opacity: .38; }
+
+.experience-body-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 0;
+  color: #b0bac5;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+
+.experience-body-meta span:first-child {
+  color: #03b3c3;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+}
+
+.experience-body h3 {
+  margin: 14px 0 6px;
+  font-size: clamp(30px, 3.4vw, 48px);
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.experience-body-position {
+  margin: 0;
+  color: #7fe3ee;
+  font-size: 17px;
+}
+
+.experience-body-description {
+  margin: 28px 0;
+  color: #d5e2e7;
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+.experience-body h4 {
   margin: 0 0 12px;
   color: #b0bac5;
-  font-size: 10px;
+  font-size: 13px;
   letter-spacing: 0.17em;
 }
 
-.experience-depth-responsibilities {
+.experience-body-list {
   margin: 0;
-  padding-left: 19px;
+  padding-left: 20px;
   color: #e0eaec;
-  font-size: 13px;
-  line-height: 1.65;
+  font-size: 17px;
+  line-height: 1.6;
 }
 
-.experience-depth-responsibilities li + li {
-  margin-top: 7px;
-}
+.experience-body-list li + li { margin-top: 8px; }
+.experience-body-list li::marker { color: #03b3c3; }
 
-.experience-depth-responsibilities li::marker {
-  color: #03b3c3;
-}
-
-.experience-depth-skills {
+.experience-body-skills {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
-  margin: 22px 0 0;
-  padding: 15px 0 0;
+  gap: 8px;
+  margin: 28px 0 0;
+  padding: 18px 0 0;
   border-top: 1px solid #274149;
   list-style: none;
 }
 
-.experience-depth-skills li {
-  padding: 5px 7px;
+.experience-body-skills li {
+  padding: 6px 9px;
   border: 1px solid #274952;
   color: #b9d5dc;
-  font-size: 10px;
+  font-size: 13px;
 }
 
-.experience-depth-foot {
-  position: absolute;
-  right: -10px;
-  bottom: 0;
-  left: 0;
-}
-
-.experience-depth button:focus-visible,
-.experience-depth-card:focus-within,
-.experience-depth-deck:focus-visible {
+.experience-rail button:focus-visible,
+.experience-body:focus-visible {
   outline: 2px solid #7fe3ee;
-  outline-offset: 4px;
+  outline-offset: 6px;
 }
 
-.experience-depth-card-scroll:focus-visible { outline: none; }
-
+/* 모바일: 왼쪽 얇은 선 한 열. 기관·직책은 각 본문 제목이 맡고 표식은 그 옆에 선다. */
 @media (max-width: 760px) {
-  .experience-depth {
-    padding: 36px 15px 43px;
-  }
-
-  .experience-depth-foot {
-    position: static;
-    margin-top: 0;
-  }
-
-  .experience-depth-layout {
-    display: block;
-  }
-
- .experience-depth-rail { padding-top: 36px; }
- .experience-depth-marker { transform: translate(-50%, -50%); }
-
-  .experience-depth-timeline {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    margin: 0 0 10px;
-    padding: 0;
-  }
-
-  .experience-depth-timeline li + li {
-    margin: 0;
-  }
-
-  .experience-depth-timeline li::before {
-    top: 0;
-    left: 50%;
-    transform: translate(-50%, -50%);
-  }
-
-  .experience-depth-timeline button {
-    padding: 20px 6px 10px;
-    text-align: center;
-  }
-
-  .experience-depth-timeline strong {
-    font-size: 12px;
-  }
-
-  .experience-depth-timeline span,
-  .experience-depth-timeline small {
-    font-size: 9px;
-  }
-
-  .experience-depth-deck {
-    height: 530px;
-  }
-
-  .experience-depth-card {
-    width: calc(100% - 44px);
-    min-height: 0;
-    height: calc(100% - 20px);
-  }
-
-  .experience-depth-card-scroll { padding: 23px 20px; }
-
-  .experience-depth-card[data-depth='1'] {
-    transform: translate(-50%, -50%) translateX(68px) translateZ(-130px) rotateY(12deg);
-  }
-
-  .experience-depth-card[data-depth='2'] {
-    transform: translate(-50%, -50%) translateX(118px) translateZ(-240px) rotateY(20deg);
-  }
+  .experience-timeline { padding: 36px 15px 96px; }
+  .experience-timeline-layout { display: block; padding-left: 28px; }
+  .experience-timeline-rail { position: absolute; top: 0; bottom: 0; left: 0; width: 24px; }
+  .experience-line { height: 100%; }
+  .experience-rail { display: none; }
+  .experience-line-path,
+  .experience-line-tip { left: 4px; }
+  .experience-line-node { left: 6px; }
+  .experience-bodies { gap: 88px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .experience-depth-card {
-    transition: none;
-  }
+  .experience-line-node,
+  .experience-rail li,
+  .experience-body { transition: none; }
 }
 }
 
@@ -1447,7 +1335,6 @@ html[data-intro] .hero-ball { opacity: 0; }
 }
 
 .skills-signal .signal-map::before,
-.experience-depth-card::before,
 .skills-signal .signal-result::before {
   content: '';
   position: absolute;

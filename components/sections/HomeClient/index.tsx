@@ -45,6 +45,7 @@ export default function HomeClient() {
   const projectsRef = useRef<ProjectsSectionHandle>(null);
   const wordmarkRef = useRef<HTMLButtonElement>(null);
   const logoHostRef = useRef<HTMLDivElement>(null);
+  const shellRef = useRef<SVGSVGElement>(null);
   const heroStaticRef = useRef<HTMLDivElement>(null);
   const ballIconsRef = useRef<HTMLDivElement>(null);
   const ballRef = useRef<CrystalizedBallHandle>(null);
@@ -113,7 +114,7 @@ export default function HomeClient() {
   useEffect(() => {
     const root = rootRef.current, header = headerRef.current, wordmark = wordmarkRef.current, logoHost = logoHostRef.current;
     if (!motionModule || !root || !header || !wordmark || !logoHost) return;
-    const motion = motionModule.createPortfolioMotion({ root, header, wordmark, logoHost, ball: ballRef, reduced: reducedMotion, onLogoOwnerChange: setLogoOwner });
+    const motion = motionModule.createPortfolioMotion({ root, header, wordmark, logoHost, ball: ballRef, shell: shellRef.current, reduced: reducedMotion, onLogoOwnerChange: setLogoOwner });
     motionRef.current = motion;
     return () => { motion.destroy(); motionRef.current = null; setLogoOwner('none'); };
   }, [motionModule, reducedMotion]);
@@ -194,6 +195,11 @@ export default function HomeClient() {
               intensity={0.65} glow={0.3} speed={1.1} flicker={0.25} interactive={false} /> : null}
           </div>
         </div>
+        {/* 페이지 전용 공유 외피(M5). 프리뷰→선, 선→면 두 경계만 쓰고 그 밖에는 숨는다. 화면 좌표에 고정되고 누르거나 읽을 것이 아니다. */}
+        <svg ref={shellRef} data-motion-shell aria-hidden="true" focusable="false" className="motion-shell">
+          <rect className="motion-shell-glow" />
+          <rect className="motion-shell-face" />
+        </svg>
       </main>
       <div inert={obscured} data-flow-finale=""><Footer /></div>
       <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">{announcement}</div>
