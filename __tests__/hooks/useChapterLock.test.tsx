@@ -253,6 +253,40 @@ describe('About 진입 wheel의 늦은 착지 (M4 Task 15)', () => {
     expect(documentY).toBe(ABOUT + 400);
   });
 
+  // 수정 1(리뷰 I2·m2). 착지 창은 막지 못한 wheel의 것이다. 터치와 키 진입은 예전 350ms 넘침 창 그대로다.
+  it('터치 진입은 착지 창을 열지 않아 350ms 뒤 이어진 드래그 스크롤은 예전처럼 잠금에서 빠져나간다', () => {
+    mount(ABOUT - 60);
+    const touch = (y: number, at: number, type: string) => stamp(Object.assign(new Event(type, { cancelable: true }), { touches: [{ clientY: y }] }), at);
+    touch(500, 20_000, 'touchstart');
+    touch(400, 20_016, 'touchmove');
+    expect(locked('about')).toBe(true);
+    expect(documentY).toBe(ABOUT);
+    scrollAt(ABOUT + 300, 20_800);
+    expect(locked('about')).toBe(false);
+    expect(documentY).toBe(ABOUT + 300);
+  });
+
+  it('키 진입은 착지 창을 열지 않아 350ms 뒤 입력 없는 스크롤을 끌어오지 않는다', () => {
+    mount(ABOUT - 60);
+    expect(stamp(new KeyboardEvent('keydown', { key: 'ArrowDown', cancelable: true }), 20_000).defaultPrevented).toBe(true);
+    expect(locked('about')).toBe(true);
+    scrollAt(ABOUT + 400, 20_600);
+    expect(locked('about')).toBe(false);
+    expect(documentY).toBe(ABOUT + 400);
+  });
+
+  it.each([
+    ['popstate', () => new PopStateEvent('popstate')],
+    ['keydown', () => new KeyboardEvent('keydown', { key: 'End', cancelable: true })],
+  ] as const)('%s는 wheel 진입의 착지 창을 닫는다', (_, make) => {
+    mount(ABOUT - 60);
+    wheel(500, 20_000);
+    stamp(make(), 20_100);
+    scrollAt(ABOUT + 400, 20_400);
+    expect(locked('about')).toBe(false);
+    expect(documentY).toBe(ABOUT + 400);
+  });
+
   it('착지가 오지 않으면 pointerdown이나 상한(1500ms)이 착지 창을 닫는다', () => {
     const { unmount } = mount(ABOUT - 60);
     wheel(500, 20_000);
