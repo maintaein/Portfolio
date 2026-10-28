@@ -31,8 +31,8 @@ const BALL_GAP = 16;
 // 볼에서 로고로의 변신(사용자 결정 2026-10-21, background_good.mp4 0–2초). 진행도 하나를 이 시간 동안 시간으로 돌린다.
 // 사용자 요청(2026-10-22)으로 1.2초에서 25% 느리게 했다. 구간 비율은 진행도 기준이라 그대로다.
 export const LOGO_SECONDS = 1.5;
-// About 로고에서 프리뷰로 가는 구간(진행도 1–2)만의 시간. 사용자 요청(2026-10-23)으로 1.5초에서 40% 느리게 했다. 드문 설명 전환이라 길다.
-export const PREVIEW_SECONDS = 2.1;
+// About 로고에서 프리뷰로 가는 구간(진행도 1–2)만의 시간. 사용자 요청(2026-10-23)으로 1.5초에서 2.1초로 늘렸다가, 2026-10-29 요청으로 1.8초로 줄였다.
+export const PREVIEW_SECONDS = 1.8;
 // 같은 구간을 거꾸로(프리뷰 그림 → 움직이는 로고) 도는 시간. 사용자 요청(2026-10-24)으로 되돌기만 빠르다. 떠나는 쪽이라 설명할 것이 없다.
 export const PREVIEW_RETURN_SECONDS = 1.4;
 // 처음 들어올 때 캡션이 들어오는 시간(M4 Task 14). 넘김(.94–1)은 0.13초뿐이라 그 안에는 잡음이 안 읽힌다. 넘김에서 시작해
@@ -57,13 +57,10 @@ const RETURN_LINE_RATIO = .15;
 export const CORE = .22;
 // 원이 펼쳐지는 지름(About 앵커 비율). ElectricLogo가 로고를 그리는 크기(scale .7)와 같다.
 export const ORBIT = .7;
-// About 로고에서 프로젝트 프리뷰로(M4 Task 1, 참조 background.mp4 5.15–6.17초). 다 넓어진 면은 프리뷰보다 이만큼 크게 섰다가
-// 정착에서 프리뷰 상자로 줄어든다. 참조의 면 488×188 → 카드 456×185(가로 1.07, 세로 1.016)의 기하 평균이다. 미디어는 원래 비율이라 한 배율이다.
-export const PREVIEW_OVER = 1.04;
 // 떠나는 타일의 모서리(로고 크기 비율). 참조 5.35초의 155px 타일이 45px 남짓 둥글다.
 const TILE_RADIUS = .3;
 // Projects 프리뷰에서 Experience 첫 세로축으로(M5 Task 1, 참조 background.mp4 6.17–7.0초의 면 수축과 이동). 진행도 하나를 이 시간 동안 돌린다.
-// About→Projects(2.1초)보다 짧다. 도착이 설명할 그림이 아니라 읽기 시작이라 붙잡지 않는다. 되돌기는 떠나는 쪽이라 더 짧다(PREVIEW_RETURN_SECONDS와 같은 규칙).
+// About→Projects(1.8초)보다 짧다. 도착이 설명할 그림이 아니라 읽기 시작이라 붙잡지 않는다. 되돌기는 떠나는 쪽이라 더 짧다(PREVIEW_RETURN_SECONDS와 같은 규칙).
 export const LINE_SECONDS = 1.4;
 export const LINE_RETURN_SECONDS = .9;
 // 선 지점: 첫 본문(FASOO) 위끝이 화면 아래끝에서 이만큼(px) 올라온 스크롤. 도착(100%)에서 선·첫 표식·본문 머리(메타 줄과 제목 첫머리)가
@@ -103,13 +100,14 @@ export function logoPhases(p: number) {
 
 // About(1)에서 Projects(2)로 가는 진행도 q의 구간. 참조 5.15–5.35초 기호가 옮겨 가며 타일로 차고, 5.35–5.75초 면이 가로로 넓어지고,
 // 5.75–6.13초 그 면 안에 내용이 드러나고, 6.13–6.17초 카드로 들어앉는다. 비율은 녹화 속도가 아니라 이 구간들의 몫이다.
-// 이동 0–.25, 가로 0–.65, 외피 seek 0–.65(옮겨 가는 동안 이미 3분의 1 풀린다), 높이 .1–.65, 모서리 .25–.65, 목록 .7–.9, 정착 .82–.94(Task 4, 전에는 .9–1).
+// 이동 0–.25, 가로 0–.65, 외피 seek 0–.65(옮겨 가는 동안 이미 3분의 1 풀린다), 높이 .1–.65, 모서리 .25–.65, 목록 .7–.9.
+// 면은 프리뷰 크기 그대로 넓어진다. 프리뷰보다 4% 크게 섰다가 줄어드는 정착은 사용자 요청(2026-10-29)으로 뺐다.
 // 빛의 면(사용자 선택 A 2026-10-23): 옮겨 가는 동안 기호 속이 빛으로 차(채움 0–.2) 면으로 퍼지고, 다 퍼진 자리에서
 // 빛(로고 캔버스와 그 테두리 전기)이 가라앉는 만큼 미디어·캡션이 떠오른다(.65–.9). 둘은 한 곡선의 보수라 빈 프레임도 겹쳐 밝은 프레임도 없다.
 // 그림 안의 면(사용자 선택 (가) + (i) 2026-10-23): 프리뷰 그림이 받아져 있으면 처음부터 그 그림이 모양 안에서 가운데부터 드러난다(앞선 0–.8,
-// 10%에 이미 3분의 1). 테두리 전기는 굵기째 가늘어져 사라지고(.3–.6, Task 5에서 .6–.9보다 앞당김) 면은 정착(.82–.94)에서 프리뷰 상자에 들어앉는다.
+// 10%에 이미 3분의 1). 테두리 전기는 굵기째 가늘어져 사라진다(.3–.6, Task 5에서 .6–.9보다 앞당김).
 // 방향마다 고르지 않은 퍼짐(Task 5, 사용자 요청 2026-10-24): 앞선과 외곽선이 같은 잡음 장을 따라 어떤 쪽은 앞서고 어떤 쪽은 처진다(ElectricLogo).
-// 외곽선의 일그러짐(ragged)은 .45까지 다 실리고 정착이 시작하는 .82에 0이라 정착한 상자가 정확하다.
+// 외곽선의 일그러짐(ragged)은 .45까지 다 실리고 .82에 0이라 넘김 전에 상자가 정확하다.
 // .94–1은 넘김이다(Task 4 수정 1): 제자리에 멈춘 GL 그림 아래 DOM 틀(그림·캡션)이 다 서고 캔버스가 빠진다. 둘이 같은 자리라 같은 그림이 차츰
 // 또렷해지고 캡션이 떠오른다. 한 프레임 바꿈은 DPR이 1.25를 넘으면 흐린 GL 그림이 또렷한 DOM 그림으로 툭 바뀌었다. 위 교차(media·logo)는 그림이 없는 방문의 몫이다.
 export function previewPhases(q: number) {
@@ -126,7 +124,6 @@ export function previewPhases(q: number) {
     ragged: 1 - smooth(span(.45, .82, q)),
     media,
     list: smooth(span(.7, .9, q)),
-    settle: inOut(span(.82, .94, q)),
     handoff: smooth(span(.94, 1, q)),
     logo: 1 - media,
   };
@@ -432,14 +429,13 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       logo!.setBoundaryTarget({ width: ring, height: ring, radius: ring / 2 });
       logo!.seekBoundary(phase.boundary);
     };
-    // 외피는 About 로고 크기의 타일에서 가로부터 넓어져 프리뷰보다 4% 큰 면이 되고, 정착에서 프리뷰 상자·모서리로 줄어든다.
+    // 외피는 About 로고 크기의 타일에서 가로부터 넓어져 프리뷰 상자·모서리가 된다.
     // 캔버스 자리는 줄지 않으므로 가장 큰 면으로 한 번 잡는다(자리를 그 이상 넓히지 않는다).
     const tile = about.w * ORBIT;
-    const over = lerp(PREVIEW_OVER, 1, view.settle);
-    const box = { width: lerp(tile, preview.w * over, view.widen), height: lerp(tile, preview.h * over, view.face), radius: lerp(tile * TILE_RADIUS, m.radius, view.corner) };
-    // 그림은 처음부터 정착할 상자(프리뷰 × 지금 배율)에 DOM과 같은 cover로 깔리고 모양이 그 창이다. 끝에서 DOM 그림과 같은 자리다.
+    const box = { width: lerp(tile, preview.w, view.widen), height: lerp(tile, preview.h, view.face), radius: lerp(tile * TILE_RADIUS, m.radius, view.corner) };
+    // 그림은 처음부터 프리뷰 상자에 DOM과 같은 cover로 깔리고 모양이 그 창이다. 끝에서 DOM 그림과 같은 자리다.
     const aimBox = () => {
-      logo!.setBoundaryTarget(photo ? { ...box, image: { source: photo, width: preview.w * over, height: preview.h * over } } : box);
+      logo!.setBoundaryTarget(photo ? { ...box, image: { source: photo, width: preview.w, height: preview.h } } : box);
       logo!.seekBoundary(view.shell, view.fill, view.reveal, view.strands, view.ragged);
     };
     // 지금 구간의 것이 아닌 경계를 먼저 닫는다. ElectricLogo는 경계를 잡은 채 다시 begin하면 새로 잡지 않고 다시 겨누기만 해서,
@@ -466,7 +462,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
         // next/image는 lazy라 아직 안 받아졌을 수 있다. 그 방문은 기다리지 않고 그림 없이 난다. 영상이나 오류 화면에는 img가 없다.
         const img = frame?.querySelector('img');
         photo = img?.complete && img.naturalWidth ? img : null;
-        boxed = logo.beginBoundary({ width: preview.w * PREVIEW_OVER, height: preview.h * PREVIEW_OVER, radius: m.radius });
+        boxed = logo.beginBoundary({ width: preview.w, height: preview.h, radius: m.radius });
         // GL이 아직 그리지 않았으면 이 방문은 정적으로 넘긴다. 늦게 준비돼도 날던 도중에 외피를 끼우지 않고 다음 방문에 잇는다.
         if (!boxed) {
           travel?.kill();

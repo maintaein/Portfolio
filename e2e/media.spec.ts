@@ -79,7 +79,7 @@ test.describe('미디어', () => {
     const tab = page.getByRole('tab', { name: withVideo!.title, exact: true });
     if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
     await expect(tab).toHaveAttribute('aria-selected', 'true');
-    // GL이 준비됐으면 2.1초 비행, 아니면 정적 인계다. 소프트웨어 GL에서는 비행이 수십 프레임이라 페이지 쪽 rAF로 기다린다.
+    // GL이 준비됐으면 1.8초 비행, 아니면 정적 인계다. 소프트웨어 GL에서는 비행이 수십 프레임이라 페이지 쪽 rAF로 기다린다.
     const landed = () => page.evaluate(() => new Promise<void>(resolve => {
       const read = () => {
         if (document.querySelector('.portfolio-document')!.getAttribute('data-logo-owner') !== 'preview') resolve();
