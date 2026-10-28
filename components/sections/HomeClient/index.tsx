@@ -64,6 +64,8 @@ export default function HomeClient() {
   const [motionModule, setMotionModule] = useState<typeof import('./motion') | null>(null);
   const [logo, setLogo] = useState<ElectricLogoHandle | null>(null);
   const [logoOwner, setLogoOwner] = useState<LogoOwner>('none');
+  // 프리뷰→선 경계가 첫 세로축에 내려앉았는지. Experience가 첫 표식과 FASOO 본문을 공개한다.
+  const [lineArrived, setLineArrived] = useState(false);
   const [logoReady, setLogoReady] = useState(false);
   // GL 로고는 쉬는 자리(hero·about)에서만 드러난다. 날아가는 도중에 준비돼도 내려앉은 뒤에 정적 실루엣과 바뀐다.
   const [logoLive, setLogoLive] = useState(false);
@@ -114,9 +116,9 @@ export default function HomeClient() {
   useEffect(() => {
     const root = rootRef.current, header = headerRef.current, wordmark = wordmarkRef.current, logoHost = logoHostRef.current;
     if (!motionModule || !root || !header || !wordmark || !logoHost) return;
-    const motion = motionModule.createPortfolioMotion({ root, header, wordmark, logoHost, ball: ballRef, shell: shellRef.current, reduced: reducedMotion, onLogoOwnerChange: setLogoOwner });
+    const motion = motionModule.createPortfolioMotion({ root, header, wordmark, logoHost, ball: ballRef, shell: shellRef.current, reduced: reducedMotion, onLogoOwnerChange: setLogoOwner, onLineArrive: setLineArrived });
     motionRef.current = motion;
-    return () => { motion.destroy(); motionRef.current = null; setLogoOwner('none'); };
+    return () => { motion.destroy(); motionRef.current = null; setLogoOwner('none'); setLineArrived(false); };
   }, [motionModule, reducedMotion]);
   useEffect(() => { motionRef.current?.setLogo(logo); }, [logo, motionModule, reducedMotion]);
   useEffect(() => { motionRef.current?.setPaused(obscured || !pageVisible); }, [obscured, pageVisible, motionModule, reducedMotion]);
@@ -179,9 +181,9 @@ export default function HomeClient() {
           </div>
         </section>
         {HOME_SECTION_CONFIG.map(({ id, label }) => {
-          const Section = id === SECTION_IDS.ABOUT || id === SECTION_IDS.PROJECTS ? null : SECTION_COMPONENTS[id];
+          const Section = id === SECTION_IDS.ABOUT || id === SECTION_IDS.PROJECTS || id === SECTION_IDS.EXPERIENCE ? null : SECTION_COMPONENTS[id];
           return <div key={id} data-section={id} role="region" aria-label={label} tabIndex={-1} className="document-section">
-            {id === SECTION_IDS.PROJECTS ? <ProjectsSection ref={projectsRef} beforeAction={beforeProjectsAction} navigationPending={navigationTarget !== null} logoOwner={logoOwner} /> : Section ? <Section /> : <AboutSection ref={aboutRef} onChapterChange={setAboutChapter} navigationPending={navigationTarget !== null} logoOwner={logoOwner} />}
+            {id === SECTION_IDS.EXPERIENCE ? <ExperienceSection lineArrived={lineArrived} /> : id === SECTION_IDS.PROJECTS ? <ProjectsSection ref={projectsRef} beforeAction={beforeProjectsAction} navigationPending={navigationTarget !== null} logoOwner={logoOwner} /> : Section ? <Section /> : <AboutSection ref={aboutRef} onChapterChange={setAboutChapter} navigationPending={navigationTarget !== null} logoOwner={logoOwner} />}
           </div>;
         })}
         {/* 공유 로고 host. About의 원형 마스크와 overflow-x: clip 밖, 문서 좌표에 산다.

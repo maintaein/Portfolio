@@ -1,6 +1,8 @@
 import { useRef as useVisibilityRef } from 'react';
 const localVisibility = vi.hoisted(() => ({ visible: true, hasEntered: true }));
 vi.mock('@/hooks/useSectionVisibility', () => ({ useSectionVisibility: () => ({ ref: useVisibilityRef(null), visible: localVisibility.visible, hasEntered: localVisibility.hasEntered }) }));
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
@@ -9,11 +11,11 @@ import { SectionActivityProvider, type SectionActivityProviderProps } from '@/co
 import { experiences } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
 
-function experienceWithActivity(state: Partial<Omit<SectionActivityProviderProps, 'children'>> = {}) {
+function experienceWithActivity(state: Partial<Omit<SectionActivityProviderProps, 'children'>> = {}, props: { lineArrived?: boolean } = {}) {
   return (
     <SectionActivityProvider obscured={false}
       routeResolved motionReady pageVisible reducedMotion={false} {...state}>
-      <ExperienceSection />
+      <ExperienceSection {...props} />
     </SectionActivityProvider>
   );
 }
@@ -159,5 +161,58 @@ describe('ExperienceSection', () => {
     fireEvent.click(within(railItems()[0]).getByRole('button'));
     expect(scroll).toHaveBeenCalledWith({ top: Math.ceil(geometry.layoutTop + 500 - READING_LINE), behavior: 'smooth' });
     expect(articles()[0]).toHaveFocus();
+  });
+  // 수정 1 I2: 서버 HTML(JS 전)에는 감추는 표시가 없다. 감추는 CSS는 모두 하이드레이션 뒤 JS가 켜는 data-progressive 아래에만 있다.
+  it('서버 HTML에는 점진 공개 표시도 inert도 없어 JS 없이도 모든 본문과 rail이 보인다', () => {
+    const html = renderToString(experienceWithActivity());
+    expect(html).not.toContain('data-progressive');
+    expect(html).not.toMatch(/\sinert/);
+    // 서버 HTML의 모든 본문은 future 상태로 나가지만, 그 상태를 감추는 규칙은 data-progressive 없이는 맞지 않는다.
+    const css = readFileSync(resolve(__dirname, '../../styles/design-tokens.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter(([, selector, body]) => /experience-(body|rail)/.test(selector) && /opacity:\s*0[;\s]|visibility:\s*hidden|opacity:\s*\.\d/.test(body));
+    expect(rules.length).toBeGreaterThan(0);
+    for (const [, selector] of rules) {
+      for (const part of selector.split(',')) expect(part.trim()).toMatch(/^\.experience-timeline\[data-progressive\] /);
+    }
+  });
+
+  it('하이드레이션 뒤에는 점진 공개를 켜고, 모션 감소의 정적 공개에서는 끈다', () => {
+    const { container, rerender } = render(experienceWithActivity());
+    expect(container.querySelector('section')).toHaveAttribute('data-progressive');
+    rerender(experienceWithActivity({ reducedMotion: true }));
+    expect(container.querySelector('section')).not.toHaveAttribute('data-progressive');
+  });
+
+  // 수정 1 I1: 경계가 첫 세로축에 내려앉으면 읽기선 전이라도 첫 표식과 FASOO를 공개하고, 거꾸로 떠나면 다시 숨긴다. 다음 노드는 읽기선이 정한다.
+  it('선 경계가 내려앉으면 첫 표식과 FASOO만 공개하고 떠나면 다시 숨긴다', () => {
+    const { rerender } = render(experienceWithActivity());
+    readAt(100);
+    expect(railItems().every(item => item.hasAttribute('inert'))).toBe(true);
+    rerender(experienceWithActivity({}, { lineArrived: true }));
+    expect(railItems().map(item => item.hasAttribute('inert'))).toEqual([false, true, true]);
+    expect(articles().map(article => article.dataset.state)).toEqual(['current', 'future', 'future']);
+    expect(document.querySelectorAll('[data-part="line-node"][data-reached]')).toHaveLength(1);
+    expect(within(railItems()[0]).getByRole('button')).toHaveAttribute('aria-current', 'step');
+    // 그 뒤 노드는 여전히 읽기선이 정한다.
+    readAt(1500);
+    expect(articles().map(article => article.dataset.state)).toEqual(['past', 'current', 'future']);
+    readAt(100);
+    expect(articles()[0].dataset.state).toBe('current');
+    rerender(experienceWithActivity({}, { lineArrived: false }));
+    expect(railItems().every(item => item.hasAttribute('inert'))).toBe(true);
+    expect(articles().map(article => article.dataset.state)).toEqual(['future', 'future', 'future']);
+  });
+
+  // 수정 1 I3: 모션 감소에서 rail 단추는 보이는 동안에만 포커스를 받는다. 정적 공개는 감추지 않고 inert도 걸지 않는다.
+  it('모션 감소에서는 rail이 감춰지지 않고 모든 단추가 보이며 포커스된다', () => {
+    render(experienceWithActivity({ reducedMotion: true }));
+    expect(document.querySelector('section')).not.toHaveAttribute('data-progressive');
+    for (const item of railItems()) {
+      expect(item).not.toHaveAttribute('inert');
+      const button = within(item).getByRole('button');
+      button.focus();
+      expect(button).toHaveFocus();
+    }
   });
 });

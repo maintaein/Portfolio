@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { gsap, ScrollTrigger } from '@/lib/gsap';
 import type { ElectricLogoHandle } from '@/components/blocks/ElectricLogo';
-import { CORE, LOGO_SECONDS, ORBIT, PREVIEW_OVER, PREVIEW_RETURN_SECONDS, PREVIEW_SECONDS, createPortfolioMotion, logoPhases, previewPhases, type LogoOwner, type PortfolioMotion } from '@/components/sections/HomeClient/motion';
+import { CORE, LINE_RETURN_SECONDS, LINE_SECONDS, LOGO_SECONDS, ORBIT, PREVIEW_OVER, PREVIEW_RETURN_SECONDS, PREVIEW_SECONDS, createPortfolioMotion, logoPhases, previewPhases, type LogoOwner, type PortfolioMotion } from '@/components/sections/HomeClient/motion';
 import { resolveCurrentSection } from '@/lib/utils/scrollGeometry';
 import { clearCaptionReveal, revealCaption } from '@/components/sections/ProjectsSection/captionReveal';
 
@@ -1567,4 +1567,84 @@ it('로고 host는 포인터에 기울지 않는다', () => {
   advance(5);
   expect(inner.style.transform).toBe('');
   expect(gsap.getTweensOf(inner)).toHaveLength(0);
+});
+
+// M5 Task 1 수정 1. Projects 프리뷰 → Experience 첫 세로축.
+describe('Projects→Experience: 프리뷰가 첫 세로축이 되어 첫 표식과 FASOO에 넘긴다', () => {
+  let group: HTMLElement; let frame: HTMLElement;
+  const arrivals: boolean[] = [];
+  // Projects는 1800부터(잠금 1724), 프리뷰는 2050. 첫 본문 위끝 2800.
+  // 선 지점 = max(잠금 1724 + LOGO_BACK 24 + 1, 2800 - 화면 900 + 96) = 1996. 되넘기는 1972 이하.
+  const LINE_AT = 1996;
+  beforeEach(() => {
+    arrivals.length = 0;
+    const projects = document.createElement('div');
+    projects.dataset.section = 'projects';
+    projects.innerHTML = `<section><div data-motion-anchor="projects-preview"><div><div data-part="preview-media"></div></div></div><div data-part="index"></div></section>`;
+    const experience = document.createElement('div');
+    experience.dataset.section = 'experience';
+    experience.innerHTML = `<section><div data-part="experience-line"><span data-part="line-path"></span><span data-part="line-tip"></span><button>FASOO</button></div><article></article></section>`;
+    root.insertBefore(projects, host);
+    root.insertBefore(experience, host);
+    place(projects, { x: 0, y: 1800, w: 1440, h: 900 });
+    place(projects.querySelector('[data-motion-anchor="projects-preview"]')!, { x: 120, y: 2050, w: 640, h: 360 });
+    frame = projects.querySelector<HTMLElement>('[data-motion-anchor="projects-preview"] > div')!;
+    group = experience.querySelector('[data-part="experience-line"]')!;
+    place(experience.querySelector('article')!, { x: 500, y: 2800, w: 760, h: 400 });
+    place(experience.querySelector('[data-part="line-path"]')!, { x: 80, y: 2810, w: 4, h: 0 });
+    place(experience.querySelector('[data-part="line-tip"]')!, { x: 80, y: 2810, w: 4, h: 56 });
+  });
+  const start = (reduced = false) => {
+    motion = createPortfolioMotion({ root, header, wordmark, logoHost: host, ball: { current: ball }, reduced, onLogoOwnerChange: owner => owners.push(owner), onLineArrive: arrived => arrivals.push(arrived) });
+    motion.setLogo(handle);
+    scrollAt(1724);
+    advance(5);
+    expect(owners.at(-1)).toBe('projects');
+  };
+
+  it('넘겨받기 전 선 그룹은 숨고 inert이며, 지점을 넘어 100%에 닿을 때 한 번 도착을 알리고 드러난다', () => {
+    start();
+    expect(group.style.opacity).toBe('0');
+    expect(group).toHaveAttribute('inert');
+    // 잠금 자리에서 LOGO_BACK 안쪽은 지점이 아니다.
+    scrollAt(LINE_AT - 1);
+    advance(2);
+    expect(arrivals).toEqual([]);
+    scrollAt(LINE_AT);
+    advance(LINE_SECONDS * .5);
+    expect(group).toHaveAttribute('inert');
+    expect(arrivals).toEqual([]);
+    expect(Number(frame.style.opacity)).toBe(0);
+    advance(LINE_SECONDS);
+    expect(arrivals).toEqual([true]);
+    expect(group.style.opacity).toBe('');
+    expect(group).not.toHaveAttribute('inert');
+  });
+
+  it('거꾸로 도는 첫 프레임에 도착을 거두고 그룹을 다시 숨기며, 다 돌면 틀에 쓴 값이 없다', () => {
+    start();
+    scrollAt(LINE_AT + 10);
+    advance(LINE_SECONDS + .1);
+    expect(arrivals).toEqual([true]);
+    scrollAt(LINE_AT - 24);
+    expect(arrivals).toEqual([true, false]);
+    expect(group.style.opacity).toBe('0');
+    expect(group).toHaveAttribute('inert');
+    advance(LINE_RETURN_SECONDS + .1);
+    expect(frame.getAttribute('style') ?? '').toBe('');
+    expect(arrivals).toEqual([true, false]);
+  });
+
+  it('모션 감소에서는 선 그룹을 숨기지도 inert로 두지도 않는다. 단추가 보이는 동안에만 포커스를 받는다', () => {
+    start(true);
+    expect(group.style.opacity).toBe('');
+    expect(group).not.toHaveAttribute('inert');
+    scrollAt(LINE_AT + 10);
+    expect(group.style.opacity).toBe('');
+    expect(group).not.toHaveAttribute('inert');
+    expect(arrivals).toEqual([true]);
+    scrollAt(1724);
+    expect(group.style.opacity).toBe('');
+    expect(group).not.toHaveAttribute('inert');
+  });
 });

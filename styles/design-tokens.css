@@ -960,9 +960,10 @@ html[data-intro] .hero-ball { opacity: 0; }
 
 /* Experience 읽기 타임라인(M5 Task 1). 좁은 sticky rail(기관·직책)과 실제 높이의 넓은 본문.
    선 끝·자르기·표식 위치는 ExperienceSection이 요소에 바로 쓴다. 여기는 모양과 공개 상태만 정한다. */
+/* 위 여백은 두지 않는다. Projects 아래 빈 자리가 이미 섹션을 가르고, 프리뷰와 FASOO가 가까워야 선 경계의 출발과 도착이 한 화면에 든다(수정 1 I1). */
 .experience-timeline {
   position: relative;
-  padding: clamp(30px, 3vw, 44px) clamp(30px, 5vw, 70px) clamp(96px, 14vh, 160px);
+  padding: 0 clamp(30px, 5vw, 70px) clamp(96px, 14vh, 160px);
   color: #eef4f5;
 }
 
@@ -1028,14 +1029,15 @@ html[data-intro] .hero-ball { opacity: 0; }
 
 .experience-rail li + li { margin-top: 72px; }
 
-.experience-rail li {
+/* 감추는 상태는 모두 data-progressive(하이드레이션 뒤 JS가 켠다) 아래에만 둔다. 서버 HTML과 JS 실패에서는 원문이 다 보인다. */
+.experience-timeline[data-progressive] .experience-rail li {
   opacity: 0;
   visibility: hidden;
   transform: translateY(6px);
   transition: opacity .4s, transform .4s, visibility 0s .4s;
 }
 
-.experience-rail li[data-reached] {
+.experience-timeline[data-progressive] .experience-rail li[data-reached] {
   opacity: 1;
   visibility: visible;
   transform: none;
@@ -1082,8 +1084,8 @@ html[data-intro] .hero-ball { opacity: 0; }
 }
 
 /* 미래 본문은 자리를 지키고 보이지 않는다. 읽은 본문은 위로 물러나며 흐려진다. */
-.experience-body[data-state='future'] { opacity: 0; transform: translateY(16px); }
-.experience-body[data-state='past'] { opacity: .38; }
+.experience-timeline[data-progressive] .experience-body[data-state='future'] { opacity: 0; transform: translateY(16px); }
+.experience-timeline[data-progressive] .experience-body[data-state='past'] { opacity: .38; }
 
 .experience-body-meta {
   display: flex;
@@ -1165,7 +1167,7 @@ html[data-intro] .hero-ball { opacity: 0; }
 
 /* 모바일: 왼쪽 얇은 선 한 열. 기관·직책은 각 본문 제목이 맡고 표식은 그 옆에 선다. */
 @media (max-width: 760px) {
-  .experience-timeline { padding: 36px 15px 96px; }
+  .experience-timeline { padding: 0 15px 96px; }
   .experience-timeline-layout { display: block; padding-left: 28px; }
   .experience-timeline-rail { position: absolute; top: 0; bottom: 0; left: 0; width: 24px; }
   .experience-line { height: 100%; }

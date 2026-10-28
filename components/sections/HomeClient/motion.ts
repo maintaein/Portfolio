@@ -66,10 +66,11 @@ const TILE_RADIUS = .3;
 // About→Projects(2.1초)보다 짧다. 도착이 설명할 그림이 아니라 읽기 시작이라 붙잡지 않는다. 되돌기는 떠나는 쪽이라 더 짧다(PREVIEW_RETURN_SECONDS와 같은 규칙).
 export const LINE_SECONDS = 1.4;
 export const LINE_RETURN_SECONDS = .9;
-// 선 지점: 첫 본문 위끝이 화면 위에서 이 비율 자리에 오는 스크롤. 1440x900에서 프리뷰가 아직 nav 바로 아래에 다 남고 첫 표식 자리가 화면 안에 든다.
-// 두 끝이 다 보이는 자리라 외피가 화면 밖으로 빠지지 않는다. 읽기선(.4)보다 아래라 첫 본문 공개보다 먼저 떠난다.
-// Projects 잠금 자리보다 아래에 묶는다. 잠금은 마지막 프로젝트를 본 뒤에만 문서를 내려 주므로 이 지점은 풀린 뒤에만 넘는다. 되넘기는 LOGO_BACK만큼 위다.
-const LINE_ENTER = .8;
+// 선 지점: 첫 본문(FASOO) 위끝이 화면 아래끝에서 이만큼(px) 올라온 스크롤. 도착(100%)에서 선·첫 표식·본문 머리(메타 줄과 제목 첫머리)가
+// 함께 화면 안에 있고, 그보다 앞서 떠나므로 출발(0%)에서 프리뷰는 아직 nav 아래에 다 있다(1440x900, 390x844, 1280x720, 1280x600 실측, 수정 1 I1).
+// 화면이 프리뷰와 첫 본문을 한 번에 담지 못하면(200% 확대 등) 도착 쪽을 지킨다. 빈 화면으로 끝나지 않는 것이 먼저다.
+// Projects 잠금 자리보다 LOGO_BACK 넘게 아래에 묶는다. 잠금은 마지막 프로젝트를 본 뒤에만 문서를 내려 주고, 잠금 자리로 되돌려도 언제나 프리뷰 쪽(0)이다.
+const LINE_SHOW = 96;
 
 type Box = { x: number; y: number; w: number; h: number };
 const EMPTY: Box = { x: 0, y: 0, w: 0, h: 0 };
@@ -164,13 +165,15 @@ const rectBox = (element: Element | null, scroll = 0): Box => {
   return { x: rect.left, y: rect.top + scroll, w: rect.width, h: rect.height };
 };
 
-export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, shell, reduced, onLogoOwnerChange }: {
+export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, shell, reduced, onLogoOwnerChange, onLineArrive }: {
   root: HTMLElement; header: HTMLElement; wordmark: HTMLButtonElement; logoHost: HTMLElement; reduced: boolean;
   // GL 볼 손잡이(없으면 정적 볼). 볼은 진입 뒤에 늦게 떠서 ref로 받는다.
   ball?: { current: CrystalizedBallHandle | null };
   // 페이지 전용 공유 외피(화면 좌표의 SVG, 앞 rect 광휘 + 뒤 rect 면). 프리뷰→선 경계만 쓴다. 없으면 외피 없이 틀과 선만 넘긴다.
   shell?: SVGSVGElement | null;
   onLogoOwnerChange: (owner: LogoOwner) => void;
+  // 선이 첫 세로축에 내려앉았는지(경계 100%). 내려앉을 때와 거꾸로 떠날 때만 부른다. Experience가 첫 표식과 FASOO 본문을 이것으로 공개한다.
+  onLineArrive?: (arrived: boolean) => void;
 }): PortfolioMotion {
   registerScrollTrigger();
   const inner = logoHost.firstElementChild instanceof HTMLElement ? logoHost.firstElementChild : null;
@@ -226,6 +229,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   const linePose = { p: 0 };
   let lineGoal = 0;
   let lineTween: gsap.core.Tween | null = null;
+  let lineArrived = false;
 
   const measure = () => {
     const about = root.querySelector('[data-section="about"]');
@@ -263,7 +267,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     const previewAt = preview.w ? Math.min(projectsLock - 1, Math.max(lock + 1, projectsLock - window.innerHeight / 2 - LOGO_LEAD * window.innerHeight)) : Infinity;
     const headerHeight = header.getBoundingClientRect().height;
     // 첫 본문 위끝은 offset으로 잰다. 아직 닿지 않은 본문의 등장 이동(transform)이 섞이지 않는다.
-    const lineAt = preview.w && firstArticle && linePath && lineTip ? Math.max(projectsLock + 1, layoutBox(firstArticle).y - LINE_ENTER * window.innerHeight) : Infinity;
+    const lineAt = preview.w && firstArticle && linePath && lineTip ? Math.max(projectsLock + LOGO_BACK + 1, layoutBox(firstArticle).y - window.innerHeight + LINE_SHOW) : Infinity;
     m = {
       nameSize: size, nav: rectBox(header.querySelector('[data-motion-anchor="nav-name"]')),
       logoAt: Math.min(lock - 1, Math.max(NAME_DOWN, reveal - LOGO_LEAD * window.innerHeight)),
@@ -329,8 +333,19 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   // 진행도 0에서는 경계가 쓴 값을 걷어 Projects 쉬는 자리다(로고가 프리뷰에 넘긴 자리의 clearProjects).
   const renderLine = () => {
     const p = linePose.p;
-    // 선 그룹은 넘겨받기 전까지 숨는다. 지점이 없으면(프리뷰나 선이 없다) 건드리지 않아 그대로 보인다.
-    if (experienceLine && Number.isFinite(m.lineAt)) experienceLine.style.opacity = p >= 1 ? '' : '0';
+    // 선 그룹은 넘겨받기 전까지 숨고, 숨은 동안 그 안의 표식 단추에 포커스가 서지 않게 inert다(수정 1 I3).
+    // 모션 감소는 숨기지 않는다. 재생이 없어 넘겨받을 순간이 없고 Experience가 전체를 정적으로 보인다. 지점이 없으면(프리뷰나 선이 없다) 그대로 보인다.
+    // 도착은 100%에 선 쪽을 가리킬 때다. 거꾸로 돌기 시작하는 프레임에 바로 떠난다(선 그룹과 FASOO가 경계와 함께 숨는다).
+    const arrived = p >= 1 && lineGoal === 1;
+    const hidden = !reduced && Number.isFinite(m.lineAt) && !arrived;
+    if (experienceLine) {
+      experienceLine.style.opacity = hidden ? '0' : '';
+      experienceLine.toggleAttribute('inert', hidden);
+    }
+    if (arrived !== lineArrived) {
+      lineArrived = arrived;
+      onLineArrive?.(arrived);
+    }
     if (p <= 0 || !previewAnchor || !linePath || !lineTip) {
       hideShell();
       clearProjects();
@@ -710,7 +725,10 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       travel?.kill();
       lineTween?.kill();
       hideShell();
-      if (experienceLine) experienceLine.style.opacity = '';
+      if (experienceLine) {
+        experienceLine.style.opacity = '';
+        experienceLine.removeAttribute('inert');
+      }
       stopName();
       context.revert();
       side = 'hero';

@@ -1,6 +1,6 @@
 'use client';
 
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { experiences } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
 import { useSectionActivity } from '@/components/common/SectionActivityContext';
@@ -16,10 +16,12 @@ const localTop = (element: HTMLElement, ancestor: HTMLElement) => {
   return y;
 };
 const headerHeight = () => document.querySelector('[data-scroll-header]')?.getBoundingClientRect().height ?? 0;
+const noSubscribe = () => () => {};
 
 // 좁은 rail(기관·직책)과 실제 높이의 넓은 본문. 선 끝·표식·본문 공개는 같은 읽기선(M1 readingLineY)에서 정한다(M5 Task 1).
 // 선 그룹 전체가 data-part="experience-line"이고 data-complete가 마지막 본문을 다 읽었는지다(Skills 경계가 읽는다).
-export default function ExperienceSection() {
+// lineArrived: 프리뷰→선 경계가 첫 세로축에 내려앉았다(HomeClient가 motion.ts에서 받아 넘긴다). 그 끝에서 첫 표식과 FASOO 본문을 공개한다.
+export default function ExperienceSection({ lineArrived = false }: { lineArrived?: boolean }) {
   const { reducedMotion, motionReady } = useSectionActivity();
   const { ref, visible } = useSectionVisibility<HTMLElement>();
   const layoutRef = useRef<HTMLDivElement>(null);
@@ -31,9 +33,13 @@ export default function ExperienceSection() {
   const articlesRef = useRef<(HTMLElement | null)[]>([]);
   // 모션 감소는 선호를 확인한 뒤에만 전체 정적 공개다. 확인 전 기본값(reduced)으로 미래 이력을 한 번 보였다가 숨기지 않는다.
   const staticMode = reducedMotion && motionReady;
+  // 점진 공개는 하이드레이션 뒤 JS가 켠다(data-progressive). 서버 HTML과 JS가 없는 방문에서는 모든 본문과 rail이 보인다(수정 1 I2).
+  const hydrated = useSyncExternalStore(noSubscribe, () => true, () => false);
+  const progressive = hydrated && !staticMode;
   // React 상태는 도달 index와 완료가 바뀔 때만 바꾼다. 선 끝과 자르기는 아래 효과가 요소에 바로 쓴다.
   const [progress, setProgress] = useState({ reached: -1, complete: false });
-  const reached = staticMode ? experiences.length - 1 : progress.reached;
+  // 경계가 내려앉으면 첫 표식과 FASOO까지는 읽기선 전에도 공개한다(수정 1 I1). 그 뒤 노드는 읽기선이 정하고, 경계가 거꾸로 떠나면 이 바닥도 걷힌다.
+  const reached = staticMode ? experiences.length - 1 : lineArrived ? Math.max(progress.reached, 0) : progress.reached;
   const complete = staticMode || progress.complete;
 
   useLayoutEffect(() => {
@@ -105,7 +111,7 @@ export default function ExperienceSection() {
   };
 
   return (
-    <section ref={ref} id={SECTION_IDS.EXPERIENCE} aria-label="경력" className="experience-timeline">
+    <section ref={ref} id={SECTION_IDS.EXPERIENCE} aria-label="경력" className="experience-timeline" data-progressive={progressive ? '' : undefined}>
       <div ref={layoutRef} className="experience-timeline-layout">
         <div className="experience-timeline-rail">
           <div ref={lineRef} data-part="experience-line" data-complete={complete} className="experience-line">
@@ -118,7 +124,7 @@ export default function ExperienceSection() {
             <ol className="experience-rail" aria-label="경력 시점">
               {/* 아직 닿지 않은 표식은 자리만 남긴다(선 좌표를 재야 한다). 보이지도, 포커스되지도 않는다. */}
               {experiences.map((experience, index) => (
-                <li key={experience.id} data-reached={index <= reached ? '' : undefined} inert={index > reached}>
+                <li key={experience.id} data-reached={index <= reached ? '' : undefined} inert={progressive && index > reached}>
                   <button type="button" aria-current={index === reached ? 'step' : undefined} onClick={() => goTo(index)}>
                     <strong ref={(node) => { labelsRef.current[index] = node; }}>{experience.company}</strong>
                     <span>{experience.position}</span>

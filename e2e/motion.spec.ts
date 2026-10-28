@@ -443,14 +443,20 @@ test.describe('Native motion activity', () => {
     await expect(shell).toHaveCSS('visibility', 'hidden');
     await expect(shell).toHaveCSS('pointer-events', 'none');
     await expect(shell).toHaveAttribute('aria-hidden', 'true');
-    // 선 지점: 첫 본문 위끝이 화면 위에서 80% 자리에 오는 스크롤(Projects 잠금 자리보다 아래).
-    const lineAt = await page.evaluate(() => {
+    // 선 지점(수정 1 I1): 첫 본문 위끝이 화면 아래끝에서 96px 올라온 스크롤. 잠금 자리보다 LOGO_BACK(24) 넘게 아래다.
+    const { lineAt, previewTop, header } = await page.evaluate(() => {
       const projects = document.querySelector<HTMLElement>('[data-section="projects"]')!;
       const lock = projects.getBoundingClientRect().top + scrollY - parseFloat(getComputedStyle(projects).scrollMarginTop);
       let y = 0;
       for (let node = document.querySelector<HTMLElement>('#experience article'); node; node = node.offsetParent as HTMLElement | null) y += node.offsetTop;
-      return Math.max(lock + 1, y - .8 * innerHeight);
+      return {
+        lineAt: Math.max(lock + 25, y - innerHeight + 96),
+        previewTop: document.querySelector('[data-motion-anchor="projects-preview"]')!.getBoundingClientRect().top + scrollY,
+        header: document.querySelector('[data-scroll-header]')!.getBoundingClientRect().height,
+      };
     });
+    // 출발(0%)에서 프리뷰는 아직 nav 아래에 다 있다.
+    expect(previewTop - (Math.ceil(lineAt) + 10)).toBeGreaterThanOrEqual(header);
     // 프레임 수에 기대지 않고 쓰기 순서를 본다. 외피가 보이는 동안 선 그룹은 숨고, 선 그룹이 드러날 때는 외피가 이미 숨었다.
     const record = () => page.evaluate(() => new Promise<{ shown: number; overlap: number; minFrame: number }>(resolve => {
       const shellEl = document.querySelector<SVGSVGElement>('[data-motion-shell]')!;
@@ -473,15 +479,30 @@ test.describe('Native motion activity', () => {
     expect(went.overlap).toBe(0);
     await expect(line).toHaveCSS('opacity', '1', SLOW);
     await expect(shell).toHaveCSS('visibility', 'hidden');
-    // 미디어는 사라졌고 떠난 프리뷰는 눌리지 않는다. 다음 이력은 아직 없다.
+    // 미디어는 사라졌고 떠난 프리뷰는 눌리지 않는다.
     await expect(frame).toHaveCSS('opacity', '0');
     await expect(open).toHaveCSS('pointer-events', 'none');
-    await expect(page.locator('.experience-rail li[inert]')).toHaveCount(3);
+    // 도착(100%)은 첫 표식과 FASOO 본문에 넘긴다(수정 1 I1). 읽기선 전이라도 둘이 공개되고 다음 이력은 아직 없다.
+    await expect(page.locator('.experience-rail li[inert]')).toHaveCount(2);
+    await expect(page.locator('.experience-rail li').first()).toHaveCSS('visibility', 'visible', SLOW);
+    await expect(page.locator('#experience article').first()).toHaveAttribute('data-state', 'current');
+    await expect(page.locator('#experience article').first()).toHaveCSS('opacity', '1', SLOW);
+    await expect(page.locator('[data-part="line-node"][data-reached]')).toHaveCount(1);
+    // 선, 첫 표식, FASOO 본문 머리가 한 화면 안에 함께 있다.
+    const onScreen = await page.evaluate(() => {
+      const top = (selector: string) => document.querySelector(selector)!.getBoundingClientRect().top;
+      const header = document.querySelector('[data-scroll-header]')!.getBoundingClientRect().height;
+      return ['[data-part="line-path"]', '[data-part="line-node"]', '#experience article'].map(selector => { const y = top(selector); return y >= header && y < innerHeight - 40; });
+    });
+    expect(onScreen).toEqual([true, true, true]);
     // 되넘기: 거꾸로 돌고 쉬는 Projects 자리에는 경계가 쓴 값이 남지 않는다. 캡션도 captionReveal 밖의 인라인 값이 없다.
     const back = record();
     await page.evaluate(y => window.scrollTo({ top: y, behavior: 'instant' }), Math.floor(lineAt) - 40);
     await back;
     await expect(line).toHaveCSS('opacity', '0', SLOW);
+    // FASOO도 경계와 함께 다시 숨는다.
+    await expect(page.locator('.experience-rail li[inert]')).toHaveCount(3);
+    await expect(page.locator('#experience article').first()).toHaveAttribute('data-state', 'future');
     await expect(frame).toHaveCSS('opacity', '1', SLOW);
     const leftovers = await frame.evaluate(el => ({
       frame: (['opacity', 'clipPath', 'pointerEvents', 'transform'] as const).filter(key => el.style[key] !== ''),
