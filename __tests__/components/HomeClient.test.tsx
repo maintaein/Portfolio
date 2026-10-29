@@ -6,7 +6,7 @@ import { HOME_SECTION_CONFIG } from '@/lib/constants';
 import { coreValues } from '@/lib/data';
 const flags = vi.hoisted(() => ({ obscured: false, pageVisible: true, reduced: false, wide: false, ready: true }));
 const motion = vi.hoisted(() => ({
-  create: vi.fn(), destroy: vi.fn(), setPaused: vi.fn(), setLogo: vi.fn(), refresh: vi.fn(), settleProjects: vi.fn(),
+  create: vi.fn(), destroy: vi.fn(), setPaused: vi.fn(), setLogo: vi.fn(), setOverlay: vi.fn(), refresh: vi.fn(), settleProjects: vi.fn(),
   owner: null as ((owner: 'hero' | 'about' | 'boundary' | 'preview' | 'projects' | 'none') => void) | null,
 }));
 vi.mock('@/hooks/useProjectModalObscured', () => ({ useProjectModalObscured: () => flags.obscured }));
@@ -41,7 +41,7 @@ vi.mock('@/components/sections/ExperienceSection/overlay', () => ({ createExperi
 vi.mock('@/components/sections/HomeClient/motion', () => ({
   createPortfolioMotion: (options: { onLogoOwnerChange: (owner: 'hero' | 'about' | 'boundary' | 'preview' | 'projects' | 'none') => void }) => {
     motion.create(options); motion.owner = options.onLogoOwnerChange;
-    return { destroy: motion.destroy, setPaused: motion.setPaused, setLogo: motion.setLogo, refresh: motion.refresh, settleProjects: motion.settleProjects };
+    return { destroy: motion.destroy, setPaused: motion.setPaused, setLogo: motion.setLogo, setOverlay: motion.setOverlay, refresh: motion.refresh, settleProjects: motion.settleProjects };
   },
 }));
 // App Router 빌드는 next/dynamic을 app-dynamic으로 바꿔 ref를 실제 컴포넌트까지 넘긴다.
@@ -543,4 +543,11 @@ it('passes the reduced-motion preference to the experience overlay and follows c
   flags.reduced = false;
   rerender(<HomeClient />);
   expect(overlay.setReduced).toHaveBeenLastCalledWith(false);
+});
+
+// 오버레이는 마운트 뒤에 와서 경계를 다시 짓지 않고 따로 넘긴다(Task 6).
+it('hands the experience overlay to the boundary separately without rebuilding it', async () => {
+  render(<HomeClient />); await flush();
+  expect(motion.create).toHaveBeenCalledTimes(1);
+  expect(motion.setOverlay).toHaveBeenLastCalledWith(overlay);
 });

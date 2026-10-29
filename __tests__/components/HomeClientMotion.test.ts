@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { gsap, ScrollTrigger } from '@/lib/gsap';
 import type { ElectricLogoHandle } from '@/components/blocks/ElectricLogo';
-import { CORE, LINE_RETURN_SECONDS, LINE_SECONDS, LOGO_SECONDS, ORBIT, PREVIEW_RETURN_SECONDS, PREVIEW_SECONDS, createPortfolioMotion, logoPhases, previewPhases, type LogoOwner, type PortfolioMotion } from '@/components/sections/HomeClient/motion';
+import { CORE, LOGO_SECONDS, ORBIT, PREVIEW_RETURN_SECONDS, PREVIEW_SECONDS, createPortfolioMotion, logoPhases, previewPhases, type LogoOwner, type PortfolioMotion } from '@/components/sections/HomeClient/motion';
 import { resolveCurrentSection } from '@/lib/utils/scrollGeometry';
+import { morphQ } from '@/components/sections/ExperienceSection/lineMotion';
+import type { ExperienceOverlay } from '@/components/sections/ExperienceSection/overlay';
 import { clearCaptionReveal, revealCaption } from '@/components/sections/ProjectsSection/captionReveal';
 
 // 캡션 드러냄은 실제 구현을 그대로 돌리되 부른 자리를 보려고 감싼다(M4 Task 14)
@@ -1566,82 +1568,251 @@ it('로고 host는 포인터에 기울지 않는다', () => {
   expect(gsap.getTweensOf(inner)).toHaveLength(0);
 });
 
-// M5 Task 1 수정 1. Projects 프리뷰 → Experience 첫 세로축.
-describe('Projects→Experience: 프리뷰가 첫 세로축이 되어 첫 표식과 FASOO에 넘긴다', () => {
-  let group: HTMLElement; let frame: HTMLElement;
+// M5 Task 6. Projects 프리뷰가 제자리에서 첫 Experience 헤드로 morph한다. 그림은 오버레이 캔버스가 그리고 motion은 시간과 틀만 맡는다.
+describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된다', () => {
+  let projects: HTMLElement; let frame: HTMLElement; let list: HTMLElement; let preview: HTMLElement; let img: HTMLImageElement; let node: HTMLElement;
   const arrivals: boolean[] = [];
-  // Projects는 1800부터(잠금 1724), 프리뷰는 2050. 첫 본문 위끝 2800.
-  // 선 지점 = max(잠금 1724 + LOGO_BACK 24 + 1, 2800 - 화면 900 + 96) = 1996. 되넘기는 1972 이하.
-  const LINE_AT = 1996;
+  const IN = 2.6;
+  const OUT = 2.6 * 1.4 / 1.8;
+  // Projects는 1800부터(잠금 1724), 프리뷰는 2050(nav 76). 축 칸 가운데 x 64, 첫 노드 y = h3 위끝 2680 + 40 / 2 = 2700.
+  // 선 지점 = clamp(2700 - 900 + 140, 1724 + 24 + 1, 2050 - 76 - 12) = 1940. 되넘기는 1916 이하.
+  const LINE_AT = 1940;
+  const PREVIEW = { x: 120, y: 2050, w: 640, h: 360 };
+  const overlayMock = () => ({ setBoundary: vi.fn(), setTimeline: vi.fn(), setReduced: vi.fn(), destroy: vi.fn() });
+  let overlay = overlayMock();
+  const smooth = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
   beforeEach(() => {
     arrivals.length = 0;
-    const projects = document.createElement('div');
+    overlay = overlayMock();
+    projects = document.createElement('div');
     projects.dataset.section = 'projects';
-    projects.innerHTML = `<section><div data-motion-anchor="projects-preview"><div><div data-part="preview-media"></div></div></div><div data-part="index"></div></section>`;
+    projects.innerHTML = `<section><div data-motion-anchor="projects-preview"><div style="border-top-left-radius: 14px"><div data-part="preview-media"><img alt=""></div></div></div><div data-part="index"></div></section>`;
     const experience = document.createElement('div');
     experience.dataset.section = 'experience';
-    experience.innerHTML = `<section><div data-part="experience-line"><span data-part="line-path"></span><span data-part="line-tip"></span><button>FASOO</button></div><article></article></section>`;
+    experience.innerHTML = `<section><span data-part="experience-line" aria-hidden="true"></span><article><div data-part="experience-axis"></div><div><h3 data-part="experience-node">FASOO</h3></div></article></section>`;
     root.insertBefore(projects, host);
     root.insertBefore(experience, host);
     place(projects, { x: 0, y: 1800, w: 1440, h: 900 });
-    place(projects.querySelector('[data-motion-anchor="projects-preview"]')!, { x: 120, y: 2050, w: 640, h: 360 });
-    frame = projects.querySelector<HTMLElement>('[data-motion-anchor="projects-preview"] > div')!;
-    group = experience.querySelector('[data-part="experience-line"]')!;
-    place(experience.querySelector('article')!, { x: 500, y: 2800, w: 760, h: 400 });
-    place(experience.querySelector('[data-part="line-path"]')!, { x: 80, y: 2810, w: 4, h: 0 });
-    place(experience.querySelector('[data-part="line-tip"]')!, { x: 80, y: 2810, w: 4, h: 56 });
+    preview = projects.querySelector('[data-motion-anchor="projects-preview"]')!;
+    place(preview, PREVIEW);
+    frame = preview.firstElementChild as HTMLElement;
+    list = projects.querySelector('[data-part="index"]')!;
+    img = projects.querySelector('img')!;
+    Object.defineProperties(img, { complete: { configurable: true, value: true }, naturalWidth: { configurable: true, value: 1600 } });
+    place(experience.querySelector('[data-part="experience-axis"]')!, { x: 40, y: 2600, w: 48, h: 600 });
+    node = experience.querySelector('[data-part="experience-node"]')!;
+    place(node, { x: 120, y: 2680, w: 600, h: 40 });
   });
-  const start = (reduced = false) => {
+  const start = ({ reduced = false, withOverlay = true, at = 1724 } = {}) => {
+    documentY = at;
     motion = createPortfolioMotion({ root, header, wordmark, logoHost: host, ball: { current: ball }, reduced, onLogoOwnerChange: owner => owners.push(owner), onLineArrive: arrived => arrivals.push(arrived) });
     motion.setLogo(handle);
-    scrollAt(1724);
+    if (withOverlay) motion.setOverlay(overlay as unknown as ExperienceOverlay);
+    scrollAt(at);
     advance(5);
-    expect(owners.at(-1)).toBe('projects');
   };
+  const boundary = () => lastCall(overlay.setBoundary) as { t: number; preview: DOMRect; radius: number; image: HTMLImageElement | null; target: { x: number; y: number } } | null;
+  const blocked = (event: Event) => { window.dispatchEvent(event); return event.defaultPrevented; };
+  const wheel = (deltaY: number) => blocked(new WheelEvent('wheel', { deltaY, cancelable: true }));
+  const key = (name: string) => blocked(new KeyboardEvent('keydown', { key: name, cancelable: true }));
+  const touch = (type: string, clientY: number) => blocked(Object.assign(new Event(type, { cancelable: true }), { touches: [{ clientY }] }));
 
-  it('넘겨받기 전 선 그룹은 숨고 inert이며, 지점을 넘어 100%에 닿을 때 한 번 도착을 알리고 드러난다', () => {
+  it('선 지점은 첫 노드가 화면 아래 140px 안에 드는 스크롤이되, 잠금 + LOGO_BACK + 1 아래로도, 프리뷰가 nav 아래로 들어가는 스크롤 위로도 가지 않는다', () => {
+    const pointAt = (expected: number) => {
+      motion!.refresh();
+      scrollAt(expected - 1);
+      advance(3);
+      expect(arrivals).toEqual([]);
+      scrollAt(expected);
+      advance(3);
+      expect(arrivals).toEqual([true]);
+      scrollAt(1724);
+      advance(3);
+      arrivals.length = 0;
+    };
     start();
-    expect(group.style.opacity).toBe('0');
-    expect(group).toHaveAttribute('inert');
-    // 잠금 자리에서 LOGO_BACK 안쪽은 지점이 아니다.
-    scrollAt(LINE_AT - 1);
-    advance(2);
-    expect(arrivals).toEqual([]);
-    scrollAt(LINE_AT);
-    advance(LINE_SECONDS * .5);
-    expect(group).toHaveAttribute('inert');
-    expect(arrivals).toEqual([]);
-    expect(Number(frame.style.opacity)).toBe(0);
-    advance(LINE_SECONDS);
-    expect(arrivals).toEqual([true]);
-    expect(group.style.opacity).toBe('');
-    expect(group).not.toHaveAttribute('inert');
+    expect(owners.at(-1)).toBe('projects');
+    pointAt(LINE_AT);
+    // 첫 노드가 잠금 자리 가까이 있으면 잠금 + 25에 묶는다: 2420 - 900 + 140 = 1660 → 1749.
+    place(node, { x: 120, y: 2400, w: 600, h: 40 });
+    pointAt(1749);
+    // 첫 노드가 멀면 프리뷰가 nav 아래 12px에 닿는 스크롤에 묶는다: 3020 - 900 + 140 = 2260 → 1962.
+    place(node, { x: 120, y: 3000, w: 600, h: 40 });
+    pointAt(1962);
   });
 
-  it('거꾸로 도는 첫 프레임에 도착을 거두고 그룹을 다시 숨기며, 다 돌면 틀에 쓴 값이 없다', () => {
-    start();
-    scrollAt(LINE_AT + 10);
-    advance(LINE_SECONDS + .1);
+  it('앞으로 2.6초, 되돌기 2.6 × 1.4 / 1.8초 동안 돌고 도착에서 onLineArrive(true)', () => {
+    // 캔버스가 없어도(오버레이 null) 시간·도착·틀 숨김은 그대로 돈다.
+    start({ withOverlay: false });
+    scrollAt(LINE_AT);
+    advance(IN - .05);
+    expect(arrivals).toEqual([]);
+    expect(frame.style.visibility).toBe('hidden');
+    advance(.1);
     expect(arrivals).toEqual([true]);
     scrollAt(LINE_AT - 24);
     expect(arrivals).toEqual([true, false]);
-    expect(group.style.opacity).toBe('0');
-    expect(group).toHaveAttribute('inert');
-    advance(LINE_RETURN_SECONDS + .1);
-    expect(frame.getAttribute('style') ?? '').toBe('');
+    advance(OUT - .05);
+    expect(frame.style.pointerEvents).toBe('none');
+    advance(.1);
+    expect(frame.style.cssText).toBe('border-top-left-radius: 14px;');
+    expect(list.getAttribute('style') ?? '').toBe('');
     expect(arrivals).toEqual([true, false]);
   });
 
-  it('모션 감소에서는 선 그룹을 숨기지도 inert로 두지도 않는다. 단추가 보이는 동안에만 포커스를 받는다', () => {
-    start(true);
-    expect(group.style.opacity).toBe('');
-    expect(group).not.toHaveAttribute('inert');
-    scrollAt(LINE_AT + 10);
-    expect(group.style.opacity).toBe('');
-    expect(group).not.toHaveAttribute('inert');
+  it('morph 동안 setBoundary에 프리뷰 rect, 첫 노드 목적지, 받아진 그림을 넘기고 도착하면 null', () => {
+    start();
+    expect(boundary()).toBeNull();
+    scrollAt(LINE_AT);
+    advance(1);
+    let frameNow = boundary()!;
+    expect(frameNow.t).toBeCloseTo(1 / IN, 2);
+    expect(frameNow).toMatchObject({ radius: 14, image: img, target: { x: 64, y: 2700 - LINE_AT } });
+    expect(frameNow.preview).toMatchObject({ left: 120, top: 2050 - LINE_AT, width: 640, height: 360 });
+    // 재생 중에 스크롤이 움직이면 프리뷰와 목적지를 지금 화면 좌표로 다시 잰다.
+    scrollAt(LINE_AT + 30);
+    advance(.1);
+    frameNow = boundary()!;
+    expect(frameNow.target).toEqual({ x: 64, y: 2700 - LINE_AT - 30 });
+    expect(frameNow.preview.top).toBe(2050 - LINE_AT - 30);
+    advance(IN);
     expect(arrivals).toEqual([true]);
+    expect(boundary()).toBeNull();
+  });
+
+  it('그림이 아직 안 받아졌으면 image null로 넘긴다', () => {
+    Object.defineProperty(img, 'complete', { configurable: true, value: false });
+    start();
+    scrollAt(LINE_AT);
+    advance(.5);
+    expect(boundary()).toMatchObject({ image: null });
+    // 영상이나 오류 화면처럼 img가 없어도 같다.
+    img.remove();
+    advance(.1);
+    expect(boundary()).toMatchObject({ image: null });
+  });
+
+  it('틀은 q .94에서 숨고 목록은 q .9~.7에 사라지며, 0으로 되돌면 인라인 값을 걷는다', () => {
+    start();
+    expect(frame.style.visibility).toBe('');
+    scrollAt(LINE_AT);
+    let hidden = false;
+    for (let i = 0; i < 30; i++) {
+      advance(.06);
+      const q = morphQ(boundary()!.t);
+      expect(frame.style.visibility).toBe(q <= .94 ? 'hidden' : '');
+      expect(Number(list.style.opacity)).toBeCloseTo(smooth(.7, .9, q), 5);
+      hidden ||= q <= .94;
+    }
+    expect(hidden).toBe(true);
+    expect(frame.style.pointerEvents).toBe('none');
+    scrollAt(LINE_AT - 24);
+    advance(OUT + .1);
+    expect(frame.style.cssText).toBe('border-top-left-radius: 14px;');
+    expect(list.getAttribute('style') ?? '').toBe('');
+    expect(boundary()).toBeNull();
+  });
+
+  it('앞으로 도는 morph 동안 아래로 굴리는 wheel·스크롤 키는 막고 위로 굴리는 wheel은 막지 않는다. 이동 구간에서는 막지 않는다', () => {
+    start();
+    expect(wheel(100)).toBe(false);
+    scrollAt(LINE_AT);
+    advance(.5);
+    expect(wheel(100)).toBe(true);
+    expect(wheel(-100)).toBe(false);
+    for (const name of [' ', 'PageDown', 'ArrowDown', 'End']) expect(key(name)).toBe(true);
+    for (const name of ['ArrowUp', 'PageUp', 'Home']) expect(key(name)).toBe(false);
+    // 손가락을 위로 끌면(아래로 스크롤) 막고 아래로 끌면 두지 않는다.
+    expect(touch('touchstart', 500)).toBe(false);
+    expect(touch('touchmove', 440)).toBe(true);
+    expect(touch('touchmove', 480)).toBe(false);
+    // 상세가 열려 멈춘 동안은 막지 않는다. 모달 안의 스크롤이 산다.
+    motion!.setPaused(true);
+    expect(wheel(100)).toBe(false);
+    motion!.setPaused(false);
+    expect(wheel(100)).toBe(true);
+    // morph(1.8초)가 끝나면 이동 구간(.8초)이라 막지 않는다.
+    advance(1.4);
+    expect(boundary()!.t).toBeGreaterThan(1.8 / IN);
+    expect(wheel(100)).toBe(false);
+    expect(key('PageDown')).toBe(false);
+    advance(1);
+    expect(wheel(100)).toBe(false);
+    // 되도는 morph에서도 막지 않는다.
+    scrollAt(LINE_AT - 24);
+    advance(.5);
+    expect(wheel(100)).toBe(false);
+  });
+
+  it('도중에 되돌리면 지금 진행에서 거꾸로 돈다', () => {
+    start();
+    scrollAt(LINE_AT);
+    advance(IN / 2);
+    expect(boundary()!.t).toBeCloseTo(.5, 2);
+    scrollAt(LINE_AT - 24);
+    expect(boundary()!.t).toBeCloseTo(.5, 2);
+    advance(.2);
+    expect(boundary()!.t).toBeCloseTo(.5 - .2 / OUT, 2);
+    // 남은 몫(.5)만큼의 되돌기 시간이다.
+    advance(OUT / 2 - .25);
+    expect(boundary()!.t).toBeGreaterThan(0);
+    advance(.1);
+    expect(boundary()).toBeNull();
+    expect(frame.style.cssText).toBe('border-top-left-radius: 14px;');
+    expect(arrivals).toEqual([]);
+  });
+
+  it('해시로 Experience에 바로 서면 재생 없이 도착 상태다', () => {
+    start({ at: 3000 });
+    expect(arrivals).toEqual([true]);
+    expect(overlay.setBoundary.mock.calls.every(([value]) => value === null)).toBe(true);
+    expect(frame.style.visibility).toBe('hidden');
+    expect(list.style.opacity).toBe('0');
+    expect(wheel(100)).toBe(false);
+    // 되넘으면 거기서부터 거꾸로 돈다.
+    scrollAt(LINE_AT - 24);
+    advance(.2);
+    expect(arrivals).toEqual([true, false]);
+    expect(boundary()!.t).toBeCloseTo(1 - .2 / OUT, 2);
+  });
+
+  it('모션 감소는 재생 없이 바로 도착하고 프리뷰를 숨기지 않으며 입력을 막지 않는다', () => {
+    start({ reduced: true });
+    scrollAt(LINE_AT);
+    expect(arrivals).toEqual([true]);
+    expect(overlay.setBoundary.mock.calls.every(([value]) => value === null)).toBe(true);
+    expect(frame.style.visibility).toBe('');
+    expect(list.getAttribute('style') ?? '').toBe('');
+    expect(wheel(100)).toBe(false);
     scrollAt(1724);
-    expect(group.style.opacity).toBe('');
-    expect(group).not.toHaveAttribute('inert');
+    expect(arrivals).toEqual([true, false]);
+  });
+
+  it('오버레이를 바꾸거나 걷으면 옛 오버레이의 경계를 비우고 새 오버레이가 이어 그린다', () => {
+    start();
+    scrollAt(LINE_AT);
+    advance(.5);
+    const old = overlay;
+    const next = overlayMock();
+    motion!.setOverlay(next as unknown as ExperienceOverlay);
+    expect(lastCall(old.setBoundary)).toBeNull();
+    expect(lastCall(next.setBoundary)).toMatchObject({ radius: 14 });
+    motion!.setOverlay(null);
+    expect(lastCall(next.setBoundary)).toBeNull();
+    // 오버레이 없이도 끝까지 돌아 도착한다.
+    advance(IN);
+    expect(arrivals).toEqual([true]);
+    motion!.destroy();
+    motion = null;
+    expect(lastCall(next.setBoundary)).toBeNull();
+  });
+
+  it('선 표시는 더는 숨기거나 inert로 두지 않는다', () => {
+    start();
+    const marker = root.querySelector<HTMLElement>('[data-part="experience-line"]')!;
+    scrollAt(LINE_AT);
+    advance(.5);
+    expect(marker.getAttribute('style')).toBeNull();
+    expect(marker).not.toHaveAttribute('inert');
   });
 });

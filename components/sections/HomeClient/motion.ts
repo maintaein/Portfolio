@@ -1,5 +1,7 @@
 import type { CrystalizedBallHandle } from '@/components/blocks/CrystalizedBall';
 import type { ElectricLogoHandle } from '@/components/blocks/ElectricLogo';
+import { HEAD_MORPH_SECONDS, HEAD_TRAVEL_SECONDS, SPLIT, morphQ } from '@/components/sections/ExperienceSection/lineMotion';
+import type { ExperienceOverlay } from '@/components/sections/ExperienceSection/overlay';
 import { clearCaptionReveal, revealCaption } from '@/components/sections/ProjectsSection/captionReveal';
 import { gsap, registerScrollTrigger, ScrollTrigger, SITE_EASE } from '@/lib/gsap';
 import { readingLineY } from '@/lib/utils/scrollGeometry';
@@ -11,6 +13,7 @@ export interface PortfolioMotion {
   refresh(): void;
   setPaused(paused: boolean): void;
   setLogo(logo: ElectricLogoHandle | null): void;
+  setOverlay(overlay: ExperienceOverlay | null): void;
   settleProjects(): void;
   destroy(): void;
 }
@@ -59,15 +62,16 @@ export const CORE = .22;
 export const ORBIT = .7;
 // 떠나는 타일의 모서리(로고 크기 비율). 참조 5.35초의 155px 타일이 45px 남짓 둥글다.
 const TILE_RADIUS = .3;
-// Projects 프리뷰에서 Experience 첫 세로축으로(M5 Task 1, 참조 background.mp4 6.17–7.0초의 면 수축과 이동). 진행도 하나를 이 시간 동안 돌린다.
-// About→Projects(1.8초)보다 짧다. 도착이 설명할 그림이 아니라 읽기 시작이라 붙잡지 않는다. 되돌기는 떠나는 쪽이라 더 짧다(PREVIEW_RETURN_SECONDS와 같은 규칙).
-export const LINE_SECONDS = 1.4;
-export const LINE_RETURN_SECONDS = .9;
-// 선 지점: 첫 본문(FASOO) 위끝이 화면 아래끝에서 이만큼(px) 올라온 스크롤. 도착(100%)에서 선·첫 표식·본문 머리(메타 줄과 제목 첫머리)가
-// 함께 화면 안에 있고, 그보다 앞서 떠나므로 출발(0%)에서 프리뷰는 아직 nav 아래에 다 있다(1440x900, 390x844, 1280x720, 1280x600 실측, 수정 1 I1).
-// 화면이 프리뷰와 첫 본문을 한 번에 담지 못하면(200% 확대 등) 도착 쪽을 지킨다. 빈 화면으로 끝나지 않는 것이 먼저다.
-// Projects 잠금 자리보다 LOGO_BACK 넘게 아래에 묶는다. 잠금은 마지막 프로젝트를 본 뒤에만 문서를 내려 주고, 잠금 자리로 되돌려도 언제나 프리뷰 쪽(0)이다.
-const LINE_SHOW = 96;
+// Projects 프리뷰가 제자리에서 첫 Experience 헤드로(M5 시안). 진행 t 하나를 morph 1.8초 + 첫 노드로 옮겨 가는 .8초 동안 시간에 선형으로 돌리고
+// 곡선은 morphQ가 준다. 되돌기는 사이트 규칙(About→Projects의 1.4 / 1.8)대로 더 빠르다. 그림은 오버레이 캔버스가 그린다.
+const BOUNDARY_IN = HEAD_MORPH_SECONDS + HEAD_TRAVEL_SECONDS;
+const BOUNDARY_OUT = BOUNDARY_IN * 1.4 / 1.8;
+// 선 지점: 첫 노드가 화면 아래끝에서 이만큼(px) 올라온 스크롤(1440x900에서 1868, 390x844에서 1746 실측, 계획 R1).
+// 잠금 자리보다 LOGO_BACK 넘게 아래, 프리뷰가 nav 아래 12px에 닿는 스크롤보다 위에 묶는다. 둘이 다투는 짧은 화면은 위쪽이 이긴다
+// (프리뷰가 nav 밑으로 들어가지 않는다). 그때 헤드는 매 프레임 잰 노드 자리로 가고 화면 밖일 수 있다.
+const NODE_SHOW = 140;
+// 앞으로 도는 morph 동안 막는 아래쪽 스크롤 키(계획 R2). Shift+Space는 위로 가는 키라 두지 않는다.
+const DOWN_KEYS = new Set([' ', 'PageDown', 'ArrowDown', 'End']);
 
 type Box = { x: number; y: number; w: number; h: number };
 const EMPTY: Box = { x: 0, y: 0, w: 0, h: 0 };
@@ -129,20 +133,6 @@ export function previewPhases(q: number) {
   };
 }
 
-// 프리뷰(0)에서 첫 세로축(1)으로 가는 진행도 p의 구간. 참조 6.17–6.55초 넓은 면이 줄며 안의 글이 경계에 잘리고(고르게 줄지 않는다),
-// 6.6–7.0초 작은 조각이 아래로 옮겨 간다. 퇴장 0–.35: 미디어·캡션이 줄어드는 외피에 잘리며 사라진다. 사진을 선처럼 세로로 누르지 않는다.
-// 폭 0–.55: 가로가 먼저 선 굵기로 준다. 채움 .1–.6: 외곽선뿐이던 외피가 선 색으로 찬다. 이동 .2–.85, 길이 .35–.9: 세로로 긴 막대가
-// 첫 표식 자리로 가며 실제 첫 선 길이가 된다. .9–1은 실제 선과 같은 자리에 머물고 1에서 실제 선 그룹이 넘겨받는다.
-export function linePhases(p: number) {
-  return {
-    exit: smooth(span(0, .35, p)),
-    narrow: inOut(span(0, .55, p)),
-    fill: smooth(span(.1, .6, p)),
-    travel: inOut(span(.2, .85, p)),
-    length: inOut(span(.35, .9, p)),
-  };
-}
-
 // transform을 뺀 레이아웃 좌표. About 레일의 등장 transform이 잰 값을 흔들지 않는다.
 function layoutBox(element: Element | null): Box {
   if (!(element instanceof HTMLElement)) return EMPTY;
@@ -162,14 +152,12 @@ const rectBox = (element: Element | null, scroll = 0): Box => {
   return { x: rect.left, y: rect.top + scroll, w: rect.width, h: rect.height };
 };
 
-export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, shell, reduced, onLogoOwnerChange, onLineArrive }: {
+export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, reduced, onLogoOwnerChange, onLineArrive }: {
   root: HTMLElement; header: HTMLElement; wordmark: HTMLButtonElement; logoHost: HTMLElement; reduced: boolean;
   // GL 볼 손잡이(없으면 정적 볼). 볼은 진입 뒤에 늦게 떠서 ref로 받는다.
   ball?: { current: CrystalizedBallHandle | null };
-  // 페이지 전용 공유 외피(화면 좌표의 SVG, 앞 rect 광휘 + 뒤 rect 면). 프리뷰→선 경계만 쓴다. 없으면 외피 없이 틀과 선만 넘긴다.
-  shell?: SVGSVGElement | null;
   onLogoOwnerChange: (owner: LogoOwner) => void;
-  // 선이 첫 세로축에 내려앉았는지(경계 100%). 내려앉을 때와 거꾸로 떠날 때만 부른다. Experience가 첫 표식과 FASOO 본문을 이것으로 공개한다.
+  // 프리뷰가 첫 헤드에 내려앉았는지(경계 100%). 내려앉을 때와 거꾸로 떠날 때만 부른다. Experience가 첫 헤드와 첫 장을 이것으로 공개한다.
   onLineArrive?: (arrived: boolean) => void;
 }): PortfolioMotion {
   registerScrollTrigger();
@@ -186,12 +174,10 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   const focusedControl = (target: EventTarget | null = document.activeElement) => target instanceof Element && target !== projectsSection
     && !!projectsSection?.contains(target) && !!target.closest('button, a, input, select, textarea, [tabindex]:not([tabindex="-1"])');
   const list = projectsSection?.querySelector<HTMLElement>('[data-part="index"]') ?? null;
-  // Experience 선 그룹(ExperienceSection). 경계는 넘겨받기 전까지 그룹의 opacity만 쓰고, 선 자리와 길이는 그리는 요소에서 읽기만 한다.
-  const experienceLine = root.querySelector<HTMLElement>('[data-part="experience-line"]');
-  const linePath = experienceLine?.querySelector('[data-part="line-path"]') ?? null;
-  const lineTip = experienceLine?.querySelector('[data-part="line-tip"]') ?? null;
-  const firstArticle = experienceLine?.closest('section')?.querySelector('article');
-  const [shellGlow, shellFace] = shell ? Array.from(shell.querySelectorAll('rect')) : [];
+  // Experience 첫 장의 축 칸과 노드 제목(ExperienceSection). 재기만 한다. 노드 y는 섹션과 같이 제목 위끝 + min(높이, 60) / 2다.
+  const axis = root.querySelector<HTMLElement>('[data-part="experience-axis"]');
+  const firstNode = root.querySelector<HTMLElement>('[data-part="experience-node"]');
+  const nodeY = (box: Box) => box.y + Math.min(box.h, 60) / 2;
   // Hero 이름 글자 크기(0이면 CSS 값), nav 자리(화면 좌표), 로고가 떠나는 스크롤 지점, 두 로고 앵커(문서 좌표).
   // aboutTop·line: useSectionNav가 About을 고르는 읽기선(About 위끝 <= 스크롤 + 읽기선). back: Projects에서 되도는 선(RETURN_LINE_RATIO).
   // previewAt·projectsTop: 프리뷰로 떠나는 지점과 Projects 위끝(경로 판정), preview·radius: 프리뷰 상자와 모서리.
@@ -222,11 +208,16 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   let lowY = -Infinity;
   // Projects 컨트롤에 포커스가 선 스크롤(그 뒤 내려간 가장 아래). 이보다 위로 굴리면 포커스가 남아 있어도 Projects를 놓는다.
   let holdFrom = Infinity;
-  // 선 진행도 p: 0 프리뷰, 1 첫 세로축. 로고가 Projects(goal 2)에 있을 때만 움직이고 lineGoal은 지금 스크롤이 가리키는 쪽이다.
+  // 선 진행도 p: 0 프리뷰, 1 첫 헤드(morphQ의 t). 로고가 Projects(goal 2)에 있을 때만 움직이고 lineGoal은 지금 스크롤이 가리키는 쪽이다.
   const linePose = { p: 0 };
   let lineGoal = 0;
   let lineTween: gsap.core.Tween | null = null;
   let lineArrived = false;
+  // morph를 그리는 오버레이(HomeClient가 늦게 넘긴다). 없으면 그리기 없이 시간·도착·틀 숨김만 돈다.
+  let overlay: ExperienceOverlay | null = null;
+  // 아래쪽 입력을 막는 차단 리스너를 달고 있는지. 차단 wheel은 스크롤을 메인 스레드에 묶어 늦추므로 막는 동안만 단다(useChapterLock과 같은 이유).
+  let pinned = false;
+  let touchY = NaN;
 
   const measure = () => {
     const about = root.querySelector('[data-section="about"]');
@@ -263,8 +254,9 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     const preview = previewAnchor ? rectBox(previewAnchor, window.scrollY) : EMPTY;
     const previewAt = preview.w ? Math.min(projectsLock - 1, Math.max(lock + 1, projectsLock - window.innerHeight / 2 - LOGO_LEAD * window.innerHeight)) : Infinity;
     const headerHeight = header.getBoundingClientRect().height;
-    // 첫 본문 위끝은 offset으로 잰다. 아직 닿지 않은 본문의 등장 이동(transform)이 섞이지 않는다.
-    const lineAt = preview.w && firstArticle && linePath && lineTip ? Math.max(projectsLock + LOGO_BACK + 1, layoutBox(firstArticle).y - window.innerHeight + LINE_SHOW) : Infinity;
+    // 첫 노드는 offset으로 잰다. 아직 공개되지 않은 제목의 등장 이동(transform)이 섞이지 않는다. clamp는 위쪽 묶음이 이긴다.
+    const lineAt = preview.w && firstNode
+      ? clamp(nodeY(layoutBox(firstNode)) - window.innerHeight + NODE_SHOW, projectsLock + LOGO_BACK + 1, preview.y - headerHeight - 12) : Infinity;
     m = {
       nameSize: size, nav: rectBox(header.querySelector('[data-motion-anchor="nav-name"]')),
       logoAt: Math.min(lock - 1, Math.max(NAME_DOWN, reveal - LOGO_LEAD * window.innerHeight)),
@@ -322,63 +314,73 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     ball?.current?.setCollapse(0);
   };
   const clearProjects = () => {
-    if (frame) Object.assign(frame.style, { transform: '', opacity: '', clipPath: '', pointerEvents: '' });
+    if (frame) Object.assign(frame.style, { transform: '', opacity: '', clipPath: '', pointerEvents: '', visibility: '' });
     if (list) Object.assign(list.style, { opacity: '', pointerEvents: '' });
   };
-  const hideShell = () => { if (shell) Object.assign(shell.style, { visibility: '', opacity: '' }); };
-  // 프리뷰→첫 세로축. 틀(미디어·캡션)은 줄어드는 외피에 잘리며 사라지고, 외피는 세로 막대가 되어 실제 선 자리에 내려앉는다.
+  // 아래로 가는 wheel·손가락을 위로 끄는 touchmove·아래쪽 스크롤 키를 막는다. 위로 가는 입력은 두어 되돌 수 있다.
+  const block = (event: Event) => { if (event.cancelable) event.preventDefault(); };
+  const onWheel = (event: WheelEvent) => { if (event.deltaY > 0) block(event); };
+  const onTouchStart = (event: TouchEvent) => { touchY = event.touches[0]?.clientY ?? NaN; };
+  // 막기 시작한 몸짓의 첫 움직임은 기준이 없어 두고 다음부터 본다.
+  const onTouchMove = (event: TouchEvent) => {
+    const y = event.touches[0]?.clientY ?? NaN;
+    if (y < touchY) block(event);
+    touchY = y;
+  };
+  const onKey = (event: KeyboardEvent) => { if (DOWN_KEYS.has(event.key) && !(event.key === ' ' && event.shiftKey)) block(event); };
+  // 앞으로 도는 morph(t < SPLIT) 동안만 막는다(계획 R2). 이동 구간·되돌기·멈춤(상세가 열린 동안)은 막지 않는다.
+  const syncPin = () => {
+    const next = alive && !paused && !reduced && !!lineTween && lineGoal === 1 && linePose.p < SPLIT;
+    if (next === pinned) return;
+    pinned = next;
+    touchY = NaN;
+    const options = { passive: false, capture: true };
+    if (next) {
+      window.addEventListener('wheel', onWheel, options);
+      window.addEventListener('touchstart', onTouchStart, { passive: true, capture: true });
+      window.addEventListener('touchmove', onTouchMove, options);
+      window.addEventListener('keydown', onKey, options);
+    } else {
+      window.removeEventListener('wheel', onWheel, true);
+      window.removeEventListener('touchstart', onTouchStart, true);
+      window.removeEventListener('touchmove', onTouchMove, true);
+      window.removeEventListener('keydown', onKey, true);
+    }
+  };
+  // 프리뷰 → 첫 헤드. 오버레이가 같은 그림으로 프리뷰를 다 덮은 뒤(q .94) DOM 틀을 숨기고 목록은 q .9–.7에 사라진다.
   // 진행도 0에서는 경계가 쓴 값을 걷어 Projects 쉬는 자리다(로고가 프리뷰에 넘긴 자리의 clearProjects).
   const renderLine = () => {
     const p = linePose.p;
-    // 선 그룹은 넘겨받기 전까지 숨고, 숨은 동안 그 안의 표식 단추에 포커스가 서지 않게 inert다(수정 1 I3).
-    // 모션 감소는 숨기지 않는다. 재생이 없어 넘겨받을 순간이 없고 Experience가 전체를 정적으로 보인다. 지점이 없으면(프리뷰나 선이 없다) 그대로 보인다.
-    // 도착은 100%에 선 쪽을 가리킬 때다. 거꾸로 돌기 시작하는 프레임에 바로 떠난다(선 그룹과 FASOO가 경계와 함께 숨는다).
+    // 도착은 100%에 선 쪽을 가리킬 때다. 거꾸로 돌기 시작하는 프레임에 바로 떠난다(첫 헤드와 첫 장이 경계와 함께 숨는다).
     const arrived = p >= 1 && lineGoal === 1;
-    const hidden = !reduced && Number.isFinite(m.lineAt) && !arrived;
-    if (experienceLine) {
-      experienceLine.style.opacity = hidden ? '0' : '';
-      experienceLine.toggleAttribute('inert', hidden);
-    }
     if (arrived !== lineArrived) {
       lineArrived = arrived;
       onLineArrive?.(arrived);
     }
-    if (p <= 0 || !previewAnchor || !linePath || !lineTip) {
-      hideShell();
+    syncPin();
+    // 모션 감소는 재생이 없어 프리뷰가 그대로 서고(시안과 같다) 첫 헤드는 도착으로 바로 산다.
+    if (p <= 0 || reduced || !previewAnchor) {
+      overlay?.setBoundary(null);
       clearProjects();
       return;
     }
-    if (list) Object.assign(list.style, { opacity: '', pointerEvents: '' });
-    const phase = linePhases(p);
-    // 출발과 도착은 매 프레임 지금 화면 좌표로 잰다. 재생 중에 스크롤이 움직여도 프리뷰에서 떠나 실제 선(sticky rail)에 내려앉는다.
-    const from = previewAnchor.getBoundingClientRect();
-    const path = linePath.getBoundingClientRect();
-    const to = { x: path.left, y: path.top, w: path.width, h: lineTip.getBoundingClientRect().bottom - path.top };
-    const w = lerp(from.width, to.w, phase.narrow);
-    const h = lerp(from.height, to.h, phase.length);
-    const x = lerp(from.left + from.width / 2, to.x + to.w / 2, phase.travel) - w / 2;
-    const y = lerp(from.top + from.height / 2, to.y + to.h / 2, phase.travel) - h / 2;
-    const radius = Math.min(lerp(m.radius, to.w / 2, phase.narrow), w / 2, h / 2);
+    const q = morphQ(p);
     // 열기 단추는 떠나는 동안 눌리지 않는다. 상세의 FLIP과 이 경계가 같은 프리뷰를 함께 옮기지 않는다.
-    if (frame) Object.assign(frame.style, {
-      transform: '',
-      clipPath: `inset(${y - from.top}px ${from.right - x - w}px ${from.bottom - y - h}px ${x - from.left}px round ${radius}px)`,
-      opacity: String(1 - phase.exit),
-      pointerEvents: 'none',
-    });
-    if (!shell || !shellGlow || !shellFace) return;
-    // 외곽선은 첫 순간에 툭 서지 않고 짧게 떠오른다.
-    Object.assign(shell.style, { visibility: p < 1 ? 'visible' : '', opacity: String(smooth(span(0, .12, p))) });
-    for (const rect of [shellGlow, shellFace]) {
-      rect.setAttribute('x', String(x));
-      rect.setAttribute('y', String(y));
-      rect.setAttribute('width', String(w));
-      rect.setAttribute('height', String(h));
-      rect.setAttribute('rx', String(radius));
+    if (frame) Object.assign(frame.style, { transform: '', opacity: '', clipPath: '', pointerEvents: 'none', visibility: q <= .94 ? 'hidden' : '' });
+    if (list) Object.assign(list.style, { opacity: String(smooth(span(.7, .9, q))), pointerEvents: 'none' });
+    // 도착하면 실제 첫 헤드가 넘겨받아 오버레이 경계를 비운다. 비우지 않으면 오버레이가 그릴 것 없이 돈다.
+    if (!overlay || arrived) {
+      overlay?.setBoundary(null);
+      return;
     }
-    // 채움은 CSS의 쉬는 값(0)을 덮도록 style로 쓴다. 표현 속성은 CSS에 진다.
-    shellFace.style.fillOpacity = String(phase.fill);
-    shellFace.style.strokeOpacity = String(1 - phase.fill);
+    // 출발과 도착은 매 프레임 지금 화면 좌표로 잰다. 재생 중에 스크롤이 움직여도 프리뷰에서 떠나 지금 노드 자리에 내려앉는다.
+    const img = frame?.querySelector('img');
+    const axisBox = layoutBox(axis);
+    overlay.setBoundary({
+      t: p, preview: previewAnchor.getBoundingClientRect(), radius: m.radius,
+      image: img?.complete && img.naturalWidth ? img : null,
+      target: { x: axisBox.x + axisBox.w / 2, y: nodeY(layoutBox(firstNode)) - window.scrollY },
+    });
   };
   // 재생 없이 프리뷰 쪽(0)에 놓는다. 로고가 Projects를 떠날 때, Projects 컨트롤이 입력이나 포커스를 받을 때다.
   const dropLine = () => {
@@ -533,7 +535,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   };
 
   // 선을 지금 쪽으로 옮긴다. 로고가 Projects에 넘긴 뒤에만 움직인다(그 밖에서는 moveLogo가 0에 놓는다).
-  // 되돌아갈 때는 지난 진행도만큼의 시간만 쓴다. 진행도는 시간에 선형이고 구간마다 제 곡선을 쓴다(linePhases).
+  // 되돌아갈 때는 지난 진행도만큼의 시간만 쓴다. 진행도는 시간에 선형이고 곡선은 morphQ가 준다.
   const moveLine = (target: number, animate: boolean) => {
     if (goal !== 2 || target === lineGoal) return;
     lineGoal = target;
@@ -548,13 +550,13 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
         renderLogo();
       }
       if (focusedControl()) (document.activeElement as HTMLElement).blur();
-      // 캡션 드러냄이 돌고 있으면 걷는다. 캡션은 틀째로 잘리며 사라진다. 캡션의 인라인 값은 captionReveal만 쓴다.
+      // 캡션 드러냄이 돌고 있으면 걷는다. 캡션은 틀째로 숨는다. 캡션의 인라인 값은 captionReveal만 쓴다.
       const caption = frame?.querySelector<HTMLElement>('[data-part="preview-caption"]');
       if (caption) clearCaptionReveal(caption);
     }
     if (!animate || reduced || linePose.p === target) linePose.p = target;
     else lineTween = gsap.to(linePose, {
-      p: target, duration: (target ? LINE_SECONDS : LINE_RETURN_SECONDS) * Math.abs(target - linePose.p), ease: 'none',
+      p: target, duration: (target ? BOUNDARY_IN : BOUNDARY_OUT) * Math.abs(target - linePose.p), ease: 'none',
       onUpdate: renderLine, onComplete: () => { lineTween = null; renderLine(); },
     });
     renderLine();
@@ -680,6 +682,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       paused = next;
       // 상세가 열린 동안(M4 pause) 선 재생도 그 자리에 멈춘다.
       lineTween?.paused(next);
+      syncPin();
       if (next || !alive) return;
       // 멈춘 사이 넘은 지점은 재생하지 않고 그쪽 자리에 둔다.
       if (nameSide() !== side) placeName(nameSide(), false);
@@ -699,6 +702,13 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
         clearOrb();
       }
       renderLogo();
+    },
+    // 오버레이가 오거나 바뀌거나 떠날 때. 옛 오버레이의 경계를 비우고 지금 진행을 새 오버레이에 그린다.
+    setOverlay: (next) => {
+      if (next === overlay) return;
+      overlay?.setBoundary(null);
+      overlay = next;
+      if (alive) renderLine();
     },
     // 날고 있는 About↔Projects 비행을 Projects 쪽 끝 자리로 동기로 끝낸다. 스크롤은 건드리지 않는다.
     // 새 경로를 만들지 않는다: 쉬는 자리(t=2)로 놓는 renderLogo가 경계를 닫고 소유 속성을 걷는다. GL이 없으면 정적 자리 그대로다.
@@ -720,11 +730,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       frame?.removeEventListener('load', onImageLoad, true);
       travel?.kill();
       lineTween?.kill();
-      hideShell();
-      if (experienceLine) {
-        experienceLine.style.opacity = '';
-        experienceLine.removeAttribute('inert');
-      }
+      syncPin();
+      overlay?.setBoundary(null);
       stopName();
       context.revert();
       side = 'hero';

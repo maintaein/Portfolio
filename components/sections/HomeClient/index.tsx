@@ -65,7 +65,7 @@ export default function HomeClient() {
   const [motionModule, setMotionModule] = useState<typeof import('./motion') | null>(null);
   const [logo, setLogo] = useState<ElectricLogoHandle | null>(null);
   const [logoOwner, setLogoOwner] = useState<LogoOwner>('none');
-  // 프리뷰→선 경계가 첫 세로축에 내려앉았는지. Experience가 첫 표식과 FASOO 본문을 공개한다.
+  // 프리뷰→헤드 경계가 첫 노드에 내려앉았는지. Experience가 첫 헤드와 첫 장을 공개한다.
   const [lineArrived, setLineArrived] = useState(false);
   const [logoReady, setLogoReady] = useState(false);
   // GL 로고는 쉬는 자리(hero·about)에서만 드러난다. 날아가는 도중에 준비돼도 내려앉은 뒤에 정적 실루엣과 바뀐다.
@@ -91,7 +91,7 @@ export default function HomeClient() {
   const ballRuns = heroResting || logoOwner === 'boundary';
   const activeLabel = HOME_SECTION_CONFIG.find(section => section.id === active)?.label ?? 'Overview';
   const [announcement, setAnnouncement] = useState('');
-  // 경력 선과 프리뷰 morph를 그리는 오버레이 손잡이. ExperienceSection이 읽기 진행을 넘기고, motion은 다음 단계에서 잇는다.
+  // 경력 선과 프리뷰 morph를 그리는 오버레이 손잡이. ExperienceSection이 읽기 진행을, motion이 프리뷰→헤드 경계를 넘긴다.
   const [overlay, setOverlay] = useState<ExperienceOverlay | null>(null);
   useEffect(() => {
     const canvas = overlayRef.current;
@@ -134,6 +134,8 @@ export default function HomeClient() {
     return () => { motion.destroy(); motionRef.current = null; setLogoOwner('none'); setLineArrived(false); };
   }, [motionModule, reducedMotion]);
   useEffect(() => { motionRef.current?.setLogo(logo); }, [logo, motionModule, reducedMotion]);
+  // 오버레이는 마운트 뒤에 와서 setLogo처럼 따로 넘긴다. 옵션으로 넘기면 오는 순간 경계 전체를 다시 지었다.
+  useEffect(() => { motionRef.current?.setOverlay(overlay); }, [overlay, motionModule, reducedMotion]);
   useEffect(() => { motionRef.current?.setPaused(obscured || !pageVisible); }, [obscured, pageVisible, motionModule, reducedMotion]);
   useEffect(() => {
     if (!logoReady || logoOwner === 'none') setLogoLive(false);
