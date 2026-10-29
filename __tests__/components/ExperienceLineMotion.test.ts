@@ -1,16 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
-  HEAD_MORPH_SECONDS,
-  HEAD_TRAVEL_SECONDS,
   LEAD,
   PULSE_GAP,
-  SPLIT,
   SPRINT_IN,
   SPRINT_OUT,
   createSegments,
-  morphPhases,
-  morphQ,
-  travelU,
+  gatherPose,
   pulseOffsets,
   stepSegment,
 } from '@/components/sections/ExperienceSection/lineMotion';
@@ -85,33 +80,34 @@ describe('pulseOffsets', () => {
   });
 });
 
-describe('morph', () => {
-  it('morphQ는 0에서 1, SPLIT에서 0이고 그 뒤로 0이다', () => {
-    expect(morphQ(0)).toBe(1);
-    expect(morphQ(SPLIT)).toBe(0);
-    expect(morphQ(SPLIT + 0.1)).toBe(0);
-    expect(morphQ(1)).toBe(0);
+describe('gatherPose', () => {
+  const word = { x: 1000, y: 300 }, node = { x: 64, y: 700 };
+  const near = { x: 900, y: 300, k: 0 }, far = { x: 1100, y: 300, k: 7 };
+
+  it('0초에는 글자가 제자리에 있고 녹지도 모이지도 않았다', () => {
+    const p = gatherPose(far, 0, word, node);
+    expect(p.x).toBeCloseTo(1100, 6);
+    expect(p.y).toBeCloseTo(300, 6);
+    expect([p.g, p.melt, p.speed]).toEqual([0, 0, 0]);
   });
 
-  it('travelU: 이동은 morph가 끝나기 전에 떠나 t 1에 닿는다', () => {
-    expect(travelU(0)).toBe(0);
-    expect(travelU(0.6 / (HEAD_MORPH_SECONDS + HEAD_TRAVEL_SECONDS))).toBe(0);
-    expect(travelU(SPLIT / 2)).toBeGreaterThan(0);
-    expect(travelU(SPLIT)).toBeLessThan(1);
-    expect(travelU(1)).toBe(1);
+  it('1.95초에 모든 글자가 노드에 한 덩이로 내려앉는다', () => {
+    for (const L of [near, far]) {
+      const p = gatherPose(L, 1.95, word, node);
+      expect(p.x).toBeCloseTo(64, 6);
+      expect(p.y).toBeCloseTo(700, 6);
+      expect([p.g, p.melt, p.speed]).toEqual([1, 1, 0]);
+    }
   });
 
-  it('morphPhases는 시안 구간 그대로다', () => {
-    const a = morphPhases(0.82);
-    expect(a.ragged).toBe(0);
-    expect(a.crumple).toBeCloseTo(0, 6);
-    expect(morphPhases(0.41).crumple).toBeCloseTo(1, 2);
-    expect(morphPhases(0.45).ragged).toBe(1);
-    const b = morphPhases(0.65);
-    expect([b.widen, b.face, b.corner]).toEqual([1, 1, 1]);
-    const c = morphPhases(0);
-    expect(c.widen).toBe(0);
-    expect(c.face).toBe(0);
-    expect(c.reveal).toBe(0);
+  it('노드에 가까운 글자(k 0)가 먼저 떠난다', () => {
+    const sec = 0.37;
+    expect(gatherPose(near, sec, word, node).speed).toBeGreaterThan(0);
+    expect(gatherPose(far, sec, word, node).speed).toBe(0);
+  });
+
+  it('무리는 떠날 때 낱말 위로 살짝 떠오른다(예비 동작)', () => {
+    const p = gatherPose({ ...word, k: 0 }, 0.6, word, node);
+    expect(p.y).toBeLessThan(300);
   });
 });

@@ -1,4 +1,4 @@
-// 경력 타임라인 선의 순수 계산. DOM을 읽지 않는다. 시안 stepSeg(A 분기), previewPhases, morphQ를 옮겼다.
+// 경력 타임라인 선의 순수 계산. DOM을 읽지 않는다. 시안 stepSeg(A 분기)와 PoseTive → 헤드 시안의 pose를 옮겼다.
 export const K = 0.45;
 export const R = 16;
 export const R_NODE = 7.5;
@@ -7,11 +7,10 @@ export const SPRINT_IN = 0.9;
 export const SPRINT_OUT = 0.5;
 export const PULSE_SPEED = 230;
 export const PULSE_GAP = 420;
-// morph는 2.4초로 여유 있게 구겨진다. 이동은 morph가 끝나기를 기다리지 않고 .6초부터 함께 가며, morph 뒤 .5초에 내려앉는다(사용자 요청 2026-10-29).
-export const HEAD_MORPH_SECONDS = 2.4;
-export const HEAD_TRAVEL_SECONDS = 0.5;
-export const SPLIT = HEAD_MORPH_SECONDS / (HEAD_MORPH_SECONDS + HEAD_TRAVEL_SECONDS);
-const TRAVEL_FROM = 0.6 / (HEAD_MORPH_SECONDS + HEAD_TRAVEL_SECONDS);
+// Projects 이름 글자가 첫 노드로 날아가며 뭉쳐 첫 헤드가 된다(사용자 승인 2026-10-29, posetive-head-prototype).
+// 무리는 1.95초에 내려앉고 .15초 뒤 첫 헤드로 넘긴다.
+export const GATHER_SECONDS = 2.1;
+const GATHER_LAND = 1.95;
 
 const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -73,27 +72,28 @@ export function pulseOffsets(time: number, length: number): number[] {
   return out;
 }
 
-// 경계 진행 t(0..1, morph+이동)를 morph 진행 q로. 1은 프리뷰, 0은 헤드이며 t >= SPLIT이면 0이다.
-// 등속이다. easeInOut이면 구겨지는 구간(q .82~.12)이 가운데 가장 빠른 .6초에 몰려 급하게 보였다(2026-10-29).
-export function morphQ(t: number): number {
-  return 1 - clamp(t / SPLIT);
-}
+type Point = { x: number; y: number };
+const bez = (a: number, b: number, c: number, d: number, t: number) => {
+  const m = 1 - t;
+  return m * m * m * a + 3 * m * m * t * b + 3 * m * t * t * c + t * t * t * d;
+};
 
-// 경계 진행 t를 프리뷰 가운데→목적지 이동 진행(선형 0..1)으로. morph 도중(TRAVEL_FROM)에 떠나 t 1에 닿는다. 곡선은 그리는 쪽이 easeInOut으로 준다.
-export function travelU(t: number): number {
-  return span(TRAVEL_FROM, 1, t);
-}
-
-export function morphPhases(q: number) {
+// 경계 시작에서 sec초 뒤 글자 하나의 자리(화면 좌표). letter: 글자 상자 가운데와 노드에 가까운 순서 k, word: 낱말 가운데, node: 첫 노드.
+// 무리 가운데는 낱말 가운데에서 살짝 떠올랐다가(예비 동작) 노드 바로 위에서 축을 따라 내려앉는다. 노드에 가까운 글자부터 .035초씩 먼저 떠나 같은 때 닿는다.
+// 글자는 그 무리 가운데를 따라가며 제자리에서 가운데로 소용돌이치며(.9rad) 모인다(Hero 볼의 빠짐). g: 모인 정도, melt: 녹은 정도, speed: 이동 속도(정점 1).
+export function gatherPose(letter: Point & { k: number }, sec: number, word: Point, node: Point) {
+  const k = letter.k, u = span(0.35 + 0.035 * k, GATHER_LAND, sec), e = easeInOut(u);
+  const g = easeInOut(span(0.4 + 0.03 * k, 1.35 + 0.03 * k, sec));
+  const dx = node.x - word.x, dy = node.y - word.y;
+  const c1x = word.x + dx * 0.15, c1y = word.y - 60, c2y = node.y - Math.max(120, 0.55 * Math.abs(dy));
+  const at = (v: number): [number, number] => [bez(word.x, c1x, node.x, node.x, v), bez(word.y, c1y, c2y, node.y, v)];
+  const [gx, gy] = at(e), [x1, y1] = at(Math.max(0, e - 0.01)), [x2, y2] = at(Math.min(1, e + 0.01));
+  const ox = letter.x - word.x, oy = letter.y - word.y, th = 0.9 * g, r = 1 - g;
   return {
-    widen: easeInOut(span(0, 0.65, q)),
-    face: easeInOut(span(0.1, 0.65, q)),
-    corner: easeInOut(span(0.25, 0.65, q)),
-    reveal: easeOut3(span(0, 0.8, q)),
-    strands: 1 - smooth(0.3, 0.6, q),
-    ragged: 1 - smooth(0.45, 0.82, q),
-    handoff: smooth(0.94, 1, q),
-    // 구겨지는 정도: .82에 0, .41에 가장 크고, 0에서 다시 0.
-    crumple: Math.pow(Math.sin(Math.PI * span(0, 0.82, q)), 0.8),
+    x: gx + (ox * Math.cos(th) - oy * Math.sin(th)) * r,
+    y: gy + (ox * Math.sin(th) + oy * Math.cos(th)) * r,
+    g, melt: smooth(0.3 + 0.03 * k, 0.9 + 0.03 * k, sec),
+    ang: Math.atan2(y2 - y1, x2 - x1),
+    speed: u < 0.5 ? 4 * u * u : 4 * (1 - u) * (1 - u),
   };
 }

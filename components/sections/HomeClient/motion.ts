@@ -1,8 +1,8 @@
 import type { CrystalizedBallHandle } from '@/components/blocks/CrystalizedBall';
 import type { ElectricLogoHandle } from '@/components/blocks/ElectricLogo';
-import { HEAD_MORPH_SECONDS, HEAD_TRAVEL_SECONDS, SPLIT, morphQ } from '@/components/sections/ExperienceSection/lineMotion';
-import type { ExperienceOverlay } from '@/components/sections/ExperienceSection/overlay';
-import { SCRIM_STOPS, clearCaptionReveal, revealCaption } from '@/components/sections/ProjectsSection/captionReveal';
+import { GATHER_SECONDS } from '@/components/sections/ExperienceSection/lineMotion';
+import type { ExperienceOverlay, GatherLetter } from '@/components/sections/ExperienceSection/overlay';
+import { clearCaptionReveal, revealCaption } from '@/components/sections/ProjectsSection/captionReveal';
 import { gsap, registerScrollTrigger, ScrollTrigger, SITE_EASE } from '@/lib/gsap';
 import { readingLineY } from '@/lib/utils/scrollGeometry';
 
@@ -62,15 +62,15 @@ export const CORE = .22;
 export const ORBIT = .7;
 // 떠나는 타일의 모서리(로고 크기 비율). 참조 5.35초의 155px 타일이 45px 남짓 둥글다.
 const TILE_RADIUS = .3;
-// Projects 프리뷰가 제자리에서 첫 Experience 헤드로(M5 시안). 진행 t 하나를 morph 1.8초 + 첫 노드로 옮겨 가는 .8초 동안 시간에 선형으로 돌리고
-// 곡선은 morphQ가 준다. 되돌기는 사이트 규칙(About→Projects의 1.4 / 1.8)대로 더 빠르다. 그림은 오버레이 캔버스가 그린다.
-const BOUNDARY_IN = HEAD_MORPH_SECONDS + HEAD_TRAVEL_SECONDS;
+// Projects 이름 글자가 첫 노드로 날아가며 뭉쳐 첫 Experience 헤드가 된다(사용자 승인 2026-10-29). 진행 t 하나를 2.1초 동안 시간에 선형으로 돌리고
+// 곡선은 lineMotion gatherPose가 준다. 되돌기는 사이트 규칙(About→Projects의 1.4 / 1.8)대로 더 빠르다. 그림은 오버레이 캔버스가 그린다.
+const BOUNDARY_IN = GATHER_SECONDS;
 const BOUNDARY_OUT = BOUNDARY_IN * 1.4 / 1.8;
 // 선 지점: 첫 노드가 화면 아래끝에서 이만큼(px) 올라온 스크롤(1440x900에서 1858, 390x844에서 1735 실측, 계획 R1).
 // 잠금 자리보다 LOGO_BACK 넘게 아래, 프리뷰가 nav 아래 12px에 닿는 스크롤보다 위에 묶는다. 둘이 다투는 짧은 화면은 위쪽이 이긴다
 // (프리뷰가 nav 밑으로 들어가지 않는다). 그때 헤드는 매 프레임 잰 노드 자리로 가고 화면 밖일 수 있다.
 const NODE_SHOW = 140;
-// 앞으로 도는 morph 동안 막는 아래쪽 스크롤 키(계획 R2). Shift+Space는 위로 가는 키라 두지 않는다.
+// 앞으로 도는 경계 동안 막는 아래쪽 스크롤 키(계획 R2). Shift+Space는 위로 가는 키라 두지 않는다.
 const DOWN_KEYS = new Set([' ', 'PageDown', 'ArrowDown', 'End']);
 
 type Box = { x: number; y: number; w: number; h: number };
@@ -83,40 +83,23 @@ const smooth = (t: number) => t * t * (3 - 2 * t);
 // power2.inOut. 참조의 접힘과 이동은 천천히 떠나 빨라졌다가 내려앉으며 느려진다.
 const inOut = (t: number) => t < .5 ? 4 * t * t * t : 1 - (2 - 2 * t) ** 3 / 2;
 const out = (t: number) => 1 - (1 - t) ** 3;
+// 경계가 시작되고 프리뷰와 다른 이름이 물러나는 시간(초). 글자가 충전되는 동안이다.
+const AWAY_SECONDS = .5;
 
-// 프리뷰 겉모습(그림 cover, 캡션 띠, 글자)을 프리뷰 크기 한 장으로 뜬다. 경계 morph가 그림만 따로가 아니라 이 프리뷰 그대로 구겨진다.
-// shortcut: 글자는 요소마다 한 줄로 그린다(제목·부제·링크가 모두 한 줄이라). 두 줄로 꺾이는 캡션이 생기면 줄 상자(Range)마다 그린다.
-function capturePreview(frame: HTMLElement, img: HTMLImageElement): HTMLCanvasElement | null {
-  const box = frame.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(box.width * dpr);
-  canvas.height = Math.round(box.height * dpr);
-  const g = box.width && box.height ? canvas.getContext('2d') : null;
-  if (!g) return null;
-  g.scale(dpr, dpr);
-  const ar = box.width / box.height, iw = img.naturalWidth, ih = img.naturalHeight;
-  const sw = iw / ih > ar ? ih * ar : iw, sh = iw / ih > ar ? ih : iw / ar;
-  g.drawImage(img, (iw - sw) / 2, (ih - sh) / 2, sw, sh, 0, 0, box.width, box.height);
-  const caption = frame.querySelector<HTMLElement>('[data-part="preview-caption"]');
-  if (!caption) return canvas;
-  const c = caption.getBoundingClientRect();
-  const scrim = g.createLinearGradient(0, c.bottom - box.top, 0, c.top - box.top);
-  for (const [at, alpha] of SCRIM_STOPS) scrim.addColorStop(at / 100, `rgba(0,0,0,${alpha})`);
-  g.fillStyle = scrim;
-  g.fillRect(c.left - box.left, c.top - box.top, c.width, c.height);
-  for (const el of caption.querySelectorAll<HTMLElement>('[data-part="preview-caption-text"] > *')) {
-    const s = getComputedStyle(el), r = el.getBoundingClientRect();
-    g.font = `${s.fontStyle} ${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;
-    g.fillStyle = s.color;
-    // HTML 공백 접기를 따라 한다(부제에 리터럴 줄바꿈이 있다)
-    let text = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
-    // truncate의 말줄임을 따라 한다
-    while (text.length > 1 && g.measureText(text).width > r.width) text = text.slice(0, -2) + '…';
-    const t = g.measureText(text), size = parseFloat(s.fontSize);
-    const asc = t.fontBoundingBoxAscent ?? size * .8, desc = t.fontBoundingBoxDescent ?? size * .2;
-    g.fillText(text, r.left - box.left, r.top - box.top + (r.height - asc - desc) / 2 + asc);
+// 첫 헤드로 뭉칠 낱말을 잰다. 글자마다 상자 가운데(문서 좌표)와 노드에 가까운 순서 k를 매긴다. 공백은 건너뛴다.
+function measureWord(el: HTMLElement, node: { x: number; y: number }) {
+  const text = el.firstChild;
+  if (!(text instanceof Text)) return null;
+  const s = getComputedStyle(el), range = document.createRange(), letters: GatherLetter[] = [];
+  for (let i = 0; i < text.data.length; i++) {
+    if (!text.data[i].trim()) continue;
+    range.setStart(text, i);
+    range.setEnd(text, i + 1);
+    const b = range.getBoundingClientRect();
+    letters.push({ ch: text.data[i], x: b.left + b.width / 2, y: b.top + b.height / 2 + window.scrollY, k: 0 });
   }
-  return canvas;
+  [...letters].sort((a, b) => Math.hypot(a.x - node.x, a.y - node.y) - Math.hypot(b.x - node.x, b.y - node.y)).forEach((L, k) => { L.k = k; });
+  return { el, font: `${s.fontWeight} ${s.fontSize} ${s.fontFamily}`, letters };
 }
 
 // 진행도 p(0 Hero의 쉬는 볼, 1 About에 내려앉은 로고)의 세 구간. 모든 값이 p만의 함수라 어디서 되돌아도 같은 길을 거꾸로 밟는다.
@@ -245,14 +228,14 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   let lowY = -Infinity;
   // Projects 컨트롤에 포커스가 선 스크롤(그 뒤 내려간 가장 아래). 이보다 위로 굴리면 포커스가 남아 있어도 Projects를 놓는다.
   let holdFrom = Infinity;
-  // 선 진행도 p: 0 프리뷰, 1 첫 헤드(morphQ의 t). 로고가 Projects(goal 2)에 있을 때만 움직이고 lineGoal은 지금 스크롤이 가리키는 쪽이다.
+  // 선 진행도 p: 0 프리뷰, 1 첫 헤드. 로고가 Projects(goal 2)에 있을 때만 움직이고 lineGoal은 지금 스크롤이 가리키는 쪽이다.
   const linePose = { p: 0 };
   let lineGoal = 0;
   let lineTween: gsap.core.Tween | null = null;
-  // 경계 한 번의 재생 동안 쓰는 프리뷰 한 장. 프리뷰 쪽(0)에 서면 비워 다음 재생에서 지금 프로젝트로 다시 뜬다.
-  let shot: HTMLCanvasElement | null = null;
+  // 경계 한 번의 재생 동안 캔버스가 이어받아 그리는 낱말. 그동안 DOM 글자는 숨는다. 프리뷰 쪽(0)에 서면 되돌려 다음 재생에서 지금 이름을 다시 잰다.
+  let word: ReturnType<typeof measureWord> = null;
   let lineArrived = false;
-  // morph를 그리는 오버레이(HomeClient가 늦게 넘긴다). 없으면 그리기 없이 시간·도착·틀 숨김만 돈다.
+  // 경계를 그리는 오버레이(HomeClient가 늦게 넘긴다). 없으면 그리기 없이 시간·도착·틀 숨김만 돈다.
   let overlay: ExperienceOverlay | null = null;
   // 아래쪽 입력을 막는 차단 리스너를 달고 있는지. 차단 wheel은 스크롤을 메인 스레드에 묶어 늦추므로 막는 동안만 단다(useChapterLock과 같은 이유).
   let pinned = false;
@@ -368,9 +351,9 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     touchY = y;
   };
   const onKey = (event: KeyboardEvent) => { if (DOWN_KEYS.has(event.key) && !(event.key === ' ' && event.shiftKey) && !event.ctrlKey && !event.metaKey) block(event); };
-  // 앞으로 도는 morph(t < SPLIT) 동안만 막는다(계획 R2). 이동 구간·되돌기·멈춤(상세가 열린 동안)은 막지 않는다.
+  // 앞으로 도는 경계 동안만 막는다(계획 R2). 되돌기·멈춤(상세가 열린 동안)은 막지 않는다.
   const syncPin = () => {
-    const next = alive && !paused && !reduced && !!lineTween && lineGoal === 1 && linePose.p < SPLIT;
+    const next = alive && !paused && !reduced && !!lineTween && lineGoal === 1;
     if (next === pinned) return;
     pinned = next;
     touchY = NaN;
@@ -387,7 +370,11 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       window.removeEventListener('keydown', onKey, true);
     }
   };
-  // 프리뷰 → 첫 헤드. 오버레이가 같은 그림으로 프리뷰를 다 덮은 뒤(q .94) DOM 틀을 숨기고 목록은 q .9–.7에 사라진다.
+  const dropWord = () => {
+    if (word) word.el.style.visibility = '';
+    word = null;
+  };
+  // 이름 → 첫 헤드. 프리뷰·목록·넘김 줄은 처음 AWAY_SECONDS 동안 물러나고(프리뷰는 3% 작아진다) 낱말은 오버레이가 이어받는다.
   // 진행도 0에서는 경계가 쓴 값을 걷어 Projects 쉬는 자리다(로고가 프리뷰에 넘긴 자리의 clearProjects).
   const renderLine = () => {
     const p = linePose.p;
@@ -400,24 +387,31 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     syncPin();
     // 모션 감소는 재생이 없어 프리뷰가 그대로 서고(시안과 같다) 첫 헤드는 도착으로 바로 산다.
     if (p <= 0 || reduced || !previewAnchor) {
-      shot = null;
+      dropWord();
       overlay?.setBoundary(null);
       clearProjects();
       return;
     }
-    const q = morphQ(p);
+    const away = out(span(0, AWAY_SECONDS / BOUNDARY_IN, p));
     // 열기 단추는 떠나는 동안 눌리지 않는다. 상세의 FLIP과 이 경계가 같은 프리뷰를 함께 옮기지 않는다.
-    if (frame) Object.assign(frame.style, { transform: '', opacity: '', clipPath: '', pointerEvents: 'none', visibility: q <= .94 ? 'hidden' : '' });
-    for (const el of [list, pager]) if (el) Object.assign(el.style, { opacity: String(smooth(span(.7, .9, q))), pointerEvents: 'none' });
-    if (!overlay) return;
-    // 출발과 도착은 매 프레임 지금 화면 좌표로 잰다. 재생 중에 스크롤이 움직여도 프리뷰에서 떠나 지금 노드 자리에 내려앉는다.
+    if (frame) Object.assign(frame.style, { transform: away ? `scale(${1 - .03 * away})` : '', opacity: String(1 - away), clipPath: '', pointerEvents: 'none', visibility: away >= 1 ? 'hidden' : '' });
+    for (const el of [list, pager]) if (el) Object.assign(el.style, { opacity: String(1 - away), pointerEvents: 'none' });
+    // 그릴 캔버스가 없으면 낱말도 목록·프리뷰와 같이 물러난다.
+    if (!overlay) return dropWord();
+    // 출발과 도착은 매 프레임 지금 화면 좌표로 잰다. 재생 중에 스크롤이 움직여도 낱말에서 떠나 지금 노드 자리에 내려앉는다.
     // 도착(t 1)도 넘긴다. 오버레이가 실제 첫 헤드가 살 때까지 그 자리에 헤드를 잡아 두고 스스로 비운다(넘김 프레임이 비지 않는다).
-    const img = frame?.querySelector('img');
-    if (!shot && frame && img?.complete && img.naturalWidth) shot = capturePreview(frame, img);
     const axisBox = layoutBox(axis);
+    const target = { x: axisBox.x + axisBox.w / 2, y: nodeY(layoutBox(firstNode)) - window.scrollY };
+    if (!word) {
+      // 데스크톱은 오른쪽 목록의 고른 이름, 목록이 숨는 lg 아래는 프리뷰 캡션 제목이다
+      const name = list?.querySelector<HTMLElement>('[aria-selected="true"] > span');
+      const el = name?.getClientRects().length ? name : frame?.querySelector<HTMLElement>('[data-part="preview-caption-text"] > p');
+      word = el ? measureWord(el, { x: target.x, y: target.y + window.scrollY }) : null;
+    }
+    if (word) word.el.style.visibility = 'hidden';
     overlay.setBoundary({
-      t: p, preview: previewAnchor.getBoundingClientRect(), radius: m.radius, image: shot,
-      target: { x: axisBox.x + axisBox.w / 2, y: nodeY(layoutBox(firstNode)) - window.scrollY },
+      t: p, font: word?.font ?? '', target,
+      letters: word?.letters.map(L => ({ ...L, y: L.y - window.scrollY })) ?? [],
     });
   };
   // 재생 없이 프리뷰 쪽(0)에 놓는다. 로고가 Projects를 떠날 때, Projects 컨트롤이 입력이나 포커스를 받을 때다.
@@ -573,7 +567,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   };
 
   // 선을 지금 쪽으로 옮긴다. 로고가 Projects에 넘긴 뒤에만 움직인다(그 밖에서는 moveLogo가 0에 놓는다).
-  // 되돌아갈 때는 지난 진행도만큼의 시간만 쓴다. 진행도는 시간에 선형이고 곡선은 morphQ가 준다.
+  // 되돌아갈 때는 지난 진행도만큼의 시간만 쓴다. 진행도는 시간에 선형이고 곡선은 gatherPose가 준다.
   const moveLine = (target: number, animate: boolean) => {
     if (goal !== 2 || target === lineGoal) return;
     lineGoal = target;
@@ -602,7 +596,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   // 선 지점을 넘으면 1, LOGO_BACK 넘게 위로 돌아오면 0, 그 사이에서는 지금 쪽이다.
   const lineSide = () => window.scrollY >= m.lineAt ? 1 : window.scrollY <= m.lineAt - LOGO_BACK ? 0 : clamp(lineGoal);
   // nav 이동(useSectionNav가 main에 data-navigation-target을 단 동안)이 선 지점을 넘으면 재생 없이 그쪽에 놓는다.
-  // 빈 Experience 위로 2.9초 경계를 돌리지 않고 도착 상태로 선다. 로고 비행은 그대로 재생한다.
+  // 빈 Experience 위로 2.1초 경계를 돌리지 않고 도착 상태로 선다. 로고 비행은 그대로 재생한다.
   const playLine = () => !root.hasAttribute('data-navigation-target');
 
   // 지금 스크롤이 가리키는 쪽. 이름은 두 문턱 사이에서 지금 자리를 지킨다.
@@ -773,6 +767,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       lineTween?.kill();
       syncPin();
       overlay?.setBoundary(null);
+      dropWord();
       stopName();
       context.revert();
       side = 'hero';

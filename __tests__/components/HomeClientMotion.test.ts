@@ -3,8 +3,8 @@ import { gsap, ScrollTrigger } from '@/lib/gsap';
 import type { ElectricLogoHandle } from '@/components/blocks/ElectricLogo';
 import { CORE, LOGO_SECONDS, ORBIT, PREVIEW_RETURN_SECONDS, PREVIEW_SECONDS, createPortfolioMotion, logoPhases, previewPhases, type LogoOwner, type PortfolioMotion } from '@/components/sections/HomeClient/motion';
 import { resolveCurrentSection } from '@/lib/utils/scrollGeometry';
-import { HEAD_MORPH_SECONDS, HEAD_TRAVEL_SECONDS, morphQ } from '@/components/sections/ExperienceSection/lineMotion';
-import type { ExperienceOverlay } from '@/components/sections/ExperienceSection/overlay';
+import { GATHER_SECONDS } from '@/components/sections/ExperienceSection/lineMotion';
+import type { BoundaryFrame, ExperienceOverlay } from '@/components/sections/ExperienceSection/overlay';
 import { clearCaptionReveal, revealCaption } from '@/components/sections/ProjectsSection/captionReveal';
 
 // 캡션 드러냄은 실제 구현을 그대로 돌리되 부른 자리를 보려고 감싼다(M4 Task 14)
@@ -1568,11 +1568,11 @@ it('로고 host는 포인터에 기울지 않는다', () => {
   expect(gsap.getTweensOf(inner)).toHaveLength(0);
 });
 
-// M5 Task 6. Projects 프리뷰가 제자리에서 첫 Experience 헤드로 morph한다. 그림은 오버레이 캔버스가 그리고 motion은 시간과 틀만 맡는다.
-describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된다', () => {
+// M5. Projects 이름 글자가 첫 노드로 날아가며 뭉쳐 첫 Experience 헤드가 된다. 그림은 오버레이 캔버스가 그리고 motion은 시간, 낱말 재기, 물러남만 맡는다.
+describe('Projects→Experience: 이름 글자가 뭉쳐 첫 헤드가 된다', () => {
   let projects: HTMLElement; let frame: HTMLElement; let list: HTMLElement; let preview: HTMLElement; let img: HTMLImageElement; let node: HTMLElement;
   const arrivals: boolean[] = [];
-  const IN = HEAD_MORPH_SECONDS + HEAD_TRAVEL_SECONDS;
+  const IN = GATHER_SECONDS;
   const OUT = IN * 1.4 / 1.8;
   // Projects는 1800부터(잠금 1724), 프리뷰는 2050(nav 76). 축 칸 가운데 x 64, 첫 노드 y = h3 위끝 2680 + 40 / 2 = 2700.
   // 선 지점 = clamp(2700 - 900 + 140, 1724 + 24 + 1, 2050 - 76 - 12) = 1940. 되넘기는 1916 이하.
@@ -1580,13 +1580,15 @@ describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된�
   const PREVIEW = { x: 120, y: 2050, w: 640, h: 360 };
   const overlayMock = () => ({ setBoundary: vi.fn(), setTimeline: vi.fn(), setReduced: vi.fn(), destroy: vi.fn() });
   let overlay = overlayMock();
-  const smooth = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  // 프리뷰·목록이 물러나는 정도(처음 .5초, ease-out 세제곱)
+  const away = (t: number) => 1 - (1 - Math.min(1, t / (.5 / IN))) ** 3;
+  let name: HTMLElement; let title: HTMLElement;
   beforeEach(() => {
     arrivals.length = 0;
     overlay = overlayMock();
     projects = document.createElement('div');
     projects.dataset.section = 'projects';
-    projects.innerHTML = `<section><div data-motion-anchor="projects-preview"><div style="border-top-left-radius: 14px"><div data-part="preview-media"><img alt=""></div></div></div><div data-part="index"></div><div data-part="mobile-pager"><button type="button">다음</button></div></section>`;
+    projects.innerHTML = `<section><div data-motion-anchor="projects-preview"><div style="border-top-left-radius: 14px"><div data-part="preview-media"><img alt=""></div><div data-part="preview-caption"><div data-part="preview-caption-text"><p>PoseTive</p></div></div></div></div><div data-part="index"><button aria-selected="false"><span>TDS</span></button><button aria-selected="true"><span>PoseTive</span></button></div><div data-part="mobile-pager"><button type="button">다음</button></div></section>`;
     const experience = document.createElement('div');
     experience.dataset.section = 'experience';
     experience.innerHTML = `<section><span data-part="experience-line" aria-hidden="true"></span><article><div data-part="experience-axis"></div><div><h3 data-part="experience-node">FASOO</h3></div></article></section>`;
@@ -1600,11 +1602,25 @@ describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된�
     list = projects.querySelector('[data-part="index"]')!;
     img = projects.querySelector('img')!;
     Object.defineProperties(img, { complete: { configurable: true, value: true }, naturalWidth: { configurable: true, value: 1600 }, naturalHeight: { configurable: true, value: 900 } });
-    // jsdom에는 2d 캔버스가 없다. 프리뷰 한 장(capturePreview)을 뜰 수 있게 그리기 호출만 받는 모의 컨텍스트를 준다.
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => new Proxy({}, {
-      get: (target: Record<string | symbol, unknown>, key) => (target[key] ??= key === 'measureText' ? () => ({ width: 10 }) : key === 'createLinearGradient' ? () => ({ addColorStop() {} }) : () => {}),
-      set: () => true,
-    })) as unknown as typeof HTMLCanvasElement.prototype.getContext);
+    name = list.querySelector('[aria-selected="true"] > span')!;
+    title = frame.querySelector('[data-part="preview-caption-text"] > p')!;
+    // jsdom에는 배치가 없다. 데스크톱 목록 이름은 (1000 + 30i, 2100)에 서 있고 보인다. 캡션 제목은 (200 + 10i, 2380)이다.
+    const glyphs = (el: HTMLElement, x0: number, step: number, y: number) => {
+      Object.defineProperty(el, 'getClientRects', { configurable: true, value: () => [{}] });
+      return { el, x0, step, y };
+    };
+    const at = [glyphs(name, 1000, 30, 2100), glyphs(title, 200, 10, 2380)];
+    vi.spyOn(document, 'createRange').mockImplementation(() => {
+      let node: Node | null = null, i = 0;
+      return {
+        setStart: (n: Node, o: number) => { node = n; i = o; },
+        setEnd: () => {},
+        getBoundingClientRect: () => {
+          const g = at.find(a => a.el.firstChild === node)!;
+          return { left: g.x0 + g.step * i - 5, width: 10, top: g.y - 30 - documentY, height: 60 } as DOMRect;
+        },
+      } as unknown as Range;
+    });
     place(experience.querySelector('[data-part="experience-axis"]')!, { x: 40, y: 2600, w: 48, h: 600 });
     node = experience.querySelector('[data-part="experience-node"]')!;
     place(node, { x: 120, y: 2680, w: 600, h: 40 });
@@ -1617,7 +1633,7 @@ describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된�
     scrollAt(at);
     advance(5);
   };
-  const boundary = () => lastCall(overlay.setBoundary) as { t: number; preview: DOMRect; radius: number; image: HTMLImageElement | null; target: { x: number; y: number } } | null;
+  const boundary = () => lastCall(overlay.setBoundary) as BoundaryFrame | null;
   const blocked = (event: Event) => { window.dispatchEvent(event); return event.defaultPrevented; };
   const wheel = (deltaY: number) => blocked(new WheelEvent('wheel', { deltaY, cancelable: true }));
   const key = (name: string) => blocked(new KeyboardEvent('keydown', { key: name, cancelable: true }));
@@ -1647,13 +1663,14 @@ describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된�
     pointAt(1962);
   });
 
-  it('앞으로 2.9초, 되돌기 2.9 × 1.4 / 1.8초 동안 돌고 도착에서 onLineArrive(true)', () => {
-    // 캔버스가 없어도(오버레이 null) 시간·도착·틀 숨김은 그대로 돈다.
+  it('앞으로 2.1초, 되돌기 2.1 × 1.4 / 1.8초 동안 돌고 도착에서 onLineArrive(true)', () => {
+    // 캔버스가 없어도(오버레이 null) 시간·도착·틀 숨김은 그대로 돈다. 그릴 것이 없어 낱말은 숨기지 않고 목록과 같이 물러난다.
     start({ withOverlay: false });
     scrollAt(LINE_AT);
     advance(IN - .05);
     expect(arrivals).toEqual([]);
     expect(frame.style.visibility).toBe('hidden');
+    expect(name.style.visibility).toBe('');
     advance(.1);
     expect(arrivals).toEqual([true]);
     scrollAt(LINE_AT - 24);
@@ -1666,59 +1683,73 @@ describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된�
     expect(arrivals).toEqual([true, false]);
   });
 
-  it('morph 동안 setBoundary에 프리뷰 rect, 첫 노드 목적지, 프리뷰를 뜬 한 장을 넘기고 도착에는 t 1을 넘긴다', () => {
+  it('경계 동안 setBoundary에 고른 이름의 글자(지금 화면 좌표, 노드에 가까운 순서)와 첫 노드 목적지를 넘기고 도착에는 t 1을 넘긴다', () => {
     start();
     expect(boundary()).toBeNull();
     scrollAt(LINE_AT);
     advance(1);
     let frameNow = boundary()!;
     expect(frameNow.t).toBeCloseTo(1 / IN, 2);
-    expect(frameNow).toMatchObject({ radius: 14, target: { x: 64, y: 2700 - LINE_AT } });
-    // 프리뷰는 재생마다 한 번만 프리뷰 크기로 뜬다
-    const shot = frameNow.image!;
-    expect(shot).toBeInstanceOf(HTMLCanvasElement);
-    expect([shot.width, shot.height]).toEqual([640, 360]);
-    expect(frameNow.preview).toMatchObject({ left: 120, top: 2050 - LINE_AT, width: 640, height: 360 });
-    // 재생 중에 스크롤이 움직이면 프리뷰와 목적지를 지금 화면 좌표로 다시 잰다.
+    expect(frameNow.target).toEqual({ x: 64, y: 2700 - LINE_AT });
+    expect(frameNow.letters.map(L => L.ch).join('')).toBe('PoseTive');
+    expect(frameNow.letters[0]).toEqual({ ch: 'P', x: 1000, y: 2100 - LINE_AT, k: 0 });
+    // 노드(왼쪽)에 가까운 글자부터 0, 1, …
+    expect(frameNow.letters.map(L => L.k)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    // 캔버스가 이어받는 동안 DOM 글자는 숨는다
+    expect(name.style.visibility).toBe('hidden');
+    // 재생 중에 스크롤이 움직이면 글자와 목적지를 지금 화면 좌표로 옮긴다. 낱말은 재생마다 한 번만 잰다.
+    const measured = vi.mocked(document.createRange).mock.calls.length;
     scrollAt(LINE_AT + 30);
     advance(.1);
     frameNow = boundary()!;
-    expect(frameNow.image).toBe(shot);
+    expect(vi.mocked(document.createRange).mock.calls.length).toBe(measured);
     expect(frameNow.target).toEqual({ x: 64, y: 2700 - LINE_AT - 30 });
-    expect(frameNow.preview.top).toBe(2050 - LINE_AT - 30);
+    expect(frameNow.letters[0].y).toBe(2100 - LINE_AT - 30);
     advance(IN);
     expect(arrivals).toEqual([true]);
     // 오버레이가 실제 첫 헤드가 살 때까지 이 헤드를 잡아 두고 스스로 비운다
     expect(boundary()).toMatchObject({ t: 1, target: { x: 64, y: 2700 - LINE_AT - 30 } });
+    // 되돌아 0에 서면 DOM 글자가 돌아온다
+    scrollAt(LINE_AT - 24);
+    advance(OUT + .1);
+    expect(boundary()).toBeNull();
+    expect(name.style.visibility).toBe('');
   });
 
-  it('그림이 아직 안 받아졌으면 image null로 넘긴다', () => {
-    Object.defineProperty(img, 'complete', { configurable: true, value: false });
+  it('목록이 숨는 lg 아래에서는 프리뷰 캡션 제목에서 떠난다', () => {
+    Object.defineProperty(name, 'getClientRects', { configurable: true, value: () => [] });
     start();
     scrollAt(LINE_AT);
     advance(.5);
-    expect(boundary()).toMatchObject({ image: null });
-    // 영상이나 오류 화면처럼 img가 없어도 같다.
-    img.remove();
-    advance(.1);
-    expect(boundary()).toMatchObject({ image: null });
+    expect(boundary()!.letters[0]).toMatchObject({ ch: 'P', x: 200, y: 2380 - LINE_AT });
+    expect(title.style.visibility).toBe('hidden');
+    expect(name.style.visibility).toBe('');
   });
 
-  it('틀은 q .94에서 숨고 목록과 lg 아래 넘김 줄은 q .9~.7에 사라지며, 0으로 되돌면 인라인 값을 걷는다', () => {
+  it('뭉칠 글자가 없으면 빈 글자로 넘긴다(오류 화면에는 캡션이 없다)', () => {
+    Object.defineProperty(name, 'getClientRects', { configurable: true, value: () => [] });
+    title.remove();
+    start();
+    scrollAt(LINE_AT);
+    advance(.5);
+    expect(boundary()).toMatchObject({ letters: [], font: '' });
+  });
+
+  it('프리뷰·목록·lg 아래 넘김 줄은 처음 .5초 동안 물러나고(프리뷰는 3% 작아진다), 0으로 되돌면 인라인 값을 걷는다', () => {
     const pager = projects.querySelector<HTMLElement>('[data-part="mobile-pager"]')!;
     start();
     expect(frame.style.visibility).toBe('');
     scrollAt(LINE_AT);
-    let hidden = false;
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 12; i++) {
       advance(.06);
-      const q = morphQ(boundary()!.t);
-      expect(frame.style.visibility).toBe(q <= .94 ? 'hidden' : '');
-      expect(Number(list.style.opacity)).toBeCloseTo(smooth(.7, .9, q), 5);
+      const a = away(boundary()!.t);
+      expect(Number(frame.style.opacity)).toBeCloseTo(1 - a, 5);
+      expect(frame.style.transform).toBe(`scale(${1 - .03 * a})`);
+      expect(frame.style.visibility).toBe(a >= 1 ? 'hidden' : '');
+      expect(Number(list.style.opacity)).toBeCloseTo(1 - a, 5);
       expect(pager.style.opacity).toBe(list.style.opacity);
-      hidden ||= q <= .94;
     }
-    expect(hidden).toBe(true);
+    expect(frame.style.visibility).toBe('hidden');
     expect(frame.style.pointerEvents).toBe('none');
     expect(pager.style).toMatchObject({ opacity: '0', pointerEvents: 'none' });
     scrollAt(LINE_AT - 24);
@@ -1729,7 +1760,7 @@ describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된�
     expect(boundary()).toBeNull();
   });
 
-  it('앞으로 도는 morph 동안 아래로 굴리는 wheel·스크롤 키는 막고 위로 굴리는 wheel은 막지 않는다. 이동 구간에서는 막지 않는다', () => {
+  it('앞으로 도는 경계 동안 아래로 굴리는 wheel·스크롤 키는 막고 위로 굴리는 wheel은 막지 않는다. 도착하면 풀린다', () => {
     start();
     expect(wheel(100)).toBe(false);
     scrollAt(LINE_AT);
@@ -1747,14 +1778,15 @@ describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된�
     expect(wheel(100)).toBe(false);
     motion!.setPaused(false);
     expect(wheel(100)).toBe(true);
-    // morph(2.4초)가 끝나면 남은 이동(.5초)이라 막지 않는다.
-    advance(2);
-    expect(boundary()!.t).toBeGreaterThan(HEAD_MORPH_SECONDS / IN);
+    // 내려앉기 직전까지 막는다.
+    advance(IN - .5 - .1);
+    expect(wheel(100)).toBe(true);
+    // 도착하면 풀린다.
+    advance(.2);
+    expect(arrivals).toEqual([true]);
     expect(wheel(100)).toBe(false);
     expect(key('PageDown')).toBe(false);
-    advance(1);
-    expect(wheel(100)).toBe(false);
-    // 되도는 morph에서도 막지 않는다.
+    // 되도는 경계에서도 막지 않는다.
     scrollAt(LINE_AT - 24);
     advance(.5);
     expect(wheel(100)).toBe(false);
@@ -1781,7 +1813,7 @@ describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된�
   it('해시로 Experience에 바로 서면 재생 없이 도착 상태다', () => {
     start({ at: 3000 });
     expect(arrivals).toEqual([true]);
-    // 재생 중인 morph는 없다. 넘기는 것은 도착한 헤드(t 1)뿐이고 오버레이가 첫 헤드에 넘기며 비운다.
+    // 재생 중인 경계는 없다. 넘기는 것은 도착한 헤드(t 1)뿐이고 오버레이가 첫 헤드에 넘기며 비운다.
     expect(overlay.setBoundary.mock.calls.every(([value]) => value === null || (value as { t: number }).t === 1)).toBe(true);
     expect(frame.style.visibility).toBe('hidden');
     expect(list.style.opacity).toBe('0');
@@ -1813,7 +1845,7 @@ describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된�
     expect(boundary()!.t).toBeCloseTo(.5 / IN, 2);
   });
 
-  it('앞으로 도는 morph 동안에도 Ctrl·Meta가 실린 wheel과 키(확대, Ctrl+End)는 막지 않는다', () => {
+  it('앞으로 도는 경계 동안에도 Ctrl·Meta가 실린 wheel과 키(확대, Ctrl+End)는 막지 않는다', () => {
     start();
     scrollAt(LINE_AT);
     advance(.5);
@@ -1844,7 +1876,7 @@ describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된�
     const next = overlayMock();
     motion!.setOverlay(next as unknown as ExperienceOverlay);
     expect(lastCall(old.setBoundary)).toBeNull();
-    expect(lastCall(next.setBoundary)).toMatchObject({ radius: 14 });
+    expect(lastCall(next.setBoundary)).toMatchObject({ letters: expect.any(Array) });
     motion!.setOverlay(null);
     expect(lastCall(next.setBoundary)).toBeNull();
     // 오버레이 없이도 끝까지 돌아 도착한다.

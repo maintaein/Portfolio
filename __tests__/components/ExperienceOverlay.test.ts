@@ -4,7 +4,6 @@ import {
   type BoundaryFrame,
   type TimelineFrame,
 } from '@/components/sections/ExperienceSection/overlay';
-import { SPLIT } from '@/components/sections/ExperienceSection/lineMotion';
 
 // jsdom에는 2d 캔버스가 없다(canvas npm 패키지 미설치). PreviewMorph.test.tsx처럼 getContext를 모의 컨텍스트로 바꾼다.
 // 픽셀은 여기서 못 본다. 이 파일은 루프의 켜짐·꺼짐과 그리기 호출만 잠근다.
@@ -16,7 +15,8 @@ function fakeContext(): FakeContext {
   return new Proxy(store, {
     get(target, key) {
       if (!(key in target)) {
-        target[key] = key === 'createRadialGradient' || key === 'createLinearGradient' ? vi.fn(() => ({ addColorStop: vi.fn() })) : vi.fn();
+        target[key] = key === 'createRadialGradient' || key === 'createLinearGradient' ? vi.fn(() => ({ addColorStop: vi.fn() }))
+          : key === 'measureText' ? vi.fn(() => ({ width: 10, fontBoundingBoxAscent: 40, fontBoundingBoxDescent: 10 })) : vi.fn();
       }
       return target[key];
     },
@@ -54,9 +54,8 @@ const drawCalls = (name: string) => contexts.reduce((n, c) => n + (name in c ? c
 function boundary(over: Partial<BoundaryFrame> = {}): BoundaryFrame {
   return {
     t: 0.3,
-    preview: { left: 100, top: 100, width: 640, height: 360, right: 740, bottom: 460, x: 100, y: 100 } as DOMRect,
-    radius: 16,
-    image: null,
+    font: '700 56px sans-serif',
+    letters: [...'PoseTive'].map((ch, i) => ({ ch, x: 1000 + 30 * i, y: 300, k: i })),
     target: { x: 200, y: 600 },
     ...over,
   };
@@ -132,49 +131,51 @@ describe('createExperienceOverlay', () => {
     overlay.destroy();
   });
 
-  it('그림이 없는 경계도 오류 없이 그린다', () => {
+  // contexts: [화면, 액체]. 액체 캔버스는 처음 모일 때 만든다.
+  it('글자는 액체 캔버스에 처음에는 제자리 그대로 그리고, 필터를 건다', () => {
+    const parent = document.createElement('div');
+    parent.append(canvas);
     const overlay = createExperienceOverlay(canvas)!;
-    overlay.setBoundary(boundary({ image: null, t: 0.3 }));
-    expect(() => tick()).not.toThrow();
-    expect(drawCalls('drawImage')).toBe(0);
-    expect(drawCalls('fill')).toBeGreaterThan(0);
-    overlay.destroy();
-  });
-
-  // 프리뷰 한 장(motion.ts capturePreview가 뜬 캔버스)
-  const shot = () => Object.assign(document.createElement('canvas'), { width: 1280, height: 720 });
-
-  it('그림이 있으면 가면 캔버스에 흔들어 얹는다', () => {
-    const overlay = createExperienceOverlay(canvas)!;
-    // t .1이면 q가 1에 가까워 그림이 드러나 있다
-    overlay.setBoundary(boundary({ image: shot(), t: 0.1 }));
+    overlay.setBoundary(boundary({ t: 0.01 }));
     tick();
-    expect(drawCalls('drawImage')).toBeGreaterThan(0);
+    const texts = contexts[1].fillText.mock.calls;
+    expect(texts.map(c => c[0]).join('')).toBe('PoseTive');
+    const goo = parent.querySelector('canvas:not(:last-child)') as HTMLCanvasElement;
+    expect(goo.style.filter).toContain('url(#experience-goo)');
+    expect(parent.querySelector('filter#experience-goo')).not.toBeNull();
     overlay.destroy();
+    expect(parent.children).toHaveLength(1);
   });
 
-  it('morph 도중에 프리뷰 한 장은 줄어든 상자에 눌려 담기고, 상자는 이미 목적지 쪽으로 옮겨 가 있다', () => {
+  it('다 녹은 뒤에는 글자 대신 방울과 헤드를 그린다', () => {
     const overlay = createExperienceOverlay(canvas)!;
-    overlay.setBoundary(boundary({ image: shot(), t: 0.7 * SPLIT }));
+    overlay.setBoundary(boundary({ t: 0.8 }));
     tick();
-    // contexts: [화면, 가면, 흔들림]. 가면에 얹는 세로 줄들의 목적지 상자를 모은다.
-    const strips = contexts[1].drawImage.mock.calls.filter(c => c.length === 9) as number[][];
-    expect(strips.length).toBeGreaterThan(0);
-    const left = Math.min(...strips.map(c => c[5])), right = Math.max(...strips.map(c => c[5] + c[7]));
-    expect(right - left).toBeLessThan(640 / 2);
-    expect(Math.max(...strips.map(c => c[8]))).toBeLessThan(360 / 2);
-    // 프리뷰 가운데 x 420, 목적지 x 200
-    const mid = (left + right) / 2;
-    expect(mid).toBeLessThan(400);
-    expect(mid).toBeGreaterThan(220);
+    expect(contexts[1].fillText).not.toHaveBeenCalled();
+    expect(contexts[1].ellipse).toHaveBeenCalled();
+    expect(drawCalls('arc')).toBeGreaterThan(0);
     overlay.destroy();
   });
 
-  it('이동 구간(t >= SPLIT)은 헤드를 목적지로 옮겨 그린다', () => {
+  it('글자가 없는 경계는 아무것도 그리지 않고 오류도 없다', () => {
     const overlay = createExperienceOverlay(canvas)!;
-    overlay.setBoundary(boundary({ t: 0.9 }));
+    overlay.setBoundary(boundary({ letters: [] }));
     expect(() => tick()).not.toThrow();
-    expect(drawCalls('fill')).toBeGreaterThan(0);
+    expect(contexts).toHaveLength(1);
+    overlay.destroy();
+  });
+
+  it('경계가 비면 액체 캔버스를 지우고 필터를 걷는다', () => {
+    const parent = document.createElement('div');
+    parent.append(canvas);
+    const overlay = createExperienceOverlay(canvas)!;
+    overlay.setBoundary(boundary());
+    tick();
+    const goo = parent.querySelector('canvas:not(:last-child)') as HTMLCanvasElement;
+    expect(goo.style.filter).not.toBe('');
+    overlay.setBoundary(null);
+    expect(goo.style.filter).toBe('');
+    expect(contexts[1].clearRect.mock.calls.length).toBeGreaterThan(1);
     overlay.destroy();
   });
 

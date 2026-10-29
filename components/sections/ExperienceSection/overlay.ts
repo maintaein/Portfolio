@@ -1,9 +1,10 @@
-// 경력 선·헤드와 프리뷰→헤드 morph를 그리는 화면 고정 Canvas2D 하나. 시안 blobPath, drawOrb, drawLine, boxPoints, trace, drawMorph를 옮겼다.
+// 경력 선·헤드와 Projects 이름 → 첫 헤드 모임을 그리는 화면 고정 Canvas2D 하나. 시안 blobPath, drawOrb, drawLine, zapLine, drawGather를 옮겼다.
 // 두 소비자(경계, 타임라인)의 상태를 받아 rAF 하나로 그린다. 계산은 lineMotion이 맡고 여기서는 그리기만 한다.
-import { K, R, SPLIT, morphPhases, morphQ, pulseOffsets, travelU } from './lineMotion';
+import { GATHER_SECONDS, K, R, gatherPose, pulseOffsets } from './lineMotion';
 
-// image: 프리뷰 겉모습(그림·캡션 띠·글자)을 프리뷰 크기로 뜬 한 장(motion.ts capturePreview).
-export type BoundaryFrame = { t: number; preview: DOMRect; radius: number; image: HTMLCanvasElement | null; target: { x: number; y: number } };
+// 경계 한 프레임. letters: 뭉칠 글자(화면 좌표 글자 상자 가운데, k: 노드에 가까운 순서), font: 그 글자의 CSS font, target: 첫 노드.
+export type GatherLetter = { ch: string; x: number; y: number; k: number };
+export type BoundaryFrame = { t: number; font: string; letters: readonly GatherLetter[]; target: { x: number; y: number } };
 export type TimelineFrame = {
   scrollY: number; axisX: number;
   segments: readonly { from: number; tip: number; swell: number; done: boolean; last: boolean; rOrigin: number }[]; // 화면 y
@@ -17,7 +18,6 @@ export interface ExperienceOverlay {
 }
 
 type G = CanvasRenderingContext2D;
-type OutlinePoint = [number, number, number, number];
 
 const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -26,7 +26,6 @@ const smooth = (a: number, b: number, x: number) => {
   return t * t * (3 - 2 * t);
 };
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
-const easeInOutD = (t: number) => (t < 0.5 ? 12 * t * t : 3 * Math.pow(2 - 2 * t, 2)) / 3; // 속도, 정점 1
 const hash = (a: number, b: number) => {
   const n = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
   return n - Math.floor(n);
@@ -136,34 +135,27 @@ function drawLine(g: G, vh: number, x: number, y0: number, y1: number, rOrigin: 
   g.restore();
 }
 
-// 둥근 상자 둘레를 같은 간격으로 짚은 점과 바깥 법선
-function boxPoints(w: number, h: number, r: number, n = 180): OutlinePoint[] {
-  r = Math.max(0, Math.min(r, w / 2, h / 2));
-  const ex = w - 2 * r, ey = h - 2 * r, arc = (Math.PI * r) / 2, P = Math.PI;
-  const corner = (ox: number, oy: number, a: number): OutlinePoint => [ox + r * Math.cos(a), oy + r * Math.sin(a), Math.cos(a), Math.sin(a)];
-  const segs: [number, (t: number) => OutlinePoint][] = [
-    [ex, t => [-ex / 2 + t * ex, -h / 2, 0, -1]], [arc, t => corner(ex / 2, -ey / 2, -P / 2 + (t * P) / 2)],
-    [ey, t => [w / 2, -ey / 2 + t * ey, 1, 0]], [arc, t => corner(ex / 2, ey / 2, (t * P) / 2)],
-    [ex, t => [ex / 2 - t * ex, h / 2, 0, 1]], [arc, t => corner(-ex / 2, ey / 2, P / 2 + (t * P) / 2)],
-    [ey, t => [-w / 2, ey / 2 - t * ey, -1, 0]], [arc, t => corner(-ex / 2, -ey / 2, P + (t * P) / 2)],
-  ];
-  const L = segs.reduce((s, [l]) => s + l, 0) || 1, pts: OutlinePoint[] = [];
-  for (let i = 0; i < n; i++) {
-    let d = (i / n) * L, k = 0;
-    while (k < 7 && d > segs[k][0]) {
-      d -= segs[k][0];
-      k++;
-    }
-    pts.push(segs[k][1](segs[k][0] ? Math.min(1, d / segs[k][0]) : 0));
+// 전기 줄기: 두 점 사이를 떨며 잇는 가는 선(About→Projects 테두리 전기와 같은 말)
+function zapLine(g: G, x1: number, y1: number, x2: number, y2: number, seed: number, time: number, a: number) {
+  if (a <= 0.01) return;
+  const len = Math.hypot(x2 - x1, y2 - y1) || 1, nx = -(y2 - y1) / len, ny = (x2 - x1) / len;
+  g.beginPath();
+  for (let i = 0; i <= 12; i++) {
+    const t = i / 12, j = (n2(t * 3.1 + seed, time * 7 + seed) - 0.5) * 2 * Math.min(7, len * 0.12) * Math.sin(Math.PI * t);
+    const x = lerp(x1, x2, t) + nx * j, y = lerp(y1, y2, t) + ny * j;
+    if (i) g.lineTo(x, y);
+    else g.moveTo(x, y);
   }
-  return pts;
+  g.strokeStyle = `rgba(220,251,255,${a})`;
+  g.lineWidth = 1;
+  g.stroke();
 }
 
-const trace = (g: G, pts: readonly OutlinePoint[]) => {
-  g.beginPath();
-  pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
-  g.closePath();
-};
+const mix = (a: readonly number[], b: readonly number[], t: number) => a.map((v, i) => v + (b[i] - v) * t);
+const rgb = (c: readonly number[]) => `rgb(${c.map(Math.round).join(',')})`;
+// 글자색(--color-text-primary), 헤드 청록, 번쩍임
+const INK = [238, 244, 245], CYAN_L = [127, 227, 238], WHITE = [236, 253, 255];
+const SVG = 'http://www.w3.org/2000/svg';
 
 // 2D 컨텍스트가 없으면 null이다. 받는 쪽(ExperienceSection)은 그리기 없이 자기 rAF로 읽기 진행을 돈다.
 export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOverlay | null {
@@ -172,22 +164,38 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
   let boundary: BoundaryFrame | null = null;
   let provider: ((dt: number, now: number) => TimelineFrame | null) | null = null;
   let reduced = false, dead = false, raf = 0, last = 0, dpr = 1, vw = 0, vh = 0;
-  // morph의 가면(mask)과 그림 흔들림(warp) 캔버스. 그림이 처음 필요할 때 한 번 만들어 계속 쓴다.
-  let layers: { mask: HTMLCanvasElement; m: G; warp: HTMLCanvasElement; w: G } | null | undefined;
+  // 액체 캔버스: 글자와 방울을 여기에 그리고 SVG 필터(흐리게 번진 알파를 다시 날카롭게 세운다)로 가까운 방울끼리 목이 이어져 붙게 한다.
+  // 이 캔버스 바로 아래 형제로, 처음 모일 때 한 번 만들어 계속 쓴다. 필터가 없는 브라우저에서는 방울이 따로 보일 뿐이다.
+  let goo: { el: HTMLCanvasElement; g: G; svg: SVGSVGElement; blur: SVGFEGaussianBlurElement; on: boolean } | null | undefined;
 
-  const sizeMask = () => {
-    if (!layers) return;
-    layers.mask.width = vw * dpr;
-    layers.mask.height = vh * dpr;
+  const sizeGoo = () => {
+    if (!goo) return;
+    goo.el.width = vw * dpr;
+    goo.el.height = vh * dpr;
   };
-  const getLayers = () => {
-    if (layers === undefined) {
-      const mask = document.createElement('canvas'), warp = document.createElement('canvas');
-      const m = mask.getContext('2d'), w = warp.getContext('2d');
-      layers = m && w ? { mask, m, warp, w } : null;
-      sizeMask();
+  const getGoo = () => {
+    if (goo === undefined) {
+      const el = document.createElement('canvas'), g = el.getContext('2d');
+      if (!g) return (goo = null);
+      el.className = canvas.className;
+      el.setAttribute('aria-hidden', 'true');
+      const svg = document.createElementNS(SVG, 'svg');
+      svg.setAttribute('aria-hidden', 'true');
+      svg.setAttribute('style', 'position:absolute;width:0;height:0');
+      svg.innerHTML = '<filter id="experience-goo" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">'
+        + '<feGaussianBlur in="SourceGraphic" stdDeviation="0.01" result="b"/><feColorMatrix in="b" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 12 -5"/></filter>';
+      canvas.before(svg, el);
+      goo = { el, g, svg, blur: svg.querySelector('feGaussianBlur')!, on: false };
+      sizeGoo();
     }
-    return layers;
+    return goo;
+  };
+  const clearGoo = () => {
+    if (!goo?.on) return;
+    goo.on = false;
+    goo.g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    goo.g.clearRect(0, 0, vw, vh);
+    goo.el.style.filter = '';
   };
   const measure = () => {
     dpr = Math.min(2, devicePixelRatio || 1);
@@ -196,148 +204,105 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
     vh = canvas.clientHeight || innerHeight;
     canvas.width = vw * dpr;
     canvas.height = vh * dpr;
-    sizeMask();
+    sizeGoo();
   };
 
-  /* ---------- 프리뷰 → 헤드 ----------
-     About→Projects 전환(previewPhases)을 거꾸로 밟는다. 프리뷰 겉모습 그대로 상자에 눌려 담겨 구겨지고(7차), 그림은 고르지 않은 앞선으로
-     가운데로 물러나며 그 자리가 빛으로 찬다. 구겨지는 동안 이미 목적지로 옮겨 가고, 헤드가 된 뒤 마저 내려앉는다(2026-10-29). */
-  const drawMorph = (b: BoundaryFrame, time: number) => {
-    const pr = b.preview, img = b.image;
-    const px = pr.left + pr.width / 2, py = pr.top + pr.height / 2, tx = b.target.x, ty = b.target.y, go = travelU(b.t);
-    const cx = lerp(px, tx, easeInOut(go)), cy = lerp(py, ty, easeInOut(go));
-    if (b.t >= SPLIT) {
-      // 헤드가 마저 내려앉는다. 진행 방향으로 살짝 늘어나고, 늘어남은 넘김에서 튀지 않게 차오른다.
-      const st = 1 + 0.35 * easeInOutD(go) * smooth(SPLIT, SPLIT + 0.3 * (1 - SPLIT), b.t), ang = Math.atan2(ty - py, tx - px);
+  /* ---------- Projects 이름 → 헤드 ----------
+     사이트 전환 말을 빌린다. ① 충전: About→Projects의 전기처럼 빛이 글자를 훑어 흰 글자가 청록으로 달아오르고 글자 사이에 전기 줄기가 튄다.
+     ② 녹음: 글자 획이 둥글게 녹아 방울이 된다. ③ 모임: 무리가 노드로 떠나는 동안 글자들이 가운데로 소용돌이치며 모이고, 가까워진 방울끼리 목으로 이어져 한 덩이가 된다.
+     ④ 맺힘: 덩이에 헤드 재질이 차올라 진행 방향으로 늘어난 채 노드에 내려앉는다. 넘김은 첫 헤드의 고리 펄스다. */
+  const drawGather = (b: BoundaryFrame, time: number) => {
+    const n = b.letters.length, layer = n ? getGoo() : null;
+    if (!layer) return;
+    const { g: gctx, el, blur } = layer;
+    const sec = b.t * GATHER_SECONDS, node = b.target;
+    const xs = b.letters.map(L => L.x), minX = Math.min(...xs), maxX = Math.max(...xs);
+    const word = { x: (minX + maxX) / 2, y: b.letters.reduce((a, L) => a + L.y, 0) / n };
+    const rDrop = (1.2 * R) / Math.sqrt(n);
+    layer.on = true;
+    // 녹음: 번짐을 키울수록 획 모서리가 둥글어지고 가는 획이 가늘어진다. 방울끼리 가까우면 목이 이어진다.
+    blur.setAttribute('stdDeviation', lerp(0.01, 4.5, smooth(0.2, 0.8, sec)).toFixed(2));
+    const charge = smooth(0, 0.45, sec);
+    el.style.filter = `url(#experience-goo) drop-shadow(0 0 ${(2 + 4 * charge).toFixed(1)}px rgba(127,227,238,${(0.85 * charge).toFixed(2)})) drop-shadow(0 0 14px rgba(3,179,195,${(0.5 * charge).toFixed(2)}))`;
+    gctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    gctx.clearRect(0, 0, vw, vh);
+    gctx.font = b.font;
+    gctx.textAlign = 'center';
+    gctx.textBaseline = 'alphabetic';
+    // 글자 상자 가운데에서 기준선까지(상자 높이 = 글꼴 올림 + 내림)
+    const m = gctx.measureText('P'), base = (m.fontBoundingBoxAscent - m.fontBoundingBoxDescent) / 2;
+    const scan = lerp(minX - 60, maxX + 60, charge);
+    const poses = b.letters.map(L => {
+      const p = gatherPose(L, sec, word, node);
+      // 충전: 훑는 빛이 지나간 글자는 청록이 되고, 지나가는 순간 하얗게 번쩍인다
+      const lit = smooth(-10, 50, scan - L.x), flash = Math.exp(-(((scan - L.x) / 28) ** 2)) * (1 - smooth(0.3, 0.5, sec));
+      const col = rgb(mix(mix(INK, CYAN_L, Math.max(lit, p.melt)), WHITE, 0.8 * flash));
+      if (p.melt < 1) {
+        const sc = lerp(1, 0.5, p.melt);
+        gctx.save();
+        gctx.translate(p.x, p.y);
+        gctx.scale(sc, sc);
+        gctx.globalAlpha = 1 - p.melt;
+        gctx.fillStyle = col;
+        gctx.fillText(L.ch, 0, base);
+        gctx.restore();
+      }
+      // 방울: 글자가 녹는 자리에서 맺히고, 모일수록 커져 다 모이면 겹친 방울이 헤드 크기 한 덩이가 된다
+      const rd = smooth(0, 0.5, p.melt) * lerp(rDrop, R * 0.85, p.g), st = 1 + 0.6 * p.speed;
+      if (rd > 0.3) {
+        gctx.fillStyle = col;
+        gctx.beginPath();
+        gctx.ellipse(p.x, p.y, rd * st, rd / Math.sqrt(st), p.ang, 0, Math.PI * 2);
+        gctx.fill();
+        // 꼬리: 지나온 자리의 작은 구슬 셋이 번짐에 이어져 물방울 꼬리가 된다
+        if (p.speed > 0.15) for (let j = 1; j <= 3; j++) {
+          const q = gatherPose(L, sec - 0.035 * j, word, node);
+          gctx.beginPath();
+          gctx.arc(q.x, q.y, rd * (1 - 0.24 * j), 0, Math.PI * 2);
+          gctx.fill();
+        }
+      }
+      return { ...p, k: L.k, rd, st };
+    });
+    const gm = poses.reduce((a, p) => a + p.g, 0) / n;
+    // 전기 줄기: 이웃 글자 사이에 튀다가, 다 모여 한 덩이가 되면 가라앉는다
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.shadowColor = 'rgba(3,179,195,.9)';
+    ctx.shadowBlur = 6;
+    const live = smooth(0.12, 0.3, sec) * (1 - smooth(0.6, 0.9, gm));
+    for (let i = 0; i < n - 1; i++) {
+      const a = poses[i], c = poses[i + 1];
+      zapLine(ctx, a.x, a.y, c.x, c.y, i * 3.3, time, K * 1.2 * live * (1 - smooth(90, 200, Math.hypot(a.x - c.x, a.y - c.y))));
+    }
+    ctx.restore();
+    // 방울 속심: 헤드와 같은 재질(흰 속)이라 같은 것이 모이는 것으로 읽힌다
+    const core = 0.9 * (1 - smooth(0.7, 1, gm));
+    poses.forEach((p, i) => {
+      if (p.rd <= 0.8 || core <= 0) return;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.ang);
+      ctx.scale(p.st, 1 / Math.sqrt(p.st));
+      blobPath(ctx, 0, 0, p.rd * 0.42, 0.08, i * 2.7, time);
+      ctx.fillStyle = `rgba(236,253,255,${core})`;
+      ctx.fill();
+      ctx.restore();
+    });
+    // 덩이가 되면 헤드 재질이 차오른다. 무리 가운데에서 진행 방향으로 늘어나며 날아 노드에 내려앉는다.
+    const head = smooth(0.55, 0.95, gm);
+    if (head > 0) {
+      const cx = poses.reduce((a, p) => a + p.x, 0) / n, cy = poses.reduce((a, p) => a + p.y, 0) / n;
+      const lead = poses.find(p => p.k === 0) ?? poses[0], st = 1 + 0.35 * lead.speed, ang = lead.ang;
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(ang);
       ctx.scale(st, 1 / Math.sqrt(st));
       ctx.rotate(-ang);
       ctx.translate(-cx, -cy);
-      drawOrb(ctx, cx, cy, R, 1, 0, time);
-      ctx.restore();
-      return;
-    }
-    const q = morphQ(b.t), v = morphPhases(q);
-    const W = lerp(R * 2, pr.width, v.widen), H = lerp(R * 2, pr.height, v.face), hw = W / 2, hh = H / 2;
-    // 모서리는 프리뷰 모서리에서 다 둥근 덩이로 간다
-    const rad = lerp(Math.min(hw, hh), b.radius, v.corner);
-    const end = 1 - smooth(0, 0.12, q); // 끝: 전기가 가라앉고 테두리 없는 헤드만 남는다
-    const zap = v.strands * (1 - end), sz = clamp(Math.min(W, H) / 60, 0.35, 1);
-    // 빛(흰 막과 가장자리 광휘)은 윤곽이 일그러지기 시작할 때부터 얹혀 맨 윤곽이 드러나지 않게 한다
-    const glow = Math.max(v.strands, 0.6 * v.ragged);
-    // 구김과 잔떨림은 안쪽으로만 민다. 바깥으로 밀면 줄어들기 전에 프리뷰보다 커지듯 모서리와 테두리가 부풀었다(7차).
-    const unit = Math.sqrt(hw * hh) || 1, crush = 0.18 * v.crumple * unit, swing = v.ragged * Math.min(5, 1 + 0.015 * Math.min(W, H));
-    const lobes = [[3, 0.45, 0.7], [4, 0.3, -1.1], [5, 0.25, 1.6], [7, 0.15, -2.3]];
-    const outline = boxPoints(W, H, rad, 220).map(([x, y, nx, ny]): OutlinePoint => {
-      const a = Math.atan2(y / (hh || 1), x / (hw || 1));
-      let lobe = 0;
-      for (const [k, w, sp] of lobes) lobe += w * Math.cos(k * a + sp * time + k * 1.7);
-      // 법선 따라 안으로 밀면 모서리 호가 서로 넘어가 뾰족하게 접혔다. 가운데 쪽으로 당기면 접히지 않는다.
-      const pull = crush * (lobe + 1.15) * 0.8 + swing * n2(x * 0.03 + 11, y * 0.03 + time * 0.3) * 2;
-      const f = Math.max(0.3, 1 - pull / (Math.hypot(x, y) || 1));
-      return [cx + x * f, cy + y * f, nx, ny];
-    });
-    ctx.save();
-    ctx.globalAlpha = (1 - v.handoff) * (1 - end);
-    if (glow > 0) {
-      ctx.save();
-      ctx.shadowColor = `rgba(3,179,195,${0.85 * glow})`;
-      ctx.shadowBlur = 26 * sz;
-      trace(ctx, outline);
-      ctx.fillStyle = `rgba(3,179,195,${0.3 * glow})`;
-      ctx.fill();
+      drawOrb(ctx, cx, cy, R * lerp(0.6, 1, head), head, 0, time);
       ctx.restore();
     }
-    ctx.save();
-    trace(ctx, outline);
-    ctx.clip();
-    if (v.reveal < 1) {
-      ctx.fillStyle = `rgba(127,227,238,${1 - v.reveal})`;
-      ctx.fillRect(cx - hw - 60, cy - hh - 60, W + 120, H + 120);
-    }
-    const lay = v.reveal > 0 && img && img.width ? getLayers() : null;
-    if (img && lay) {
-      const { mask, m: mctx, warp, w: wctx } = lay;
-      // 프리뷰 겉모습은 지금 상자(W×H)에 눌려 담기고, 가운데에서 재는 고르지 않은 앞선 안에서만 보인다
-      mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      mctx.clearRect(0, 0, vw, vh);
-      mctx.filter = `blur(${Math.max(1, 0.12 * Math.min(hw, hh))}px)`;
-      mctx.beginPath();
-      for (let i = 0; i <= 72; i++) {
-        const a = (i / 72) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
-        const rf = v.reveal * (2.75 + (n2(c * 1.2 + 31, s * 1.2 + time * 0.12) - 0.5) * 2.6);
-        if (i) mctx.lineTo(cx + c * rf * hw, cy + s * rf * hh);
-        else mctx.moveTo(cx + c * rf * hw, cy + s * rf * hh);
-      }
-      mctx.fillStyle = '#fff';
-      mctx.fill();
-      mctx.filter = 'none';
-      const fw = pr.width, fh = pr.height, sw = img.width, sh = img.height, kx = W / fw, ky = H / fh;
-      // 그림은 느린 흐름 장을 따라 밀린다. 가는 가로줄을 옆으로 민 뒤 가는 세로줄을 위아래로 미는 두 번 밀기라 칸 경계가 보이지 않는다.
-      // 덮어 그려야 해서 source-atop이다.
-      const flow = Math.max(v.crumple, 0.5 * v.strands) * Math.min(fw, fh) * 0.07, step = 3;
-      const ww = Math.round(fw * dpr), wh = Math.round(fh * dpr);
-      if (warp.width !== ww || warp.height !== wh) {
-        warp.width = ww;
-        warp.height = wh;
-      } else wctx.clearRect(0, 0, ww, wh);
-      wctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      for (let y = 0; y < fh; y += step) {
-        const ox = flow * (n2(y * 0.012 + 3, time * 0.9) - 0.5) * 2;
-        wctx.drawImage(img, 0, (sh * y) / fh, sw, (sh * step) / fh, ox, y, fw, step + 0.5);
-      }
-      mctx.globalCompositeOperation = 'source-atop';
-      for (let x = 0; x < fw; x += step) {
-        const oy = flow * (n2(x * 0.012 + 17, time * 0.7) - 0.5) * 2;
-        mctx.drawImage(warp, x * dpr, 0, step * dpr, wh, cx - W / 2 + x * kx, cy - H / 2 + oy * ky, (step + 0.5) * kx, H);
-      }
-      mctx.globalCompositeOperation = 'source-over';
-      ctx.drawImage(mask, 0, 0, vw, vh);
-    }
-    if (glow > 0) {
-      // 빛 막: 안쪽은 흐리게, 가장자리로 갈수록 하얗게 밝아진다. 구겨질수록 막이 짙다.
-      const sheet = Math.max(0.22 * v.strands, 0.38 * v.crumple);
-      ctx.fillStyle = `rgba(225,250,255,${sheet})`;
-      ctx.fillRect(cx - hw - 60, cy - hh - 60, W + 120, H + 120);
-      const band = Math.min(26, 6 + 0.07 * Math.min(W, H));
-      ctx.shadowColor = `rgba(236,253,255,${glow})`;
-      ctx.shadowBlur = band;
-      trace(ctx, outline);
-      ctx.lineWidth = band;
-      ctx.strokeStyle = `rgba(236,253,255,${0.55 * glow})`;
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-      ctx.lineWidth = band * 0.35;
-      ctx.strokeStyle = `rgba(200,248,252,${0.5 * glow})`;
-      ctx.stroke();
-    }
-    ctx.restore();
-    if (zap > 0) {
-      // 가장자리 전기 줄기: 굵은 선두 하나와 가는 줄기 둘이 외곽선을 따라 떨린다
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.lineJoin = 'round';
-      for (let i = 0; i < 3; i++) {
-        const amp = (i ? 1 + 0.8 * i : 0.6) * sz, sp = 1 + i * 0.19; // 줄기는 외곽선에 붙어 떨린다. 멀리 뜨면 별개의 테두리로 읽힌다
-        ctx.beginPath();
-        outline.forEach(([x, y, nx, ny], j) => {
-          const d = amp * (n2(x * 0.03 + i * 5.1, y * 0.03 + time * 1.4 * sp) - 0.5) * 2.6;
-          if (j) ctx.lineTo(x + nx * d, y + ny * d);
-          else ctx.moveTo(x + nx * d, y + ny * d);
-        });
-        ctx.closePath();
-        ctx.shadowColor = 'rgba(3,179,195,.9)';
-        ctx.shadowBlur = i ? 6 : 10;
-        ctx.lineWidth = (i ? 0.9 : 1.6) * zap;
-        ctx.strokeStyle = i ? `rgba(127,227,238,${0.55 * zap})` : `rgba(235,253,255,${0.9 * zap})`;
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
-    ctx.restore();
-    if (end > 0) drawOrb(ctx, cx, cy, R, end, 0, time);
   };
 
   const drawTimeline = (f: TimelineFrame, time: number) => {
@@ -380,7 +345,8 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
     // 도착한(t 1) 헤드는 타임라인의 첫 헤드가 살 때까지 그 자리에 잡아 둔다. 도착이 React를 거쳐 첫 헤드에 닿는 한 프레임 동안 헤드가 비지 않는다.
     if (boundary && boundary.t >= 1 && (!timeline || timeline.heads.some(h => h.current))) boundary = null;
     // 모션 감소에서는 경계를 재생하지 않는다
-    if (boundary && !reduced && boundary.t > 0) drawMorph(boundary, time);
+    if (boundary && !reduced && boundary.t > 0) drawGather(boundary, time);
+    else clearGoo();
     if (timeline) drawTimeline(timeline, time);
     start();
   };
@@ -396,6 +362,7 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
     if (boundary || provider) return start();
     stop();
     clear();
+    clearGoo();
   };
   const onVisibility = () => (document.hidden ? stop() : start());
 
@@ -422,6 +389,8 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
       dead = true;
       stop();
       boundary = provider = null;
+      goo?.el.remove();
+      goo?.svg.remove();
       window.removeEventListener('resize', measure);
       box?.disconnect();
       document.removeEventListener('visibilitychange', onVisibility);
