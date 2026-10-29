@@ -368,12 +368,9 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     // 열기 단추는 떠나는 동안 눌리지 않는다. 상세의 FLIP과 이 경계가 같은 프리뷰를 함께 옮기지 않는다.
     if (frame) Object.assign(frame.style, { transform: '', opacity: '', clipPath: '', pointerEvents: 'none', visibility: q <= .94 ? 'hidden' : '' });
     if (list) Object.assign(list.style, { opacity: String(smooth(span(.7, .9, q))), pointerEvents: 'none' });
-    // 도착하면 실제 첫 헤드가 넘겨받아 오버레이 경계를 비운다. 비우지 않으면 오버레이가 그릴 것 없이 돈다.
-    if (!overlay || arrived) {
-      overlay?.setBoundary(null);
-      return;
-    }
+    if (!overlay) return;
     // 출발과 도착은 매 프레임 지금 화면 좌표로 잰다. 재생 중에 스크롤이 움직여도 프리뷰에서 떠나 지금 노드 자리에 내려앉는다.
+    // 도착(t 1)도 넘긴다. 오버레이가 실제 첫 헤드가 살 때까지 그 자리에 헤드를 잡아 두고 스스로 비운다(넘김 프레임이 비지 않는다).
     const img = frame?.querySelector('img');
     const axisBox = layoutBox(axis);
     overlay.setBoundary({

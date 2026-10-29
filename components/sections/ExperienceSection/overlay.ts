@@ -382,9 +382,11 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
     last = now;
     const time = reduced ? 0 : now / 1000;
     clear();
-    // 모션 감소에서는 경계를 재생하지 않는다
-    if (boundary && !reduced && boundary.t > 0 && boundary.t < 1) drawMorph(boundary, time);
     const timeline = provider?.(dt, now);
+    // 도착한(t 1) 헤드는 타임라인의 첫 헤드가 살 때까지 그 자리에 잡아 둔다. 도착이 React를 거쳐 첫 헤드에 닿는 한 프레임 동안 헤드가 비지 않는다.
+    if (boundary && boundary.t >= 1 && (!timeline || timeline.heads.some(h => h.current))) boundary = null;
+    // 모션 감소에서는 경계를 재생하지 않는다
+    if (boundary && !reduced && boundary.t > 0) drawMorph(boundary, time);
     if (timeline) drawTimeline(timeline, time);
     start();
   };

@@ -1660,7 +1660,7 @@ describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된�
     expect(arrivals).toEqual([true, false]);
   });
 
-  it('morph 동안 setBoundary에 프리뷰 rect, 첫 노드 목적지, 받아진 그림을 넘기고 도착하면 null', () => {
+  it('morph 동안 setBoundary에 프리뷰 rect, 첫 노드 목적지, 받아진 그림을 넘기고 도착에는 t 1을 넘긴다', () => {
     start();
     expect(boundary()).toBeNull();
     scrollAt(LINE_AT);
@@ -1677,7 +1677,8 @@ describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된�
     expect(frameNow.preview.top).toBe(2050 - LINE_AT - 30);
     advance(IN);
     expect(arrivals).toEqual([true]);
-    expect(boundary()).toBeNull();
+    // 오버레이가 실제 첫 헤드가 살 때까지 이 헤드를 잡아 두고 스스로 비운다
+    expect(boundary()).toMatchObject({ t: 1, target: { x: 64, y: 2700 - LINE_AT - 30 } });
   });
 
   it('그림이 아직 안 받아졌으면 image null로 넘긴다', () => {
@@ -1765,7 +1766,8 @@ describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된�
   it('해시로 Experience에 바로 서면 재생 없이 도착 상태다', () => {
     start({ at: 3000 });
     expect(arrivals).toEqual([true]);
-    expect(overlay.setBoundary.mock.calls.every(([value]) => value === null)).toBe(true);
+    // 재생 중인 morph는 없다. 넘기는 것은 도착한 헤드(t 1)뿐이고 오버레이가 첫 헤드에 넘기며 비운다.
+    expect(overlay.setBoundary.mock.calls.every(([value]) => value === null || (value as { t: number }).t === 1)).toBe(true);
     expect(frame.style.visibility).toBe('hidden');
     expect(list.style.opacity).toBe('0');
     expect(wheel(100)).toBe(false);

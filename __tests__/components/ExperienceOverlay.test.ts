@@ -161,6 +161,31 @@ describe('createExperienceOverlay', () => {
     overlay.destroy();
   });
 
+  it('도착(t 1)한 헤드는 타임라인의 첫 헤드가 살 때까지 그리고, 살면 경계를 비운다', () => {
+    const none = { ...timeline, segments: [], heads: timeline.heads.map(h => ({ ...h, r: 0, current: false })) };
+    let frame: TimelineFrame = none;
+    const overlay = createExperienceOverlay(canvas)!;
+    overlay.setTimeline(() => frame);
+    overlay.setBoundary(boundary({ t: 1 }));
+    tick();
+    expect(drawCalls('fill')).toBeGreaterThan(0);
+    // 첫 헤드가 살면 경계를 비운다. 그 뒤 타임라인을 걷으면 그릴 것이 없어 멈춘다.
+    frame = timeline;
+    tick();
+    overlay.setTimeline(null);
+    expect(frames.size).toBe(0);
+    overlay.destroy();
+  });
+
+  it('타임라인이 없으면 도착(t 1)한 경계를 그리지 않고 비운다', () => {
+    const overlay = createExperienceOverlay(canvas)!;
+    overlay.setBoundary(boundary({ t: 1 }));
+    tick();
+    expect(drawCalls('fill')).toBe(0);
+    expect(frames.size).toBe(0);
+    overlay.destroy();
+  });
+
   it('provider가 프레임을 주면 선과 헤드를 그린다', () => {
     const provider = vi.fn(() => timeline);
     const overlay = createExperienceOverlay(canvas)!;
