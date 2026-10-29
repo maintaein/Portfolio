@@ -423,10 +423,8 @@ html[data-name-side='nav'] .site-name { position: fixed; z-index: 51; left: max(
 .logo-host > div { width: 100%; height: 100%; opacity: 0; }
 /* 볼과 로고의 교대는 경계(motion.ts)의 변신이다. 볼이 Hero 앵커째로 작은 고리로 접히고 같은 지름의 Electric 원이 넘겨받아 About으로 간다. */
 [data-logo-live] .logo-host { opacity: 1; }
-/* 공유 외피(M5). 경계가 rect 좌표와 채움을 쓰고 도는 동안만 보인다. nav(z 50) 아래, 섹션 위다. */
-.motion-shell { position: fixed; inset: 0; z-index: 40; width: 100%; height: 100%; overflow: visible; pointer-events: none; visibility: hidden; }
-.motion-shell-face { fill: #03b3c3; fill-opacity: 0; stroke: #7fe3ee; stroke-width: 1.5; }
-.motion-shell-glow { fill: none; stroke: #03b3c3; stroke-width: 10; stroke-opacity: .22; }
+/* 경력 선과 프리뷰 morph를 그리는 오버레이 캔버스. nav(z 50) 아래, 섹션 위다. */
+.motion-overlay { position: fixed; inset: 0; z-index: 40; width: 100%; height: 100%; pointer-events: none; }
 [data-logo-live] [data-motion-anchor] .about-electric-static { opacity: 0; }
 /* 가려진 실루엣의 충전 애니메이션도 멈춘다. GL과 겹쳐 돌면 첫 화면 프레임을 계속 다시 그린다(인트로 뒤 GL이 뜨면서 드러났다). */
 [data-logo-live] [data-motion-anchor] .about-electric-static-shape { animation: none; }

@@ -11,6 +11,7 @@ import { SectionActivityProvider } from '@/components/common/SectionActivityCont
 import { AboutSection, AwardAndCertificateSection, ExperienceSection, Footer, ProjectsSection, SkillsSection } from '@/components/sections';
 import type { AboutSectionHandle } from '@/components/sections/AboutSection';
 import type { ProjectsSectionHandle } from '@/components/sections/ProjectsSection';
+import { createExperienceOverlay, type ExperienceOverlay } from '@/components/sections/ExperienceSection/overlay';
 import BootSequence, { type BootSequenceHandle, type IntroTargets } from '@/components/sections/BootSequence';
 import { useMotionPreference } from '@/hooks/useMotionPreference';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
@@ -45,7 +46,7 @@ export default function HomeClient() {
   const projectsRef = useRef<ProjectsSectionHandle>(null);
   const wordmarkRef = useRef<HTMLButtonElement>(null);
   const logoHostRef = useRef<HTMLDivElement>(null);
-  const shellRef = useRef<SVGSVGElement>(null);
+  const overlayRef = useRef<HTMLCanvasElement>(null);
   const heroStaticRef = useRef<HTMLDivElement>(null);
   const ballIconsRef = useRef<HTMLDivElement>(null);
   const ballRef = useRef<CrystalizedBallHandle>(null);
@@ -90,6 +91,15 @@ export default function HomeClient() {
   const ballRuns = heroResting || logoOwner === 'boundary';
   const activeLabel = HOME_SECTION_CONFIG.find(section => section.id === active)?.label ?? 'Overview';
   const [announcement, setAnnouncement] = useState('');
+  // 경력 선과 프리뷰 morph를 그리는 오버레이 손잡이. 넘겨받을 쪽(ExperienceSection, motion)은 다음 단계에서 잇는다.
+  const [, setOverlay] = useState<ExperienceOverlay | null>(null);
+  useEffect(() => {
+    const canvas = overlayRef.current;
+    if (!canvas) return;
+    const overlay = createExperienceOverlay(canvas);
+    setOverlay(overlay);
+    return () => { overlay.destroy(); setOverlay(null); };
+  }, []);
   // 명시적 이동이 도착해 목적지에 포커스가 간 때만 알린다. 수동으로 읽어 넘긴 섹션은 알리지 않는다.
   useEffect(() => {
     if (navigationTarget) setAnnouncement('');
@@ -116,7 +126,7 @@ export default function HomeClient() {
   useEffect(() => {
     const root = rootRef.current, header = headerRef.current, wordmark = wordmarkRef.current, logoHost = logoHostRef.current;
     if (!motionModule || !root || !header || !wordmark || !logoHost) return;
-    const motion = motionModule.createPortfolioMotion({ root, header, wordmark, logoHost, ball: ballRef, shell: shellRef.current, reduced: reducedMotion, onLogoOwnerChange: setLogoOwner, onLineArrive: setLineArrived });
+    const motion = motionModule.createPortfolioMotion({ root, header, wordmark, logoHost, ball: ballRef, reduced: reducedMotion, onLogoOwnerChange: setLogoOwner, onLineArrive: setLineArrived });
     motionRef.current = motion;
     return () => { motion.destroy(); motionRef.current = null; setLogoOwner('none'); setLineArrived(false); };
   }, [motionModule, reducedMotion]);
@@ -197,11 +207,8 @@ export default function HomeClient() {
               intensity={0.65} glow={0.3} speed={1.1} flicker={0.25} interactive={false} /> : null}
           </div>
         </div>
-        {/* 페이지 전용 공유 외피(M5). 프리뷰→선, 선→면 두 경계만 쓰고 그 밖에는 숨는다. 화면 좌표에 고정되고 누르거나 읽을 것이 아니다. */}
-        <svg ref={shellRef} data-motion-shell aria-hidden="true" focusable="false" className="motion-shell">
-          <rect className="motion-shell-glow" />
-          <rect className="motion-shell-face" />
-        </svg>
+        {/* 페이지 전용 오버레이 캔버스. 경력 선·헤드와 프리뷰→헤드 morph를 그린다. 화면 좌표에 고정되고 누르거나 읽을 것이 아니다. */}
+        <canvas ref={overlayRef} data-motion-overlay aria-hidden="true" className="motion-overlay" />
       </main>
       <div inert={obscured} data-flow-finale=""><Footer /></div>
       <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">{announcement}</div>
