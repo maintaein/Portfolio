@@ -429,88 +429,63 @@ test.describe('Native motion activity', () => {
     await expect(list).toHaveCSS('opacity', '1');
     await expect(frame).toHaveCSS('opacity', '1');
   });
-  test('Projects→Experience 경계는 지점에서 프리뷰를 공유 외피로 접어 첫 세로축에 넘기고, 되넘으면 틀을 깨끗이 돌려놓는다', async ({ page }) => {
+  test('Projects→Experience 경계는 지점에서 프리뷰를 제자리에서 첫 헤드로 접어 넘기고, 되넘으면 틀을 깨끗이 돌려놓는다', async ({ page }) => {
     // 소프트웨어 GL 프레임을 기다린다. 성공 조건이 아니라 실패 상한이다.
     test.setTimeout(180_000);
     await page.setViewportSize({ width: 1440, height: 900 });
     await enter(page, 'projects');
-    const line = page.locator('[data-part="experience-line"]');
     const frame = page.locator('[data-motion-anchor="projects-preview"] > div');
-    const shell = page.locator('[data-motion-shell]');
+    const list = page.locator('#projects [data-part="index"]');
     const open = page.locator('[data-part="preview-open"]');
-    // 경계 모듈이 오면 선 그룹은 넘겨받기 전까지 숨는다. 외피는 쉬는 동안 숨고 누르거나 읽을 것이 아니다.
-    await expect(line).toHaveCSS('opacity', '0', { timeout: 20_000 });
-    await expect(shell).toHaveCSS('visibility', 'hidden');
-    await expect(shell).toHaveCSS('pointer-events', 'none');
-    await expect(shell).toHaveAttribute('aria-hidden', 'true');
-    // 선 지점(수정 1 I1): 첫 본문 위끝이 화면 아래끝에서 96px 올라온 스크롤. 잠금 자리보다 LOGO_BACK(24) 넘게 아래다.
+    const fasoo = page.locator('#experience article').first();
+    // 경계는 로고가 프리뷰에 넘긴 Projects 쉬는 자리에서 돈다. 그림은 aria-hidden 오버레이 캔버스 하나가 그린다.
+    await expect(page.locator('.portfolio-document')).toHaveAttribute('data-logo-owner', 'projects', SLOW);
+    await expect(page.locator('canvas[data-motion-overlay]')).toHaveAttribute('aria-hidden', 'true');
+    await expect(page.locator('canvas[data-motion-overlay]')).toHaveCSS('pointer-events', 'none');
+    await expect(fasoo).toHaveAttribute('data-state', 'future');
+    // 선 지점(계획 R1): 첫 노드가 화면 아래끝에서 140px 올라온 스크롤. 잠금 자리 + LOGO_BACK(24)보다 아래, 프리뷰가 nav 아래 12px에 닿는 스크롤보다 위에 묶는다.
     const { lineAt, previewTop, header } = await page.evaluate(() => {
       const projects = document.querySelector<HTMLElement>('[data-section="projects"]')!;
       const lock = projects.getBoundingClientRect().top + scrollY - parseFloat(getComputedStyle(projects).scrollMarginTop);
+      const node = document.querySelector<HTMLElement>('[data-part="experience-node"]')!;
       let y = 0;
-      for (let node = document.querySelector<HTMLElement>('#experience article'); node; node = node.offsetParent as HTMLElement | null) y += node.offsetTop;
-      return {
-        lineAt: Math.max(lock + 25, y - innerHeight + 96),
-        previewTop: document.querySelector('[data-motion-anchor="projects-preview"]')!.getBoundingClientRect().top + scrollY,
-        header: document.querySelector('[data-scroll-header]')!.getBoundingClientRect().height,
-      };
+      for (let el: HTMLElement | null = node; el; el = el.offsetParent as HTMLElement | null) y += el.offsetTop;
+      const previewTop = document.querySelector('[data-motion-anchor="projects-preview"]')!.getBoundingClientRect().top + scrollY;
+      const header = document.querySelector('[data-scroll-header]')!.getBoundingClientRect().height;
+      return { lineAt: Math.min(previewTop - header - 12, Math.max(lock + 25, y + Math.min(node.offsetHeight, 60) / 2 - innerHeight + 140)), previewTop, header };
     });
     // 출발(0%)에서 프리뷰는 아직 nav 아래에 다 있다.
     expect(previewTop - (Math.ceil(lineAt) + 10)).toBeGreaterThanOrEqual(header);
-    // 프레임 수에 기대지 않고 쓰기 순서를 본다. 외피가 보이는 동안 선 그룹은 숨고, 선 그룹이 드러날 때는 외피가 이미 숨었다.
-    const record = () => page.evaluate(() => new Promise<{ shown: number; overlap: number; minFrame: number }>(resolve => {
-      const shellEl = document.querySelector<SVGSVGElement>('[data-motion-shell]')!;
-      const group = document.querySelector<HTMLElement>('[data-part="experience-line"]')!;
-      const frameEl = document.querySelector<HTMLElement>('[data-motion-anchor="projects-preview"] > div')!;
-      const seen = { shown: 0, overlap: 0, minFrame: 1 };
-      const observer = new MutationObserver(() => {
-        const visible = shellEl.style.visibility === 'visible';
-        if (visible) { seen.shown++; seen.minFrame = Math.min(seen.minFrame, Number(frameEl.style.opacity || 1)); }
-        if (visible && group.style.opacity !== '0') seen.overlap++;
-        if (!visible && seen.shown) { observer.disconnect(); resolve(seen); }
-      });
-      observer.observe(shellEl, { attributes: true, attributeFilter: ['style'] });
-      observer.observe(group, { attributes: true, attributeFilter: ['style'] });
-    }));
-    const forward = record();
     await page.evaluate(y => window.scrollTo({ top: y, behavior: 'instant' }), Math.ceil(lineAt) + 10);
-    const went = await forward;
-    expect(went.shown).toBeGreaterThan(0);
-    expect(went.overlap).toBe(0);
-    await expect(line).toHaveCSS('opacity', '1', SLOW);
-    await expect(shell).toHaveCSS('visibility', 'hidden');
-    // 미디어는 사라졌고 떠난 프리뷰는 눌리지 않는다.
-    await expect(frame).toHaveCSS('opacity', '0');
+    // 도착(100%)은 첫 헤드와 FASOO에 넘긴다. 읽기선 전이라도 FASOO가 공개되고 다음 이력은 아직 없다.
+    await expect(fasoo).toHaveAttribute('data-state', 'current', SLOW);
+    await expect(fasoo.locator('[data-part="experience-node"]')).toHaveCSS('opacity', '1', SLOW);
+    await expect(page.locator('#experience article[data-state="future"]')).toHaveCount(2);
+    // 떠난 프리뷰는 숨고 눌리지 않으며 목록도 사라졌다.
+    await expect(frame).toHaveCSS('visibility', 'hidden');
     await expect(open).toHaveCSS('pointer-events', 'none');
-    // 도착(100%)은 첫 표식과 FASOO 본문에 넘긴다(수정 1 I1). 읽기선 전이라도 둘이 공개되고 다음 이력은 아직 없다.
-    await expect(page.locator('.experience-rail li[inert]')).toHaveCount(2);
-    await expect(page.locator('.experience-rail li').first()).toHaveCSS('visibility', 'visible', SLOW);
-    await expect(page.locator('#experience article').first()).toHaveAttribute('data-state', 'current');
-    await expect(page.locator('#experience article').first()).toHaveCSS('opacity', '1', SLOW);
-    await expect(page.locator('[data-part="line-node"][data-reached]')).toHaveCount(1);
-    // 선, 첫 표식, FASOO 본문 머리가 한 화면 안에 함께 있다.
+    await expect(list).toHaveCSS('opacity', '0');
+    // 첫 노드(FASOO 제목)와 선 끝이 한 화면 안에 함께 있다.
     const onScreen = await page.evaluate(() => {
-      const top = (selector: string) => document.querySelector(selector)!.getBoundingClientRect().top;
       const header = document.querySelector('[data-scroll-header]')!.getBoundingClientRect().height;
-      return ['[data-part="line-path"]', '[data-part="line-node"]', '#experience article'].map(selector => { const y = top(selector); return y >= header && y < innerHeight - 40; });
+      const inView = (y: number) => y >= header && y < innerHeight - 40;
+      const tip = Number(document.querySelector<HTMLElement>('[data-part="experience-line"]')!.dataset.tip) - scrollY;
+      return [inView(document.querySelector('[data-part="experience-node"]')!.getBoundingClientRect().top), inView(tip)];
     });
-    expect(onScreen).toEqual([true, true, true]);
+    expect(onScreen).toEqual([true, true]);
     // 되넘기: 거꾸로 돌고 쉬는 Projects 자리에는 경계가 쓴 값이 남지 않는다. 캡션도 captionReveal 밖의 인라인 값이 없다.
-    const back = record();
     await page.evaluate(y => window.scrollTo({ top: y, behavior: 'instant' }), Math.floor(lineAt) - 40);
-    await back;
-    await expect(line).toHaveCSS('opacity', '0', SLOW);
     // FASOO도 경계와 함께 다시 숨는다.
-    await expect(page.locator('.experience-rail li[inert]')).toHaveCount(3);
-    await expect(page.locator('#experience article').first()).toHaveAttribute('data-state', 'future');
-    await expect(frame).toHaveCSS('opacity', '1', SLOW);
+    await expect(fasoo).toHaveAttribute('data-state', 'future', SLOW);
+    await expect(frame).toHaveCSS('visibility', 'visible', SLOW);
+    await expect(frame).toHaveCSS('opacity', '1');
+    await expect(list).toHaveCSS('opacity', '1', SLOW);
     const leftovers = await frame.evaluate(el => ({
-      frame: (['opacity', 'clipPath', 'pointerEvents', 'transform'] as const).filter(key => el.style[key] !== ''),
+      frame: (['opacity', 'clipPath', 'pointerEvents', 'transform', 'visibility'] as const).filter(key => el.style[key] !== ''),
       caption: (['opacity', 'filter', 'transform'] as const).filter(key => el.querySelector<HTMLElement>('[data-part="preview-caption"]')?.style[key]),
     }));
     expect(leftovers).toEqual({ frame: [], caption: [] });
     await expect(open).toHaveCSS('pointer-events', 'auto');
-    await expect(shell).toHaveCSS('visibility', 'hidden');
   });
   // Task 1 재리뷰 N1. nav 도착은 섹션에 포커스를 준다. 그 포커스가 날던 변신을 쉬는 자리로 건너뛰게 하면 안 된다.
   test('nav의 Projects를 누르거나 Enter로 가도 로고→프리뷰 변신을 끝까지 재생하고 섹션에 포커스가 간다', async ({ page }) => {

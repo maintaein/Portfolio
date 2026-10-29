@@ -137,53 +137,39 @@ const readAt = (page: Page, y: number) => page.evaluate(y => {
   const header = document.querySelector('[data-scroll-header]')!.getBoundingClientRect().height;
   window.scrollTo({ top: Math.ceil(y - (header + (innerHeight - header) * .4)), behavior: 'instant' });
 }, y);
+// 장마다 위끝과 읽기 끝(기술 목록 아래 8px, ExperienceSection의 readEnd)의 문서 y.
 const articleTops = (page: Page) => page.locator('#experience article').evaluateAll(list => list.map(article => {
-  let y = 0;
-  for (let node = article as HTMLElement | null; node; node = node.offsetParent as HTMLElement | null) y += node.offsetTop;
-  return { top: y, bottom: y + (article as HTMLElement).offsetHeight };
+  const offsetY = (el: HTMLElement) => { let y = 0; for (let node: HTMLElement | null = el; node; node = node.offsetParent as HTMLElement | null) y += node.offsetTop; return y; };
+  const chips = article.querySelector<HTMLElement>('ul[aria-label="기술"]')!;
+  return { top: offsetY(article as HTMLElement), readEnd: offsetY(chips) + chips.offsetHeight + 8 };
 }));
-test('Experience는 읽기선을 따라 표식과 본문을 하나씩 공개하고 미래 표식은 보이지도 포커스되지도 않으며 거꾸로 가면 다시 숨긴다', async ({ page }) => {
+test('Experience는 읽기선을 따라 노드와 본문을 하나씩 공개하고 거꾸로 가면 다시 숨긴다', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await enter(page, 'experience');
-  const items = page.locator('.experience-rail li');
+  const nodes = page.locator('#experience [data-part="experience-node"]');
   const bodies = page.locator('#experience article');
   const line = page.locator('[data-part="experience-line"]');
-  const focusable = () => page.locator('#experience button').evaluateAll(buttons => buttons.filter(button => {
-    (button as HTMLButtonElement).focus();
-    const ok = document.activeElement === button;
-    (button as HTMLButtonElement).blur();
-    return ok;
-  }).length);
   const tops = await articleTops(page);
   for (const [index, article] of tops.entries()) {
     await readAt(page, article.top + 2);
     await waitFrames(page, 3);
-    for (let i = 0; i < tops.length; i++) {
-      await expect(items.nth(i)).toHaveCSS('visibility', i <= index ? 'visible' : 'hidden', SLOW);
-      await expect(bodies.nth(i)).toHaveAttribute('data-state', i < index ? 'past' : i === index ? 'current' : 'future');
-    }
-    // 아직 닿지 않은 본문은 자리만 지키고 보이지 않는다. 지금 본문은 다 드러난다.
-    await expect(bodies.nth(index)).toHaveCSS('opacity', '1', SLOW);
-    if (index + 1 < tops.length) await expect(bodies.nth(index + 1)).toHaveCSS('opacity', '0');
-    expect(await focusable()).toBe(index + 1);
+    for (let i = 0; i < tops.length; i++) await expect(bodies.nth(i)).toHaveAttribute('data-state', i < index ? 'past' : i === index ? 'current' : 'future', SLOW);
+    // 아직 닿지 않은 장은 자리만 지키고 보이지 않는다. 지금 장은 다 드러난다.
+    await expect(nodes.nth(index)).toHaveCSS('opacity', '1', SLOW);
+    if (index + 1 < tops.length) await expect(nodes.nth(index + 1)).toHaveCSS('opacity', '0');
     await expect(line).toHaveAttribute('data-complete', 'false');
   }
-  // 마지막 본문 끝을 읽기선이 지나야 완료다.
-  await readAt(page, tops.at(-1)!.bottom - 4);
+  // 마지막 장 읽기 끝을 읽기선이 지나야 완료다.
+  await readAt(page, tops.at(-1)!.readEnd - 4);
   await waitFrames(page, 3);
   await expect(line).toHaveAttribute('data-complete', 'false');
-  await readAt(page, tops.at(-1)!.bottom + 2);
+  await readAt(page, tops.at(-1)!.readEnd + 2);
   await expect(line).toHaveAttribute('data-complete', 'true', SLOW);
-  // 거꾸로: 첫 본문으로 돌아오면 뒤 표식과 본문이 다시 숨는다.
+  // 거꾸로: 첫 장으로 돌아오면 뒤 장이 다시 숨는다.
   await readAt(page, tops[0].top + 2);
-  await expect(items.nth(1)).toHaveCSS('visibility', 'hidden', SLOW);
-  await expect(bodies.nth(1)).toHaveAttribute('data-state', 'future');
+  await expect(bodies.nth(1)).toHaveAttribute('data-state', 'future', SLOW);
+  await expect(nodes.nth(1)).toHaveCSS('opacity', '0', SLOW);
   await expect(line).toHaveAttribute('data-complete', 'false');
-  expect(await focusable()).toBe(1);
-  // 드러난 표식은 그 본문으로 돌아가는 이동 지점이다. 본문 안에 따로 굴려야 하는 영역은 없다.
-  await readAt(page, tops[1].top + 2);
-  await items.nth(0).getByRole('button').click();
-  await expect(bodies.nth(0)).toBeFocused();
-  await expect(bodies.nth(0)).toHaveAttribute('data-state', 'current', SLOW);
+  // 본문 안에 따로 굴려야 하는 영역은 없다.
   expect(await page.locator('#experience .scroll-area, #experience [aria-roledescription="carousel"]').count()).toBe(0);
 });

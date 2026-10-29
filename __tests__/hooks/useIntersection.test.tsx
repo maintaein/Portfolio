@@ -12,7 +12,7 @@ const VISIBILITY_ONLY_IO = new Set([
   'components/blocks/CrystalizedBall/index.tsx',
   'components/blocks/ElectricLogo/index.tsx',
   'components/blocks/LuminousFlowBackground/index.tsx',
-  // 경력 증거 카드. 공개 판정은 active prop이 맡고 IO는 화면 밖 rAF 정지만 한다.
+  // 경력 증거 카드. 공개 판정은 active prop이 맡고 IO는 화면 밖 rAF 정지만 한다. 정지·재개는 e2e/experience.spec.ts에서 검증한다.
   'components/sections/ExperienceSection/EvidenceCard.tsx',
 ]);
 
