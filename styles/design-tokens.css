@@ -1181,6 +1181,37 @@ html[data-intro] .hero-ball { opacity: 0; }
   .experience-rail li,
   .experience-body { transition: none; }
 }
+
+/* 경력 증거 카드(M5 Task 4). 시안 .card를 옮겼다. 그림은 EvidenceCard가 캔버스에 그리고 여기는 틀과 높이만 정한다. */
+.evidence-card {
+  position: relative;
+  margin: 0;
+  border-radius: 18px;
+  padding: 18px 18px 14px;
+  background: linear-gradient(180deg, rgb(11 53 64 / .32), rgb(8 38 46 / .18));
+  border: 1px solid rgb(127 227 238 / .14);
+  overflow: hidden;
+}
+.evidence-card[data-wide] { grid-column: span 2; }
+.evidence-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.evidence-card-label { margin: 0; font-size: 12px; letter-spacing: .14em; color: var(--color-cyan-hi); }
+.evidence-card-note { margin: 0; font-size: 14px; color: var(--color-text-secondary); text-align: right; }
+.evidence-card canvas { display: block; width: 100%; height: 240px; }
+.evidence-card[data-demo='inspect'] canvas { height: 320px; }
+.evidence-card[data-demo='calendar'] canvas { height: 300px; }
+.evidence-card[data-demo='security'] canvas { height: 190px; }
+
+@media (max-width: 760px) {
+  .evidence-card[data-wide] { grid-column: auto; }
+  .evidence-card[data-demo='inspect'] canvas { height: 500px; }
+  .evidence-card[data-demo='calendar'] canvas { height: 560px; }
+}
 }
 
 /* Skills C signal map. All selectors stay under this section. */
