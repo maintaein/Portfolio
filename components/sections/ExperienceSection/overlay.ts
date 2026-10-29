@@ -190,8 +190,9 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
   };
   const measure = () => {
     dpr = Math.min(2, devicePixelRatio || 1);
-    vw = innerWidth;
-    vh = innerHeight;
+    // 캔버스 상자(100%)는 고전 스크롤바를 뺀 폭이다. innerWidth로 재면 그림이 그 비만큼 눌려 오른쪽이 15px쯤 어긋났다.
+    vw = canvas.clientWidth || innerWidth;
+    vh = canvas.clientHeight || innerHeight;
     canvas.width = vw * dpr;
     canvas.height = vh * dpr;
     sizeMask();
@@ -407,6 +408,9 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
 
   measure();
   window.addEventListener('resize', measure);
+  // 스크롤바가 생기거나 사라지면 창 resize 없이 상자만 바뀐다.
+  const box = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+  box?.observe(canvas);
   document.addEventListener('visibilitychange', onVisibility);
 
   return {
@@ -426,6 +430,7 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
       stop();
       boundary = provider = null;
       window.removeEventListener('resize', measure);
+      box?.disconnect();
       document.removeEventListener('visibilitychange', onVisibility);
     },
   };

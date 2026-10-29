@@ -248,4 +248,23 @@ describe('createExperienceOverlay', () => {
     expect(canvas.height).toBe(window.innerHeight * 2);
     overlay.destroy();
   });
+
+  it('비트맵은 창(innerWidth)이 아니라 캔버스 상자(고전 스크롤바를 뺀 clientWidth)에 맞추고, 상자가 바뀌면 다시 잰다', () => {
+    vi.stubGlobal('devicePixelRatio', 2);
+    let observe: ResizeObserverCallback = () => {};
+    const disconnect = vi.fn();
+    vi.stubGlobal('ResizeObserver', class { constructor(callback: ResizeObserverCallback) { observe = callback; } observe() {} unobserve() {} disconnect = disconnect; });
+    // Windows 크롬의 고전 스크롤바(15px)가 100% 폭에서 빠진다
+    Object.defineProperty(canvas, 'clientWidth', { configurable: true, value: window.innerWidth - 15 });
+    Object.defineProperty(canvas, 'clientHeight', { configurable: true, value: window.innerHeight });
+    const overlay = createExperienceOverlay(canvas)!;
+    expect(canvas.width).toBe((window.innerWidth - 15) * 2);
+    expect(canvas.height).toBe(window.innerHeight * 2);
+    // 스크롤바가 사라지면 창 resize 없이 상자만 넓어진다
+    Object.defineProperty(canvas, 'clientWidth', { configurable: true, value: window.innerWidth });
+    observe([], {} as ResizeObserver);
+    expect(canvas.width).toBe(window.innerWidth * 2);
+    overlay.destroy();
+    expect(disconnect).toHaveBeenCalled();
+  });
 });
