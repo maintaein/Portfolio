@@ -132,23 +132,6 @@ it('외부 pause 뒤 새 프레임을 예약하지 않고 재개 시 누적 시�
   expect(phase()).toBeCloseTo(beforePause + step, 6);
 });
 
-it('setThrottled 동안은 1/15초에 한 장만 그리고, 건너뛴 프레임의 시간도 흐름에 쌓아 위상이 끊기지 않는다', () => {
-  const { drawn, tick, phase } = harness();
-  const ref = createRef<LuminousFlowBackgroundHandle>();
-  render(<LuminousFlowBackground ref={ref} scrollScene />);
-  tick(); tick();
-  const start = phase(), draws = drawn.length;
-  act(() => ref.current!.setThrottled(true));
-  // 16ms 틱 12번(192ms) 동안 64ms마다 한 장
-  for (let i = 0; i < 12; i++) tick();
-  expect(drawn.length - draws).toBe(3);
-  expect(phase()).toBeCloseTo(start + .192 * .5, 6);
-  // 풀면 다시 틱마다 그린다
-  act(() => ref.current!.setThrottled(false));
-  tick();
-  expect(drawn.length - draws).toBe(4);
-});
-
 // The texture fills a strip per frame; 20 frames cover this scene's 17 strips.
 function revealScene(options?: Parameters<typeof harness>[0]) {
   const scene = harness(options);

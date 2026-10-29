@@ -170,15 +170,13 @@ const rectBox = (element: Element | null, scroll = 0): Box => {
   return { x: rect.left, y: rect.top + scroll, w: rect.width, h: rect.height };
 };
 
-export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, reduced, onLogoOwnerChange, onLineArrive, onLinePlay }: {
+export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, reduced, onLogoOwnerChange, onLineArrive }: {
   root: HTMLElement; header: HTMLElement; wordmark: HTMLButtonElement; logoHost: HTMLElement; reduced: boolean;
   // GL 볼 손잡이(없으면 정적 볼). 볼은 진입 뒤에 늦게 떠서 ref로 받는다.
   ball?: { current: CrystalizedBallHandle | null };
   onLogoOwnerChange: (owner: LogoOwner) => void;
   // 프리뷰가 첫 헤드에 내려앉았는지(경계 100%). 내려앉을 때와 거꾸로 떠날 때만 부른다. Experience가 첫 헤드와 첫 장을 이것으로 공개한다.
   onLineArrive?: (arrived: boolean) => void;
-  // 경계가 재생 중인지(앞으로든 거꾸로든). 바뀔 때만 부른다. HomeClient가 그동안 배경 그리기를 줄여 GPU를 경계에 내준다.
-  onLinePlay?: (playing: boolean) => void;
 }): PortfolioMotion {
   registerScrollTrigger();
   const inner = logoHost.firstElementChild instanceof HTMLElement ? logoHost.firstElementChild : null;
@@ -237,7 +235,6 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   // 경계 한 번의 재생 동안 캔버스가 이어받아 그리는 낱말. 그동안 DOM 글자는 숨는다. 프리뷰 쪽(0)에 서면 되돌려 다음 재생에서 지금 이름을 다시 잰다.
   let word: ReturnType<typeof measureWord> = null;
   let lineArrived = false;
-  let linePlaying = false;
   // 경계를 그리는 오버레이(HomeClient가 늦게 넘긴다). 없으면 그리기 없이 시간·도착·틀 숨김만 돈다.
   let overlay: ExperienceOverlay | null = null;
   // 아래쪽 입력을 막는 차단 리스너를 달고 있는지. 차단 wheel은 스크롤을 메인 스레드에 묶어 늦추므로 막는 동안만 단다(useChapterLock과 같은 이유).
@@ -388,11 +385,6 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       onLineArrive?.(arrived);
     }
     syncPin();
-    const playing = alive && !reduced && !!lineTween;
-    if (playing !== linePlaying) {
-      linePlaying = playing;
-      onLinePlay?.(playing);
-    }
     // 모션 감소는 재생이 없어 프리뷰가 그대로 서고(시안과 같다) 첫 헤드는 도착으로 바로 산다.
     if (p <= 0 || reduced || !previewAnchor) {
       dropWord();
@@ -775,10 +767,6 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       travel?.kill();
       lineTween?.kill();
       syncPin();
-      if (linePlaying) {
-        linePlaying = false;
-        onLinePlay?.(false);
-      }
       overlay?.setBoundary(null);
       dropWord();
       stopName();

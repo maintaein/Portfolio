@@ -58,9 +58,6 @@ export default function HomeClient() {
   const [introPending, setIntroPending] = useState(introEnabled);
   const introDone = useCallback(() => setIntroPending(false), []);
   const [background, setBackground] = useState<LuminousFlowBackgroundHandle | null>(null);
-  // 경계 모션이 도는 동안 배경 그리기를 줄인다. motion은 한 번 만들어지므로 늦게 오는 배경 손잡이를 ref로 읽는다.
-  const backgroundRef = useRef<LuminousFlowBackgroundHandle | null>(null);
-  useEffect(() => { backgroundRef.current = background; }, [background]);
   const [introTargets, setIntroTargets] = useState<IntroTargets | null>(null);
   // 공유 로고가 선택한 chapter를 따라가도록 셸이 들고 있는다.
   const [aboutChapter, setAboutChapter] = useState(0);
@@ -134,10 +131,9 @@ export default function HomeClient() {
   useEffect(() => {
     const root = rootRef.current, header = headerRef.current, wordmark = wordmarkRef.current, logoHost = logoHostRef.current;
     if (!motionModule || !root || !header || !wordmark || !logoHost) return;
-    const motion = motionModule.createPortfolioMotion({ root, header, wordmark, logoHost, ball: ballRef, reduced: reducedMotion, onLogoOwnerChange: setLogoOwner, onLineArrive: setLineArrived,
-      onLinePlay: playing => backgroundRef.current?.setThrottled(playing) });
+    const motion = motionModule.createPortfolioMotion({ root, header, wordmark, logoHost, ball: ballRef, reduced: reducedMotion, onLogoOwnerChange: setLogoOwner, onLineArrive: setLineArrived });
     motionRef.current = motion;
-    return () => { motion.destroy(); motionRef.current = null; setLogoOwner('none'); setLineArrived(false); backgroundRef.current?.setThrottled(false); };
+    return () => { motion.destroy(); motionRef.current = null; setLogoOwner('none'); setLineArrived(false); };
   }, [motionModule, reducedMotion]);
   useEffect(() => { motionRef.current?.setLogo(logo); }, [logo, motionModule, reducedMotion]);
   // 오버레이는 마운트 뒤에 와서 setLogo처럼 따로 넘긴다. 옵션으로 넘기면 오는 순간 경계 전체를 다시 지었다.

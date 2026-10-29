@@ -1572,7 +1572,6 @@ it('로고 host는 포인터에 기울지 않는다', () => {
 describe('Projects→Experience: 이름 글자가 뭉쳐 첫 헤드가 된다', () => {
   let projects: HTMLElement; let frame: HTMLElement; let list: HTMLElement; let preview: HTMLElement; let img: HTMLImageElement; let node: HTMLElement;
   const arrivals: boolean[] = [];
-  const plays: boolean[] = [];
   const IN = GATHER_SECONDS;
   const OUT = IN * 1.4 / 1.8;
   // Projects는 1800부터(잠금 1724), 프리뷰는 2050(nav 76). 축 칸 가운데 x 64, 첫 노드 y = h3 위끝 2680 + 40 / 2 = 2700.
@@ -1586,7 +1585,6 @@ describe('Projects→Experience: 이름 글자가 뭉쳐 첫 헤드가 된다', 
   let name: HTMLElement; let title: HTMLElement;
   beforeEach(() => {
     arrivals.length = 0;
-    plays.length = 0;
     overlay = overlayMock();
     projects = document.createElement('div');
     projects.dataset.section = 'projects';
@@ -1629,7 +1627,7 @@ describe('Projects→Experience: 이름 글자가 뭉쳐 첫 헤드가 된다', 
   });
   const start = ({ reduced = false, withOverlay = true, at = 1724 } = {}) => {
     documentY = at;
-    motion = createPortfolioMotion({ root, header, wordmark, logoHost: host, ball: { current: ball }, reduced, onLogoOwnerChange: owner => owners.push(owner), onLineArrive: arrived => arrivals.push(arrived), onLinePlay: playing => plays.push(playing) });
+    motion = createPortfolioMotion({ root, header, wordmark, logoHost: host, ball: { current: ball }, reduced, onLogoOwnerChange: owner => owners.push(owner), onLineArrive: arrived => arrivals.push(arrived) });
     motion.setLogo(handle);
     if (withOverlay) motion.setOverlay(overlay as unknown as ExperienceOverlay);
     scrollAt(at);
@@ -1716,33 +1714,6 @@ describe('Projects→Experience: 이름 글자가 뭉쳐 첫 헤드가 된다', 
     advance(OUT + .1);
     expect(boundary()).toBeNull();
     expect(name.style.visibility).toBe('');
-  });
-
-  it('onLinePlay는 경계가 앞으로든 거꾸로든 도는 동안만 true다(배경 그리기를 줄이는 신호)', () => {
-    start();
-    scrollAt(LINE_AT);
-    advance(.5);
-    expect(plays).toEqual([true]);
-    advance(IN);
-    expect(plays).toEqual([true, false]);
-    scrollAt(LINE_AT - 24);
-    advance(.2);
-    expect(plays).toEqual([true, false, true]);
-    // 도중에 다시 앞으로 돌아서도 재생은 이어진다
-    scrollAt(LINE_AT);
-    advance(.1);
-    expect(plays).toEqual([true, false, true]);
-    // 재생 중에 사라지면 false로 걷는다
-    motion!.destroy();
-    motion = null;
-    expect(plays).toEqual([true, false, true, false]);
-  });
-
-  it('모션 감소에서는 onLinePlay를 부르지 않는다', () => {
-    start({ reduced: true });
-    scrollAt(LINE_AT);
-    scrollAt(1724);
-    expect(plays).toEqual([]);
   });
 
   it('목록이 숨는 lg 아래에서는 프리뷰 캡션 제목에서 떠난다', () => {
