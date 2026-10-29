@@ -956,230 +956,61 @@ html[data-intro] .hero-ball { opacity: 0; }
   .scroll-area { scrollbar-width: auto; scrollbar-color: auto; }
 }
 
-/* Experience 읽기 타임라인(M5 Task 1). 좁은 sticky rail(기관·직책)과 실제 높이의 넓은 본문.
-   선 끝·자르기·표식 위치는 ExperienceSection이 요소에 바로 쓴다. 여기는 모양과 공개 상태만 정한다. */
-/* 위 여백은 두지 않는다. Projects 아래 빈 자리가 이미 섹션을 가르고, 프리뷰와 FASOO가 가까워야 선 경계의 출발과 도착이 한 화면에 든다(수정 1 I1). */
-.experience-timeline {
+/* Experience 레이아웃 A(M5 Task 5). 시안 .exp, .chapter, .rv를 옮겼다. 선과 헤드는 화면 고정 오버레이 캔버스가 그리고 여기는 장의 틀과 공개 상태만 정한다.
+   사이트에 --ease-out 토큰이 없어 시안 값을 이 섹션 안에만 둔다. */
+.experience {
+  --ease-out: cubic-bezier(.23, 1, .32, 1);
   position: relative;
-  padding: 0 clamp(30px, 5vw, 70px) clamp(96px, 14vh, 160px);
-  color: #eef4f5;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 32px;
+  color: var(--color-text-primary);
 }
+.experience-eyebrow { margin: 0 0 0 120px; font-size: 11px; letter-spacing: .24em; color: var(--color-cyan-core); }
+.experience-chapter { display: grid; grid-template-columns: 120px 1fr; min-height: 170svh; padding-bottom: 26svh; }
+.experience-chapter:first-of-type .experience-chapter-body { padding-top: 12px; }
+.experience-axis { position: relative; }
+.experience-chapter-body { padding-top: 56px; }
+.experience-meta { display: flex; gap: 12px; font-size: 12px; letter-spacing: .1em; color: #8b95a1; }
+.experience-kind { color: var(--color-cyan-core); }
+.experience-company { margin: 10px 0 6px; font-size: clamp(40px, 5.4vw, 72px); font-weight: 800; letter-spacing: -.02em; line-height: 1.05; }
+.experience-position { margin: 0 0 22px; font-size: 18px; color: var(--color-text-secondary); }
+.experience-desc { max-width: 720px; margin: 0 0 40px; font-size: 18px; line-height: 1.7; color: var(--color-text-secondary); }
+.experience-metrics { display: flex; flex-wrap: wrap; gap: 56px; margin: 0 0 44px; }
+.experience-metric b { display: block; font-size: clamp(44px, 5vw, 68px); font-weight: 700; letter-spacing: -.03em; color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
+.experience-metric span { font-size: 13px; letter-spacing: .04em; color: #8b95a1; }
+.experience-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; margin: 0 0 44px; }
+.experience-resp-title { margin: 0 0 12px; font-size: 12px; font-weight: 400; letter-spacing: .14em; color: #8b95a1; }
+.experience-resp { display: grid; gap: 10px; max-width: 760px; margin: 0 0 28px; padding: 0; list-style: none; }
+.experience-resp li { position: relative; padding-left: 18px; font-size: 16px; line-height: 1.6; color: var(--color-text-secondary); }
+.experience-resp li::before { content: ''; position: absolute; left: 0; top: .72em; width: 6px; height: 6px; border-radius: 50%; background: var(--color-cyan-core); opacity: .7; }
+.experience-resp .experience-win { color: var(--color-text-primary); }
+.experience-resp .experience-win::before { background: var(--color-cyan-hi); }
+.experience-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.experience-chips li { padding: 6px 10px; border: 1px solid rgb(127 227 238 / .14); border-radius: 999px; font-size: 12px; color: var(--color-text-secondary); }
 
-.experience-timeline-layout {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(220px, 0.3fr) minmax(0, 0.7fr);
-  gap: 4vw;
-  align-items: start;
+/* 공개(시안 .rv). 감추는 상태는 data-progressive(하이드레이션 뒤 JS가 켠다) 아래에만 둔다. 서버 HTML과 JS 실패에서는 원문이 다 보인다.
+   카드는 EvidenceCard의 figure라 이름으로 함께 고른다. 지연은 .experience-cards의 --d를 물려받고 둘째 카드는 한 칸 늦다. */
+.experience :is(.experience-reveal, .evidence-card) {
+  transition: opacity .7s var(--ease-out), transform .7s var(--ease-out);
+  transition-delay: calc(var(--d, 0) * 70ms);
 }
+.experience .evidence-card + .evidence-card { transition-delay: calc((var(--d, 0) + 1) * 70ms); }
+.experience[data-progressive] .experience-chapter[data-state='future'] :is(.experience-reveal, .evidence-card) { opacity: 0; transform: translateY(18px); }
 
-/* nav(76px) 아래에 붙어 본문이 지나가는 동안 남는다. */
-.experience-timeline-rail { position: sticky; top: 116px; }
-.experience-line { position: relative; }
-
-.experience-line-path,
-.experience-line-tip,
-.experience-line-node {
-  position: absolute;
-  top: 0;
-  pointer-events: none;
-}
-
-.experience-line-path,
-.experience-line-tip {
-  left: 9px;
-  width: 4px;
-  border-radius: 999px;
-}
-
-.experience-line-path {
-  height: 0;
-  background: #03b3c3;
-  box-shadow: 0 0 9px rgb(3 179 195 / .5);
-}
-
-/* 선 끝 아래 짧게 흐려지는 꼬리. 지금 구간의 끝이지 미래 경로가 아니다. */
-.experience-line-tip {
-  height: 56px;
-  background: linear-gradient(#03b3c3, rgb(3 179 195 / 0));
-}
-
-.experience-line-node {
-  left: 11px;
-  z-index: 1;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #7fe3ee;
-  box-shadow: 0 0 0 4px #000, 0 0 12px #03b3c3;
-  opacity: 0;
-  transform: translate(-50%, -50%) scale(0);
-  transition: opacity .35s, transform .35s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.experience-line-node[data-reached] { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-
-.experience-rail {
-  margin: 0;
-  padding: 0 0 0 36px;
-  list-style: none;
-}
-
-.experience-rail li + li { margin-top: 72px; }
-
-/* 감추는 상태는 모두 data-progressive(하이드레이션 뒤 JS가 켠다) 아래에만 둔다. 서버 HTML과 JS 실패에서는 원문이 다 보인다. */
-.experience-timeline[data-progressive] .experience-rail li {
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(6px);
-  transition: opacity .4s, transform .4s, visibility 0s .4s;
-}
-
-.experience-timeline[data-progressive] .experience-rail li[data-reached] {
-  opacity: 1;
-  visibility: visible;
-  transform: none;
-  transition: opacity .4s, transform .4s;
-}
-
-.experience-rail button {
-  display: block;
-  width: 100%;
-  min-height: 44px;
-  padding: 4px 0;
-  border: 0;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-}
-
-.experience-rail strong {
-  display: block;
-  color: #b0bac5;
-  font-size: clamp(17px, 1.6vw, 21px);
-  letter-spacing: -0.02em;
-  line-height: 1.3;
-}
-
-.experience-rail button[aria-current] strong,
-.experience-rail button:hover strong { color: #eef4f5; }
-
-.experience-rail span {
-  display: block;
-  margin-top: 6px;
-  color: #7fe3ee;
-  font-size: 13px;
-}
-
-.experience-bodies {
-  display: grid;
-  gap: 112px;
-}
-
-.experience-body {
-  max-width: 760px;
-  transition: opacity .5s, transform .5s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-/* 미래 본문은 자리를 지키고 보이지 않는다. 읽은 본문은 위로 물러나며 흐려진다. */
-.experience-timeline[data-progressive] .experience-body[data-state='future'] { opacity: 0; transform: translateY(16px); }
-.experience-timeline[data-progressive] .experience-body[data-state='past'] { opacity: .38; }
-
-.experience-body-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 18px;
-  margin: 0;
-  color: #b0bac5;
-  font-size: 13px;
-  letter-spacing: 0.08em;
-}
-
-.experience-body-meta span:first-child {
-  color: #03b3c3;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-}
-
-.experience-body h3 {
-  margin: 14px 0 6px;
-  font-size: clamp(30px, 3.4vw, 48px);
-  letter-spacing: -0.04em;
-  line-height: 1.15;
-  overflow-wrap: anywhere;
-}
-
-.experience-body-position {
-  margin: 0;
-  color: #7fe3ee;
-  font-size: 17px;
-}
-
-.experience-body-description {
-  margin: 28px 0;
-  color: #d5e2e7;
-  font-size: 17px;
-  line-height: 1.6;
-}
-
-.experience-body h4 {
-  margin: 0 0 12px;
-  color: #b0bac5;
-  font-size: 13px;
-  letter-spacing: 0.17em;
-}
-
-.experience-body-list {
-  margin: 0;
-  padding-left: 20px;
-  color: #e0eaec;
-  font-size: 17px;
-  line-height: 1.6;
-}
-
-.experience-body-list li + li { margin-top: 8px; }
-.experience-body-list li::marker { color: #03b3c3; }
-
-.experience-body-skills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 28px 0 0;
-  padding: 18px 0 0;
-  border-top: 1px solid #274149;
-  list-style: none;
-}
-
-.experience-body-skills li {
-  padding: 6px 9px;
-  border: 1px solid #274952;
-  color: #b9d5dc;
-  font-size: 13px;
-}
-
-.experience-rail button:focus-visible,
-.experience-body:focus-visible {
-  outline: 2px solid #7fe3ee;
-  outline-offset: 6px;
-}
-
-/* 모바일: 왼쪽 얇은 선 한 열. 기관·직책은 각 본문 제목이 맡고 표식은 그 옆에 선다. */
 @media (max-width: 760px) {
-  .experience-timeline { padding: 0 15px 96px; }
-  .experience-timeline-layout { display: block; padding-left: 28px; }
-  .experience-timeline-rail { position: absolute; top: 0; bottom: 0; left: 0; width: 24px; }
-  .experience-line { height: 100%; }
-  .experience-rail { display: none; }
-  .experience-line-path,
-  .experience-line-tip { left: 4px; }
-  .experience-line-node { left: 6px; }
-  .experience-bodies { gap: 88px; }
+  .experience { padding: 0 16px; }
+  .experience-eyebrow { margin-left: 38px; }
+  .experience-chapter { grid-template-columns: 38px 1fr; min-height: auto; padding-bottom: 22svh; }
+  .experience-company { font-size: 36px; }
+  .experience-desc { font-size: 16px; }
+  .experience-metrics { gap: 28px; }
+  .experience-metric b { font-size: 40px; }
+  .experience-cards { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .experience-line-node,
-  .experience-rail li,
-  .experience-body { transition: none; }
+  .experience :is(.experience-reveal, .evidence-card) { transition: none; }
 }
 
 /* 경력 증거 카드(M5 Task 4). 시안 .card를 옮겼다. 그림은 EvidenceCard가 캔버스에 그리고 여기는 틀과 높이만 정한다. */

@@ -91,8 +91,8 @@ export default function HomeClient() {
   const ballRuns = heroResting || logoOwner === 'boundary';
   const activeLabel = HOME_SECTION_CONFIG.find(section => section.id === active)?.label ?? 'Overview';
   const [announcement, setAnnouncement] = useState('');
-  // 경력 선과 프리뷰 morph를 그리는 오버레이 손잡이. 넘겨받을 쪽(ExperienceSection, motion)은 다음 단계에서 잇는다.
-  const [, setOverlay] = useState<ExperienceOverlay | null>(null);
+  // 경력 선과 프리뷰 morph를 그리는 오버레이 손잡이. ExperienceSection이 읽기 진행을 넘기고, motion은 다음 단계에서 잇는다.
+  const [overlay, setOverlay] = useState<ExperienceOverlay | null>(null);
   useEffect(() => {
     const canvas = overlayRef.current;
     if (!canvas) return;
@@ -193,7 +193,7 @@ export default function HomeClient() {
         {HOME_SECTION_CONFIG.map(({ id, label }) => {
           const Section = id === SECTION_IDS.ABOUT || id === SECTION_IDS.PROJECTS || id === SECTION_IDS.EXPERIENCE ? null : SECTION_COMPONENTS[id];
           return <div key={id} data-section={id} role="region" aria-label={label} tabIndex={-1} className="document-section">
-            {id === SECTION_IDS.EXPERIENCE ? <ExperienceSection lineArrived={lineArrived} /> : id === SECTION_IDS.PROJECTS ? <ProjectsSection ref={projectsRef} beforeAction={beforeProjectsAction} navigationPending={navigationTarget !== null} logoOwner={logoOwner} /> : Section ? <Section /> : <AboutSection ref={aboutRef} onChapterChange={setAboutChapter} navigationPending={navigationTarget !== null} logoOwner={logoOwner} />}
+            {id === SECTION_IDS.EXPERIENCE ? <ExperienceSection lineArrived={lineArrived} overlay={overlay} /> : id === SECTION_IDS.PROJECTS ? <ProjectsSection ref={projectsRef} beforeAction={beforeProjectsAction} navigationPending={navigationTarget !== null} logoOwner={logoOwner} /> : Section ? <Section /> : <AboutSection ref={aboutRef} onChapterChange={setAboutChapter} navigationPending={navigationTarget !== null} logoOwner={logoOwner} />}
           </div>;
         })}
         {/* 공유 로고 host. About의 원형 마스크와 overflow-x: clip 밖, 문서 좌표에 산다.
