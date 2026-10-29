@@ -7,9 +7,11 @@ export const SPRINT_IN = 0.9;
 export const SPRINT_OUT = 0.5;
 export const PULSE_SPEED = 230;
 export const PULSE_GAP = 420;
-export const HEAD_MORPH_SECONDS = 1.8;
-export const HEAD_TRAVEL_SECONDS = 0.8;
+// morph는 2.4초로 여유 있게 구겨진다. 이동은 morph가 끝나기를 기다리지 않고 .6초부터 함께 가며, morph 뒤 .5초에 내려앉는다(사용자 요청 2026-10-29).
+export const HEAD_MORPH_SECONDS = 2.4;
+export const HEAD_TRAVEL_SECONDS = 0.5;
 export const SPLIT = HEAD_MORPH_SECONDS / (HEAD_MORPH_SECONDS + HEAD_TRAVEL_SECONDS);
+const TRAVEL_FROM = 0.6 / (HEAD_MORPH_SECONDS + HEAD_TRAVEL_SECONDS);
 
 const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -72,8 +74,14 @@ export function pulseOffsets(time: number, length: number): number[] {
 }
 
 // 경계 진행 t(0..1, morph+이동)를 morph 진행 q로. 1은 프리뷰, 0은 헤드이며 t >= SPLIT이면 0이다.
+// 등속이다. easeInOut이면 구겨지는 구간(q .82~.12)이 가운데 가장 빠른 .6초에 몰려 급하게 보였다(2026-10-29).
 export function morphQ(t: number): number {
-  return 1 - easeInOut(clamp(t / SPLIT));
+  return 1 - clamp(t / SPLIT);
+}
+
+// 경계 진행 t를 프리뷰 가운데→목적지 이동 진행(선형 0..1)으로. morph 도중(TRAVEL_FROM)에 떠나 t 1에 닿는다. 곡선은 그리는 쪽이 easeInOut으로 준다.
+export function travelU(t: number): number {
+  return span(TRAVEL_FROM, 1, t);
 }
 
 export function morphPhases(q: number) {

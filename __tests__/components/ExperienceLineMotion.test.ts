@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  HEAD_MORPH_SECONDS,
+  HEAD_TRAVEL_SECONDS,
   LEAD,
   PULSE_GAP,
   SPLIT,
@@ -8,6 +10,7 @@ import {
   createSegments,
   morphPhases,
   morphQ,
+  travelU,
   pulseOffsets,
   stepSegment,
 } from '@/components/sections/ExperienceSection/lineMotion';
@@ -88,6 +91,14 @@ describe('morph', () => {
     expect(morphQ(SPLIT)).toBe(0);
     expect(morphQ(SPLIT + 0.1)).toBe(0);
     expect(morphQ(1)).toBe(0);
+  });
+
+  it('travelU: 이동은 morph가 끝나기 전에 떠나 t 1에 닿는다', () => {
+    expect(travelU(0)).toBe(0);
+    expect(travelU(0.6 / (HEAD_MORPH_SECONDS + HEAD_TRAVEL_SECONDS))).toBe(0);
+    expect(travelU(SPLIT / 2)).toBeGreaterThan(0);
+    expect(travelU(SPLIT)).toBeLessThan(1);
+    expect(travelU(1)).toBe(1);
   });
 
   it('morphPhases는 시안 구간 그대로다', () => {

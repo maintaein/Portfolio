@@ -3,7 +3,7 @@ import { gsap, ScrollTrigger } from '@/lib/gsap';
 import type { ElectricLogoHandle } from '@/components/blocks/ElectricLogo';
 import { CORE, LOGO_SECONDS, ORBIT, PREVIEW_RETURN_SECONDS, PREVIEW_SECONDS, createPortfolioMotion, logoPhases, previewPhases, type LogoOwner, type PortfolioMotion } from '@/components/sections/HomeClient/motion';
 import { resolveCurrentSection } from '@/lib/utils/scrollGeometry';
-import { morphQ } from '@/components/sections/ExperienceSection/lineMotion';
+import { HEAD_MORPH_SECONDS, HEAD_TRAVEL_SECONDS, morphQ } from '@/components/sections/ExperienceSection/lineMotion';
 import type { ExperienceOverlay } from '@/components/sections/ExperienceSection/overlay';
 import { clearCaptionReveal, revealCaption } from '@/components/sections/ProjectsSection/captionReveal';
 
@@ -1572,8 +1572,8 @@ it('로고 host는 포인터에 기울지 않는다', () => {
 describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된다', () => {
   let projects: HTMLElement; let frame: HTMLElement; let list: HTMLElement; let preview: HTMLElement; let img: HTMLImageElement; let node: HTMLElement;
   const arrivals: boolean[] = [];
-  const IN = 2.6;
-  const OUT = 2.6 * 1.4 / 1.8;
+  const IN = HEAD_MORPH_SECONDS + HEAD_TRAVEL_SECONDS;
+  const OUT = IN * 1.4 / 1.8;
   // Projects는 1800부터(잠금 1724), 프리뷰는 2050(nav 76). 축 칸 가운데 x 64, 첫 노드 y = h3 위끝 2680 + 40 / 2 = 2700.
   // 선 지점 = clamp(2700 - 900 + 140, 1724 + 24 + 1, 2050 - 76 - 12) = 1940. 되넘기는 1916 이하.
   const LINE_AT = 1940;
@@ -1596,9 +1596,15 @@ describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된�
     preview = projects.querySelector('[data-motion-anchor="projects-preview"]')!;
     place(preview, PREVIEW);
     frame = preview.firstElementChild as HTMLElement;
+    place(frame, PREVIEW);
     list = projects.querySelector('[data-part="index"]')!;
     img = projects.querySelector('img')!;
-    Object.defineProperties(img, { complete: { configurable: true, value: true }, naturalWidth: { configurable: true, value: 1600 } });
+    Object.defineProperties(img, { complete: { configurable: true, value: true }, naturalWidth: { configurable: true, value: 1600 }, naturalHeight: { configurable: true, value: 900 } });
+    // jsdom에는 2d 캔버스가 없다. 프리뷰 한 장(capturePreview)을 뜰 수 있게 그리기 호출만 받는 모의 컨텍스트를 준다.
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => new Proxy({}, {
+      get: (target: Record<string | symbol, unknown>, key) => (target[key] ??= key === 'measureText' ? () => ({ width: 10 }) : key === 'createLinearGradient' ? () => ({ addColorStop() {} }) : () => {}),
+      set: () => true,
+    })) as unknown as typeof HTMLCanvasElement.prototype.getContext);
     place(experience.querySelector('[data-part="experience-axis"]')!, { x: 40, y: 2600, w: 48, h: 600 });
     node = experience.querySelector('[data-part="experience-node"]')!;
     place(node, { x: 120, y: 2680, w: 600, h: 40 });
@@ -1641,7 +1647,7 @@ describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된�
     pointAt(1962);
   });
 
-  it('앞으로 2.6초, 되돌기 2.6 × 1.4 / 1.8초 동안 돌고 도착에서 onLineArrive(true)', () => {
+  it('앞으로 2.9초, 되돌기 2.9 × 1.4 / 1.8초 동안 돌고 도착에서 onLineArrive(true)', () => {
     // 캔버스가 없어도(오버레이 null) 시간·도착·틀 숨김은 그대로 돈다.
     start({ withOverlay: false });
     scrollAt(LINE_AT);
@@ -1660,19 +1666,24 @@ describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된�
     expect(arrivals).toEqual([true, false]);
   });
 
-  it('morph 동안 setBoundary에 프리뷰 rect, 첫 노드 목적지, 받아진 그림을 넘기고 도착에는 t 1을 넘긴다', () => {
+  it('morph 동안 setBoundary에 프리뷰 rect, 첫 노드 목적지, 프리뷰를 뜬 한 장을 넘기고 도착에는 t 1을 넘긴다', () => {
     start();
     expect(boundary()).toBeNull();
     scrollAt(LINE_AT);
     advance(1);
     let frameNow = boundary()!;
     expect(frameNow.t).toBeCloseTo(1 / IN, 2);
-    expect(frameNow).toMatchObject({ radius: 14, image: img, target: { x: 64, y: 2700 - LINE_AT } });
+    expect(frameNow).toMatchObject({ radius: 14, target: { x: 64, y: 2700 - LINE_AT } });
+    // 프리뷰는 재생마다 한 번만 프리뷰 크기로 뜬다
+    const shot = frameNow.image!;
+    expect(shot).toBeInstanceOf(HTMLCanvasElement);
+    expect([shot.width, shot.height]).toEqual([640, 360]);
     expect(frameNow.preview).toMatchObject({ left: 120, top: 2050 - LINE_AT, width: 640, height: 360 });
     // 재생 중에 스크롤이 움직이면 프리뷰와 목적지를 지금 화면 좌표로 다시 잰다.
     scrollAt(LINE_AT + 30);
     advance(.1);
     frameNow = boundary()!;
+    expect(frameNow.image).toBe(shot);
     expect(frameNow.target).toEqual({ x: 64, y: 2700 - LINE_AT - 30 });
     expect(frameNow.preview.top).toBe(2050 - LINE_AT - 30);
     advance(IN);
@@ -1736,9 +1747,9 @@ describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된�
     expect(wheel(100)).toBe(false);
     motion!.setPaused(false);
     expect(wheel(100)).toBe(true);
-    // morph(1.8초)가 끝나면 이동 구간(.8초)이라 막지 않는다.
-    advance(1.4);
-    expect(boundary()!.t).toBeGreaterThan(1.8 / IN);
+    // morph(2.4초)가 끝나면 남은 이동(.5초)이라 막지 않는다.
+    advance(2);
+    expect(boundary()!.t).toBeGreaterThan(HEAD_MORPH_SECONDS / IN);
     expect(wheel(100)).toBe(false);
     expect(key('PageDown')).toBe(false);
     advance(1);

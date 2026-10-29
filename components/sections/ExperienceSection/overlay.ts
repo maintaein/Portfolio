@@ -1,8 +1,9 @@
 // 경력 선·헤드와 프리뷰→헤드 morph를 그리는 화면 고정 Canvas2D 하나. 시안 blobPath, drawOrb, drawLine, boxPoints, trace, drawMorph를 옮겼다.
 // 두 소비자(경계, 타임라인)의 상태를 받아 rAF 하나로 그린다. 계산은 lineMotion이 맡고 여기서는 그리기만 한다.
-import { K, R, SPLIT, morphPhases, morphQ, pulseOffsets } from './lineMotion';
+import { K, R, SPLIT, morphPhases, morphQ, pulseOffsets, travelU } from './lineMotion';
 
-export type BoundaryFrame = { t: number; preview: DOMRect; radius: number; image: HTMLImageElement | null; target: { x: number; y: number } };
+// image: 프리뷰 겉모습(그림·캡션 띠·글자)을 프리뷰 크기로 뜬 한 장(motion.ts capturePreview).
+export type BoundaryFrame = { t: number; preview: DOMRect; radius: number; image: HTMLCanvasElement | null; target: { x: number; y: number } };
 export type TimelineFrame = {
   scrollY: number; axisX: number;
   segments: readonly { from: number; tip: number; swell: number; done: boolean; last: boolean; rOrigin: number }[]; // 화면 y
@@ -199,22 +200,22 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
   };
 
   /* ---------- 프리뷰 → 헤드 ----------
-     About→Projects 전환(previewPhases)을 제자리에서 거꾸로 밟는다. 윤곽은 프리뷰 상자 안에서만 구겨지고(7차), 그림은 고르지 않은 앞선으로
-     가운데로 물러나며 그 자리가 빛으로 찬다. 끝에서 전기가 가라앉아 헤드가 된 뒤에야 목적지로 옮겨 간다. */
+     About→Projects 전환(previewPhases)을 거꾸로 밟는다. 프리뷰 겉모습 그대로 상자에 눌려 담겨 구겨지고(7차), 그림은 고르지 않은 앞선으로
+     가운데로 물러나며 그 자리가 빛으로 찬다. 구겨지는 동안 이미 목적지로 옮겨 가고, 헤드가 된 뒤 마저 내려앉는다(2026-10-29). */
   const drawMorph = (b: BoundaryFrame, time: number) => {
     const pr = b.preview, img = b.image;
-    const cx = pr.left + pr.width / 2, cy = pr.top + pr.height / 2;
+    const px = pr.left + pr.width / 2, py = pr.top + pr.height / 2, tx = b.target.x, ty = b.target.y, go = travelU(b.t);
+    const cx = lerp(px, tx, easeInOut(go)), cy = lerp(py, ty, easeInOut(go));
     if (b.t >= SPLIT) {
-      // morph가 끝난 헤드가 목적지로 옮겨 간다. 빠른 가운데에서만 진행 방향으로 살짝 늘어난다.
-      const u = (b.t - SPLIT) / (1 - SPLIT), e = easeInOut(u), st = 1 + 0.35 * easeInOutD(u);
-      const tx = b.target.x, ty = b.target.y, x = lerp(cx, tx, e), y = lerp(cy, ty, e), ang = Math.atan2(ty - cy, tx - cx);
+      // 헤드가 마저 내려앉는다. 진행 방향으로 살짝 늘어나고, 늘어남은 넘김에서 튀지 않게 차오른다.
+      const st = 1 + 0.35 * easeInOutD(go) * smooth(SPLIT, SPLIT + 0.3 * (1 - SPLIT), b.t), ang = Math.atan2(ty - py, tx - px);
       ctx.save();
-      ctx.translate(x, y);
+      ctx.translate(cx, cy);
       ctx.rotate(ang);
       ctx.scale(st, 1 / Math.sqrt(st));
       ctx.rotate(-ang);
-      ctx.translate(-x, -y);
-      drawOrb(ctx, x, y, R, 1, 0, time);
+      ctx.translate(-cx, -cy);
+      drawOrb(ctx, cx, cy, R, 1, 0, time);
       ctx.restore();
       return;
     }
@@ -256,10 +257,10 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
       ctx.fillStyle = `rgba(127,227,238,${1 - v.reveal})`;
       ctx.fillRect(cx - hw - 60, cy - hh - 60, W + 120, H + 120);
     }
-    const lay = v.reveal > 0 && img && img.complete && img.naturalWidth ? getLayers() : null;
+    const lay = v.reveal > 0 && img && img.width ? getLayers() : null;
     if (img && lay) {
       const { mask, m: mctx, warp, w: wctx } = lay;
-      // 그림은 프리뷰와 같은 cover로 깔리고, 가운데에서 재는 고르지 않은 앞선 안에서만 보인다
+      // 프리뷰 겉모습은 지금 상자(W×H)에 눌려 담기고, 가운데에서 재는 고르지 않은 앞선 안에서만 보인다
       mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       mctx.clearRect(0, 0, vw, vh);
       mctx.filter = `blur(${Math.max(1, 0.12 * Math.min(hw, hh))}px)`;
@@ -273,15 +274,7 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
       mctx.fillStyle = '#fff';
       mctx.fill();
       mctx.filter = 'none';
-      const fw = pr.width, fh = pr.height, ar = fw / fh, iar = img.naturalWidth / img.naturalHeight;
-      let sw = img.naturalWidth, sh = img.naturalHeight, sx = 0, sy = 0;
-      if (iar > ar) {
-        sw = sh * ar;
-        sx = (img.naturalWidth - sw) / 2;
-      } else {
-        sh = sw / ar;
-        sy = (img.naturalHeight - sh) / 2;
-      }
+      const fw = pr.width, fh = pr.height, sw = img.width, sh = img.height, kx = W / fw, ky = H / fh;
       // 그림은 느린 흐름 장을 따라 밀린다. 가는 가로줄을 옆으로 민 뒤 가는 세로줄을 위아래로 미는 두 번 밀기라 칸 경계가 보이지 않는다.
       // 덮어 그려야 해서 source-atop이다.
       const flow = Math.max(v.crumple, 0.5 * v.strands) * Math.min(fw, fh) * 0.07, step = 3;
@@ -293,12 +286,12 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
       wctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       for (let y = 0; y < fh; y += step) {
         const ox = flow * (n2(y * 0.012 + 3, time * 0.9) - 0.5) * 2;
-        wctx.drawImage(img, sx, sy + (sh * y) / fh, sw, (sh * step) / fh, ox, y, fw, step + 0.5);
+        wctx.drawImage(img, 0, (sh * y) / fh, sw, (sh * step) / fh, ox, y, fw, step + 0.5);
       }
       mctx.globalCompositeOperation = 'source-atop';
       for (let x = 0; x < fw; x += step) {
         const oy = flow * (n2(x * 0.012 + 17, time * 0.7) - 0.5) * 2;
-        mctx.drawImage(warp, x * dpr, 0, step * dpr, wh, cx - fw / 2 + x, cy - fh / 2 + oy, step + 0.5, fh);
+        mctx.drawImage(warp, x * dpr, 0, step * dpr, wh, cx - W / 2 + x * kx, cy - H / 2 + oy * ky, (step + 0.5) * kx, H);
       }
       mctx.globalCompositeOperation = 'source-over';
       ctx.drawImage(mask, 0, 0, vw, vh);

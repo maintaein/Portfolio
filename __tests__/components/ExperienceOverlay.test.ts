@@ -4,6 +4,7 @@ import {
   type BoundaryFrame,
   type TimelineFrame,
 } from '@/components/sections/ExperienceSection/overlay';
+import { SPLIT } from '@/components/sections/ExperienceSection/lineMotion';
 
 // jsdom에는 2d 캔버스가 없다(canvas npm 패키지 미설치). PreviewMorph.test.tsx처럼 getContext를 모의 컨텍스트로 바꾼다.
 // 픽셀은 여기서 못 본다. 이 파일은 루프의 켜짐·꺼짐과 그리기 호출만 잠근다.
@@ -140,16 +141,32 @@ describe('createExperienceOverlay', () => {
     overlay.destroy();
   });
 
+  // 프리뷰 한 장(motion.ts capturePreview가 뜬 캔버스)
+  const shot = () => Object.assign(document.createElement('canvas'), { width: 1280, height: 720 });
+
   it('그림이 있으면 가면 캔버스에 흔들어 얹는다', () => {
-    const image = document.createElement('img');
-    Object.defineProperty(image, 'complete', { value: true });
-    Object.defineProperty(image, 'naturalWidth', { value: 1280 });
-    Object.defineProperty(image, 'naturalHeight', { value: 720 });
     const overlay = createExperienceOverlay(canvas)!;
     // t .1이면 q가 1에 가까워 그림이 드러나 있다
-    overlay.setBoundary(boundary({ image, t: 0.1 }));
+    overlay.setBoundary(boundary({ image: shot(), t: 0.1 }));
     tick();
     expect(drawCalls('drawImage')).toBeGreaterThan(0);
+    overlay.destroy();
+  });
+
+  it('morph 도중에 프리뷰 한 장은 줄어든 상자에 눌려 담기고, 상자는 이미 목적지 쪽으로 옮겨 가 있다', () => {
+    const overlay = createExperienceOverlay(canvas)!;
+    overlay.setBoundary(boundary({ image: shot(), t: 0.7 * SPLIT }));
+    tick();
+    // contexts: [화면, 가면, 흔들림]. 가면에 얹는 세로 줄들의 목적지 상자를 모은다.
+    const strips = contexts[1].drawImage.mock.calls.filter(c => c.length === 9) as number[][];
+    expect(strips.length).toBeGreaterThan(0);
+    const left = Math.min(...strips.map(c => c[5])), right = Math.max(...strips.map(c => c[5] + c[7]));
+    expect(right - left).toBeLessThan(640 / 2);
+    expect(Math.max(...strips.map(c => c[8]))).toBeLessThan(360 / 2);
+    // 프리뷰 가운데 x 420, 목적지 x 200
+    const mid = (left + right) / 2;
+    expect(mid).toBeLessThan(400);
+    expect(mid).toBeGreaterThan(220);
     overlay.destroy();
   });
 

@@ -2,7 +2,7 @@ import type { CrystalizedBallHandle } from '@/components/blocks/CrystalizedBall'
 import type { ElectricLogoHandle } from '@/components/blocks/ElectricLogo';
 import { HEAD_MORPH_SECONDS, HEAD_TRAVEL_SECONDS, SPLIT, morphQ } from '@/components/sections/ExperienceSection/lineMotion';
 import type { ExperienceOverlay } from '@/components/sections/ExperienceSection/overlay';
-import { clearCaptionReveal, revealCaption } from '@/components/sections/ProjectsSection/captionReveal';
+import { SCRIM_STOPS, clearCaptionReveal, revealCaption } from '@/components/sections/ProjectsSection/captionReveal';
 import { gsap, registerScrollTrigger, ScrollTrigger, SITE_EASE } from '@/lib/gsap';
 import { readingLineY } from '@/lib/utils/scrollGeometry';
 
@@ -83,6 +83,41 @@ const smooth = (t: number) => t * t * (3 - 2 * t);
 // power2.inOut. 참조의 접힘과 이동은 천천히 떠나 빨라졌다가 내려앉으며 느려진다.
 const inOut = (t: number) => t < .5 ? 4 * t * t * t : 1 - (2 - 2 * t) ** 3 / 2;
 const out = (t: number) => 1 - (1 - t) ** 3;
+
+// 프리뷰 겉모습(그림 cover, 캡션 띠, 글자)을 프리뷰 크기 한 장으로 뜬다. 경계 morph가 그림만 따로가 아니라 이 프리뷰 그대로 구겨진다.
+// shortcut: 글자는 요소마다 한 줄로 그린다(제목·부제·링크가 모두 한 줄이라). 두 줄로 꺾이는 캡션이 생기면 줄 상자(Range)마다 그린다.
+function capturePreview(frame: HTMLElement, img: HTMLImageElement): HTMLCanvasElement | null {
+  const box = frame.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(box.width * dpr);
+  canvas.height = Math.round(box.height * dpr);
+  const g = box.width && box.height ? canvas.getContext('2d') : null;
+  if (!g) return null;
+  g.scale(dpr, dpr);
+  const ar = box.width / box.height, iw = img.naturalWidth, ih = img.naturalHeight;
+  const sw = iw / ih > ar ? ih * ar : iw, sh = iw / ih > ar ? ih : iw / ar;
+  g.drawImage(img, (iw - sw) / 2, (ih - sh) / 2, sw, sh, 0, 0, box.width, box.height);
+  const caption = frame.querySelector<HTMLElement>('[data-part="preview-caption"]');
+  if (!caption) return canvas;
+  const c = caption.getBoundingClientRect();
+  const scrim = g.createLinearGradient(0, c.bottom - box.top, 0, c.top - box.top);
+  for (const [at, alpha] of SCRIM_STOPS) scrim.addColorStop(at / 100, `rgba(0,0,0,${alpha})`);
+  g.fillStyle = scrim;
+  g.fillRect(c.left - box.left, c.top - box.top, c.width, c.height);
+  for (const el of caption.querySelectorAll<HTMLElement>('[data-part="preview-caption-text"] > *')) {
+    const s = getComputedStyle(el), r = el.getBoundingClientRect();
+    g.font = `${s.fontStyle} ${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;
+    g.fillStyle = s.color;
+    // HTML 공백 접기를 따라 한다(부제에 리터럴 줄바꿈이 있다)
+    let text = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
+    // truncate의 말줄임을 따라 한다
+    while (text.length > 1 && g.measureText(text).width > r.width) text = text.slice(0, -2) + '…';
+    const t = g.measureText(text), size = parseFloat(s.fontSize);
+    const asc = t.fontBoundingBoxAscent ?? size * .8, desc = t.fontBoundingBoxDescent ?? size * .2;
+    g.fillText(text, r.left - box.left, r.top - box.top + (r.height - asc - desc) / 2 + asc);
+  }
+  return canvas;
+}
 
 // 진행도 p(0 Hero의 쉬는 볼, 1 About에 내려앉은 로고)의 세 구간. 모든 값이 p만의 함수라 어디서 되돌아도 같은 길을 거꾸로 밟는다.
 // 줄기 0–.42: 볼이 채워진 한 덩이로 제자리에서 작게 준다. 참조 1.23–1.70초, 판이 속까지 함께 작은 타일로 줄어든다.
@@ -214,6 +249,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   const linePose = { p: 0 };
   let lineGoal = 0;
   let lineTween: gsap.core.Tween | null = null;
+  // 경계 한 번의 재생 동안 쓰는 프리뷰 한 장. 프리뷰 쪽(0)에 서면 비워 다음 재생에서 지금 프로젝트로 다시 뜬다.
+  let shot: HTMLCanvasElement | null = null;
   let lineArrived = false;
   // morph를 그리는 오버레이(HomeClient가 늦게 넘긴다). 없으면 그리기 없이 시간·도착·틀 숨김만 돈다.
   let overlay: ExperienceOverlay | null = null;
@@ -363,6 +400,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     syncPin();
     // 모션 감소는 재생이 없어 프리뷰가 그대로 서고(시안과 같다) 첫 헤드는 도착으로 바로 산다.
     if (p <= 0 || reduced || !previewAnchor) {
+      shot = null;
       overlay?.setBoundary(null);
       clearProjects();
       return;
@@ -375,10 +413,10 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     // 출발과 도착은 매 프레임 지금 화면 좌표로 잰다. 재생 중에 스크롤이 움직여도 프리뷰에서 떠나 지금 노드 자리에 내려앉는다.
     // 도착(t 1)도 넘긴다. 오버레이가 실제 첫 헤드가 살 때까지 그 자리에 헤드를 잡아 두고 스스로 비운다(넘김 프레임이 비지 않는다).
     const img = frame?.querySelector('img');
+    if (!shot && frame && img?.complete && img.naturalWidth) shot = capturePreview(frame, img);
     const axisBox = layoutBox(axis);
     overlay.setBoundary({
-      t: p, preview: previewAnchor.getBoundingClientRect(), radius: m.radius,
-      image: img?.complete && img.naturalWidth ? img : null,
+      t: p, preview: previewAnchor.getBoundingClientRect(), radius: m.radius, image: shot,
       target: { x: axisBox.x + axisBox.w / 2, y: nodeY(layoutBox(firstNode)) - window.scrollY },
     });
   };
@@ -564,7 +602,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   // 선 지점을 넘으면 1, LOGO_BACK 넘게 위로 돌아오면 0, 그 사이에서는 지금 쪽이다.
   const lineSide = () => window.scrollY >= m.lineAt ? 1 : window.scrollY <= m.lineAt - LOGO_BACK ? 0 : clamp(lineGoal);
   // nav 이동(useSectionNav가 main에 data-navigation-target을 단 동안)이 선 지점을 넘으면 재생 없이 그쪽에 놓는다.
-  // 빈 Experience 위로 2.6초 경계를 돌리지 않고 도착 상태로 선다. 로고 비행은 그대로 재생한다.
+  // 빈 Experience 위로 2.9초 경계를 돌리지 않고 도착 상태로 선다. 로고 비행은 그대로 재생한다.
   const playLine = () => !root.hasAttribute('data-navigation-target');
 
   // 지금 스크롤이 가리키는 쪽. 이름은 두 문턱 사이에서 지금 자리를 지킨다.
