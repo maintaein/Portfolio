@@ -1,4 +1,8 @@
 
+export type ExperienceMetric = { from: number; to: number; suffix: string; label: string };
+export type EvidenceDemo = 'inspect' | 'security' | 'calendar' | 'loss' | 'cnn';
+export type ExperienceEvidence = { demo: EvidenceDemo; label: string; note?: string; wide: boolean; summary: string };
+
 export interface Experience {
     id: string;
     company: string;
@@ -9,6 +13,10 @@ export interface Experience {
     description: string;
     responsibilities: string[];
     skills?: string[];
+    metrics?: ExperienceMetric[];
+    evidence?: ExperienceEvidence[];
+    /** 업무 목록 맨 위의 강조 줄 */
+    highlight?: string;
   }
   
   export type ExperienceType = Experience['type'];
