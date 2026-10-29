@@ -17,7 +17,7 @@ import { HAZE_FROM, strandReach } from '@/components/blocks/LuminousFlowBackgrou
 import { buildFlowGeometry, type FlowGeometry } from '@/components/blocks/LuminousFlowBackground/geometry';
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Object.defineProperty(window, 'innerHeight', { configurable: true, writable: true, value: 768 }); });
 
-type DrawnFrame = { dashes: number[]; paths: number[][][]; arcs: number; clips: number; glow: number; rims: number[][]; erases: number[] };
+type DrawnFrame = { dashes: number[]; paths: number[][][]; arcs: number; clips: number; glow: number; rims: number[][]; dots: number; erases: number[] };
 // RAF callback map, fake clock and Canvas/IO mocks. They see frame scheduling, canvas calls and the geometry passed in.
 function harness({ reduced = false, rect = { left: 0, top: 0, width: 1200, height: 4000 }, screen = 0 } = {}) {
   // A viewport as tall as the document keeps every segment inside the drawn crop.
@@ -49,13 +49,13 @@ function harness({ reduced = false, rect = { left: 0, top: 0, width: 1200, heigh
   let composite = 'source-over', alpha = 1;
   const main = new Proxy({}, {
     get: (_target, key) => helpers(key) ?? (
-      key === 'clearRect' ? () => { current = { dashes: [], paths: [], arcs: 0, clips: 0, glow: 0, rims: [], erases: [] }; drawn.push(current); }
+      key === 'clearRect' ? () => { current = { dashes: [], paths: [], arcs: 0, clips: 0, glow: 0, rims: [], dots: 0, erases: [] }; drawn.push(current); }
         : key === 'arc' ? () => { current!.arcs++; }
           : key === 'clip' ? () => { current!.clips++; }
             : key === 'fill' ? () => { if (composite === 'destination-out') current!.erases.push(alpha); }
               : key === 'restore' ? () => { composite = 'source-over'; }
-                // The glow texture spans the scene; bend rims are 76 units tall.
-                : key === 'drawImage' ? (...args: number[]) => { if (args[4] > 1000) current!.glow++; else current!.rims.push([args[1] + 45, args[2] + 38]); }
+                // The glow texture spans the scene; bend rims are 76 units tall; particle dots are stamped from a sprite about 2 units tall.
+                : key === 'drawImage' ? (...args: number[]) => { if (args[4] > 1000) current!.glow++; else if (args[4] === 76) current!.rims.push([args[1] + 45, args[2] + 38]); else current!.dots++; }
                   : () => {}),
     set: (_target, key, value) => {
       if (key === 'lineDashOffset') current?.dashes.push(value);
@@ -130,6 +130,15 @@ it('외부 pause 뒤 새 프레임을 예약하지 않고 재개 시 누적 시�
   expect(frames.size).toBe(1);
   tick();
   expect(phase()).toBeCloseTo(beforePause + step, 6);
+});
+
+it('입자 점은 점선 대신 점마다 스프라이트로 찍고, 점선은 빛줄기 한 겹에만 쓴다', () => {
+  const { drawn, tick } = harness();
+  render(<LuminousFlowBackground scrollScene />);
+  tick();
+  expect(drawn.at(-1)!.dots).toBeGreaterThan(28);
+  // 가닥마다 빛줄기 점선의 오프셋 하나와, 입자 전에 0으로 되돌리는 한 번이다(점까지 점선이면 57)
+  expect(drawn.at(-1)!.dashes).toHaveLength(28 + 1);
 });
 
 // The texture fills a strip per frame; 20 frames cover this scene's 17 strips.

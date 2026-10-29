@@ -77,6 +77,43 @@ const bezierHead = (t: number, a: number, b: number, c: number, d: number) => {
   const ab = a + (b - a) * t, bc = b + (c - b) * t, abc = ab + (bc - ab) * t;
   return [ab, abc, abc + (bc + (c + (d - c) * t - bc) * t - abc) * t];
 };
+// The particle dots a [DOT_ON, DOT_PERIOD - DOT_ON] round-capped dash of DOT_WIDTH would draw along each contour, as
+// [x, y, angle] of each dot's start. Each dot is then stamped from a sprite of that dash piece. Stroked as a dash, these tiny
+// round-capped pieces were most of the background's raster time in Chrome: about 30 of 35 ms per frame went to the dots alone
+// on the dev machine (2026-10-29). Like canvas dashing, the pattern restarts at each contour with the same offset, and
+// distance is measured along the curves.
+// shortcut: a dot cut by a contour end is stamped whole (up to DOT_ON past the end); contour ends sit outside the screen except at
+// a strand head still growing in the entrance, so cut the sprite if that ever shows.
+const DOT_ON = .6, DOT_PERIOD = 70, DOT_WIDTH = .65;
+const DOT_STEPS = 16;
+const dotStarts = (contours: number[][][], offset: number) => {
+  const dots: number[][] = [];
+  const phase = (offset % DOT_PERIOD + DOT_PERIOD) % DOT_PERIOD;
+  contours.forEach(segments => {
+    // The next dot starts at `next` along the contour; one already running at the start begins at the start.
+    let travelled = 0, next = -phase;
+    let [x, y] = segments[0];
+    segments.forEach(([x0, y0, x1, y1, x2, y2, x3, y3]) => {
+      for (let step = 1; step <= DOT_STEPS; step++) {
+        const t = step / DOT_STEPS, m = 1 - t;
+        const nx = m * m * m * x0 + 3 * m * m * t * x1 + 3 * m * t * t * x2 + t * t * t * x3;
+        const ny = m * m * m * y0 + 3 * m * m * t * y1 + 3 * m * t * t * y2 + t * t * t * y3;
+        const length = Math.hypot(nx - x, ny - y);
+        while (length && next < travelled + length) {
+          if (next + DOT_ON > travelled) {
+            const along = Math.max(next, travelled) - travelled;
+            dots.push([x + (nx - x) * along / length, y + (ny - y) * along / length, Math.atan2(ny - y, nx - x)]);
+          }
+          next += DOT_PERIOD;
+        }
+        travelled += length;
+        x = nx;
+        y = ny;
+      }
+    });
+  });
+  return dots;
+};
 
 // One color per geometry strand; the renderer owns color, the geometry owns shape.
 const colors = [palette.cyan, palette.glow, palette.cyan, palette.blue, palette.depth];
@@ -203,6 +240,32 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
     rimGlow.addColorStop(0, '#fff');
     rimGlow.addColorStop(.3, '#ffffffe6');
     rimGlow.addColorStop(1, '#ffffff00');
+    // One dash piece per color at twice the drawing scale, with DOT_WIDTH of room around it; rebuilt when the scale changes.
+    let dotScale = 0;
+    let dotSprites: HTMLCanvasElement[] = [];
+    const dotSprite = (blue: boolean, scale: number) => {
+      if (scale !== dotScale) {
+        dotScale = scale;
+        dotSprites = [palette.cyan, palette.glow].map(color => {
+          const sprite = document.createElement('canvas');
+          sprite.width = Math.ceil((DOT_ON + 2 * DOT_WIDTH) * scale);
+          sprite.height = Math.ceil(2 * DOT_WIDTH * scale);
+          const paint = sprite.getContext('2d');
+          if (paint) {
+            paint.scale(scale, scale);
+            paint.strokeStyle = color;
+            paint.lineWidth = DOT_WIDTH;
+            paint.lineCap = 'round';
+            paint.beginPath();
+            paint.moveTo(DOT_WIDTH, DOT_WIDTH);
+            paint.lineTo(DOT_WIDTH + DOT_ON, DOT_WIDTH);
+            paint.stroke();
+          }
+          return sprite;
+        });
+      }
+      return dotSprites[blue ? 0 : 1];
+    };
     const atomGlows = atoms.map(({ radius }) => {
       const glow = context.createRadialGradient(0, 0, 0, 0, 0, radius * 5);
       [[0, palette.glow], [.12, `${palette.glow}e6`], [.3, `${palette.cyan}61`], [.65, `${palette.blue}14`], [1, `${palette.blue}00`]].forEach(([stop, color]) => glow.addColorStop(Number(stop), String(color)));
@@ -427,6 +490,8 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
         }
         let skippedLength = 0;
         const path = new Path2D();
+        // The drawn cubics per contour, [x0, y0, x1, y1, x2, y2, x3, y3], for the particle dots.
+        const contours: number[][][] = [];
         const [end, partial] = ends[index];
         // Skip segments far outside the viewport, including their glow radius.
         let connected = false;
@@ -442,13 +507,17 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
           if (!connected) {
             path.moveTo(point[0], point[1]);
             skippedLength = cumulative[sample];
+            contours.push([]);
           }
+          let control: number[];
           if (portion < 1) {
             const [x, y] = [0, 1].map(axis => bezierHead(portion, point[axis], point[axis] + (next[axis] - before[axis]) / 6,
               next[axis] - (after[axis] - point[axis]) / 6, next[axis]));
-            path.bezierCurveTo(x[0], y[0], x[1], y[1], x[2], y[2]);
-          } else path.bezierCurveTo(point[0] + (next[0] - before[0]) / 6, point[1] + (next[1] - before[1]) / 6,
-            next[0] - (after[0] - point[0]) / 6, next[1] - (after[1] - point[1]) / 6, next[0], next[1]);
+            control = [x[0], y[0], x[1], y[1], x[2], y[2]];
+          } else control = [point[0] + (next[0] - before[0]) / 6, point[1] + (next[1] - before[1]) / 6,
+            next[0] - (after[0] - point[0]) / 6, next[1] - (after[1] - point[1]) / 6, next[0], next[1]];
+          path.bezierCurveTo(control[0], control[1], control[2], control[3], control[4], control[5]);
+          contours.at(-1)!.push([point[0], point[1], ...control]);
           connected = true;
         });
         paths.push(path);
@@ -466,12 +535,16 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
         context.setLineDash([34, 7, 9, 230]);
         context.lineDashOffset = skippedLength - (time + index * .137) * 280 / ((index + 1) % 3 === 0 ? 1.65 : 2.2);
         context.stroke(path);
-        context.strokeStyle = blue ? palette.cyan : palette.glow;
-        context.lineWidth = .65;
         context.globalAlpha = media.matches ? .18 : .48;
-        context.setLineDash([.6, 69.4]);
-        context.lineDashOffset = skippedLength - (time + index * .081) * 70 / .7;
-        context.stroke(path);
+        const scale = 2 * pixelRatio * unit, sprite = dotSprite(blue, scale);
+        const spriteWidth = sprite.width / scale, spriteHeight = sprite.height / scale;
+        for (const [x, y, angle] of dotStarts(contours, skippedLength - (time + index * .081) * 70 / .7)) {
+          context.save();
+          context.translate(x, y);
+          context.rotate(angle);
+          context.drawImage(sprite, -DOT_WIDTH, -DOT_WIDTH, spriteWidth, spriteHeight);
+          context.restore();
+        }
       });
 
       // Each bend mask gets a small local surface rather than a full-scene texture.
