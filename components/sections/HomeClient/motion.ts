@@ -66,7 +66,7 @@ const TILE_RADIUS = .3;
 // 곡선은 morphQ가 준다. 되돌기는 사이트 규칙(About→Projects의 1.4 / 1.8)대로 더 빠르다. 그림은 오버레이 캔버스가 그린다.
 const BOUNDARY_IN = HEAD_MORPH_SECONDS + HEAD_TRAVEL_SECONDS;
 const BOUNDARY_OUT = BOUNDARY_IN * 1.4 / 1.8;
-// 선 지점: 첫 노드가 화면 아래끝에서 이만큼(px) 올라온 스크롤(1440x900에서 1868, 390x844에서 1746 실측, 계획 R1).
+// 선 지점: 첫 노드가 화면 아래끝에서 이만큼(px) 올라온 스크롤(1440x900에서 1858, 390x844에서 1735 실측, 계획 R1).
 // 잠금 자리보다 LOGO_BACK 넘게 아래, 프리뷰가 nav 아래 12px에 닿는 스크롤보다 위에 묶는다. 둘이 다투는 짧은 화면은 위쪽이 이긴다
 // (프리뷰가 nav 밑으로 들어가지 않는다). 그때 헤드는 매 프레임 잰 노드 자리로 가고 화면 밖일 수 있다.
 const NODE_SHOW = 140;
@@ -321,7 +321,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   };
   // 아래로 가는 wheel·손가락을 위로 끄는 touchmove·아래쪽 스크롤 키를 막는다. 위로 가는 입력은 두어 되돌 수 있다.
   const block = (event: Event) => { if (event.cancelable) event.preventDefault(); };
-  const onWheel = (event: WheelEvent) => { if (event.deltaY > 0) block(event); };
+  // Ctrl·Meta가 실린 입력은 확대와 Ctrl+End 같은 브라우저 명령이라 두고 넘긴다.
+  const onWheel = (event: WheelEvent) => { if (event.deltaY > 0 && !event.ctrlKey && !event.metaKey) block(event); };
   const onTouchStart = (event: TouchEvent) => { touchY = event.touches[0]?.clientY ?? NaN; };
   // 막기 시작한 몸짓의 첫 움직임은 기준이 없어 두고 다음부터 본다.
   const onTouchMove = (event: TouchEvent) => {
@@ -329,7 +330,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     if (y < touchY) block(event);
     touchY = y;
   };
-  const onKey = (event: KeyboardEvent) => { if (DOWN_KEYS.has(event.key) && !(event.key === ' ' && event.shiftKey)) block(event); };
+  const onKey = (event: KeyboardEvent) => { if (DOWN_KEYS.has(event.key) && !(event.key === ' ' && event.shiftKey) && !event.ctrlKey && !event.metaKey) block(event); };
   // 앞으로 도는 morph(t < SPLIT) 동안만 막는다(계획 R2). 이동 구간·되돌기·멈춤(상세가 열린 동안)은 막지 않는다.
   const syncPin = () => {
     const next = alive && !paused && !reduced && !!lineTween && lineGoal === 1 && linePose.p < SPLIT;
@@ -562,6 +563,9 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   };
   // 선 지점을 넘으면 1, LOGO_BACK 넘게 위로 돌아오면 0, 그 사이에서는 지금 쪽이다.
   const lineSide = () => window.scrollY >= m.lineAt ? 1 : window.scrollY <= m.lineAt - LOGO_BACK ? 0 : clamp(lineGoal);
+  // nav 이동(useSectionNav가 main에 data-navigation-target을 단 동안)이 선 지점을 넘으면 재생 없이 그쪽에 놓는다.
+  // 빈 Experience 위로 2.6초 경계를 돌리지 않고 도착 상태로 선다. 로고 비행은 그대로 재생한다.
+  const playLine = () => !root.hasAttribute('data-navigation-target');
 
   // 지금 스크롤이 가리키는 쪽. 이름은 두 문턱 사이에서 지금 자리를 지킨다.
   const nameSide = () => window.scrollY >= NAME_DOWN ? 'nav' : window.scrollY <= NAME_UP ? 'hero' : side;
@@ -600,7 +604,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     const name = nameSide();
     if (name !== side) placeName(name, true);
     moveLogo(logoSide(), true);
-    moveLine(lineSide(), true);
+    moveLine(lineSide(), playLine());
   };
 
   // 크기·폰트가 바뀌면 앵커를 다시 잰다. 쉬는 이름·로고는 재생 없이 지금 쪽의 쉬는 자리에 둔다.
@@ -618,7 +622,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     if (travel) {
       moveLogo(next, true);
       renderLogo();
-      moveLine(nextLine, true);
+      moveLine(nextLine, playLine());
       return;
     }
     // 두 문턱 사이에서는 지금 쪽을 지킨다. 같은 쪽이라도 다시 놓도록 goal을 비운다.

@@ -5,7 +5,7 @@ import HomeClient from '@/components/sections/HomeClient';
 vi.mock('@/hooks/useMotionPreference', () => ({ useMotionPreference: () => ({ ready: true, reduced: false }) }));
 vi.mock('@/components/blocks/LuminousFlowBackground', () => ({ default: () => null }));
 vi.mock('@/components/sections/BootSequence', () => ({ default: () => null }));
-vi.mock('@/components/sections', () => ({ AboutSection: () => <p>About</p>, ProjectsSection: () => null, ExperienceSection: () => null, SkillsSection: () => null, AwardAndCertificateSection: () => null, Footer: () => null }));
+vi.mock('@/components/sections', () => ({ AboutSection: () => <p>About</p>, ProjectsSection: () => null, ExperienceSection: ({ lineArrived }: { lineArrived?: boolean }) => <p data-testid="experience" data-line-arrived={String(lineArrived)} />, SkillsSection: () => null, AwardAndCertificateSection: () => null, Footer: () => null }));
 // M4 Task 0 리뷰. 경계 청크(motion.ts, GSAP을 품는다)를 못 받으면 import()가 거절되고 아무도 받지 않았다.
 // vi.mock은 파일 단위로 호이스팅되므로 실패만 보는 독립 파일이다(HyperspeedBackgroundLoadFailure와 같은 이유).
 vi.mock('@/components/sections/HomeClient/motion', () => {
@@ -17,6 +17,8 @@ beforeEach(() => {
   process.on('unhandledRejection', unhandled);
   window.history.replaceState(null, '', '/#about');
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  // jsdom에는 2d 캔버스가 없다. 오버레이 없이(GL 없는 방문과 같다) 돌려 jsdom 미구현 오류를 찍지 않는다.
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
   vi.stubGlobal('matchMedia', vi.fn((query: string) => ({ matches: false, media: query, addEventListener: () => {}, removeEventListener: () => {} })));
 });
 afterEach(() => {
@@ -36,4 +38,10 @@ it('경계 청크가 실패하면 정적 쉬는 자리를 그대로 두고 처�
   expect(screen.getByTestId('wordmark').style.cssText).toBe('');
   expect(container.querySelector('.portfolio-document')).toHaveAttribute('data-logo-owner', 'none');
   expect((container.querySelector('[data-logo-host]') as HTMLElement).style.cssText).toBe('');
+});
+
+it('경계 청크가 실패하면 Experience는 경계 도착을 기다리지 않고 첫 장부터 공개한다', async () => {
+  render(<HomeClient />);
+  await act(async () => { for (let i = 0; i < 10; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+  expect(screen.getByTestId('experience')).toHaveAttribute('data-line-arrived', 'true');
 });

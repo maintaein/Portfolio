@@ -1782,6 +1782,37 @@ describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된�
     expect(boundary()!.t).toBeCloseTo(1 - .2 / OUT, 2);
   });
 
+  it('nav 이동 중(main의 data-navigation-target)에 선 지점을 넘으면 경계를 재생하지 않고 도착 상태로 서고, 거꾸로 넘는 이동도 재생 없이 프리뷰 쪽이다', () => {
+    start();
+    root.setAttribute('data-navigation-target', 'experience');
+    scrollAt(LINE_AT + 400);
+    expect(arrivals).toEqual([true]);
+    expect(overlay.setBoundary.mock.calls.every(([value]) => value === null || (value as { t: number }).t === 1)).toBe(true);
+    expect(frame.style.visibility).toBe('hidden');
+    expect(wheel(100)).toBe(false);
+    root.setAttribute('data-navigation-target', 'projects');
+    scrollAt(1724);
+    expect(arrivals).toEqual([true, false]);
+    expect(boundary()).toBeNull();
+    expect(frame.style.cssText).toBe('border-top-left-radius: 14px;');
+    // 이동이 끝나면 다시 평소처럼 재생한다.
+    root.removeAttribute('data-navigation-target');
+    scrollAt(LINE_AT);
+    advance(.5);
+    expect(boundary()!.t).toBeCloseTo(.5 / IN, 2);
+  });
+
+  it('앞으로 도는 morph 동안에도 Ctrl·Meta가 실린 wheel과 키(확대, Ctrl+End)는 막지 않는다', () => {
+    start();
+    scrollAt(LINE_AT);
+    advance(.5);
+    expect(wheel(100)).toBe(true);
+    expect(blocked(new WheelEvent('wheel', { deltaY: 100, ctrlKey: true, cancelable: true }))).toBe(false);
+    expect(blocked(new WheelEvent('wheel', { deltaY: 100, metaKey: true, cancelable: true }))).toBe(false);
+    expect(blocked(new KeyboardEvent('keydown', { key: 'End', ctrlKey: true, cancelable: true }))).toBe(false);
+    expect(blocked(new KeyboardEvent('keydown', { key: 'ArrowDown', metaKey: true, cancelable: true }))).toBe(false);
+  });
+
   it('모션 감소는 재생 없이 바로 도착하고 프리뷰를 숨기지 않으며 입력을 막지 않는다', () => {
     start({ reduced: true });
     scrollAt(LINE_AT);

@@ -67,6 +67,8 @@ export default function HomeClient() {
   const [logoOwner, setLogoOwner] = useState<LogoOwner>('none');
   // 프리뷰→헤드 경계가 첫 노드에 내려앉았는지. Experience가 첫 헤드와 첫 장을 공개한다.
   const [lineArrived, setLineArrived] = useState(false);
+  // 경계 청크를 못 받으면 도착이 오지 않는다. Experience는 기다리지 않고 첫 장부터 읽기 진행으로 공개한다.
+  const [motionFailed, setMotionFailed] = useState(false);
   const [logoReady, setLogoReady] = useState(false);
   // GL 로고는 쉬는 자리(hero·about)에서만 드러난다. 날아가는 도중에 준비돼도 내려앉은 뒤에 정적 실루엣과 바뀐다.
   const [logoLive, setLogoLive] = useState(false);
@@ -122,7 +124,7 @@ export default function HomeClient() {
     if (!motionReady) return;
     let alive = true;
     // 청크를 못 받으면 모듈 없이 둔다. 이름·로고·볼은 CSS 쉬는 자리에 남고, 직접 해시의 nav 표시도 걷히지 않는다.
-    import('./motion').then(module => { if (alive) setMotionModule(module); }).catch(() => {});
+    import('./motion').then(module => { if (alive) setMotionModule(module); }).catch(() => { if (alive) setMotionFailed(true); });
     return () => { alive = false; };
   }, [motionReady]);
   // 모듈 준비와 모션 감소 전환 때만 다시 잇는다. GL 손잡이는 날던 이름·로고를 끊지 않게 따로 넘긴다.
@@ -198,7 +200,7 @@ export default function HomeClient() {
         {HOME_SECTION_CONFIG.map(({ id, label }) => {
           const Section = id === SECTION_IDS.ABOUT || id === SECTION_IDS.PROJECTS || id === SECTION_IDS.EXPERIENCE ? null : SECTION_COMPONENTS[id];
           return <div key={id} data-section={id} role="region" aria-label={label} tabIndex={-1} className="document-section">
-            {id === SECTION_IDS.EXPERIENCE ? <ExperienceSection lineArrived={lineArrived} overlay={overlay} /> : id === SECTION_IDS.PROJECTS ? <ProjectsSection ref={projectsRef} beforeAction={beforeProjectsAction} navigationPending={navigationTarget !== null} logoOwner={logoOwner} /> : Section ? <Section /> : <AboutSection ref={aboutRef} onChapterChange={setAboutChapter} navigationPending={navigationTarget !== null} logoOwner={logoOwner} />}
+            {id === SECTION_IDS.EXPERIENCE ? <ExperienceSection lineArrived={motionFailed || lineArrived} overlay={overlay} /> : id === SECTION_IDS.PROJECTS ? <ProjectsSection ref={projectsRef} beforeAction={beforeProjectsAction} navigationPending={navigationTarget !== null} logoOwner={logoOwner} /> : Section ? <Section /> : <AboutSection ref={aboutRef} onChapterChange={setAboutChapter} navigationPending={navigationTarget !== null} logoOwner={logoOwner} />}
           </div>;
         })}
         {/* 공유 로고 host. About의 원형 마스크와 overflow-x: clip 밖, 문서 좌표에 산다.

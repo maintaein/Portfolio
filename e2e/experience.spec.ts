@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { enter, SLOW, waitFrames } from './helpers';
+import { enter, navButton, SLOW, waitFrames } from './helpers';
 declare global { interface Window { __drawsFor: (selector: string) => number } }
 
 const frame = (page: Page) => page.locator('[data-motion-anchor="projects-preview"] > div');
@@ -37,6 +37,7 @@ const scrollTo = (page: Page, y: number) => page.evaluate(y => window.scrollTo({
 // 경계 재생을 프레임마다 지켜본다. 프리뷰 틀이 숨은 프레임에 오버레이가 프리뷰 가운데를 덮었는지(그림이 남았는지) 읽는다.
 // 이동 구간(헤드가 가운데를 떠난 뒤)부터는 가운데가 비는 것이 맞으므로, 한 번 덮였다가 빈 뒤로는 세지 않는다.
 // 넘김: 이동하던 헤드가 첫 노드 자리에 닿은 뒤로는 그 자리가 한 프레임도 비지 않는다(경계 헤드에서 실제 첫 헤드로). 첫 장이 current가 되고 5프레임 뒤 끝낸다.
+// 첫 장이 끝내 current가 되지 않아도 1200프레임에서 본 것까지 돌려준다(검사가 시간 상한까지 매달리지 않는다).
 const watchBoundary = (page: Page) => page.evaluate(() => new Promise<{ hidden: number; covered: number; gap: number; landed: number; dropped: number }>(resolve => {
   const canvas = document.querySelector<HTMLCanvasElement>('[data-motion-overlay]')!;
   const ctx = canvas.getContext('2d')!;
@@ -48,14 +49,14 @@ const watchBoundary = (page: Page) => page.evaluate(() => new Promise<{ hidden: 
   const offset = (el: HTMLElement, key: 'offsetTop' | 'offsetLeft') => { let v = 0; for (let n: HTMLElement | null = el; n; n = n.offsetParent as HTMLElement | null) v += n[key]; return v; };
   // 가로세로 2r 화소 안의 가장 큰 알파
   const alphaAt = (x: number, y: number, r: number) => {
-    const s = canvas.width / innerWidth, size = Math.max(1, Math.round(2 * r * s));
+    const s = canvas.width / canvas.clientWidth, size = Math.max(1, Math.round(2 * r * s));
     const data = ctx.getImageData(Math.round((x - r) * s), Math.round((y - r) * s), size, size).data;
     let max = 0;
     for (let i = 3; i < data.length; i += 4) max = Math.max(max, data[i]);
     return max;
   };
   const seen = { hidden: 0, covered: 0, gap: 0, landed: 0, dropped: 0 };
-  let left = false, after = -1;
+  let left = false, after = -1, frames = 0;
   const read = () => {
     const box = anchor.getBoundingClientRect();
     const alpha = alphaAt(box.left + box.width / 2, box.top + box.height / 2, .5);
@@ -69,7 +70,7 @@ const watchBoundary = (page: Page) => page.evaluate(() => new Promise<{ hidden: 
     if (head > 0) seen.landed++;
     else if (seen.landed) seen.dropped++;
     if (after < 0 && first.getAttribute('data-state') === 'current') after = 0;
-    if (after >= 0 && after++ >= 5) resolve(seen);
+    if ((after >= 0 && after++ >= 5) || ++frames >= 1200) resolve(seen);
     else requestAnimationFrame(read);
   };
   requestAnimationFrame(read);
@@ -101,6 +102,40 @@ test.describe('Experience', () => {
     await expect(fasoo).toHaveAttribute('data-state', 'current');
     await expect(fasoo.locator('[data-part="experience-node"]')).toHaveCSS('opacity', '1', SLOW);
     expect(await states(page)).toEqual(['current', 'future', 'future']);
+  });
+
+  test('nav의 Experience를 누르면 경계를 재생하지 않고 선 지점을 넘자마자 FASOO가 current다', async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await enter(page, 'projects');
+    await expect(page.locator('.portfolio-document')).toHaveAttribute('data-logo-owner', 'projects', SLOW);
+    const { lineAt } = await boundaryPoint(page);
+    // 프레임마다 읽는다. 선 지점을 넘은 프레임부터 첫 장이 current가 되는 프레임까지 센다. 2.6초 경계가 돌면 헤드리스에서도 12~14프레임이 걸렸다(고치기 전 실측). 고친 뒤는 1프레임이다.
+    // 목록이 반쯤 사라진 프레임(경계 재생 중에만 생긴다)도 센다. 600프레임에서 본 것까지 돌려준다.
+    const watch = page.evaluate(lineAt => new Promise<{ crossed: number; current: number; midway: number }>(resolve => {
+      const first = document.querySelector('#experience article')!;
+      const list = document.querySelector<HTMLElement>('#projects [data-part="index"]')!;
+      const seen = { crossed: -1, current: -1, midway: 0 };
+      let n = 0;
+      const read = () => {
+        n++;
+        if (seen.crossed < 0 && scrollY >= lineAt) seen.crossed = n;
+        const opacity = Number(getComputedStyle(list).opacity);
+        if (opacity > 0 && opacity < 1) seen.midway++;
+        if (first.getAttribute('data-state') === 'current') seen.current = n;
+        if (seen.current > 0 || n >= 600) resolve(seen);
+        else requestAnimationFrame(read);
+      };
+      requestAnimationFrame(read);
+    }), Math.ceil(lineAt));
+    await navButton(page, 'Experience').click();
+    const seen = await watch;
+    expect(seen.crossed).toBeGreaterThan(0);
+    expect(seen.current).toBeGreaterThan(0);
+    expect(seen.current - seen.crossed).toBeLessThanOrEqual(4);
+    expect(seen.midway).toBe(0);
+    await expect(page.locator('main')).toHaveAttribute('data-active-section', 'experience', SLOW);
+    await expect(chapters(page).first()).toHaveAttribute('data-state', 'current');
   });
 
   test('빠르게 끝까지 내리면 세 장이 모두 공개되고 data-complete가 true다', async ({ page }) => {
