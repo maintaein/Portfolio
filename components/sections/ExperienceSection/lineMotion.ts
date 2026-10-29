@@ -28,9 +28,10 @@ export function createSegments(count: number): Segment[] {
 }
 
 // 문서 y. from: 이 장 노드, to: 다음 노드(마지막 장은 꼬리), readEnd: 이 장 읽기 끝, reading: 읽기선.
+// cold: 보이기 시작한 첫 프레임. 다음 노드가 이미 읽기선 위면 질주 없이 끝난 채 선다(아래에서 켜지면 지난 장이 바로 산다).
 export function stepSegment(
   seg: Segment,
-  input: { from: number; to: number; readEnd: number; reading: number; alive: boolean; dt: number; reduced: boolean },
+  input: { from: number; to: number; readEnd: number; reading: number; alive: boolean; dt: number; reduced: boolean; cold?: boolean },
 ): void {
   const { from, to, reading, dt } = input;
   if (!input.alive) {
@@ -45,6 +46,12 @@ export function stepSegment(
     seg.tip = clamp(reading, from, to);
     seg.swell = 0;
     seg.done = reading >= to;
+    return;
+  }
+  if (input.cold && reading >= to) {
+    seg.tip = seg.s0 = to;
+    seg.q = seg.swell = 1;
+    seg.done = true;
     return;
   }
   const end = Math.min(input.readEnd, to);

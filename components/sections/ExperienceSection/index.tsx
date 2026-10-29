@@ -74,6 +74,8 @@ export default function ExperienceSection({ lineArrived = false, overlay = null 
     const reduced = staticMode;
     const { segs, heads } = motion.current;
     let geo = { axisX: 0, nodes: [] as number[], readEnd: [] as number[], tail: 0, header: 0 };
+    // 보이기 시작한 첫 프레임. 아래에서 켜지면(새로 고침·해시·nav 이동) 읽기선 위의 구간을 하나씩 0.9초씩 질주시키지 않는다.
+    let cold = true;
     const measure = () => {
       const axis = section.querySelector<HTMLElement>('[data-part="experience-axis"]');
       const chapters = [...section.querySelectorAll<HTMLElement>('article')];
@@ -94,12 +96,13 @@ export default function ExperienceSection({ lineArrived = false, overlay = null 
       if (first && !heads[0].alive) { heads[0].r = R; heads[0].pulse = 1; }
       heads[0].alive = first;
       segs.forEach((seg, i) => {
-        stepSegment(seg, { from: geo.nodes[i], to: i < N - 1 ? geo.nodes[i + 1] : geo.tail, readEnd: geo.readEnd[i], reading, alive: heads[i].alive, dt, reduced });
+        stepSegment(seg, { from: geo.nodes[i], to: i < N - 1 ? geo.nodes[i + 1] : geo.tail, readEnd: geo.readEnd[i], reading, alive: heads[i].alive, dt, reduced, cold });
         const next = heads[i + 1];
         if (!next) return;
         if (seg.done && !next.alive) { next.r = R; next.pulse = 1; }
         next.alive = seg.done;
       });
+      cold = false;
       // 헤드는 앞에서부터 산다(다음 헤드는 앞 구간이 끝나야 산다). 가장 아래 산 헤드가 현재다.
       const count = heads.filter(h => h.alive).length, cur = count - 1;
       heads.forEach((h, i) => {
@@ -144,6 +147,20 @@ export default function ExperienceSection({ lineArrived = false, overlay = null 
       tick(0);
     };
   }, [visible, staticMode, overlay, ref]);
+
+  // 보이지 않는 동안은 프레임을 돌지 않지만 data-complete(Skills 경계가 읽는다)는 맞춘다. 한 번도 보이지 않고 지나간 방문도 있다.
+  // 섹션이 화면 위로 다 지나갔으면 화면 안의 읽기선은 마지막 읽기 끝 아래다. 화면 아래에 있으면 아직이다.
+  useLayoutEffect(() => {
+    const section = ref.current;
+    if (visible || staticMode || !section) return;
+    const check = () => {
+      const done = section.getBoundingClientRect().bottom <= 0;
+      setProgress(p => p.complete === done ? p : { ...p, complete: done });
+    };
+    check();
+    window.addEventListener('scroll', check, { passive: true });
+    return () => window.removeEventListener('scroll', check);
+  }, [visible, staticMode, ref]);
 
   return (
     <section ref={ref} id={SECTION_IDS.EXPERIENCE} aria-labelledby="experience-heading" className="experience" data-progressive={progressive ? '' : undefined}>

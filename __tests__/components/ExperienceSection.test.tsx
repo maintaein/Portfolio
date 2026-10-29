@@ -145,7 +145,8 @@ describe('ExperienceSection', () => {
     render(experienceWithActivity({ reducedMotion: true }, { overlay }));
     const provider = overlay.setTimeline.mock.calls.at(-1)![0] as (dt: number, now: number) => TimelineFrame;
     expect(provider).toBeTypeOf('function');
-    const frame = provider(1 / 60, 0);
+    let frame!: TimelineFrame;
+    act(() => { frame = provider(1 / 60, 0); });
     expect(frame.segments[0].tip + 1500 - READING).toBeCloseTo(1500);
     expect(frame.heads[0]).toMatchObject({ r: R, pulse: 0, current: true });
     expect(line()).toHaveAttribute('data-tip', '1500');
@@ -176,7 +177,7 @@ describe('ExperienceSection', () => {
     render(experienceWithActivity({}, { lineArrived: true, overlay }));
     const provider = overlay.setTimeline.mock.calls.at(-1)![0] as (dt: number, now: number) => TimelineFrame;
     const measured = rect.mock.calls.length;
-    for (let i = 0; i < 5; i++) provider(1 / 60, i * 16);
+    act(() => { for (let i = 0; i < 5; i++) provider(1 / 60, i * 16); });
     expect(rect).toHaveBeenCalledTimes(measured);
     header.remove();
   });
@@ -196,6 +197,48 @@ describe('ExperienceSection', () => {
     expect(line()).toHaveAttribute('data-complete', 'true');
   });
 
+  it('아래에서 켜지면(새로 고침·해시·nav 이동) 다음 노드가 읽기선 위에 있는 구간은 질주 없이 끝난 채 시작한다', () => {
+    const overlay = { setBoundary: vi.fn(), setTimeline: vi.fn(), setReduced: vi.fn(), destroy: vi.fn() };
+    const view = (visible: boolean) => { localVisibility.visible = visible; return experienceWithActivity({}, { lineArrived: true, overlay }); };
+    const below = NODES[2] + 100 - READING;
+    // 처음 켜질 때 읽기선이 셋째 노드 아래다. 지난 두 헤드와 장이 바로 산다.
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: below });
+    const { unmount } = render(view(true));
+    expect(states()).toEqual(['past', 'past', 'current']);
+    const provider = overlay.setTimeline.mock.calls.at(-1)![0] as (dt: number, now: number) => TimelineFrame;
+    let frame!: TimelineFrame;
+    act(() => { frame = provider(1 / 60, 0); });
+    expect(frame.segments.map(segment => segment.done)).toEqual([true, true, false]);
+    expect(frame.segments[0].tip).toBeCloseTo(NODES[1] - below);
+    expect(frame.segments[1].tip).toBeCloseTo(NODES[2] - below);
+    unmount();
+    // 위에서 한 번 켜졌다가 꺼진 채(예: nav로 아래로 뛰어) 아래에서 다시 켜져도 같다.
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 });
+    const again = render(view(true));
+    expect(states()).toEqual(['current', 'future', 'future']);
+    act(() => { again.rerender(view(false)); });
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: below });
+    act(() => { again.rerender(view(true)); });
+    expect(states()).toEqual(['past', 'past', 'current']);
+  });
+
+  it('한 번도 보이지 않았어도 섹션이 화면 위로 다 지나갔으면 data-complete가 true이고, 다시 아래에 있으면 false다', () => {
+    let bottom = -10;
+    const original = Element.prototype.getBoundingClientRect;
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      return this.id === SECTION_IDS.EXPERIENCE ? ({ top: bottom - 3000, bottom } as DOMRect) : original.call(this);
+    });
+    localVisibility.visible = false;
+    render(experienceWithActivity({}, { lineArrived: true }));
+    expect(line()).toHaveAttribute('data-complete', 'true');
+    bottom = 5000;
+    act(() => { window.dispatchEvent(new Event('scroll')); });
+    expect(line()).toHaveAttribute('data-complete', 'false');
+    bottom = -10;
+    act(() => { window.dispatchEvent(new Event('scroll')); });
+    expect(line()).toHaveAttribute('data-complete', 'true');
+  });
+
   it('증거 카드는 공개된 장에서만 active다', () => {
     const { rerender } = render(experienceWithActivity());
     const active = () => articles().map(article => [...article.querySelectorAll('figure')].map(figure => figure.dataset.active));
@@ -211,7 +254,8 @@ describe('ExperienceSection', () => {
     const provider = overlay.setTimeline.mock.calls.at(-1)![0] as (dt: number, now: number) => TimelineFrame;
     expect(provider).toBeTypeOf('function');
     // 축 x, 노드 화면 y, 탄생한 첫 헤드(현재, 반지름 R, 맥동이 줄어든다), 아직 살지 않은 헤드(반지름 0)
-    const frame = provider(1 / 60, 0);
+    let frame!: TimelineFrame;
+    act(() => { frame = provider(1 / 60, 0); });
     expect(frame.axisX).toBe(92);
     expect(frame.segments.map(segment => segment.from)).toEqual(NODES);
     expect(frame.segments.map(segment => segment.last)).toEqual([false, false, true]);
@@ -219,9 +263,9 @@ describe('ExperienceSection', () => {
     expect(frame.heads[0].pulse).toBeCloseTo(1 - 1.2 / 60);
     expect(frame.heads.slice(1).map(head => head.r)).toEqual([0, 0]);
     expect(line()).toHaveAttribute('data-tip', String(NODES[0]));
-    rerender(view(false));
+    act(() => { rerender(view(false)); });
     expect(overlay.setTimeline).toHaveBeenLastCalledWith(null);
-    rerender(view(true));
+    act(() => { rerender(view(true)); });
     expect(overlay.setTimeline.mock.calls.at(-1)![0]).toBeTypeOf('function');
     unmount();
     expect(overlay.setTimeline).toHaveBeenLastCalledWith(null);
