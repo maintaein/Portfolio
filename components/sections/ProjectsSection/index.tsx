@@ -1474,7 +1474,7 @@ export default function ProjectsSection({ ref, beforeAction, navigationPending =
             사용자의 것이라 보이는 44px 단추로 둔다. 조용한 n / N 하나와 양옆 화살표뿐이다.
             끝에서는 순환하지 않는다. disabled 대신 aria-disabled라 끝에 닿아도 포커스가
             단추에 남는다. 지금 프로젝트 이름은 화면에는 캡션이 이미 보여 줘서 읽기만 한다 */}
-        <div className="mt-2 flex items-center justify-center lg:hidden">
+        <div data-part="mobile-pager" className="mt-2 flex items-center justify-center lg:hidden">
           {stepButton(-1)}
           <p
             aria-live="polite"

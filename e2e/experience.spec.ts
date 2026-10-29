@@ -207,6 +207,9 @@ test.describe('Experience', () => {
     expect(seen.landed).toBeGreaterThan(0);
     expect(seen.dropped).toBe(0);
     await expect(chapters(page).first().locator('[data-part="experience-node"]')).toHaveCSS('opacity', '1', SLOW);
+    // 프리뷰 틀만 숨고 lg 아래 넘김 줄(n / N과 단추)이 Experience 위에 남지 않는다. 목록처럼 사라지고 눌리지 않는다.
+    await expect(page.locator('#projects [data-part="mobile-pager"]')).toHaveCSS('opacity', '0');
+    await expect(page.locator('#projects [data-part="mobile-pager"]')).toHaveCSS('pointer-events', 'none');
     await expect(page.locator('#experience [data-demo="calendar"] canvas')).toHaveCSS('height', '560px');
   });
 

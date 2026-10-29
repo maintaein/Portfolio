@@ -1586,7 +1586,7 @@ describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된�
     overlay = overlayMock();
     projects = document.createElement('div');
     projects.dataset.section = 'projects';
-    projects.innerHTML = `<section><div data-motion-anchor="projects-preview"><div style="border-top-left-radius: 14px"><div data-part="preview-media"><img alt=""></div></div></div><div data-part="index"></div></section>`;
+    projects.innerHTML = `<section><div data-motion-anchor="projects-preview"><div style="border-top-left-radius: 14px"><div data-part="preview-media"><img alt=""></div></div></div><div data-part="index"></div><div data-part="mobile-pager"><button type="button">다음</button></div></section>`;
     const experience = document.createElement('div');
     experience.dataset.section = 'experience';
     experience.innerHTML = `<section><span data-part="experience-line" aria-hidden="true"></span><article><div data-part="experience-axis"></div><div><h3 data-part="experience-node">FASOO</h3></div></article></section>`;
@@ -1693,7 +1693,8 @@ describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된�
     expect(boundary()).toMatchObject({ image: null });
   });
 
-  it('틀은 q .94에서 숨고 목록은 q .9~.7에 사라지며, 0으로 되돌면 인라인 값을 걷는다', () => {
+  it('틀은 q .94에서 숨고 목록과 lg 아래 넘김 줄은 q .9~.7에 사라지며, 0으로 되돌면 인라인 값을 걷는다', () => {
+    const pager = projects.querySelector<HTMLElement>('[data-part="mobile-pager"]')!;
     start();
     expect(frame.style.visibility).toBe('');
     scrollAt(LINE_AT);
@@ -1703,14 +1704,17 @@ describe('Projects→Experience: 프리뷰가 제자리에서 첫 헤드가 된�
       const q = morphQ(boundary()!.t);
       expect(frame.style.visibility).toBe(q <= .94 ? 'hidden' : '');
       expect(Number(list.style.opacity)).toBeCloseTo(smooth(.7, .9, q), 5);
+      expect(pager.style.opacity).toBe(list.style.opacity);
       hidden ||= q <= .94;
     }
     expect(hidden).toBe(true);
     expect(frame.style.pointerEvents).toBe('none');
+    expect(pager.style).toMatchObject({ opacity: '0', pointerEvents: 'none' });
     scrollAt(LINE_AT - 24);
     advance(OUT + .1);
     expect(frame.style.cssText).toBe('border-top-left-radius: 14px;');
     expect(list.getAttribute('style') ?? '').toBe('');
+    expect(pager.getAttribute('style') ?? '').toBe('');
     expect(boundary()).toBeNull();
   });
 

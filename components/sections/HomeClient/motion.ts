@@ -174,6 +174,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   const focusedControl = (target: EventTarget | null = document.activeElement) => target instanceof Element && target !== projectsSection
     && !!projectsSection?.contains(target) && !!target.closest('button, a, input, select, textarea, [tabindex]:not([tabindex="-1"])');
   const list = projectsSection?.querySelector<HTMLElement>('[data-part="index"]') ?? null;
+  // lg 아래의 넘김 줄(n / N과 양옆 단추). Experience 경계에서는 목록과 같이 사라진다(시안 #wheel).
+  const pager = projectsSection?.querySelector<HTMLElement>('[data-part="mobile-pager"]') ?? null;
   // Experience 첫 장의 축 칸과 노드 제목(ExperienceSection). 재기만 한다. 노드 y는 섹션과 같이 제목 위끝 + min(높이, 60) / 2다.
   const axis = root.querySelector<HTMLElement>('[data-part="experience-axis"]');
   const firstNode = root.querySelector<HTMLElement>('[data-part="experience-node"]');
@@ -315,7 +317,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   };
   const clearProjects = () => {
     if (frame) Object.assign(frame.style, { transform: '', opacity: '', clipPath: '', pointerEvents: '', visibility: '' });
-    if (list) Object.assign(list.style, { opacity: '', pointerEvents: '' });
+    for (const el of [list, pager]) if (el) Object.assign(el.style, { opacity: '', pointerEvents: '' });
   };
   // 아래로 가는 wheel·손가락을 위로 끄는 touchmove·아래쪽 스크롤 키를 막는다. 위로 가는 입력은 두어 되돌 수 있다.
   const block = (event: Event) => { if (event.cancelable) event.preventDefault(); };
@@ -367,7 +369,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     const q = morphQ(p);
     // 열기 단추는 떠나는 동안 눌리지 않는다. 상세의 FLIP과 이 경계가 같은 프리뷰를 함께 옮기지 않는다.
     if (frame) Object.assign(frame.style, { transform: '', opacity: '', clipPath: '', pointerEvents: 'none', visibility: q <= .94 ? 'hidden' : '' });
-    if (list) Object.assign(list.style, { opacity: String(smooth(span(.7, .9, q))), pointerEvents: 'none' });
+    for (const el of [list, pager]) if (el) Object.assign(el.style, { opacity: String(smooth(span(.7, .9, q))), pointerEvents: 'none' });
     if (!overlay) return;
     // 출발과 도착은 매 프레임 지금 화면 좌표로 잰다. 재생 중에 스크롤이 움직여도 프리뷰에서 떠나 지금 노드 자리에 내려앉는다.
     // 도착(t 1)도 넘긴다. 오버레이가 실제 첫 헤드가 살 때까지 그 자리에 헤드를 잡아 두고 스스로 비운다(넘김 프레임이 비지 않는다).
