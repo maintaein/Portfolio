@@ -142,7 +142,12 @@ describe('createExperienceOverlay', () => {
     expect(texts.map(c => c[0]).join('')).toBe('PoseTive');
     const goo = parent.querySelector('canvas:not(:last-child)') as HTMLCanvasElement;
     expect(goo.style.filter).toContain('url(#experience-goo)');
-    expect(parent.querySelector('filter#experience-goo')).not.toBeNull();
+    const filter = parent.querySelector('filter#experience-goo')!;
+    // 액체 캔버스는 화면 전체가 아니라 글자 무리 상자(x 1000~1210, y 300)에 글자 높이(40)와 헤드 지름(32)을 더해,
+    // DPR 1에서 8px 칸에 맞춘 크기(928~1288, 224~376)로 그 자리에 선다. 필터 영역도 한 칸 밖까지 px로 잡는다.
+    expect([goo.style.width, goo.style.height, goo.style.transform]).toEqual(['360px', '152px', 'translate(928px, 224px)']);
+    expect([goo.width, goo.height]).toEqual([360, 152]);
+    expect(['x', 'y', 'width', 'height'].map(k => filter.getAttribute(k))).toEqual(['-8', '-8', '376', '168']);
     overlay.destroy();
     expect(parent.children).toHaveLength(1);
   });

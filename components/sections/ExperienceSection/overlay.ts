@@ -166,35 +166,37 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
   let reduced = false, dead = false, raf = 0, last = 0, dpr = 1, vw = 0, vh = 0;
   // 액체 캔버스: 글자와 방울을 여기에 그리고 SVG 필터(흐리게 번진 알파를 다시 날카롭게 세운다)로 가까운 방울끼리 목이 이어져 붙게 한다.
   // 이 캔버스 바로 아래 형제로, 처음 모일 때 한 번 만들어 계속 쓴다. 필터가 없는 브라우저에서는 방울이 따로 보일 뿐이다.
-  let goo: { el: HTMLCanvasElement; g: G; svg: SVGSVGElement; blur: SVGFEGaussianBlurElement; on: boolean } | null | undefined;
+  // 화면 전체가 아니라 글자 무리 상자 크기로 두고 매 프레임 그 상자로 옮긴다. CSS 필터 비용은 요소 넓이를 따라가서, 화면 크기로 두면
+  // 녹는 구간(.2~1.25초)이 30fps로 떨어졌다. 필터를 끄면 2.1초 중 25ms 넘는 프레임이 17~28에서 5~9로 줄었다(2026-10-30 실측).
+  // 그림자는 요소 밖으로도 그려져 잘리지 않는다. 비트맵은 키우기만 한다. w·h는 CSS px.
+  let goo: { el: HTMLCanvasElement; g: G; svg: SVGSVGElement; filter: SVGFilterElement; blur: SVGFEGaussianBlurElement; on: boolean; w: number; h: number } | null | undefined;
 
+  // DPR이 바뀌면 다음 프레임에 새로 키운다
   const sizeGoo = () => {
-    if (!goo) return;
-    goo.el.width = vw * dpr;
-    goo.el.height = vh * dpr;
+    if (goo) goo.w = goo.h = 0;
   };
   const getGoo = () => {
     if (goo === undefined) {
       const el = document.createElement('canvas'), g = el.getContext('2d');
       if (!g) return (goo = null);
       el.className = canvas.className;
+      Object.assign(el.style, { inset: 'auto', left: '0', top: '0' });
       el.setAttribute('aria-hidden', 'true');
       const svg = document.createElementNS(SVG, 'svg');
       svg.setAttribute('aria-hidden', 'true');
       svg.setAttribute('style', 'position:absolute;width:0;height:0');
-      svg.innerHTML = '<filter id="experience-goo" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">'
+      svg.innerHTML = '<filter id="experience-goo" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">'
         + '<feGaussianBlur in="SourceGraphic" stdDeviation="0.01" result="b"/><feColorMatrix in="b" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 12 -5"/></filter>';
       canvas.before(svg, el);
-      goo = { el, g, svg, blur: svg.querySelector('feGaussianBlur')!, on: false };
-      sizeGoo();
+      goo = { el, g, svg, filter: svg.querySelector('filter')!, blur: svg.querySelector('feGaussianBlur')!, on: false, w: 0, h: 0 };
     }
     return goo;
   };
   const clearGoo = () => {
     if (!goo?.on) return;
     goo.on = false;
-    goo.g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    goo.g.clearRect(0, 0, vw, vh);
+    goo.g.setTransform(1, 0, 0, 1, 0, 0);
+    goo.g.clearRect(0, 0, goo.el.width, goo.el.height);
     goo.el.style.filter = '';
   };
   const measure = () => {
@@ -214,7 +216,7 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
   const drawGather = (b: BoundaryFrame, time: number) => {
     const n = b.letters.length, layer = n ? getGoo() : null;
     if (!layer) return;
-    const { g: gctx, el, blur } = layer;
+    const { g: gctx, el, filter, blur } = layer;
     const sec = b.t * GATHER_SECONDS, node = b.target;
     const xs = b.letters.map(L => L.x), minX = Math.min(...xs), maxX = Math.max(...xs);
     const word = { x: (minX + maxX) / 2, y: b.letters.reduce((a, L) => a + L.y, 0) / n };
@@ -224,46 +226,65 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
     blur.setAttribute('stdDeviation', lerp(0.01, 4.5, smooth(0.2, 0.8, sec)).toFixed(2));
     const charge = smooth(0, 0.45, sec);
     el.style.filter = `url(#experience-goo) drop-shadow(0 0 ${(2 + 4 * charge).toFixed(1)}px rgba(127,227,238,${(0.85 * charge).toFixed(2)})) drop-shadow(0 0 14px rgba(3,179,195,${(0.5 * charge).toFixed(2)}))`;
-    gctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    gctx.clearRect(0, 0, vw, vh);
+    gctx.font = b.font;
+    // 글자 상자 가운데에서 기준선까지(상자 높이 = 글꼴 올림 + 내림)
+    const m = gctx.measureText('P'), base = (m.fontBoundingBoxAscent - m.fontBoundingBoxDescent) / 2;
+    const poses = b.letters.map(L => {
+      const p = gatherPose(L, sec, word, node);
+      // 방울: 글자가 녹는 자리에서 맺히고, 모일수록 커져 다 모이면 겹친 방울이 헤드 크기 한 덩이가 된다
+      const rd = smooth(0, 0.5, p.melt) * lerp(rDrop, R * 0.85, p.g), st = 1 + 0.6 * p.speed;
+      // 꼬리: 지나온 자리의 작은 구슬 셋이 번짐에 이어져 물방울 꼬리가 된다
+      const tail = rd > 0.3 && p.speed > 0.15 ? [1, 2, 3].map(j => gatherPose(L, sec - 0.035 * j, word, node)) : [];
+      return { ...p, L, k: L.k, rd, st, tail };
+    });
+    // 캔버스 상자: 그리는 것(글자, 방울, 꼬리)의 가운데에 글자 높이와 번짐 몫을 더한다
+    const pts = poses.flatMap(p => [p, ...p.tail]), pad = m.fontBoundingBoxAscent + 2 * R;
+    // 상자는 CSS px로 정수이고 장치 px로 8의 배수인 칸(DPR 1.5면 16px)에 맞춘다. goo는 알파를 가파르게 잘라, 번짐 표본 격자가 화면 크기
+    // 캔버스 때와 한 칸 미만만 어긋나도 글자·방울 가장자리가 1px씩 밀렸다. 큰 번짐은 축소해 계산되어 그 격자가 장치 px 여러 칸이다.
+    const cell = Array.from({ length: 32 }, (_, i) => i + 1).find(u => Math.abs(u * dpr / 8 - Math.round(u * dpr / 8)) < 1e-6) ?? 1;
+    const snap = (v: number, round: (x: number) => number) => round(v / cell) * cell;
+    const bx = snap(Math.min(...pts.map(q => q.x)) - pad, Math.floor), by = snap(Math.min(...pts.map(q => q.y)) - pad, Math.floor);
+    const bw = snap(Math.max(...pts.map(q => q.x)) + pad, Math.ceil) - bx, bh = snap(Math.max(...pts.map(q => q.y)) + pad, Math.ceil) - by;
+    if (bw > layer.w || bh > layer.h) {
+      layer.w = Math.max(layer.w, bw);
+      layer.h = Math.max(layer.h, bh);
+      Object.assign(el, { width: Math.round(layer.w * dpr), height: Math.round(layer.h * dpr) });
+      Object.assign(el.style, { width: `${layer.w}px`, height: `${layer.h}px` });
+      // 필터 영역도 상자 비율이 아니라 칸에 맞춘 px다
+      Object.entries({ x: -cell, y: -cell, width: layer.w + 2 * cell, height: layer.h + 2 * cell }).forEach(([k, v]) => filter.setAttribute(k, String(v)));
+    }
+    el.style.transform = `translate(${bx}px, ${by}px)`;
+    gctx.setTransform(1, 0, 0, 1, 0, 0);
+    gctx.clearRect(0, 0, el.width, el.height);
+    // 그리기는 화면 좌표 그대로다
+    gctx.setTransform(dpr, 0, 0, dpr, -bx * dpr, -by * dpr);
     gctx.font = b.font;
     gctx.textAlign = 'center';
     gctx.textBaseline = 'alphabetic';
-    // 글자 상자 가운데에서 기준선까지(상자 높이 = 글꼴 올림 + 내림)
-    const m = gctx.measureText('P'), base = (m.fontBoundingBoxAscent - m.fontBoundingBoxDescent) / 2;
     const scan = lerp(minX - 60, maxX + 60, charge);
-    const poses = b.letters.map(L => {
-      const p = gatherPose(L, sec, word, node);
+    for (const p of poses) {
       // 충전: 훑는 빛이 지나간 글자는 청록이 되고, 지나가는 순간 하얗게 번쩍인다
-      const lit = smooth(-10, 50, scan - L.x), flash = Math.exp(-(((scan - L.x) / 28) ** 2)) * (1 - smooth(0.3, 0.5, sec));
-      const col = rgb(mix(mix(INK, CYAN_L, Math.max(lit, p.melt)), WHITE, 0.8 * flash));
+      const lit = smooth(-10, 50, scan - p.L.x), flash = Math.exp(-(((scan - p.L.x) / 28) ** 2)) * (1 - smooth(0.3, 0.5, sec));
+      gctx.fillStyle = rgb(mix(mix(INK, CYAN_L, Math.max(lit, p.melt)), WHITE, 0.8 * flash));
       if (p.melt < 1) {
         const sc = lerp(1, 0.5, p.melt);
         gctx.save();
         gctx.translate(p.x, p.y);
         gctx.scale(sc, sc);
         gctx.globalAlpha = 1 - p.melt;
-        gctx.fillStyle = col;
-        gctx.fillText(L.ch, 0, base);
+        gctx.fillText(p.L.ch, 0, base);
         gctx.restore();
       }
-      // 방울: 글자가 녹는 자리에서 맺히고, 모일수록 커져 다 모이면 겹친 방울이 헤드 크기 한 덩이가 된다
-      const rd = smooth(0, 0.5, p.melt) * lerp(rDrop, R * 0.85, p.g), st = 1 + 0.6 * p.speed;
-      if (rd > 0.3) {
-        gctx.fillStyle = col;
+      if (p.rd <= 0.3) continue;
+      gctx.beginPath();
+      gctx.ellipse(p.x, p.y, p.rd * p.st, p.rd / Math.sqrt(p.st), p.ang, 0, Math.PI * 2);
+      gctx.fill();
+      p.tail.forEach((q, j) => {
         gctx.beginPath();
-        gctx.ellipse(p.x, p.y, rd * st, rd / Math.sqrt(st), p.ang, 0, Math.PI * 2);
+        gctx.arc(q.x, q.y, p.rd * (1 - 0.24 * (j + 1)), 0, Math.PI * 2);
         gctx.fill();
-        // 꼬리: 지나온 자리의 작은 구슬 셋이 번짐에 이어져 물방울 꼬리가 된다
-        if (p.speed > 0.15) for (let j = 1; j <= 3; j++) {
-          const q = gatherPose(L, sec - 0.035 * j, word, node);
-          gctx.beginPath();
-          gctx.arc(q.x, q.y, rd * (1 - 0.24 * j), 0, Math.PI * 2);
-          gctx.fill();
-        }
-      }
-      return { ...p, k: L.k, rd, st };
-    });
+      });
+    }
     const gm = poses.reduce((a, p) => a + p.g, 0) / n;
     // 전기 줄기: 이웃 글자 사이에 튀다가, 다 모여 한 덩이가 되면 가라앉는다
     ctx.save();
