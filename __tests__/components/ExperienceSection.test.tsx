@@ -222,6 +222,21 @@ describe('ExperienceSection', () => {
     expect(states()).toEqual(['past', 'past', 'current']);
   });
 
+  it('아래에서 켜진 뒤 경계 도착(lineArrived)이 늦게 와도 지난 구간은 질주 없이 끝난 채 선다', () => {
+    const overlay = { setBoundary: vi.fn(), setTimeline: vi.fn(), setReduced: vi.fn(), destroy: vi.fn() };
+    const below = NODES[2] + 100 - READING;
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: below });
+    // 새로 고침 뒤 첫 헤드가 아직 살지 않은 프레임이 먼저 돈다
+    const { rerender } = render(experienceWithActivity({}, { overlay }));
+    const provider = overlay.setTimeline.mock.calls.at(-1)![0] as (dt: number, now: number) => TimelineFrame;
+    act(() => { provider(1 / 60, 0); provider(1 / 60, 16); });
+    act(() => { rerender(experienceWithActivity({}, { lineArrived: true, overlay })); });
+    let frame!: TimelineFrame;
+    act(() => { frame = provider(1 / 60, 32); });
+    expect(frame.segments.map(segment => segment.done)).toEqual([true, true, false]);
+    expect(states()).toEqual(['past', 'past', 'current']);
+  });
+
   it('한 번도 보이지 않았어도 섹션이 화면 위로 다 지나갔으면 data-complete가 true이고, 다시 아래에 있으면 false다', () => {
     let bottom = -10;
     const original = Element.prototype.getBoundingClientRect;

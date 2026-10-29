@@ -102,7 +102,8 @@ export default function ExperienceSection({ lineArrived = false, overlay = null 
         if (seg.done && !next.alive) { next.r = R; next.pulse = 1; }
         next.alive = seg.done;
       });
-      cold = false;
+      // 첫 헤드가 살기 전 프레임은 세지 않는다. 새로 고침 뒤 경계 도착보다 먼저 돈 프레임이 cold를 써 버리면 지난 장이 차례로 질주했다.
+      if (heads[0].alive) cold = false;
       // 헤드는 앞에서부터 산다(다음 헤드는 앞 구간이 끝나야 산다). 가장 아래 산 헤드가 현재다.
       const count = heads.filter(h => h.alive).length, cur = count - 1;
       heads.forEach((h, i) => {
