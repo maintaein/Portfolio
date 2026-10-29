@@ -164,11 +164,10 @@ const trace = (g: G, pts: readonly OutlinePoint[]) => {
   g.closePath();
 };
 
-const NOOP: ExperienceOverlay = { setBoundary() {}, setTimeline() {}, setReduced() {}, destroy() {} };
-
-export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOverlay {
+// 2D 컨텍스트가 없으면 null이다. 받는 쪽(ExperienceSection)은 그리기 없이 자기 rAF로 읽기 진행을 돈다.
+export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOverlay | null {
   const ctx = canvas.getContext('2d');
-  if (!ctx) return NOOP;
+  if (!ctx) return null;
   let boundary: BoundaryFrame | null = null;
   let provider: ((dt: number, now: number) => TimelineFrame | null) | null = null;
   let reduced = false, dead = false, raf = 0, last = 0, dpr = 1, vw = 0, vh = 0;

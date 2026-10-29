@@ -966,7 +966,6 @@ html[data-intro] .hero-ball { opacity: 0; }
   padding: 0 32px;
   color: var(--color-text-primary);
 }
-.experience-eyebrow { margin: 0 0 0 120px; font-size: 11px; letter-spacing: .24em; color: var(--color-cyan-core); }
 .experience-chapter { display: grid; grid-template-columns: 120px 1fr; min-height: 170svh; padding-bottom: 26svh; }
 .experience-chapter:first-of-type .experience-chapter-body { padding-top: 12px; }
 .experience-axis { position: relative; }
@@ -1000,7 +999,6 @@ html[data-intro] .hero-ball { opacity: 0; }
 
 @media (max-width: 760px) {
   .experience { padding: 0 16px; }
-  .experience-eyebrow { margin-left: 38px; }
   .experience-chapter { grid-template-columns: 38px 1fr; min-height: auto; padding-bottom: 22svh; }
   .experience-company { font-size: 36px; }
   .experience-desc { font-size: 16px; }

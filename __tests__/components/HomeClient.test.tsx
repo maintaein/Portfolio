@@ -36,6 +36,8 @@ vi.mock('@/components/sections', async () => {
   });
   return { AboutSection: About, ProjectsSection: ({ ref, beforeAction, navigationPending, logoOwner }: { ref?: import('react').Ref<unknown>; beforeAction?: (run: () => void) => void; navigationPending?: boolean; logoOwner?: string }) => { projectsGate.before = beforeAction ?? null; projectsLock.props = { navigationPending, logoOwner }; useImperativeHandle(ref, () => ({ release: projectsLock.release }), []); return <p>Projects original body</p>; }, ExperienceSection: () => <p>Experience original body</p>, SkillsSection: () => <p>Skills original body</p>, AwardAndCertificateSection: () => <p>Awards original body</p>, Footer: () => <footer>Contacts</footer> };
 });
+const overlay = vi.hoisted(() => ({ setBoundary: vi.fn(), setTimeline: vi.fn(), setReduced: vi.fn(), destroy: vi.fn() }));
+vi.mock('@/components/sections/ExperienceSection/overlay', () => ({ createExperienceOverlay: () => overlay }));
 vi.mock('@/components/sections/HomeClient/motion', () => ({
   createPortfolioMotion: (options: { onLogoOwnerChange: (owner: 'hero' | 'about' | 'boundary' | 'preview' | 'projects' | 'none') => void }) => {
     motion.create(options); motion.owner = options.onLogoOwnerChange;
@@ -66,6 +68,7 @@ vi.mock('@/components/blocks/CrystalizedBall', () => ({
 beforeEach(() => {
   flags.obscured = false; flags.pageVisible = true; flags.reduced = false; flags.wide = false; flags.ready = true;
   Object.values(motion).forEach(value => typeof value === 'function' && 'mockClear' in value && value.mockClear());
+  Object.values(overlay).forEach(fn => fn.mockClear());
   motion.owner = null;
   boot.props = null; boot.finish.mockClear(); document.documentElement.removeAttribute('data-intro');
   window.history.replaceState(null, '', '/'); vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
@@ -530,4 +533,14 @@ it('releases the Projects reading lock with About before a nav move and passes i
   expect(projectsGate.release).toHaveBeenCalledTimes(1);
   expect(projectsLock.release).toHaveBeenCalledTimes(1);
   expect(projectsLock.props!.navigationPending).toBe(true);
+});
+
+// 오버레이는 HomeClient가 쓰는 같은 선호(useMotionPreference)로 모션 감소를 받는다.
+it('passes the reduced-motion preference to the experience overlay and follows changes', () => {
+  flags.reduced = true;
+  const { rerender } = render(<HomeClient />);
+  expect(overlay.setReduced).toHaveBeenLastCalledWith(true);
+  flags.reduced = false;
+  rerender(<HomeClient />);
+  expect(overlay.setReduced).toHaveBeenLastCalledWith(false);
 });

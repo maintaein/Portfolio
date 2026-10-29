@@ -97,9 +97,12 @@ export default function HomeClient() {
     const canvas = overlayRef.current;
     if (!canvas) return;
     const overlay = createExperienceOverlay(canvas);
+    if (!overlay) return;
     setOverlay(overlay);
     return () => { overlay.destroy(); setOverlay(null); };
   }, []);
+  // 모션 감소에서 오버레이는 경계를 재생하지 않고 선과 헤드를 멈춘 채 그린다.
+  useEffect(() => { overlay?.setReduced(reducedMotion); }, [overlay, reducedMotion]);
   // 명시적 이동이 도착해 목적지에 포커스가 간 때만 알린다. 수동으로 읽어 넘긴 섹션은 알리지 않는다.
   useEffect(() => {
     if (navigationTarget) setAnnouncement('');

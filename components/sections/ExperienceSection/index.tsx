@@ -69,9 +69,11 @@ export default function ExperienceSection({ lineArrived = false, overlay = null 
 
   useLayoutEffect(() => {
     const section = ref.current, line = lineRef.current;
-    if (!visible || staticMode || !section || !line) return;
+    if (!visible || !section || !line) return;
+    // 모션 감소: 질주 없이 선 끝이 읽기선을 따르고(stepSegment reduced) 헤드는 맥동 없이 제 크기로 멈춘다. 장 공개는 위 정적 규칙이 맡는다.
+    const reduced = staticMode;
     const { segs, heads } = motion.current;
-    let geo = { axisX: 0, nodes: [] as number[], readEnd: [] as number[], tail: 0 };
+    let geo = { axisX: 0, nodes: [] as number[], readEnd: [] as number[], tail: 0, header: 0 };
     const measure = () => {
       const axis = section.querySelector<HTMLElement>('[data-part="experience-axis"]');
       const chapters = [...section.querySelectorAll<HTMLElement>('article')];
@@ -80,16 +82,19 @@ export default function ExperienceSection({ lineArrived = false, overlay = null 
         nodes: chapters.map(c => { const h = c.querySelector<HTMLElement>('[data-part="experience-node"]')!; return docOffset(h, 'offsetTop') + Math.min(h.offsetHeight, 60) / 2; }),
         readEnd: chapters.map(c => { const el = c.querySelector<HTMLElement>('ul[aria-label="기술"]')!; return docOffset(el, 'offsetTop') + el.offsetHeight + 8; }),
         tail: chapters.length ? docOffset(chapters[N - 1], 'offsetTop') + chapters[N - 1].offsetHeight - 80 : 0,
+        header: headerHeight(),
       };
     };
     // 시안 frame()의 A 분기. 다시 잰 뒤에도 선 끝은 stepSegment의 따라감으로 새 자리에 옮겨 간다(바로 옮기지 않는다).
     const tick = (dt: number): TimelineFrame => {
       const y = window.scrollY;
-      const reading = readingLineY(window.innerHeight, headerHeight()) + y;
-      if (arrived.current && !heads[0].alive) { heads[0].r = R; heads[0].pulse = 1; }
-      heads[0].alive = arrived.current;
+      const reading = readingLineY(window.innerHeight, geo.header) + y;
+      // 모션 감소에는 경계 재생이 없어 첫 헤드가 처음부터 산다
+      const first = arrived.current || reduced;
+      if (first && !heads[0].alive) { heads[0].r = R; heads[0].pulse = 1; }
+      heads[0].alive = first;
       segs.forEach((seg, i) => {
-        stepSegment(seg, { from: geo.nodes[i], to: i < N - 1 ? geo.nodes[i + 1] : geo.tail, readEnd: geo.readEnd[i], reading, alive: heads[i].alive, dt, reduced: false });
+        stepSegment(seg, { from: geo.nodes[i], to: i < N - 1 ? geo.nodes[i + 1] : geo.tail, readEnd: geo.readEnd[i], reading, alive: heads[i].alive, dt, reduced });
         const next = heads[i + 1];
         if (!next) return;
         if (seg.done && !next.alive) { next.r = R; next.pulse = 1; }
@@ -99,8 +104,8 @@ export default function ExperienceSection({ lineArrived = false, overlay = null 
       const count = heads.filter(h => h.alive).length, cur = count - 1;
       heads.forEach((h, i) => {
         const target = !h.alive ? 0 : i === cur ? R : R_NODE;
-        h.r += (target - h.r) * Math.min(1, dt * 6);
-        h.pulse = Math.max(0, h.pulse - dt * 1.2);
+        h.r = reduced ? target : h.r + (target - h.r) * Math.min(1, dt * 6);
+        h.pulse = reduced ? 0 : Math.max(0, h.pulse - dt * 1.2);
       });
       const done = reading >= (geo.readEnd[N - 1] ?? Infinity);
       if (cur >= 0) line.dataset.tip = String(Math.round(segs[cur].tip ?? geo.nodes[cur]));
@@ -141,8 +146,9 @@ export default function ExperienceSection({ lineArrived = false, overlay = null 
   }, [visible, staticMode, overlay, ref]);
 
   return (
-    <section ref={ref} id={SECTION_IDS.EXPERIENCE} aria-label="경력" className="experience" data-progressive={progressive ? '' : undefined}>
-      <p className="experience-eyebrow">EXPERIENCE</p>
+    <section ref={ref} id={SECTION_IDS.EXPERIENCE} aria-labelledby="experience-heading" className="experience" data-progressive={progressive ? '' : undefined}>
+      {/* 섹션 제목은 시각적으로 숨긴다(다른 섹션과 같다) */}
+      <h2 id="experience-heading" className="sr-only">경력</h2>
       <span ref={lineRef} data-part="experience-line" data-complete={complete} aria-hidden="true" />
       {experiences.map((experience, index) => {
         const on = index < alive;
@@ -175,7 +181,7 @@ export default function ExperienceSection({ lineArrived = false, overlay = null 
               {experience.evidence && (
                 // 카드는 EvidenceCard의 figure가 직접 공개된다. 지연은 이 --d를 물려받고 둘째 카드는 한 칸 늦다(CSS).
                 <div className="experience-cards" style={delay(experience.metrics ? 4 : 3)}>
-                  {experience.evidence.map((evidence) => <EvidenceCard key={evidence.demo} evidence={evidence} active={on} reduced={reducedMotion} />)}
+                  {experience.evidence.map((evidence) => <EvidenceCard key={evidence.demo} evidence={evidence} active={on} reduced={staticMode} />)}
                 </div>
               )}
               <h4 className="experience-resp-title experience-reveal">{experience.type === 'student' ? '학습 내용' : '주요 업무'}</h4>

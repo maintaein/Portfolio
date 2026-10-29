@@ -3,7 +3,8 @@ const localVisibility = vi.hoisted(() => ({ visible: true }));
 vi.mock('@/hooks/useSectionVisibility', () => ({ useSectionVisibility: () => ({ ref: useVisibilityRef(null), visible: localVisibility.visible, hasEntered: true }) }));
 // 카드 그림은 EvidenceCard 테스트가 맡는다. 여기서는 active만 드러낸다.
 vi.mock('@/components/sections/ExperienceSection/EvidenceCard', () => ({
-  default: ({ evidence, active }: { evidence: { demo: string }; active: boolean }) => <figure data-demo={evidence.demo} data-active={String(active)} />,
+  default: ({ evidence, active, reduced }: { evidence: { demo: string }; active: boolean; reduced: boolean }) =>
+    <figure data-demo={evidence.demo} data-active={String(active)} data-reduced={String(reduced)} />,
 }));
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -11,7 +12,7 @@ import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, within } from '@testing-library/react';
 import ExperienceSection from '@/components/sections/ExperienceSection';
-import type { ExperienceOverlay, TimelineFrame } from '@/components/sections/ExperienceSection/overlay';
+import { createExperienceOverlay, type ExperienceOverlay, type TimelineFrame } from '@/components/sections/ExperienceSection/overlay';
 import { R } from '@/components/sections/ExperienceSection/lineMotion';
 import { SectionActivityProvider, type SectionActivityProviderProps } from '@/components/common/SectionActivityContext';
 import { experiences } from '@/lib/data';
@@ -72,7 +73,10 @@ describe('ExperienceSection', () => {
   it('SSR HTML에 세 장의 본문, 최종 수치, 업무, 기술이 모두 있고 숨김 속성이 없다', () => {
     const html = renderToString(experienceWithActivity());
     expect(html).toContain(`id="${SECTION_IDS.EXPERIENCE}"`);
-    expect(html).toContain('aria-label="경력"');
+    // 섹션 제목은 보이지 않는 h2 하나다(보이는 EXPERIENCE 머리말은 두지 않는다).
+    expect(html).toContain('aria-labelledby="experience-heading"');
+    expect(html).toMatch(/<h2 id="experience-heading" class="sr-only">경력<\/h2>/);
+    expect(html).not.toContain('EXPERIENCE');
     expect(html).toContain('data-part="experience-line"');
     for (const record of experiences) {
       const texts = [record.company, record.position, record.period, record.description, ...record.responsibilities, ...(record.skills ?? []),
@@ -127,6 +131,54 @@ describe('ExperienceSection', () => {
     expect(states()).toEqual(['past', 'past', 'current']);
     expect(line()).toHaveAttribute('data-complete', 'true');
     for (const value of ['-30%', '3분', '1620h', '2회']) expect(within(container).getByText(value)).toBeInTheDocument();
+    expect([...container.querySelectorAll('figure')].every(figure => figure.dataset.reduced === 'true')).toBe(true);
+  });
+
+  it('선호를 확인하기 전 기본값 reduced는 카드와 수치에 모션 감소로 넘기지 않는다', () => {
+    const { container } = render(experienceWithActivity({ reducedMotion: true, motionReady: false }));
+    expect([...container.querySelectorAll('figure')].every(figure => figure.dataset.reduced === 'false')).toBe(true);
+  });
+
+  it('모션 감소에서도 provider를 걸고, 선 끝은 읽기선을 따르며 헤드는 맥동 없이 멈춰 있다', () => {
+    const overlay = { setBoundary: vi.fn(), setTimeline: vi.fn(), setReduced: vi.fn(), destroy: vi.fn() };
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 1500 - READING });
+    render(experienceWithActivity({ reducedMotion: true }, { overlay }));
+    const provider = overlay.setTimeline.mock.calls.at(-1)![0] as (dt: number, now: number) => TimelineFrame;
+    expect(provider).toBeTypeOf('function');
+    const frame = provider(1 / 60, 0);
+    expect(frame.segments[0].tip + 1500 - READING).toBeCloseTo(1500);
+    expect(frame.heads[0]).toMatchObject({ r: R, pulse: 0, current: true });
+    expect(line()).toHaveAttribute('data-tip', '1500');
+    expect(states()).toEqual(['past', 'past', 'current']);
+    expect(line()).toHaveAttribute('data-complete', 'true');
+  });
+
+  it('2D 컨텍스트가 없으면 오버레이 없이 자기 rAF로 다음 장을 공개하고 data-complete에 닿는다', () => {
+    vi.useFakeTimers();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    const overlay = createExperienceOverlay(document.createElement('canvas'));
+    render(experienceWithActivity({}, { lineArrived: true, overlay }));
+    expect(states()).toEqual(['current', 'future', 'future']);
+    scrollTo(READ_ENDS[0] - READING + 1);
+    act(() => { vi.advanceTimersByTime(1500); });
+    expect(states()).toEqual(['past', 'current', 'future']);
+    scrollTo(READ_ENDS[2] - READING + 1);
+    act(() => { vi.advanceTimersByTime(3000); });
+    expect(states()).toEqual(['past', 'past', 'current']);
+    expect(line()).toHaveAttribute('data-complete', 'true');
+  });
+
+  it('헤더 높이는 잴 때만 읽고 프레임마다 읽지 않는다', () => {
+    const header = document.body.appendChild(document.createElement('header'));
+    header.setAttribute('data-scroll-header', '');
+    const rect = vi.spyOn(header, 'getBoundingClientRect');
+    const overlay = { setBoundary: vi.fn(), setTimeline: vi.fn(), setReduced: vi.fn(), destroy: vi.fn() };
+    render(experienceWithActivity({}, { lineArrived: true, overlay }));
+    const provider = overlay.setTimeline.mock.calls.at(-1)![0] as (dt: number, now: number) => TimelineFrame;
+    const measured = rect.mock.calls.length;
+    for (let i = 0; i < 5; i++) provider(1 / 60, i * 16);
+    expect(rect).toHaveBeenCalledTimes(measured);
+    header.remove();
   });
 
   it('읽기선이 마지막 장 읽기 끝을 지나면 data-complete가 true다', () => {

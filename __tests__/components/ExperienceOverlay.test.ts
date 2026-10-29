@@ -101,15 +101,21 @@ afterEach(() => {
 });
 
 describe('createExperienceOverlay', () => {
+  it('2D 컨텍스트가 없으면 null을 돌려준다(받는 쪽이 그리기 없이 진행만 돈다)', () => {
+    vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(null);
+    expect(createExperienceOverlay(document.createElement('canvas'))).toBeNull();
+    expect(raf).not.toHaveBeenCalled();
+  });
+
   it('경계도 타임라인도 없으면 rAF를 요청하지 않는다', () => {
-    const overlay = createExperienceOverlay(canvas);
+    const overlay = createExperienceOverlay(canvas)!;
     overlay.setReduced(true);
     expect(raf).not.toHaveBeenCalled();
     overlay.destroy();
   });
 
   it('setBoundary가 들어오면 그리고, null이 되면 지운 뒤 멈춘다', () => {
-    const overlay = createExperienceOverlay(canvas);
+    const overlay = createExperienceOverlay(canvas)!;
     overlay.setBoundary(boundary());
     expect(raf).toHaveBeenCalledTimes(1);
     tick();
@@ -126,7 +132,7 @@ describe('createExperienceOverlay', () => {
   });
 
   it('그림이 없는 경계도 오류 없이 그린다', () => {
-    const overlay = createExperienceOverlay(canvas);
+    const overlay = createExperienceOverlay(canvas)!;
     overlay.setBoundary(boundary({ image: null, t: 0.3 }));
     expect(() => tick()).not.toThrow();
     expect(drawCalls('drawImage')).toBe(0);
@@ -139,7 +145,7 @@ describe('createExperienceOverlay', () => {
     Object.defineProperty(image, 'complete', { value: true });
     Object.defineProperty(image, 'naturalWidth', { value: 1280 });
     Object.defineProperty(image, 'naturalHeight', { value: 720 });
-    const overlay = createExperienceOverlay(canvas);
+    const overlay = createExperienceOverlay(canvas)!;
     // t .1이면 q가 1에 가까워 그림이 드러나 있다
     overlay.setBoundary(boundary({ image, t: 0.1 }));
     tick();
@@ -148,7 +154,7 @@ describe('createExperienceOverlay', () => {
   });
 
   it('이동 구간(t >= SPLIT)은 헤드를 목적지로 옮겨 그린다', () => {
-    const overlay = createExperienceOverlay(canvas);
+    const overlay = createExperienceOverlay(canvas)!;
     overlay.setBoundary(boundary({ t: 0.9 }));
     expect(() => tick()).not.toThrow();
     expect(drawCalls('fill')).toBeGreaterThan(0);
@@ -157,7 +163,7 @@ describe('createExperienceOverlay', () => {
 
   it('provider가 프레임을 주면 선과 헤드를 그린다', () => {
     const provider = vi.fn(() => timeline);
-    const overlay = createExperienceOverlay(canvas);
+    const overlay = createExperienceOverlay(canvas)!;
     overlay.setTimeline(provider);
     tick(1000);
     tick(1016);
@@ -172,7 +178,7 @@ describe('createExperienceOverlay', () => {
 
   it('provider가 null을 돌려주면 타임라인을 그리지 않는다', () => {
     const provider = vi.fn(() => null);
-    const overlay = createExperienceOverlay(canvas);
+    const overlay = createExperienceOverlay(canvas)!;
     overlay.setTimeline(provider);
     tick();
     expect(provider).toHaveBeenCalledTimes(1);
@@ -183,7 +189,7 @@ describe('createExperienceOverlay', () => {
   });
 
   it('숨은 문서에서는 루프를 멈추고 다시 보이면 잇는다', () => {
-    const overlay = createExperienceOverlay(canvas);
+    const overlay = createExperienceOverlay(canvas)!;
     overlay.setTimeline(() => null);
     expect(frames.size).toBe(1);
     setHidden(true);
@@ -198,7 +204,7 @@ describe('createExperienceOverlay', () => {
   it('destroy는 루프와 리스너를 걷는다', () => {
     const removeWindow = vi.spyOn(window, 'removeEventListener');
     const removeDocument = vi.spyOn(document, 'removeEventListener');
-    const overlay = createExperienceOverlay(canvas);
+    const overlay = createExperienceOverlay(canvas)!;
     overlay.setTimeline(() => null);
     expect(frames.size).toBe(1);
     overlay.destroy();
@@ -212,7 +218,7 @@ describe('createExperienceOverlay', () => {
 
   it('DPR은 2를 넘지 않고 창 크기에 맞춘다', () => {
     vi.stubGlobal('devicePixelRatio', 3);
-    const overlay = createExperienceOverlay(canvas);
+    const overlay = createExperienceOverlay(canvas)!;
     expect(canvas.width).toBe(window.innerWidth * 2);
     expect(canvas.height).toBe(window.innerHeight * 2);
     overlay.destroy();
