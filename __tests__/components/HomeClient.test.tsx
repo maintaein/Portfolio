@@ -12,7 +12,7 @@ const motion = vi.hoisted(() => ({
 vi.mock('@/hooks/useProjectModalObscured', () => ({ useProjectModalObscured: () => flags.obscured }));
 vi.mock('@/hooks/usePageVisibility', () => ({ usePageVisibility: () => flags.pageVisible }));
 vi.mock('@/hooks/useMotionPreference', () => ({ useMotionPreference: () => ({ ready: flags.ready, reduced: flags.reduced }) }));
-const flow = vi.hoisted(() => ({ setRevealProgress: () => {} }));
+const flow = vi.hoisted(() => ({ setRevealProgress: () => {}, setThrottled: vi.fn() }));
 vi.mock('@/components/blocks/LuminousFlowBackground', async () => {
   const { forwardRef, useImperativeHandle } = await import('react');
   return { default: forwardRef<typeof flow, { paused: boolean }>(function Flow({ paused }, ref) { useImperativeHandle(ref, () => flow, []); return <aside data-testid="flow" data-paused={paused} />; }) };
@@ -348,6 +348,20 @@ it('pauses the boundary while the modal covers the page and destroys it on unmou
   expect(motion.setPaused).toHaveBeenLastCalledWith(true);
   view.unmount();
   expect(motion.destroy).toHaveBeenCalledTimes(1);
+});
+
+it('경계가 도는 동안 배경 그리기를 줄이고, 끝나거나 경계가 사라지면 푼다', async () => {
+  flags.wide = true;
+  flow.setThrottled.mockClear();
+  const view = render(<HomeClient />); await flush();
+  const { onLinePlay } = motion.create.mock.calls.at(-1)![0] as { onLinePlay: (playing: boolean) => void };
+  onLinePlay(true);
+  expect(flow.setThrottled).toHaveBeenLastCalledWith(true);
+  onLinePlay(false);
+  expect(flow.setThrottled).toHaveBeenLastCalledWith(false);
+  onLinePlay(true);
+  view.unmount();
+  expect(flow.setThrottled).toHaveBeenLastCalledWith(false);
 });
 
 // 브라우저 검사에서 잡혔다. aspect-ratio의 자동 최소 폭이 이전 크기의 캔버스를 붙잡아,

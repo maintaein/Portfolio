@@ -15,9 +15,14 @@ export type LuminousFlowBackgroundProps = {
 
 export interface LuminousFlowBackgroundHandle {
   setRevealProgress(progress: number): void;
+  // Draw at most THROTTLED_FPS while another motion needs the GPU (the Projects → Experience boundary).
+  setThrottled(throttled: boolean): void;
 }
 
 // Speed multipliers relative to the original flow; times are in seconds.
+// The flow already runs near 30 fps on a busy GPU, so skipping every other frame would change nothing; throttling caps by time.
+const THROTTLED_FPS = 15;
+
 const SCROLL_FLOW = {
   idleSpeed: .5,
   maxSpeed: 3.3,
@@ -98,6 +103,7 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hazeRef = useRef<HTMLDivElement>(null);
   const pausedRef = useRef(paused);
+  const throttledRef = useRef(false);
   const revealRef = useRef(1);
   const syncMotionRef = useRef<(() => void) | null>(null);
   const requestDrawRef = useRef<(() => void) | null>(null);
@@ -107,6 +113,9 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
     setRevealProgress(progress: number) {
       revealRef.current = Math.min(1, Math.max(0, progress));
       requestDrawRef.current?.();
+    },
+    setThrottled(throttled: boolean) {
+      throttledRef.current = throttled;
     },
   }), []);
 
@@ -323,6 +332,11 @@ const LuminousFlowBackground = forwardRef<LuminousFlowBackgroundHandle, Luminous
 
     const draw = (now: number) => {
       frame = 0;
+      // A skipped frame lands in the next drawn frame's delta, so the flow phase does not stall. The 4 ms slack absorbs RAF jitter.
+      if (throttledRef.current && !pausedRef.current && !media.matches && !document.hidden && visible && now - previousFrame < 1000 / THROTTLED_FPS - 4) {
+        frame = requestAnimationFrame(draw);
+        return;
+      }
       drawn = true;
       if (boundsDirty) updateBounds();
       const delta = Math.min(.1, Math.max(0, now - previousFrame) / 1000);

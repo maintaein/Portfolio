@@ -170,13 +170,15 @@ const rectBox = (element: Element | null, scroll = 0): Box => {
   return { x: rect.left, y: rect.top + scroll, w: rect.width, h: rect.height };
 };
 
-export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, reduced, onLogoOwnerChange, onLineArrive }: {
+export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, reduced, onLogoOwnerChange, onLineArrive, onLinePlay }: {
   root: HTMLElement; header: HTMLElement; wordmark: HTMLButtonElement; logoHost: HTMLElement; reduced: boolean;
   // GL 볼 손잡이(없으면 정적 볼). 볼은 진입 뒤에 늦게 떠서 ref로 받는다.
   ball?: { current: CrystalizedBallHandle | null };
   onLogoOwnerChange: (owner: LogoOwner) => void;
   // 프리뷰가 첫 헤드에 내려앉았는지(경계 100%). 내려앉을 때와 거꾸로 떠날 때만 부른다. Experience가 첫 헤드와 첫 장을 이것으로 공개한다.
   onLineArrive?: (arrived: boolean) => void;
+  // 경계가 재생 중인지(앞으로든 거꾸로든). 바뀔 때만 부른다. HomeClient가 그동안 배경 그리기를 줄여 GPU를 경계에 내준다.
+  onLinePlay?: (playing: boolean) => void;
 }): PortfolioMotion {
   registerScrollTrigger();
   const inner = logoHost.firstElementChild instanceof HTMLElement ? logoHost.firstElementChild : null;
@@ -235,6 +237,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   // 경계 한 번의 재생 동안 캔버스가 이어받아 그리는 낱말. 그동안 DOM 글자는 숨는다. 프리뷰 쪽(0)에 서면 되돌려 다음 재생에서 지금 이름을 다시 잰다.
   let word: ReturnType<typeof measureWord> = null;
   let lineArrived = false;
+  let linePlaying = false;
   // 경계를 그리는 오버레이(HomeClient가 늦게 넘긴다). 없으면 그리기 없이 시간·도착·틀 숨김만 돈다.
   let overlay: ExperienceOverlay | null = null;
   // 아래쪽 입력을 막는 차단 리스너를 달고 있는지. 차단 wheel은 스크롤을 메인 스레드에 묶어 늦추므로 막는 동안만 단다(useChapterLock과 같은 이유).
@@ -336,8 +339,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     ball?.current?.setCollapse(0);
   };
   const clearProjects = () => {
-    if (frame) Object.assign(frame.style, { transform: '', opacity: '', clipPath: '', pointerEvents: '', visibility: '' });
-    for (const el of [list, pager]) if (el) Object.assign(el.style, { opacity: '', pointerEvents: '' });
+    if (frame) Object.assign(frame.style, { transform: '', opacity: '', clipPath: '', pointerEvents: '', visibility: '', willChange: '' });
+    for (const el of [list, pager]) if (el) Object.assign(el.style, { opacity: '', pointerEvents: '', willChange: '' });
   };
   // 아래로 가는 wheel·손가락을 위로 끄는 touchmove·아래쪽 스크롤 키를 막는다. 위로 가는 입력은 두어 되돌 수 있다.
   const block = (event: Event) => { if (event.cancelable) event.preventDefault(); };
@@ -385,6 +388,11 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       onLineArrive?.(arrived);
     }
     syncPin();
+    const playing = alive && !reduced && !!lineTween;
+    if (playing !== linePlaying) {
+      linePlaying = playing;
+      onLinePlay?.(playing);
+    }
     // 모션 감소는 재생이 없어 프리뷰가 그대로 서고(시안과 같다) 첫 헤드는 도착으로 바로 산다.
     if (p <= 0 || reduced || !previewAnchor) {
       dropWord();
@@ -394,8 +402,9 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     }
     const away = out(span(0, AWAY_SECONDS / BOUNDARY_IN, p));
     // 열기 단추는 떠나는 동안 눌리지 않는다. 상세의 FLIP과 이 경계가 같은 프리뷰를 함께 옮기지 않는다.
-    if (frame) Object.assign(frame.style, { transform: away ? `scale(${1 - .03 * away})` : '', opacity: String(1 - away), clipPath: '', pointerEvents: 'none', visibility: away >= 1 ? 'hidden' : '' });
-    for (const el of [list, pager]) if (el) Object.assign(el.style, { opacity: String(1 - away), pointerEvents: 'none' });
+    // 경계 동안은 제 레이어에 올린다. 안 올리면 그림·캡션 틀과 흐린 이름들이 물러나는 프레임마다 다시 그려져 시작이 30fps 밑으로 끊겼다(2026-10-29 실측).
+    if (frame) Object.assign(frame.style, { transform: away ? `scale(${1 - .03 * away})` : '', opacity: String(1 - away), clipPath: '', pointerEvents: 'none', visibility: away >= 1 ? 'hidden' : '', willChange: 'opacity, transform' });
+    for (const el of [list, pager]) if (el) Object.assign(el.style, { opacity: String(1 - away), pointerEvents: 'none', willChange: 'opacity' });
     // 그릴 캔버스가 없으면 낱말도 목록·프리뷰와 같이 물러난다.
     if (!overlay) return dropWord();
     // 출발과 도착은 매 프레임 지금 화면 좌표로 잰다. 재생 중에 스크롤이 움직여도 낱말에서 떠나 지금 노드 자리에 내려앉는다.
@@ -766,6 +775,10 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       travel?.kill();
       lineTween?.kill();
       syncPin();
+      if (linePlaying) {
+        linePlaying = false;
+        onLinePlay?.(false);
+      }
       overlay?.setBoundary(null);
       dropWord();
       stopName();
