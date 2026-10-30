@@ -2,8 +2,7 @@ import { useRef as useVisibilityRef } from 'react';
 const localVisibility = vi.hoisted(() => ({ visible: true, hasEntered: true }));
 vi.mock('@/hooks/useSectionVisibility', () => ({ useSectionVisibility: () => ({ ref: useVisibilityRef(null), visible: localVisibility.visible, hasEntered: localVisibility.hasEntered }) }));
 vi.mock('@/components/blocks/ElectricLogo', () => ({
-  default: ({ src, active, onReady }: { src: string; active: boolean; onReady?: (src: string) => void }) =>
-    <div data-testid="skills-logo" data-src={src} data-active={String(active)} onClick={() => onReady?.(src)} />,
+  default: () => <div data-testid="skills-logo" />,
 }));
 import { readFileSync } from 'node:fs';
 import { StrictMode } from 'react';
@@ -326,32 +325,61 @@ describe('SkillsSection signal map', () => {
     }
   });
 
-  it('허브는 들어온 동안만 도는 자기 ElectricLogo이고 src를 고른 아이콘으로 바꾼다', async () => {
+  it('Skills는 자기 ElectricLogo(두 번째 WebGL 문맥)를 띄우지 않는다', async () => {
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
-    const { rerender } = render(skillsWithActivity({ obscured: true }));
-    expect(screen.queryByTestId('skills-logo')).not.toBeInTheDocument();
-    rerender(skillsWithActivity());
-    const logo = await screen.findByTestId('skills-logo');
-    expect(logo).toHaveAttribute('data-src', '/icons-mono/react.svg');
-    expect(logo).toHaveAttribute('data-active', 'true');
+    const { container } = render(skillsWithActivity());
+    step(3000);
     fireEvent.click(screen.getByRole('button', { name: 'Python' }));
-    expect(screen.getByTestId('skills-logo')).toHaveAttribute('data-src', '/icons-mono/python.svg');
-    rerender(skillsWithActivity({ obscured: true }));
-    expect(screen.getByTestId('skills-logo')).toHaveAttribute('data-active', 'false');
-    rerender(skillsWithActivity({ reducedMotion: true }));
+    step(1000);
+    // 지연 청크가 풀릴 시간을 준다.
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 200)); });
     expect(screen.queryByTestId('skills-logo')).not.toBeInTheDocument();
+    expect(container.querySelector('canvas')).not.toBeInTheDocument();
   });
 
-  it('GL 허브가 다시 뜨면 새 로고가 준비될 때까지 정적 아이콘이 보인다', async () => {
-    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
-    const { container, rerender } = render(skillsWithActivity());
-    const icon = () => container.querySelector<HTMLElement>('[data-graph="hub"] .skill-icon')!;
-    fireEvent.click(await screen.findByTestId('skills-logo'));
-    expect(icon().style.opacity).toBe('0');
-    rerender(skillsWithActivity({ reducedMotion: true }));
-    rerender(skillsWithActivity());
-    await screen.findByTestId('skills-logo');
-    expect(icon().style.opacity).toBe('');
+  it('허브 아이콘은 고를 때 SVG 번개 모프(700ms)로 바뀌고 끝나면 필터 없이 새 아이콘에 선다', () => {
+    const { container } = render(skillsWithActivity());
+    const hub = () => container.querySelector<HTMLElement>('[data-graph="hub"]')!;
+    const icon = (part: 'a' | 'b') => container.querySelector<HTMLElement>(`[data-graph="icon-${part}"]`)!;
+    const src = (part: 'a' | 'b') => icon(part).style.getPropertyValue('--skill-icon-src');
+    const scale = () => Number(container.querySelector('[data-graph="disp"]')!.getAttribute('scale'));
+    step(3000);
+    expect(src('a')).toBe('url(/icons-mono/react.svg)');
+    expect(hub().style.filter).toBe('');
+    fireEvent.click(screen.getByRole('button', { name: 'Python' }));
+    expect(src('b')).toBe('url(/icons-mono/python.svg)');
+    step(352);
+    // 가운데쯤: 변위가 가장 크고 두 아이콘이 엇갈려 바뀌는 중이다.
+    expect(hub().style.filter).toMatch(/^url\(#skills-zap\) drop-shadow\(/);
+    expect(scale()).toBeGreaterThan(20);
+    expect(Number(icon('a').style.opacity)).toBeLessThan(1);
+    expect(Number(icon('b').style.opacity)).toBeGreaterThan(0);
+    const seed = container.querySelector('[data-graph="turb"]')!.getAttribute('seed');
+    step(96);
+    expect(container.querySelector('[data-graph="turb"]')!.getAttribute('seed')).not.toBe(seed);
+    step(400);
+    expect(hub().style.filter).toBe('');
+    expect(src('a')).toBe('url(/icons-mono/python.svg)');
+    expect(icon('a').style.opacity).toBe('1');
+    expect(icon('b').style.opacity).toBe('0');
+    // 모프 도중 다시 고르면 지금 보이는 쪽에서 이어 간다.
+    fireEvent.click(screen.getByRole('button', { name: 'Figma' }));
+    step(500);
+    fireEvent.click(screen.getByRole('button', { name: 'Zustand' }));
+    step(1000);
+    expect(src('a')).toBe('url(/icons-mono/zustand.svg)');
+    expect(hub().style.filter).toBe('');
+  });
+
+  it('모션 감소에서 허브 아이콘은 필터 없이 즉시 바뀐다', () => {
+    const { container } = render(skillsWithActivity({ reducedMotion: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Python' }));
+    const a = container.querySelector<HTMLElement>('[data-graph="icon-a"]')!;
+    expect(a.style.getPropertyValue('--skill-icon-src')).toBe('url(/icons-mono/python.svg)');
+    expect(a.style.opacity).toBe('1');
+    expect(container.querySelector<HTMLElement>('[data-graph="icon-b"]')!.style.opacity).toBe('0');
+    expect(container.querySelector<HTMLElement>('[data-graph="hub"]')!.style.filter).toBe('');
+    expect(added).not.toHaveBeenCalled();
   });
 
   it('모션 감소에서 제목 자리는 움직이지 않고 불투명도만 바뀐다', () => {

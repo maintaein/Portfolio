@@ -1057,11 +1057,14 @@ html[data-intro] .hero-ball { opacity: 0; }
 }
 
 .skills-signal .signal-stage {
-  /* 레일에서 허브 가운데, 썸네일 왼쪽 변, 끝점 가운데까지. 1440에서 시안의 172, 180, 160+80이다. */
+  /* 레일에서 허브 가운데, 썸네일 왼쪽 변, 끝점 가운데까지. 1440에서 시안의 172, 180, 160+80이다.
+     레일 60px은 Experience 세로선 x다(1400px 이상). 그 아래는 이름 목록이 들어가게 레일을 오른쪽으로 민다(아래 미디어). */
   --rail: 60px;
+  --tw: 160px;
+  --th: 90px;
   --hub-x: calc(var(--rail) + clamp(110px, 12vw, 172px));
   --thumb-x: calc(var(--hub-x) + clamp(130px, 12.5vw, 180px));
-  --dot-x: calc(var(--thumb-x) + 160px + clamp(48px, 5.5vw, 80px));
+  --dot-x: calc(var(--thumb-x) + var(--tw) + clamp(48px, 5.5vw, 80px));
   --row-top: 156px;
   --hub-y: 484px;
   position: relative;
@@ -1137,7 +1140,8 @@ html[data-intro] .hero-ball { opacity: 0; }
   padding: 0;
   border: 0;
   background: none;
-  color: #8b95a1;
+  /* 배경 광선의 짙은 청록(#0b3a44) 위에서도 4.5:1을 넘긴다(4.77). 같은 차가운 회색에서 밝기만 올렸다. */
+  color: #99a2ac;
   font-size: 15px;
   white-space: nowrap;
   cursor: pointer;
@@ -1234,10 +1238,15 @@ html[data-intro] .hero-ball { opacity: 0; }
   height: 64px;
 }
 
-/* GL 로고의 광휘가 잘리지 않게 허브보다 넓게 깐다. 로고 자체는 scale로 64px에 맞춘다. */
-.skills-signal .signal-hub .signal-logo {
-  width: 112px;
-  height: 112px;
+/* 쉬는 허브의 광휘(시안 값). 모프 동안은 그래프가 번개 필터를 얹은 값으로 덮는다. */
+.skills-signal .signal-hub {
+  filter: drop-shadow(0 0 14px rgb(127 227 238 / .55));
+}
+
+.skills-signal .signal-zap {
+  position: absolute;
+  width: 0;
+  height: 0;
 }
 
 .skills-signal .signal-nodes,
@@ -1254,9 +1263,9 @@ html[data-intro] .hero-ball { opacity: 0; }
 .skills-signal .signal-project {
   position: absolute;
   left: var(--thumb-x);
-  top: -45px;
+  top: calc(var(--th) / -2);
   right: 0;
-  height: 90px;
+  height: var(--th);
   color: inherit;
   text-decoration: none;
   pointer-events: auto;
@@ -1271,8 +1280,8 @@ html[data-intro] .hero-ball { opacity: 0; }
   position: absolute;
   left: 0;
   top: 0;
-  width: 160px;
-  height: 90px;
+  width: var(--tw);
+  height: var(--th);
   overflow: hidden;
 }
 
@@ -1289,14 +1298,14 @@ html[data-intro] .hero-ball { opacity: 0; }
   left: -1px;
   top: 0;
   width: 1.5px;
-  height: 90px;
+  height: var(--th);
   background: #7fe3ee;
 }
 
 .skills-signal .signal-dot {
   position: absolute;
   left: calc(var(--dot-x) - var(--thumb-x) - 4px);
-  top: 41px;
+  top: calc(var(--th) / 2 - 4px);
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -1307,7 +1316,7 @@ html[data-intro] .hero-ball { opacity: 0; }
 .skills-signal .signal-text {
   position: absolute;
   left: calc(var(--dot-x) - var(--thumb-x) + 18px);
-  top: 19px;
+  top: calc(var(--th) / 2 - 26px);
   right: 0;
   max-width: 460px;
   word-break: keep-all;
@@ -1331,7 +1340,8 @@ html[data-intro] .hero-ball { opacity: 0; }
 }
 
 .skills-signal .signal-text > span:last-child {
-  color: #7f9399;
+  /* #0b3a44 위 4.77:1. 위의 설명 글(#9fb4ba)보다 한 단 어둡게 둔다. */
+  color: #93a4a9;
   font-size: 12.5px;
 }
 
@@ -1342,15 +1352,20 @@ html[data-intro] .hero-ball { opacity: 0; }
   transform: none !important;
 }
 
-/* 레일 왼쪽에 이름까지 둘 자리가 없으면 아이콘만 남긴다. 이름은 버튼의 접근 이름으로 남고 고른 이름은 제목 자리가 보인다. */
+/* 1400px 아래는 Experience 세로선 x(60px) 왼쪽에 아이콘과 이름 목록이 다 들어가지 않는다. 레일과 헤드를 오른쪽으로 민다.
+   156은 목록 폭(약 139)과 레일까지 24를 더하고 화면 끝에서 16 넘게 남긴 값이다. */
 @media (min-width: 768px) and (max-width: 1399px) {
-  .skills-signal .signal-skill-name {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
+  .skills-signal .signal-stage { --rail: 156px; }
+}
+
+/* 768~1023: 가로가 좁아 허브, 썸네일, 설명 간격을 줄이고 썸네일을 120x68로 줄인다. 설명 칸을 170px 넘게 남긴다. */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .skills-signal .signal-stage {
+    --tw: 120px;
+    --th: 68px;
+    --hub-x: calc(var(--rail) + 100px);
+    --thumb-x: calc(var(--hub-x) + 100px);
+    --dot-x: calc(var(--thumb-x) + var(--tw) + 36px);
   }
 }
 

@@ -12,6 +12,7 @@ const shape = (t: number, z: number, w: number) => {
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 4);
 const easeInOut = (t: number) => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 const clamp = (v: number) => Math.max(0, Math.min(1, v));
+const smooth = (a: number, b: number, t: number) => { const x = clamp((t - a) / (b - a)); return x * x * (3 - 2 * x); };
 
 type Tween = { k: 's'; to: number; t0: number; w: number; z: number; from?: number }
   | { k: 'e'; to: number; t0: number; dur: number; f: (t: number) => number; from?: number };
@@ -64,8 +65,8 @@ interface Node {
 export interface SkillGraph {
   // React가 노드를 붙이거나 뗀 뒤 DOM을 다시 읽는다.
   sync(): void;
-  // 고른 줄과 그 기술의 프로젝트 제목 순서. 같은 줄이면 아무것도 하지 않는다.
-  select(row: number, order: string[]): void;
+  // 고른 줄, 그 기술의 프로젝트 제목 순서, 허브 아이콘 경로. 같은 줄이면 아무것도 하지 않는다.
+  select(row: number, order: string[], icon: string): void;
   // Skills에 처음 들어왔다. 헤드→허브 선부터 자란다.
   start(): void;
   // 들어와 보이는 동안만 돈다. 멈추면 그 자리에서 기다렸다 이어 간다.
@@ -83,10 +84,25 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
   const link = q<SVGPathElement>('[data-graph="link"]');
   const hub = q<HTMLElement>('[data-graph="hub"]');
   const rail = q<HTMLElement>('[data-graph="rail"]');
+  const iconA = q<HTMLElement>('[data-graph="icon-a"]'), iconB = q<HTMLElement>('[data-graph="icon-b"]');
+  const turb = q<SVGElement>('[data-graph="turb"]'), disp = q<SVGElement>('[data-graph="disp"]');
+  const zap = turb.closest('filter')!.id;
   const headY = new V(0, now), linkS = new V(0, now), hubA = new V(0, now);
   const nodes = new Map<string, Node>();
   let reduced = options.reduced, running = false, started = false, hubShown = false, dirty = true;
-  let row = -1, order: string[] = [], pending: string[] = [];
+  let row = -1, order: string[] = [], pending: string[] = [], icon = '';
+  // 허브 아이콘 모프(시안의 #zap). 번개처럼 일그러졌다 새 아이콘으로 맺힌다. t는 0~1.
+  let morph: { to: string; t0: number; t: number } | null = null;
+  const setIcon = (el: HTMLElement, src: string) => el.style.setProperty('--skill-icon-src', `url(${src})`);
+  const morphIcon = (src: string) => {
+    if (morph && morph.t > .5) setIcon(iconA, morph.to);
+    iconA.style.opacity = '1'; setIcon(iconB, src); morph = { to: src, t0: now(), t: 0 };
+  };
+  // 모프 없이 바로 선다(첫 진입 전, 모션 감소, 모프 끝).
+  const restIcon = (src: string) => {
+    morph = null;
+    setIcon(iconA, src); iconA.style.opacity = '1'; iconB.style.opacity = '0'; hub.style.filter = '';
+  };
   let geo = { rail: 0, hubX: 0, hubY: 0, tx: 0, tw: 0, dot: 0, rows: [] as number[] };
 
   const slot = (k: number, n: number) => geo.hubY + (k - (n - 1) / 2) * GAP;
@@ -121,6 +137,7 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
   const settle = () => {
     started = hubShown = true;
     headY.set(geo.rows[row] ?? 0); linkS.set(1); hubA.set(1);
+    restIcon(icon);
     nodes.forEach((n, title) => {
       const k = order.indexOf(title);
       if (k < 0) { n.enterAt = null; gone(title, n); return; }
@@ -154,6 +171,17 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
       } else if (n.state === 'out' && n.hubS.to === 0 && !n.hubS.tw) gone(title, n);
       busy ||= n.enterAt !== null || now() - n.flashAt < 1500 || now() - n.pulseAt < 760;
     });
+    if (morph) {
+      const t = morph.t = (now() - morph.t0) / 700, w = Math.sin(Math.PI * clamp(t));
+      if (t >= 1) restIcon(morph.to);
+      else {
+        turb.setAttribute('seed', String(Math.floor(now() / 45) % 97));
+        disp.setAttribute('scale', (w * 26).toFixed(1));
+        iconA.style.opacity = String(1 - smooth(.35, .6, t)); iconB.style.opacity = String(smooth(.35, .6, t));
+        hub.style.filter = `url(#${zap}) drop-shadow(0 0 ${14 + 22 * w}px rgba(127,227,238,${.55 + .4 * w}))`;
+      }
+      busy = true;
+    }
     return busy;
   };
 
@@ -214,16 +242,17 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
     dirty = true;
   };
 
-  const select = (nextRow: number, nextOrder: string[]) => {
+  const select = (nextRow: number, nextOrder: string[], nextIcon: string) => {
     if (nextRow === row) return;
-    row = nextRow; order = nextOrder;
+    row = nextRow; order = nextOrder; icon = nextIcon;
     measure();
     if (reduced) { settle(); return; }
     nodes.forEach(n => (n.enterAt = null));
     if (!started) headY.set(geo.rows[row] ?? 0);
     else headY.spring(geo.rows[row] ?? 0, 0, 12, .72);
-    if (!started || !hubShown) pending = order;
+    if (!started || !hubShown) { pending = order; restIcon(icon); }
     else {
+      morphIcon(icon);
       let idx = 0;
       nodes.forEach((n, title) => {
         const k = order.indexOf(title), live = n.state === 'in';

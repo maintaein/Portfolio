@@ -1,18 +1,13 @@
 'use client';
 
-import dynamic from 'next/dynamic';
 import Image from 'next/image';
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
-import type { ElectricLogoProps } from '@/components/blocks/ElectricLogo';
+import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { SECTION_IDS } from '@/lib/constants';
 import { projects, skillCategories } from '@/lib/data';
 import ScrollArea from '@/components/common/ScrollArea';
 import { useSectionActivity } from '@/components/common/SectionActivityContext';
 import { useSectionVisibility } from '@/hooks/useSectionVisibility';
 import { createSkillGraph, type SkillGraph } from './graph';
-
-// 허브 아이콘은 Skills가 따로 띄우는 GL 로고다. src를 바꾸면 1초 모프로 다음 아이콘이 된다.
-const DynamicElectricLogo = dynamic<ElectricLogoProps>(() => import('@/components/blocks/ElectricLogo'), { ssr: false });
 
 const names = [
   'React', 'TypeScript', 'Next.js', 'Tailwind CSS',
@@ -37,6 +32,8 @@ type Skill = (typeof skills)[number];
 function iconStyle(icon: string): CSSProperties {
   return { '--skill-icon-src': `url(/icons-mono/${icon}.svg)` } as CSSProperties;
 }
+// 값이 바뀌지 않으니 React는 마운트 뒤 이 style을 다시 쓰지 않는다. 그 뒤로는 그래프가 아이콘을 바꾼다.
+const HUB_ICON = iconStyle(skills[0].icon);
 
 // 지금 고른 기술의 프로젝트와, 빠지는 중이라 아직 거두는 프로젝트를 문서 순서대로 그린다.
 function rendered(view: { skill: Skill; leaving: string[] }) {
@@ -51,13 +48,6 @@ export default function SkillsSection() {
   const { routeResolved, motionReady, pageVisible, reducedMotion, obscured } = useSectionActivity();
   const { ref, visible } = useSectionVisibility<HTMLElement>();
   const entered = visible && routeResolved && motionReady && pageVisible && !obscured;
-  const [started, setStarted] = useState(false);
-  // 셸의 로고처럼 1024px부터만 GL을 띄운다. 그 아래와 모션 감소는 정적 아이콘이다.
-  const [wide, setWide] = useState(false);
-  const [logoReady, setLogoReady] = useState(false);
-  const glHub = wide && started && !reducedMotion;
-  // GL 허브가 내려가면 준비도 걷는다. 다시 뜬 로고가 그리기 전까지 정적 아이콘이 자리를 지킨다.
-  useEffect(() => { if (!glHub) setLogoReady(false); }, [glHub]);
   const order = selected.projects.map((project) => project.title);
   const row = skills.indexOf(selected);
 
@@ -65,15 +55,6 @@ export default function SkillsSection() {
     skill,
     leaving: rendered(prev).map((project) => project.title).filter((title) => !skill.projects.some((project) => project.title === title)),
   });
-
-  useEffect(() => {
-    const query = window.matchMedia?.('(min-width: 1024px)');
-    if (!query) return;
-    const update = () => setWide(query.matches);
-    update();
-    query.addEventListener('change', update);
-    return () => query.removeEventListener('change', update);
-  }, []);
 
   // 그래프는 모션 선호를 안 뒤에 만든다. 그 전의 reducedMotion은 기본값 true라 정적 상태로 굳어 버린다.
   // 그때까지는 서버 HTML의 최종 상태(선 없음) 그대로다. 아래 효과들이 모션 감소, 선택, 진입을 넘긴다.
@@ -93,13 +74,13 @@ export default function SkillsSection() {
   // 렌더마다 React가 붙이거나 뗀 노드를 다시 읽는다. 그래프는 고른 줄이 바뀐 때만 새 목표를 잡는다.
   useLayoutEffect(() => {
     graphRef.current?.sync();
-    graphRef.current?.select(row, order);
+    graphRef.current?.select(row, order, `/icons-mono/${selected.icon}.svg`);
   });
 
   useLayoutEffect(() => {
     const graph = graphRef.current;
     if (!graph) return;
-    if (entered) { graph.start(); setStarted(true); }
+    if (entered) graph.start();
     graph.setRunning(entered);
   }, [entered, reducedMotion]);
 
@@ -147,12 +128,17 @@ export default function SkillsSection() {
             </div>
           </div>
           <div data-graph="hub" className="signal-hub" aria-hidden="true">
-            <span className="skill-icon skill-icon-active" style={{ ...iconStyle(selected.icon), opacity: glHub && logoReady ? 0 : undefined }} />
-            {glHub ? (
-              <DynamicElectricLogo src={`/icons-mono/${selected.icon}.svg`} active={entered} onReady={() => setLogoReady(true)}
-                color="#7fe3ee" glowColor="#03b3c3" intensity={0.65} glow={0.3} speed={1.1} flicker={0.25} interactive={false} scale={0.57} className="signal-logo" />
-            ) : null}
+            {/* 아이콘 둘은 그래프가 소유한다(모프 동안 옛것과 새것이 엇갈린다). 서버 HTML은 첫 기술 아이콘이다. */}
+            <span data-graph="icon-a" className="skill-icon skill-icon-active" style={HUB_ICON} />
+            <span data-graph="icon-b" className="skill-icon skill-icon-active" style={{ opacity: 0 }} />
           </div>
+          {/* 허브 모프 필터(시안 #zap). 그래프가 모프 동안만 허브에 건다. */}
+          <svg className="signal-zap" aria-hidden="true" focusable="false">
+            <filter id="skills-zap" x="-40%" y="-40%" width="180%" height="180%">
+              <feTurbulence data-graph="turb" type="fractalNoise" baseFrequency="0.08" numOctaves={2} seed={1} />
+              <feDisplacementMap data-graph="disp" in="SourceGraphic" scale={0} xChannelSelector="R" yChannelSelector="G" />
+            </filter>
+          </svg>
           <div className="signal-nodes">
             {rendered(view).map((project) => {
               const k = selected.projects.indexOf(project);
