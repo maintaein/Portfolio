@@ -34,33 +34,47 @@ const readAt = (page: Page, y: number) => page.evaluate(y => {
 
 const scrollTo = (page: Page, y: number) => page.evaluate(y => window.scrollTo({ top: y, behavior: 'instant' }), y);
 
-// 경계 재생을 프레임마다 지켜본다. 프리뷰 틀이 숨은 프레임에 오버레이가 프리뷰 가운데를 덮었는지(그림이 남았는지) 읽는다.
-// 이동 구간(헤드가 가운데를 떠난 뒤)부터는 가운데가 비는 것이 맞으므로, 한 번 덮였다가 빈 뒤로는 세지 않는다.
+// 경계 재생을 프레임마다 지켜본다. 이름 글자(데스크톱은 목록의 고른 이름, lg 아래는 프리뷰 캡션 제목)가 숨은 프레임에 오버레이가 그 자리를 그렸는지 읽는다.
+// 글자가 모여 떠난 뒤로는 그 자리가 비는 것이 맞으므로, 한 번 그렸다가 빈 뒤로는 세지 않는다.
 // 넘김: 이동하던 헤드가 첫 노드 자리에 닿은 뒤로는 그 자리가 한 프레임도 비지 않는다(경계 헤드에서 실제 첫 헤드로). 첫 장이 current가 되고 5프레임 뒤 끝낸다.
 // 첫 장이 끝내 current가 되지 않아도 1200프레임에서 본 것까지 돌려준다(검사가 시간 상한까지 매달리지 않는다).
 const watchBoundary = (page: Page) => page.evaluate(() => new Promise<{ hidden: number; covered: number; gap: number; landed: number; dropped: number }>(resolve => {
   const canvas = document.querySelector<HTMLCanvasElement>('[data-motion-overlay]')!;
   const ctx = canvas.getContext('2d')!;
-  const frameEl = document.querySelector<HTMLElement>('[data-motion-anchor="projects-preview"] > div')!;
-  const anchor = document.querySelector('[data-motion-anchor="projects-preview"]')!;
+  // motion.ts renderLine이 고르는 낱말과 같다
+  const name = document.querySelector<HTMLElement>('#projects [data-part="index"] [aria-selected="true"] > span');
+  const wordEl = name?.getClientRects().length ? name : document.querySelector<HTMLElement>('[data-motion-anchor="projects-preview"] [data-part="preview-caption-text"] > p')!;
   const first = document.querySelector('#experience article')!;
   const node = first.querySelector<HTMLElement>('[data-part="experience-node"]')!;
   const axis = first.querySelector<HTMLElement>('[data-part="experience-axis"]')!;
   const offset = (el: HTMLElement, key: 'offsetTop' | 'offsetLeft') => { let v = 0; for (let n: HTMLElement | null = el; n; n = n.offsetParent as HTMLElement | null) v += n[key]; return v; };
-  // 가로세로 2r 화소 안의 가장 큰 알파
-  const alphaAt = (x: number, y: number, r: number) => {
-    const s = canvas.width / canvas.clientWidth, size = Math.max(1, Math.round(2 * r * s));
-    const data = ctx.getImageData(Math.round((x - r) * s), Math.round((y - r) * s), size, size).data;
+  // 가로세로 2r 화소 안의 가장 큰 알파(화면 좌표). 캔버스 상자 밖은 투명으로 읽힌다.
+  const alphaOf = (c: HTMLCanvasElement, g: CanvasRenderingContext2D, x: number, y: number, r: number) => {
+    const b = c.getBoundingClientRect();
+    if (!c.width || !b.width) return 0;
+    const s = c.width / b.width, size = Math.max(1, Math.round(2 * r * s));
+    const data = g.getImageData(Math.round((x - r - b.left) * s), Math.round((y - r - b.top) * s), size, size).data;
     let max = 0;
     for (let i = 3; i < data.length; i += 4) max = Math.max(max, data[i]);
     return max;
   };
+  const alphaAt = (x: number, y: number, r: number) => alphaOf(canvas, ctx, x, y, r);
+  // 글자와 방울은 오버레이 바로 앞 형제인 액체 캔버스(글자 무리 상자 크기로 옮겨 다닌다)에 그린다
+  const ink = (x: number, y: number, r: number) => {
+    const goo = canvas.previousElementSibling;
+    const g = goo instanceof HTMLCanvasElement ? goo.getContext('2d') : null;
+    return Math.max(alphaAt(x, y, r), goo instanceof HTMLCanvasElement && g ? alphaOf(goo, g, x, y, r) : 0);
+  };
   const seen = { hidden: 0, covered: 0, gap: 0, landed: 0, dropped: 0 };
   let left = false, after = -1, frames = 0;
   const read = () => {
-    const box = anchor.getBoundingClientRect();
-    const alpha = alphaAt(box.left + box.width / 2, box.top + box.height / 2, .5);
-    if (frameEl.style.visibility === 'hidden' && !left) {
+    // 캡션 p는 블록이라 상자가 글자보다 넓다. 글자만 감싼 상자를 본다.
+    const range = document.createRange();
+    range.selectNodeContents(wordEl);
+    const box = range.getBoundingClientRect();
+    // 글자 사이 빈칸에 걸리지 않게 낱말 높이만큼의 칸을 본다
+    const alpha = ink(box.left + box.width / 2, box.top + box.height / 2, box.height / 2);
+    if (wordEl.style.visibility === 'hidden' && !left) {
       seen.hidden++;
       if (alpha > 0) seen.covered++;
       else if (seen.covered) left = true;
@@ -71,13 +85,15 @@ const watchBoundary = (page: Page) => page.evaluate(() => new Promise<{ hidden: 
     else if (seen.landed) seen.dropped++;
     if (after < 0 && first.getAttribute('data-state') === 'current') after = 0;
     if ((after >= 0 && after++ >= 5) || ++frames >= 1200) resolve(seen);
-    else requestAnimationFrame(read);
+    else requestAnimationFrame(next);
   };
-  requestAnimationFrame(read);
+  // 그 프레임의 rAF 콜백(GSAP tick, 오버레이 그리기)이 다 돈 뒤에 읽는다. 칠해질 그림과 같다.
+  const next = () => setTimeout(read);
+  requestAnimationFrame(next);
 }));
 
 test.describe('Experience', () => {
-  test('Projects 뒤 선 지점을 넘으면 프리뷰가 제자리에서 헤드가 되고 FASOO가 공개된다', async ({ page }) => {
+  test('Projects 뒤 선 지점을 넘으면 이름 글자가 모여 헤드가 되고 FASOO가 공개된다', async ({ page }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: 1440, height: 900 });
     await enter(page, 'projects');
@@ -90,7 +106,7 @@ test.describe('Experience', () => {
     const watch = watchBoundary(page);
     await scrollTo(page, Math.ceil(lineAt) + 10);
     const seen = await watch;
-    // 틀이 숨은 동안 오버레이가 그 자리를 그린다. 틀도 그림도 없는 프레임이 없다.
+    // 이름이 숨은 동안 오버레이가 그 자리에 글자를 그린다. 이름도 그림도 없는 프레임이 없다.
     expect(seen.covered).toBeGreaterThan(0);
     expect(seen.gap).toBe(0);
     expect(seen.landed).toBeGreaterThan(0);

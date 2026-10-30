@@ -1695,13 +1695,15 @@ describe('Projects→Experience: 이름 글자가 뭉쳐 첫 헤드가 된다', 
     expect(frameNow.letters[0]).toEqual({ ch: 'P', x: 1000, y: 2100 - LINE_AT, k: 0 });
     // 노드(왼쪽)에 가까운 글자부터 0, 1, …
     expect(frameNow.letters.map(L => L.k)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
-    // 캔버스가 이어받는 동안 DOM 글자는 숨는다
-    expect(name.style.visibility).toBe('hidden');
+    // 글자를 처음 넘긴 tick에는 DOM 글자가 남는다. 오버레이 루프가 다음 프레임에야 그리면 한 프레임 이름이 비기 때문이다.
+    expect(name.style.visibility).toBe('');
     // 재생 중에 스크롤이 움직이면 글자와 목적지를 지금 화면 좌표로 옮긴다. 낱말은 재생마다 한 번만 잰다.
     const measured = vi.mocked(document.createRange).mock.calls.length;
     scrollAt(LINE_AT + 30);
     advance(.1);
     frameNow = boundary()!;
+    // 다음 tick부터는 캔버스가 이어받아 DOM 글자가 숨는다
+    expect(name.style.visibility).toBe('hidden');
     expect(vi.mocked(document.createRange).mock.calls.length).toBe(measured);
     expect(frameNow.target).toEqual({ x: 64, y: 2700 - LINE_AT - 30 });
     expect(frameNow.letters[0].y).toBe(2100 - LINE_AT - 30);
@@ -1721,6 +1723,7 @@ describe('Projects→Experience: 이름 글자가 뭉쳐 첫 헤드가 된다', 
     start();
     scrollAt(LINE_AT);
     advance(.5);
+    advance(.1);
     expect(boundary()!.letters[0]).toMatchObject({ ch: 'P', x: 200, y: 2380 - LINE_AT });
     expect(title.style.visibility).toBe('hidden');
     expect(name.style.visibility).toBe('');

@@ -234,6 +234,8 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   let lineTween: gsap.core.Tween | null = null;
   // 경계 한 번의 재생 동안 캔버스가 이어받아 그리는 낱말. 그동안 DOM 글자는 숨는다. 프리뷰 쪽(0)에 서면 되돌려 다음 재생에서 지금 이름을 다시 잰다.
   let word: ReturnType<typeof measureWord> = null;
+  // 오버레이가 글자를 넘겨받은 tick이 지났는가. 낱말은 그 다음 tick에 숨긴다.
+  let handed = false;
   let lineArrived = false;
   // 경계를 그리는 오버레이(HomeClient가 늦게 넘긴다). 없으면 그리기 없이 시간·도착·틀 숨김만 돈다.
   let overlay: ExperienceOverlay | null = null;
@@ -373,6 +375,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   const dropWord = () => {
     if (word) word.el.style.visibility = '';
     word = null;
+    handed = false;
   };
   // 이름 → 첫 헤드. 프리뷰·목록·넘김 줄은 처음 AWAY_SECONDS 동안 물러나고(프리뷰는 3% 작아진다) 낱말은 오버레이가 이어받는다.
   // 진행도 0에서는 경계가 쓴 값을 걷어 Projects 쉬는 자리다(로고가 프리뷰에 넘긴 자리의 clearProjects).
@@ -409,7 +412,9 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       const el = name?.getClientRects().length ? name : frame?.querySelector<HTMLElement>('[data-part="preview-caption-text"] > p');
       word = el ? measureWord(el, { x: target.x, y: target.y + window.scrollY }) : null;
     }
-    if (word) word.el.style.visibility = 'hidden';
+    // 넘긴 tick에 바로 숨기면 쉬던 오버레이 루프가 다음 프레임에야 그려 이름이 한 프레임 빈다(e2e 실측). 한 tick 겹쳐 그린다.
+    if (word && handed) word.el.style.visibility = 'hidden';
+    handed = !!word;
     overlay.setBoundary({
       t: p, font: word?.font ?? '', target,
       letters: word?.letters.map(L => ({ ...L, y: L.y - window.scrollY })) ?? [],
