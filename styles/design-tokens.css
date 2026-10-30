@@ -1058,7 +1058,7 @@ html[data-intro] .hero-ball { opacity: 0; }
 
 .skills-signal .signal-stage {
   /* 레일에서 허브 가운데, 썸네일 왼쪽 변, 끝점 가운데까지. 1440에서 시안의 172, 180, 160+80이다.
-     레일 60px은 Experience 세로선 x다(1400px 이상). 그 아래는 이름 목록이 들어가게 레일을 오른쪽으로 민다(아래 미디어). */
+     레일 60px은 Experience 세로선 x다(1440px 이상). 그 아래는 이름 목록이 들어가게 레일을 오른쪽으로 민다(아래 미디어). */
   --rail: 60px;
   --tw: 160px;
   --th: 90px;
@@ -1352,9 +1352,9 @@ html[data-intro] .hero-ball { opacity: 0; }
   transform: none !important;
 }
 
-/* 1400px 아래는 Experience 세로선 x(60px) 왼쪽에 아이콘과 이름 목록이 다 들어가지 않는다. 레일과 헤드를 오른쪽으로 민다.
-   156은 목록 폭(약 139)과 레일까지 24를 더하고 화면 끝에서 16 넘게 남긴 값이다. */
-@media (min-width: 768px) and (max-width: 1399px) {
+/* 1440px 아래는 Experience 세로선 x(60px) 왼쪽에 아이콘과 이름 목록이 다 들어가지 않는다(1400에서 화면 끝 1px, 실측). 레일과 헤드를 오른쪽으로 민다.
+   156은 목록 폭(약 139)과 레일까지 24를 더하고 화면 끝에서 16 넘게 남긴 값이다. 범위 문법이라 소수점 폭에서도 틈이 없다. */
+@media (min-width: 768px) and (width < 1440px) {
   .skills-signal .signal-stage { --rail: 156px; }
 }
 
