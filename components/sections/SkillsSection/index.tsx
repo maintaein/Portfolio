@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { SECTION_IDS } from '@/lib/constants';
 import { projects, skillCategories } from '@/lib/data';
 import ScrollArea from '@/components/common/ScrollArea';
@@ -45,6 +45,8 @@ export default function SkillsSection() {
   const selected = view.skill;
   const stageRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<SkillGraph | null>(null);
+  // 두 번 마운트돼도 url(#…)이 남의 필터를 집지 않게 인스턴스마다 다른 id를 쓴다.
+  const zapId = `skills-zap-${useId().replace(/[^\w-]/g, '')}`;
   const { routeResolved, motionReady, pageVisible, reducedMotion, obscured } = useSectionActivity();
   const { ref, visible } = useSectionVisibility<HTMLElement>();
   const entered = visible && routeResolved && motionReady && pageVisible && !obscured;
@@ -134,7 +136,7 @@ export default function SkillsSection() {
           </div>
           {/* 허브 모프 필터(시안 #zap). 그래프가 모프 동안만 허브에 건다. */}
           <svg className="signal-zap" aria-hidden="true" focusable="false">
-            <filter id="skills-zap" x="-40%" y="-40%" width="180%" height="180%">
+            <filter id={zapId} x="-40%" y="-40%" width="180%" height="180%">
               <feTurbulence data-graph="turb" type="fractalNoise" baseFrequency="0.08" numOctaves={2} seed={1} />
               <feDisplacementMap data-graph="disp" in="SourceGraphic" scale={0} xChannelSelector="R" yChannelSelector="G" />
             </filter>

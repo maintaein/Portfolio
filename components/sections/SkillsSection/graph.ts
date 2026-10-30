@@ -215,7 +215,7 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
   };
 
   // 시간은 실제대로 흘린다. 배경 때문에 프레임이 67~200ms인 기기에서 50ms 상한은 모션을 2~3배 늘였다(실측).
-  // GL 생성·탭 복귀 같은 진짜 멈춤만 250ms로 끊어 진입을 건너뛰지 않는다. 아무것도 움직이지 않으면 스타일을 쓰지 않는다.
+  // 500ms 넘는 멈춤은 gsap lagSmoothing이 먼저 33ms로 줄이고, 250~500ms 프레임만 여기서 끊는다. 아무것도 움직이지 않으면 스타일을 쓰지 않는다.
   const frame = (_time: number, deltaTime: number) => {
     vt += Math.min(250, deltaTime);
     if (tick()) dirty = true;

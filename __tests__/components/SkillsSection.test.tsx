@@ -146,9 +146,10 @@ describe('SkillsSection signal map', () => {
     }
   });
 
-  it('프레임이 100ms씩 늦어도 진입은 실제 시간대로 2초 안에 끝난다', () => {
+  it('프레임이 200ms씩 늦어도 진입은 실제 시간대로 2.4초 안에 끝난다', () => {
     const { container } = render(skillsWithActivity());
-    act(() => { for (let t = 0; t < 2000; t += 100) ticks.forEach((tick) => tick(0, 100, 0, 0)); });
+    // 50ms 상한이면 같은 12프레임에 0.6초만 흘러 첫 선도 다 못 뻗는다.
+    act(() => { for (let t = 0; t < 2400; t += 200) ticks.forEach((tick) => tick(0, 200, 0, 0)); });
     expectRevealed(container);
   });
 
@@ -350,7 +351,9 @@ describe('SkillsSection signal map', () => {
     expect(src('b')).toBe('url(/icons-mono/python.svg)');
     step(352);
     // 가운데쯤: 변위가 가장 크고 두 아이콘이 엇갈려 바뀌는 중이다.
-    expect(hub().style.filter).toMatch(/^url\(#skills-zap\) drop-shadow\(/);
+    const zap = container.querySelector('filter')!.id;
+    expect(zap).toMatch(/^skills-zap-/);
+    expect(hub().style.filter.startsWith(`url(#${zap}) drop-shadow(`)).toBe(true);
     expect(scale()).toBeGreaterThan(20);
     expect(Number(icon('a').style.opacity)).toBeLessThan(1);
     expect(Number(icon('b').style.opacity)).toBeGreaterThan(0);
