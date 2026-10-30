@@ -147,6 +147,12 @@ describe('SkillsSection signal map', () => {
     }
   });
 
+  it('프레임이 100ms씩 늦어도 진입은 실제 시간대로 2초 안에 끝난다', () => {
+    const { container } = render(skillsWithActivity());
+    act(() => { for (let t = 0; t < 2000; t += 100) ticks.forEach((tick) => tick(0, 100, 0, 0)); });
+    expectRevealed(container);
+  });
+
   it('React→TypeScript 전환은 네 노드를 언마운트하지 않고 in으로 남긴다', () => {
     const { container } = render(skillsWithActivity());
     step(3000);

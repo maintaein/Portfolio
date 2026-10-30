@@ -186,9 +186,10 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
     });
   };
 
-  // 늦은 프레임은 50ms만 흘린다(시안과 같다). 아무것도 움직이지 않으면 스타일을 쓰지 않는다.
+  // 시간은 실제대로 흘린다. 배경 때문에 프레임이 67~200ms인 기기에서 50ms 상한은 모션을 2~3배 늘였다(실측).
+  // GL 생성·탭 복귀 같은 진짜 멈춤만 250ms로 끊어 진입을 건너뛰지 않는다. 아무것도 움직이지 않으면 스타일을 쓰지 않는다.
   const frame = (_time: number, deltaTime: number) => {
-    vt += Math.min(50, deltaTime);
+    vt += Math.min(250, deltaTime);
     if (tick()) dirty = true;
     draw();
   };
