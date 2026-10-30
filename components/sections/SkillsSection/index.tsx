@@ -56,6 +56,8 @@ export default function SkillsSection() {
   const [wide, setWide] = useState(false);
   const [logoReady, setLogoReady] = useState(false);
   const glHub = wide && started && !reducedMotion;
+  // GL 허브가 내려가면 준비도 걷는다. 다시 뜬 로고가 그리기 전까지 정적 아이콘이 자리를 지킨다.
+  useEffect(() => { if (!glHub) setLogoReady(false); }, [glHub]);
   const order = selected.projects.map((project) => project.title);
   const row = skills.indexOf(selected);
 

@@ -1181,6 +1181,15 @@ html[data-intro] .hero-ball { opacity: 0; }
   from { opacity: 0; transform: translateY(-4px); }
 }
 
+/* 모션 감소: 움직임 없이 불투명도만 바꾼다. */
+@keyframes signal-swap-fade {
+  from { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skills-signal .signal-result > div { animation-name: signal-swap-fade; }
+}
+
 .skills-signal .signal-micro {
   margin: 0;
   color: #03b3c3;

@@ -106,7 +106,8 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
     dirty = true;
   };
 
-  const gone = (title: string, n: Node) => { n.state = 'gone'; n.enterAt = null; options.onGone(title); };
+  // 회수가 끝났다. 예약된 진입(회수 도중 다시 고른 노드)은 지우지 않는다. 시안처럼 그 시각에 다시 자란다.
+  const gone = (title: string, n: Node) => { n.state = 'gone'; options.onGone(title); };
   const exit = (n: Node, d: number) => {
     n.state = 'out';
     n.text.ease(0, 120, d, easeInOut);
@@ -122,7 +123,7 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
     headY.set(geo.rows[row] ?? 0); linkS.set(1); hubA.set(1);
     nodes.forEach((n, title) => {
       const k = order.indexOf(title);
-      if (k < 0) { gone(title, n); return; }
+      if (k < 0) { n.enterAt = null; gone(title, n); return; }
       n.state = 'in'; n.enterAt = null; n.flashAt = n.pulseAt = -1e9;
       n.y.set(slot(k, order.length));
       [n.hubS, n.reveal, n.descS, n.text].forEach(v => v.set(1));

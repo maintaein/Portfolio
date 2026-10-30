@@ -2,7 +2,8 @@ import { useRef as useVisibilityRef } from 'react';
 const localVisibility = vi.hoisted(() => ({ visible: true, hasEntered: true }));
 vi.mock('@/hooks/useSectionVisibility', () => ({ useSectionVisibility: () => ({ ref: useVisibilityRef(null), visible: localVisibility.visible, hasEntered: localVisibility.hasEntered }) }));
 vi.mock('@/components/blocks/ElectricLogo', () => ({
-  default: ({ src, active }: { src: string; active: boolean }) => <div data-testid="skills-logo" data-src={src} data-active={String(active)} />,
+  default: ({ src, active, onReady }: { src: string; active: boolean; onReady?: (src: string) => void }) =>
+    <div data-testid="skills-logo" data-src={src} data-active={String(active)} onClick={() => onReady?.(src)} />,
 }));
 import { readFileSync } from 'node:fs';
 import { StrictMode } from 'react';
@@ -45,6 +46,16 @@ function step(ms: number) {
 const nodes = (container: HTMLElement) => [...container.querySelectorAll<HTMLElement>('[data-project-node]')];
 const titles = (container: HTMLElement, state?: 'in' | 'out') =>
   nodes(container).filter((node) => !state || node.dataset.state === state).map((node) => node.dataset.projectNode);
+// 남은 노드마다 썸네일이 다 펼쳐지고, 두 선이 그려지고, 글자가 다 보인다.
+function expectRevealed(container: HTMLElement) {
+  for (const node of nodes(container)) {
+    expect(node.dataset.state).toBe('in');
+    expect(node.querySelector<HTMLElement>('[data-part="thumb"]')!.style.clipPath).toBe('inset(0 0% 0 0)');
+    expect(node.querySelector('[data-line="hub"]')!.getAttribute('d')).toMatch(/^M/);
+    expect(node.querySelector('[data-line="desc"]')!.getAttribute('d')).toMatch(/^M/);
+    expect([...node.querySelectorAll<HTMLElement>('[data-part="text"] > *')].map((el) => el.style.opacity)).toEqual(['1', '1', '1']);
+  }
+}
 const styles = (container: HTMLElement) =>
   nodes(container).flatMap((node) => [...node.querySelectorAll<HTMLElement | SVGPathElement>('a, [data-part], [data-part="text"] > *, path')]
     .map((el) => `${el.getAttribute('d') ?? ''}|${el.getAttribute('style') ?? ''}`));
@@ -176,11 +187,23 @@ describe('SkillsSection signal map', () => {
     step(3000);
     expect(titles(container)).toEqual(['AlphaMail', 'Ttabong']);
     expect(titles(container, 'in')).toEqual(['AlphaMail', 'Ttabong']);
+    // 집합만이 아니라 화면도 수렴한다. 회수 도중 다시 고른 Ttabong도 다 펼쳐지고 글자가 보인다.
+    expectRevealed(container);
     for (const name of visibleSkills) { fireEvent.mouseEnter(screen.getByRole('button', { name })); step(32); }
     step(3000);
     expect(titles(container)).toEqual(['ReBirth']);
-    const text = [...container.querySelectorAll<HTMLElement>('[data-project-node="ReBirth"] [data-part="text"] > *')];
-    expect(text.map((el) => el.style.opacity)).toEqual(['1', '1', '1']);
+    expectRevealed(container);
+  });
+
+  it.each([100, 150, 200, 300])('React→Python→TypeScript를 %ims 간격으로 고르면 회수 중이던 네 노드가 다시 다 펼쳐진다', (gap) => {
+    const { container } = render(skillsWithActivity());
+    step(3000);
+    fireEvent.click(screen.getByRole('button', { name: 'Python' }));
+    step(gap);
+    fireEvent.click(screen.getByRole('button', { name: 'TypeScript' }));
+    step(4000);
+    expect(titles(container)).toEqual(WEB);
+    expectRevealed(container);
   });
 
   it('모션 감소에서는 첫 렌더부터 최종 상태이고 스프링 tick이 없다', () => {
@@ -311,6 +334,23 @@ describe('SkillsSection signal map', () => {
     expect(screen.getByTestId('skills-logo')).toHaveAttribute('data-active', 'false');
     rerender(skillsWithActivity({ reducedMotion: true }));
     expect(screen.queryByTestId('skills-logo')).not.toBeInTheDocument();
+  });
+
+  it('GL 허브가 다시 뜨면 새 로고가 준비될 때까지 정적 아이콘이 보인다', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+    const { container, rerender } = render(skillsWithActivity());
+    const icon = () => container.querySelector<HTMLElement>('[data-graph="hub"] .skill-icon')!;
+    fireEvent.click(await screen.findByTestId('skills-logo'));
+    expect(icon().style.opacity).toBe('0');
+    rerender(skillsWithActivity({ reducedMotion: true }));
+    rerender(skillsWithActivity());
+    await screen.findByTestId('skills-logo');
+    expect(icon().style.opacity).toBe('');
+  });
+
+  it('모션 감소에서 제목 자리는 움직이지 않고 불투명도만 바뀐다', () => {
+    expect(css).toMatch(/@keyframes signal-swap-fade\s*\{\s*from \{ opacity: 0; \}/);
+    expect(css).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*\.skills-signal \.signal-result > div \{ animation-name: signal-swap-fade; \}/);
   });
 
   it('keeps the labeled icon navigation as a native ScrollArea with buttons that do not shrink', () => {
