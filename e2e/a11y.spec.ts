@@ -159,13 +159,37 @@ test.describe('접근성', () => {
     const links = map.getByRole('link');
     expect(await links.count()).toBeGreaterThan(0);
     for (const link of await links.all()) {
-      const title = (await link.innerText()).replace(/^\d+\s*/, '').trim();
+      const title = (await link.getAttribute('aria-label'))!.replace(/ GitHub$/, '');
       expect(projects.some((project) => project.title === title)).toBe(true);
     }
     await page.getByRole('button', { name: 'Python' }).click();
     await expect(map).toHaveAttribute('data-active-skill', 'Python');
     await expect(slot).toContainText('Python');
     await expect(slot).toBeInViewport();
+    // 모바일은 그래프 선과 허브 없이 썸네일·이름·subtitle 목록으로 읽힌다.
+    await expect(map.getByRole('link', { name: 'PoseTive GitHub' })).toBeVisible();
+    await expect(map.locator('[data-graph="hub"]')).toBeHidden();
+  });
+
+  test('Skills 그래프는 Experience 선과 같은 x의 레일에서 키보드로 8개 기술을 고르고 프로젝트는 GitHub 새 탭 링크다', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await enter(page, 'skills');
+    const map = page.locator('[data-skill-map]');
+    const center = (selector: string) => page.locator(selector).first().evaluate(el => { const box = el.getBoundingClientRect(); return box.left + box.width / 2; });
+    expect(Math.abs(await center('[data-graph="rail"]') - await center('[data-part="experience-axis"]'))).toBeLessThan(1);
+    const names = ['React', 'TypeScript', 'Next.js', 'Tailwind CSS', 'Python', 'React Query', 'Zustand', 'Figma'];
+    await page.getByRole('button', { name: 'React', exact: true }).focus();
+    for (const [index, name] of names.entries()) {
+      if (index) await page.keyboard.press('Tab');
+      await expect(page.getByRole('button', { name, exact: true })).toBeFocused();
+      await expect(map).toHaveAttribute('data-active-skill', name);
+    }
+    // 빠지는 노드가 거둬지고 Figma의 ReBirth 하나만 남는다.
+    await expect(map.locator('[data-project-node]')).toHaveCount(1, SLOW);
+    const link = map.getByRole('link', { name: 'ReBirth GitHub' });
+    await expect(link).toHaveAttribute('href', projects.find(project => project.title === 'ReBirth')!.githubUrl!);
+    await expect(link).toHaveAttribute('target', '_blank');
+    await expect(link).toHaveAttribute('rel', /noopener/);
   });
 
   test('Tab으로 문서의 다음 섹션에도 접근한다 @smoke', async ({ page }) => {
