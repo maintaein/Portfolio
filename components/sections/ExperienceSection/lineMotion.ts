@@ -12,13 +12,13 @@ export const PULSE_GAP = 420;
 export const GATHER_SECONDS = 2.1;
 const GATHER_LAND = 1.95;
 
-const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-const smooth = (a: number, b: number, x: number) => {
+export const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+export const smooth = (a: number, b: number, x: number) => {
   const t = clamp((x - a) / (b - a));
   return t * t * (3 - 2 * t);
 };
-const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+export const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 const easeOut3 = (t: number) => 1 - Math.pow(1 - t, 3);
 const span = (a: number, b: number, x: number) => clamp((x - a) / (b - a));
 

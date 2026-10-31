@@ -1,6 +1,8 @@
 // 경력 선·헤드와 Projects 이름 → 첫 헤드 모임을 그리는 화면 고정 Canvas2D 하나. 시안 blobPath, drawOrb, drawLine, zapLine, drawGather를 옮겼다.
 // 두 소비자(경계, 타임라인)의 상태를 받아 rAF 하나로 그린다. 계산은 lineMotion이 맡고 여기서는 그리기만 한다.
-import { GATHER_SECONDS, K, R, gatherPose, pulseOffsets } from './lineMotion';
+import { GATHER_SECONDS, K, R, clamp, easeInOut, gatherPose, lerp, pulseOffsets, smooth } from './lineMotion';
+import type { HandoffFrame } from './handoff';
+import { blobPath, drawGhosts, drawOrb, drawRing, n2 } from './orb';
 
 // 경계 한 프레임. letters: 뭉칠 글자(화면 좌표 글자 상자 가운데, k: 노드에 가까운 순서), font: 그 글자의 CSS font, target: 첫 노드.
 export type GatherLetter = { ch: string; x: number; y: number; k: number };
@@ -13,71 +15,13 @@ export type TimelineFrame = {
 export interface ExperienceOverlay {
   setBoundary(frame: BoundaryFrame | null): void;
   setTimeline(provider: ((dt: number, now: number) => TimelineFrame | null) | null): void;
+  // 프레임이 있는 동안은 타임라인 대신 넘김을 그린다. provider는 그대로 불린다.
+  setHandoff(frame: HandoffFrame | null): void;
   setReduced(reduced: boolean): void;
   destroy(): void;
 }
 
 type G = CanvasRenderingContext2D;
-
-const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-const smooth = (a: number, b: number, x: number) => {
-  const t = clamp((x - a) / (b - a));
-  return t * t * (3 - 2 * t);
-};
-const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
-const hash = (a: number, b: number) => {
-  const n = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
-  return n - Math.floor(n);
-};
-function n2(x: number, y: number) {
-  const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
-  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
-  return (hash(xi, yi) * (1 - u) + hash(xi + 1, yi) * u) * (1 - v) + (hash(xi, yi + 1) * (1 - u) + hash(xi + 1, yi + 1) * u) * v;
-}
-
-/* ---------- 헤드: 테두리 선 없이 광휘가 빛나고 일렁이는 덩어리 ---------- */
-function blobPath(g: G, x: number, y: number, r: number, amp: number, seed: number, time: number, pts = 40) {
-  g.beginPath();
-  for (let i = 0; i <= pts; i++) {
-    const a = (i / pts) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
-    const j = (n2(c * 1.3 + seed, s * 1.3 + time * 1.9) - 0.5) * 2 * 0.7 + (n2(c * 2.8 + seed * 2, s * 2.8 - time * 2.6) - 0.5) * 2 * 0.3;
-    const rr = r * (1 + amp * j);
-    if (i) g.lineTo(x + c * rr, y + s * rr);
-    else g.moveTo(x + c * rr, y + s * rr);
-  }
-  g.closePath();
-}
-
-function drawOrb(g: G, x: number, y: number, r: number, alpha: number, seed: number, time: number, k = K) {
-  if (r < 0.4 || alpha <= 0) return;
-  const fl = 0.8 + 0.2 * n2(time * 2.4, seed); // 깜빡임
-  const br = 0.95 + 0.1 * n2(time * 1.1, seed + 9); // 숨쉬기
-  const halo = r * (2.8 + 3.2 * k) * br;
-  const grad = g.createRadialGradient(x, y, r * 0.6, x, y, halo);
-  grad.addColorStop(0, `rgba(127,227,238,${0.55 * k * fl * alpha})`);
-  grad.addColorStop(0.3, `rgba(3,179,195,${0.28 * k * fl * alpha})`);
-  grad.addColorStop(1, 'rgba(3,179,195,0)');
-  g.fillStyle = grad;
-  g.beginPath();
-  g.arc(x, y, halo, 0, Math.PI * 2);
-  g.fill();
-  // 입체 그라데이션 대신 평면 원판 세 겹. 셋 다 같은 잡음으로 일렁여 한 덩어리로 읽힌다.
-  g.save();
-  g.shadowColor = `rgba(3,179,195,${alpha})`;
-  g.shadowBlur = r * (1.2 + 2.2 * k) * fl;
-  blobPath(g, x, y, r * br, 0.05 + 0.08 * k, seed, time);
-  g.fillStyle = `rgba(3,179,195,${0.95 * alpha})`;
-  g.fill();
-  g.shadowBlur = 0;
-  blobPath(g, x, y, r * 0.68 * br, 0.07 + 0.08 * k, seed, time);
-  g.fillStyle = `rgba(127,227,238,${alpha})`;
-  g.fill();
-  blobPath(g, x, y, r * 0.34 * br, 0.08, seed + 3, time);
-  g.fillStyle = `rgba(236,253,255,${fl * alpha})`;
-  g.fill();
-  g.restore();
-}
 
 /* ---------- 선: 헤드와 같은 재질, 헤드 쪽은 물방울처럼 뽑혀 나온다. 일렁임은 없다(5차). ---------- */
 function drawLine(g: G, vh: number, x: number, y0: number, y1: number, rOrigin: number, time: number, pulses: boolean, k = K) {
@@ -162,6 +106,7 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
   let boundary: BoundaryFrame | null = null;
+  let handoff: HandoffFrame | null = null;
   let provider: ((dt: number, now: number) => TimelineFrame | null) | null = null;
   let reduced = false, dead = false, raf = 0, last = 0, dpr = 1, vw = 0, vh = 0;
   // 액체 캔버스: 글자와 방울을 여기에 그리고 SVG 필터(흐리게 번진 알파를 다시 날카롭게 세운다)로 가까운 방울끼리 목이 이어져 붙게 한다.
@@ -338,18 +283,37 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
       if (h.r < 0.4 || h.y < -80 || h.y > vh + 80) return;
       const pulse = reduced ? 0 : h.pulse, sq = 1 + 0.25 * pulse * Math.cos(pulse * 9);
       drawOrb(ctx, x, h.y, h.r * sq, h.current ? 1 : 0.75, i * 5.3, time, h.current ? K : K * 0.5);
-      if (pulse > 0) {
-        const ring = h.r + (1 - pulse) * 34;
-        const grad = ctx.createRadialGradient(x, h.y, ring * 0.5, x, h.y, ring);
-        grad.addColorStop(0, 'rgba(127,227,238,0)');
-        grad.addColorStop(0.75, `rgba(127,227,238,${0.35 * pulse})`);
-        grad.addColorStop(1, 'rgba(127,227,238,0)');
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(x, h.y, ring, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      drawRing(ctx, x, h.y, h.r, pulse);
     });
+  };
+
+  // 선 윗끝 40px는 .6 → 3px로 굵어지고 옅은 데서 선명해진다(꼬리). 나머지는 타임라인 선 그대로다.
+  const drawHandoff = (f: HandoffFrame, time: number) => {
+    const { line } = f;
+    if (line) {
+      const fade = Math.min(40, (line.bottom - line.top) * 0.85), bodyTop = line.top + fade;
+      ctx.save();
+      ctx.shadowBlur = 8 + 12 * K;
+      for (let d = 0; d < fade; d += 2) {
+        const y1 = Math.min(line.top + d + 2, bodyTop), v = smooth(0, fade, y1 - line.top), w = lerp(0.6, 3, v);
+        ctx.shadowColor = `rgba(3,179,195,${0.85 * v})`;
+        ctx.beginPath();
+        ctx.moveTo(line.x, line.top + d);
+        ctx.lineTo(line.x, y1);
+        ctx.lineWidth = w * 3 + 6 * K;
+        ctx.strokeStyle = `rgba(3,179,195,${(0.1 + 0.12 * K) * v})`;
+        ctx.stroke();
+        ctx.lineWidth = w;
+        ctx.strokeStyle = `rgba(127,227,238,${0.92 * lerp(0.15, 1, v)})`;
+        ctx.stroke();
+      }
+      ctx.restore();
+      drawLine(ctx, vh, line.x, bodyTop, line.bottom, 0, time, false);
+    }
+    // 타임라인과 같은 seed와 세기라 넘김이 시작돼도 헤드 모양이 바뀌지 않는다
+    for (const h of f.heads) drawOrb(ctx, h.x, h.y, h.r, h.a, h.i * 5.3, time, h.current ? K : K * 0.5);
+    drawGhosts(ctx, f.ghosts, time);
+    drawOrb(ctx, f.head.x, f.head.y, f.head.r, 1, 0, time, K);
   };
 
   const clear = () => {
@@ -368,11 +332,12 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
     // 모션 감소에서는 경계를 재생하지 않는다
     if (boundary && !reduced && boundary.t > 0) drawGather(boundary, time);
     else clearGoo();
-    if (timeline) drawTimeline(timeline, time);
+    if (handoff) drawHandoff(handoff, time);
+    else if (timeline) drawTimeline(timeline, time);
     start();
   };
   const start = () => {
-    if (!raf && !dead && !document.hidden && (boundary || provider)) raf = requestAnimationFrame(frame);
+    if (!raf && !dead && !document.hidden && (boundary || provider || handoff)) raf = requestAnimationFrame(frame);
   };
   const stop = () => {
     if (raf) cancelAnimationFrame(raf);
@@ -380,7 +345,7 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
   };
   // 둘 다 비면 남은 그림을 지우고 루프를 멈춘다
   const settle = () => {
-    if (boundary || provider) return start();
+    if (boundary || provider || handoff) return start();
     stop();
     clear();
     clearGoo();
@@ -403,13 +368,17 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
       provider = next;
       settle();
     },
+    setHandoff(next) {
+      handoff = next;
+      settle();
+    },
     setReduced(next) {
       reduced = next;
     },
     destroy() {
       dead = true;
       stop();
-      boundary = provider = null;
+      boundary = provider = handoff = null;
       goo?.el.remove();
       goo?.svg.remove();
       window.removeEventListener('resize', measure);

@@ -140,7 +140,7 @@ describe('ExperienceSection', () => {
   });
 
   it('모션 감소에서도 provider를 걸고, 선 끝은 읽기선을 따르며 헤드는 맥동 없이 멈춰 있다', () => {
-    const overlay = { setBoundary: vi.fn(), setTimeline: vi.fn(), setReduced: vi.fn(), destroy: vi.fn() };
+    const overlay = { setBoundary: vi.fn(), setTimeline: vi.fn(), setHandoff: vi.fn(), setReduced: vi.fn(), destroy: vi.fn() };
     Object.defineProperty(window, 'scrollY', { configurable: true, value: 1500 - READING });
     render(experienceWithActivity({ reducedMotion: true }, { overlay }));
     const provider = overlay.setTimeline.mock.calls.at(-1)![0] as (dt: number, now: number) => TimelineFrame;
@@ -173,7 +173,7 @@ describe('ExperienceSection', () => {
     const header = document.body.appendChild(document.createElement('header'));
     header.setAttribute('data-scroll-header', '');
     const rect = vi.spyOn(header, 'getBoundingClientRect');
-    const overlay = { setBoundary: vi.fn(), setTimeline: vi.fn(), setReduced: vi.fn(), destroy: vi.fn() };
+    const overlay = { setBoundary: vi.fn(), setTimeline: vi.fn(), setHandoff: vi.fn(), setReduced: vi.fn(), destroy: vi.fn() };
     render(experienceWithActivity({}, { lineArrived: true, overlay }));
     const provider = overlay.setTimeline.mock.calls.at(-1)![0] as (dt: number, now: number) => TimelineFrame;
     const measured = rect.mock.calls.length;
@@ -198,7 +198,7 @@ describe('ExperienceSection', () => {
   });
 
   it('아래에서 켜지면(새로 고침·해시·nav 이동) 다음 노드가 읽기선 위에 있는 구간은 질주 없이 끝난 채 시작한다', () => {
-    const overlay = { setBoundary: vi.fn(), setTimeline: vi.fn(), setReduced: vi.fn(), destroy: vi.fn() };
+    const overlay = { setBoundary: vi.fn(), setTimeline: vi.fn(), setHandoff: vi.fn(), setReduced: vi.fn(), destroy: vi.fn() };
     const view = (visible: boolean) => { localVisibility.visible = visible; return experienceWithActivity({}, { lineArrived: true, overlay }); };
     const below = NODES[2] + 100 - READING;
     // 처음 켜질 때 읽기선이 셋째 노드 아래다. 지난 두 헤드와 장이 바로 산다.
@@ -223,7 +223,7 @@ describe('ExperienceSection', () => {
   });
 
   it('아래에서 켜진 뒤 경계 도착(lineArrived)이 늦게 와도 지난 구간은 질주 없이 끝난 채 선다', () => {
-    const overlay = { setBoundary: vi.fn(), setTimeline: vi.fn(), setReduced: vi.fn(), destroy: vi.fn() };
+    const overlay = { setBoundary: vi.fn(), setTimeline: vi.fn(), setHandoff: vi.fn(), setReduced: vi.fn(), destroy: vi.fn() };
     const below = NODES[2] + 100 - READING;
     Object.defineProperty(window, 'scrollY', { configurable: true, value: below });
     // 새로 고침 뒤 첫 헤드가 아직 살지 않은 프레임이 먼저 돈다
@@ -263,7 +263,7 @@ describe('ExperienceSection', () => {
   });
 
   it('overlay가 있으면 보이는 동안만 provider를 걸고 떠나면 null로 푼다', () => {
-    const overlay = { setBoundary: vi.fn(), setTimeline: vi.fn(), setReduced: vi.fn(), destroy: vi.fn() };
+    const overlay = { setBoundary: vi.fn(), setTimeline: vi.fn(), setHandoff: vi.fn(), setReduced: vi.fn(), destroy: vi.fn() };
     const view = (visible: boolean) => { localVisibility.visible = visible; return experienceWithActivity({}, { lineArrived: true, overlay }); };
     const { rerender, unmount } = render(view(true));
     const provider = overlay.setTimeline.mock.calls.at(-1)![0] as (dt: number, now: number) => TimelineFrame;

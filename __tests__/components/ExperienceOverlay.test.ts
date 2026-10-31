@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { HandoffFrame } from '@/components/sections/ExperienceSection/handoff';
 import {
   createExperienceOverlay,
   type BoundaryFrame,
@@ -73,6 +74,13 @@ const timeline: TimelineFrame = {
     { y: 500, r: 16, pulse: 0.5, current: true },
     { y: 900, r: 0, pulse: 0, current: false },
   ],
+};
+
+const handoffFrame: HandoffFrame = {
+  line: { x: 120, top: 40, bottom: 300 },
+  heads: [{ i: 1, x: 120, y: 250, r: 16, a: 1, current: true }],
+  head: { x: 120, y: 400, r: 8 },
+  ghosts: [{ x: 120, y: 380, r: 6, a: 0.5 }, { x: 120, y: 360, r: 4, a: 0.2 }],
 };
 
 let canvas: HTMLCanvasElement;
@@ -289,5 +297,61 @@ describe('createExperienceOverlay', () => {
     expect(canvas.width).toBe(window.innerWidth * 2);
     overlay.destroy();
     expect(disconnect).toHaveBeenCalled();
+  });
+
+  // 넘김 선은 길 시작(120, 40)에서 그리기 시작하고, 타임라인 선은 첫 구간 시작(120, 100)에서 시작한다
+  const movedTo = (y: number) => contexts.some(c => c.moveTo?.mock.calls.some(([x, yy]) => x === 120 && yy === y));
+
+  it('넘김 프레임이 있으면 루프가 돌고 provider가 있어도 타임라인 대신 넘김을 그린다', () => {
+    const provider = vi.fn(() => timeline);
+    const overlay = createExperienceOverlay(canvas)!;
+    overlay.setHandoff(handoffFrame);
+    overlay.setTimeline(provider);
+    expect(frames.size).toBe(1);
+    tick();
+    expect(provider).toHaveBeenCalledTimes(1);
+    expect(movedTo(40)).toBe(true);
+    expect(movedTo(100)).toBe(false);
+    // 헤드 하나 + Experience 헤드 하나 + 잔상 둘의 광휘 원이다. 타임라인의 고리 펄스는 없다.
+    expect(drawCalls('arc')).toBe(4);
+    overlay.destroy();
+  });
+
+  it('넘김 프레임을 null로 하면 타임라인으로 돌아온다', () => {
+    const overlay = createExperienceOverlay(canvas)!;
+    overlay.setTimeline(() => timeline);
+    overlay.setHandoff(handoffFrame);
+    tick();
+    expect(movedTo(100)).toBe(false);
+    overlay.setHandoff(null);
+    tick();
+    expect(movedTo(100)).toBe(true);
+    overlay.destroy();
+  });
+
+  it('타임라인 provider가 null이 된 뒤에도 넘김 프레임이 있으면 계속 그린다', () => {
+    const overlay = createExperienceOverlay(canvas)!;
+    overlay.setTimeline(() => timeline);
+    overlay.setHandoff(handoffFrame);
+    overlay.setTimeline(null);
+    expect(frames.size).toBe(1);
+    const before = drawCalls('fill');
+    tick();
+    expect(drawCalls('fill')).toBeGreaterThan(before);
+    expect(frames.size).toBe(1);
+    // 둘 다 비면 멈춘다
+    overlay.setHandoff(null);
+    expect(frames.size).toBe(0);
+    overlay.destroy();
+  });
+
+  it('넘김만 있어도(provider 없음) 루프가 돈다', () => {
+    const overlay = createExperienceOverlay(canvas)!;
+    overlay.setHandoff(handoffFrame);
+    expect(frames.size).toBe(1);
+    tick();
+    expect(drawCalls('fill')).toBeGreaterThan(0);
+    expect(frames.size).toBe(1);
+    overlay.destroy();
   });
 });
