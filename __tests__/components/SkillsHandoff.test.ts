@@ -298,6 +298,17 @@ describe('Skills 넘김: 앞으로와 거꾸로', () => {
     expect(gone(last())).toBe(true);
   });
 
+  it('#skills로 새로 고친 자리에서 scroll 없이 늦게 켜진 완료는 재생하지 않고 도착 상태로 놓는다', async () => {
+    // 복원된 자리에서 만들어져 scroll 차이가 없다. 선 끝은 화면 안(320)이다.
+    create({ at: 2400 });
+    expect(arrivals).toEqual([true, false]);
+    line.dataset.complete = 'true';
+    await Promise.resolve();
+    expect(arrivals).toEqual([true, false, true]);
+    expect(drawn()).toEqual([]);
+    expect(gone(last())).toBe(true);
+  });
+
   it('nav 표시가 재생 도중에 서면 지금 향하던 끝으로 바로 놓는다', () => {
     line.dataset.complete = 'true';
     create();

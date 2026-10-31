@@ -156,6 +156,8 @@ export function createSkillsHandoff({ root, reduced, onArrive }: { root: HTMLEle
     const row = center(skills?.querySelector('[data-skill-row]'));
     const next = line?.dataset.complete === 'true' && !!row && row.top + row.height / 2 <= TRIGGER * window.innerHeight ? 1 : 0;
     if (goal === -1) {
+      // 처음 놓인 자리(#skills 새로 고침, 복원)는 바로 이동이다. 손으로 scroll하기 전의 늦은 완료도 재생하지 않는다.
+      jumped = true;
       goal = next;
       if (!next) report(false);
       return land(next);
