@@ -5,6 +5,7 @@ import type { ExperienceOverlay, GatherLetter } from '@/components/sections/Expe
 import { clearCaptionReveal, revealCaption } from '@/components/sections/ProjectsSection/captionReveal';
 import { gsap, registerScrollTrigger, ScrollTrigger, SITE_EASE } from '@/lib/gsap';
 import { readingLineY } from '@/lib/utils/scrollGeometry';
+import { createSkillsHandoff } from './skillsHandoff';
 
 // boundary: Hero↔About 비행, preview: About↔Projects 비행, projects: 프리뷰에 넘기고 숨은 자리.
 export type LogoOwner = 'hero' | 'about' | 'boundary' | 'preview' | 'projects' | 'none';
@@ -15,6 +16,8 @@ export interface PortfolioMotion {
   setLogo(logo: ElectricLogoHandle | null): void;
   setOverlay(overlay: ExperienceOverlay | null): void;
   settleProjects(): void;
+  // Skills가 도착한 자리에 제 헤드를 그렸다(Experience → Skills 넘김 헤드를 놓는다).
+  releaseSkillsHead(): void;
   destroy(): void;
 }
 
@@ -170,15 +173,18 @@ const rectBox = (element: Element | null, scroll = 0): Box => {
   return { x: rect.left, y: rect.top + scroll, w: rect.width, h: rect.height };
 };
 
-export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, reduced, onLogoOwnerChange, onLineArrive }: {
+export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, reduced, onLogoOwnerChange, onLineArrive, onSkillsHeadArrive }: {
   root: HTMLElement; header: HTMLElement; wordmark: HTMLButtonElement; logoHost: HTMLElement; reduced: boolean;
   // GL 볼 손잡이(없으면 정적 볼). 볼은 진입 뒤에 늦게 떠서 ref로 받는다.
   ball?: { current: CrystalizedBallHandle | null };
   onLogoOwnerChange: (owner: LogoOwner) => void;
   // 프리뷰가 첫 헤드에 내려앉았는지(경계 100%). 내려앉을 때와 거꾸로 떠날 때만 부른다. Experience가 첫 헤드와 첫 장을 이것으로 공개한다.
   onLineArrive?: (arrived: boolean) => void;
+  // Experience 선이 Skills 헤드에 내려앉았는지(넘김 100%). Skills 헤드와 등장이 이것을 기다린다.
+  onSkillsHeadArrive?: (arrived: boolean) => void;
 }): PortfolioMotion {
   registerScrollTrigger();
+  const skillsHandoff = createSkillsHandoff({ root, reduced, onArrive: arrived => onSkillsHeadArrive?.(arrived) });
   const inner = logoHost.firstElementChild instanceof HTMLElement ? logoHost.firstElementChild : null;
   const label = wordmark.firstElementChild instanceof HTMLElement ? wordmark.firstElementChild : wordmark;
   const anchor = (name: string) => root.querySelector(`[data-motion-anchor="${name}"]`);
@@ -721,6 +727,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     refresh: settle,
     setPaused: (next) => {
       paused = next;
+      skillsHandoff.setPaused(next);
       // 상세가 열린 동안(M4 pause) 선 재생도 그 자리에 멈춘다.
       lineTween?.paused(next);
       syncPin();
@@ -746,6 +753,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     },
     // 오버레이가 오거나 바뀌거나 떠날 때. 옛 오버레이의 경계를 비우고 지금 진행을 새 오버레이에 그린다.
     setOverlay: (next) => {
+      skillsHandoff.setOverlay(next);
       if (next === overlay) return;
       overlay?.setBoundary(null);
       overlay = next;
@@ -763,8 +771,10 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       pose.t = 2;
       renderLogo();
     },
+    releaseSkillsHead: () => skillsHandoff.release(),
     destroy: () => {
       alive = false;
+      skillsHandoff.destroy();
       cancelAnimationFrame(queued);
       resize?.disconnect();
       projectsSection?.removeEventListener('focusin', reveal);

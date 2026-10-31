@@ -6,9 +6,11 @@ import { HOME_SECTION_CONFIG } from '@/lib/constants';
 import { coreValues } from '@/lib/data';
 const flags = vi.hoisted(() => ({ obscured: false, pageVisible: true, reduced: false, wide: false, ready: true }));
 const motion = vi.hoisted(() => ({
-  create: vi.fn(), destroy: vi.fn(), setPaused: vi.fn(), setLogo: vi.fn(), setOverlay: vi.fn(), refresh: vi.fn(), settleProjects: vi.fn(),
+  create: vi.fn(), destroy: vi.fn(), setPaused: vi.fn(), setLogo: vi.fn(), setOverlay: vi.fn(), refresh: vi.fn(), settleProjects: vi.fn(), releaseSkillsHead: vi.fn(),
   owner: null as ((owner: 'hero' | 'about' | 'boundary' | 'preview' | 'projects' | 'none') => void) | null,
+  skillsHead: null as ((arrived: boolean) => void) | null,
 }));
+const skills = vi.hoisted(() => ({ props: null as null | { headArrived?: boolean; onHeadShown?: () => void } }));
 vi.mock('@/hooks/useProjectModalObscured', () => ({ useProjectModalObscured: () => flags.obscured }));
 vi.mock('@/hooks/usePageVisibility', () => ({ usePageVisibility: () => flags.pageVisible }));
 vi.mock('@/hooks/useMotionPreference', () => ({ useMotionPreference: () => ({ ready: flags.ready, reduced: flags.reduced }) }));
@@ -34,14 +36,14 @@ vi.mock('@/components/sections', async () => {
     useImperativeHandle(ref, () => ({ release: projectsGate.release }), []);
     return <p data-logo-owner-prop={logoOwner} onClick={() => onChapterChange(2)}>About original body</p>;
   });
-  return { AboutSection: About, ProjectsSection: ({ ref, beforeAction, navigationPending, logoOwner }: { ref?: import('react').Ref<unknown>; beforeAction?: (run: () => void) => void; navigationPending?: boolean; logoOwner?: string }) => { projectsGate.before = beforeAction ?? null; projectsLock.props = { navigationPending, logoOwner }; useImperativeHandle(ref, () => ({ release: projectsLock.release }), []); return <p>Projects original body</p>; }, ExperienceSection: () => <p>Experience original body</p>, SkillsSection: () => <p>Skills original body</p>, AwardAndCertificateSection: () => <p>Awards original body</p>, Footer: () => <footer>Contacts</footer> };
+  return { AboutSection: About, ProjectsSection: ({ ref, beforeAction, navigationPending, logoOwner }: { ref?: import('react').Ref<unknown>; beforeAction?: (run: () => void) => void; navigationPending?: boolean; logoOwner?: string }) => { projectsGate.before = beforeAction ?? null; projectsLock.props = { navigationPending, logoOwner }; useImperativeHandle(ref, () => ({ release: projectsLock.release }), []); return <p>Projects original body</p>; }, ExperienceSection: () => <p>Experience original body</p>, SkillsSection: (props: { headArrived?: boolean; onHeadShown?: () => void }) => { skills.props = props; return <p>Skills original body</p>; }, AwardAndCertificateSection: () => <p>Awards original body</p>, Footer: () => <footer>Contacts</footer> };
 });
 const overlay = vi.hoisted(() => ({ setBoundary: vi.fn(), setTimeline: vi.fn(), setReduced: vi.fn(), destroy: vi.fn() }));
 vi.mock('@/components/sections/ExperienceSection/overlay', () => ({ createExperienceOverlay: () => overlay }));
 vi.mock('@/components/sections/HomeClient/motion', () => ({
-  createPortfolioMotion: (options: { onLogoOwnerChange: (owner: 'hero' | 'about' | 'boundary' | 'preview' | 'projects' | 'none') => void }) => {
-    motion.create(options); motion.owner = options.onLogoOwnerChange;
-    return { destroy: motion.destroy, setPaused: motion.setPaused, setLogo: motion.setLogo, setOverlay: motion.setOverlay, refresh: motion.refresh, settleProjects: motion.settleProjects };
+  createPortfolioMotion: (options: { onLogoOwnerChange: (owner: 'hero' | 'about' | 'boundary' | 'preview' | 'projects' | 'none') => void; onSkillsHeadArrive?: (arrived: boolean) => void }) => {
+    motion.create(options); motion.owner = options.onLogoOwnerChange; motion.skillsHead = options.onSkillsHeadArrive ?? null;
+    return { destroy: motion.destroy, setPaused: motion.setPaused, setLogo: motion.setLogo, setOverlay: motion.setOverlay, refresh: motion.refresh, settleProjects: motion.settleProjects, releaseSkillsHead: motion.releaseSkillsHead };
   },
 }));
 // App Router 빌드는 next/dynamic을 app-dynamic으로 바꿔 ref를 실제 컴포넌트까지 넘긴다.
@@ -69,7 +71,7 @@ beforeEach(() => {
   flags.obscured = false; flags.pageVisible = true; flags.reduced = false; flags.wide = false; flags.ready = true;
   Object.values(motion).forEach(value => typeof value === 'function' && 'mockClear' in value && value.mockClear());
   Object.values(overlay).forEach(fn => fn.mockClear());
-  motion.owner = null;
+  motion.owner = null; motion.skillsHead = null; skills.props = null;
   boot.props = null; boot.finish.mockClear(); document.documentElement.removeAttribute('data-intro');
   window.history.replaceState(null, '', '/'); vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
   vi.stubGlobal('matchMedia', vi.fn((query: string) => ({ matches: query === '(min-width: 1024px)' && flags.wide, media: query, addEventListener: () => {}, removeEventListener: () => {} })));
@@ -550,4 +552,30 @@ it('hands the experience overlay to the boundary separately without rebuilding i
   render(<HomeClient />); await flush();
   expect(motion.create).toHaveBeenCalledTimes(1);
   expect(motion.setOverlay).toHaveBeenLastCalledWith(overlay);
+});
+
+// Task 5. Skills 헤드는 Experience에서 넘어온 헤드가 도착한 뒤에 선다. 도착은 경계 모듈이 알리고, Skills가 헤드를 그리면 넘김 헤드를 놓게 한다.
+it('passes the Skills head arrival from the boundary module and releases the handoff head when Skills draws its own', async () => {
+  const { unmount } = render(<HomeClient />);
+  expect(skills.props!.headArrived).toBe(true);
+  await flush();
+  act(() => motion.skillsHead!(false));
+  expect(skills.props!.headArrived).toBe(false);
+  act(() => motion.skillsHead!(true));
+  expect(skills.props!.headArrived).toBe(true);
+  skills.props!.onHeadShown!();
+  expect(motion.releaseSkillsHead).toHaveBeenCalledTimes(1);
+  act(() => motion.skillsHead!(false));
+  unmount();
+});
+
+// 경계 청크를 못 받으면 도착을 알릴 쪽이 없다. Skills 헤드는 처음부터 도착한 상태다.
+it('keeps the Skills head arrived when the boundary chunk fails to load', async () => {
+  vi.resetModules();
+  vi.doMock('@/components/sections/HomeClient/motion', () => { throw new Error('chunk failed'); });
+  const { default: FailingHome } = await import('@/components/sections/HomeClient');
+  render(<FailingHome />); await flush();
+  expect(motion.create).not.toHaveBeenCalled();
+  expect(skills.props!.headArrived).toBe(true);
+  vi.doUnmock('@/components/sections/HomeClient/motion');
 });

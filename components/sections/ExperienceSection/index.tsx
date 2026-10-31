@@ -8,18 +8,13 @@ import { useSectionActivity } from '@/components/common/SectionActivityContext';
 import { useSectionVisibility } from '@/hooks/useSectionVisibility';
 import { readingLineY } from '@/lib/utils/scrollGeometry';
 import { R, R_NODE, createSegments, stepSegment } from './lineMotion';
+import { docOffset, measureTimeline } from './geometry';
 import type { ExperienceOverlay, TimelineFrame } from './overlay';
 import EvidenceCard from './EvidenceCard';
 
 const N = experiences.length;
 const kind = (type: string) => type === 'student' ? 'EDUCATION' : 'WORK';
 const delay = (d: number) => ({ '--d': d }) as CSSProperties;
-// transform을 뺀 레이아웃 좌표(문서 기준). 공개 전 translateY(18px)가 잰 값을 흔들지 않는다.
-const docOffset = (el: HTMLElement, key: 'offsetTop' | 'offsetLeft') => {
-  let v = 0;
-  for (let node: HTMLElement | null = el; node; node = node.offsetParent as HTMLElement | null) v += node[key];
-  return v;
-};
 const headerHeight = () => document.querySelector('[data-scroll-header]')?.getBoundingClientRect().height ?? 0;
 const noSubscribe = () => () => {};
 
@@ -77,13 +72,10 @@ export default function ExperienceSection({ lineArrived = false, overlay = null 
     // 보이기 시작한 첫 프레임. 아래에서 켜지면(새로 고침·해시·nav 이동) 읽기선 위의 구간을 하나씩 0.9초씩 질주시키지 않는다.
     let cold = true;
     const measure = () => {
-      const axis = section.querySelector<HTMLElement>('[data-part="experience-axis"]');
       const chapters = [...section.querySelectorAll<HTMLElement>('article')];
       geo = {
-        axisX: axis ? docOffset(axis, 'offsetLeft') + axis.offsetWidth / 2 : 0,
-        nodes: chapters.map(c => { const h = c.querySelector<HTMLElement>('[data-part="experience-node"]')!; return docOffset(h, 'offsetTop') + Math.min(h.offsetHeight, 60) / 2; }),
+        ...measureTimeline(section),
         readEnd: chapters.map(c => { const el = c.querySelector<HTMLElement>('ul[aria-label="기술"]')!; return docOffset(el, 'offsetTop') + el.offsetHeight + 8; }),
-        tail: chapters.length ? docOffset(chapters[N - 1], 'offsetTop') + chapters[N - 1].offsetHeight - 80 : 0,
         header: headerHeight(),
       };
     };

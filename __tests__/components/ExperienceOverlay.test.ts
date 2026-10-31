@@ -345,6 +345,24 @@ describe('createExperienceOverlay', () => {
     overlay.destroy();
   });
 
+  // Task 5. p 1에서 Skills가 제 헤드를 그린 바로 그 프레임에 넘김 헤드를 놓는다. 다음 rAF까지 남으면 한 프레임 헤드가 둘이다.
+  it('헤드를 내려놓는 프레임(head null)은 그 자리에서 지우고, 이어지는 프레임에도 넘김과 타임라인을 그리지 않는다', () => {
+    const overlay = createExperienceOverlay(canvas)!;
+    overlay.setTimeline(() => timeline);
+    overlay.setHandoff(handoffFrame);
+    tick();
+    const ctx = contexts[0], clears = ctx.clearRect.mock.calls.length, arcs = drawCalls('arc');
+    overlay.setHandoff({ line: null, heads: [], head: null, ghosts: [] });
+    expect(ctx.clearRect.mock.calls.length).toBe(clears + 1);
+    tick();
+    expect(drawCalls('arc')).toBe(arcs);
+    expect(movedTo(100)).toBe(false);
+    // 그릴 것이 없으면(provider도 없음) 루프가 멈춘다
+    overlay.setTimeline(null);
+    expect(frames.size).toBe(0);
+    overlay.destroy();
+  });
+
   it('넘김만 있어도(provider 없음) 루프가 돈다', () => {
     const overlay = createExperienceOverlay(canvas)!;
     overlay.setHandoff(handoffFrame);

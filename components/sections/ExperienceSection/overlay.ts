@@ -313,7 +313,7 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
     // 타임라인과 같은 seed와 세기라 넘김이 시작돼도 헤드 모양이 바뀌지 않는다
     for (const h of f.heads) drawOrb(ctx, h.x, h.y, h.r, h.a, h.i * 5.3, time, h.current ? K : K * 0.5);
     drawGhosts(ctx, f.ghosts, time);
-    drawOrb(ctx, f.head.x, f.head.y, f.head.r, 1, 0, time, K);
+    if (f.head) drawOrb(ctx, f.head.x, f.head.y, f.head.r, 1, 0, time, K);
   };
 
   const clear = () => {
@@ -336,8 +336,10 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
     else if (timeline) drawTimeline(timeline, time);
     start();
   };
+  // 헤드를 넘긴 넘김(head null)은 그릴 것이 없어 루프를 붙잡지 않는다
+  const busy = () => !!(boundary || provider || handoff?.head);
   const start = () => {
-    if (!raf && !dead && !document.hidden && (boundary || provider || handoff)) raf = requestAnimationFrame(frame);
+    if (!raf && !dead && !document.hidden && busy()) raf = requestAnimationFrame(frame);
   };
   const stop = () => {
     if (raf) cancelAnimationFrame(raf);
@@ -345,7 +347,7 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
   };
   // 둘 다 비면 남은 그림을 지우고 루프를 멈춘다
   const settle = () => {
-    if (boundary || provider || handoff) return start();
+    if (busy()) return start();
     stop();
     clear();
     clearGoo();
@@ -369,6 +371,8 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
       settle();
     },
     setHandoff(next) {
+      // 헤드를 Skills에 넘기는 순간은 그 자리에서 지운다. 이 프레임의 rAF가 이미 돌았으면 Skills가 그린 헤드와 한 프레임 겹친다.
+      if (handoff?.head && next && !next.head) clear();
       handoff = next;
       settle();
     },

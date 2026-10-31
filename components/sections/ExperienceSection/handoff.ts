@@ -44,7 +44,8 @@ export type HandoffFrame = {
   line: { x: number; top: number; bottom: number } | null;
   // i: geo.nodes에서의 자리(타임라인과 같은 일렁임 seed를 잇는 데 쓴다). x: 축 x.
   heads: readonly { i: number; x: number; y: number; r: number; a: number; current: boolean }[];
-  head: { x: number; y: number; r: number };
+  // null: 헤드를 Skills에 넘긴 뒤다. 아무것도 그리지 않되 타임라인도 그리지 않는다(진행도 1).
+  head: { x: number; y: number; r: number } | null;
   ghosts: readonly Ghost[];
 };
 
@@ -64,7 +65,7 @@ function curvePoints(geo: Pick<HandoffGeo, 'axisX' | 'tail' | 'target'>) {
 // buildHandoffTable의 curveLen에 넘길 곡선 길이
 export const handoffCurveLength = (geo: Pick<HandoffGeo, 'axisX' | 'tail' | 'target'>) => curvePoints(geo).acc.at(-1)!;
 
-export function handoffPose(table: HandoffTable, geo: HandoffGeo, p: number): HandoffFrame {
+export function handoffPose(table: HandoffTable, geo: HandoffGeo, p: number): HandoffFrame & { head: NonNullable<HandoffFrame['head']> } {
   const { lineLen, curveLen } = table, { axisX, top } = geo;
   const { head, tail } = table.at(p);
   const { pts, acc } = curvePoints(geo);
