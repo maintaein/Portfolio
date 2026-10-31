@@ -27,6 +27,7 @@ export function createSkillsHandoff({ root, reduced, onArrive }: { root: HTMLEle
   const line = root.querySelector<HTMLElement>('[data-part="experience-line"]');
   const section = line?.closest('section') ?? null;
   const skills = root.querySelector<HTMLElement>('[data-skill-map]');
+  const skillsSection = skills?.closest('section') ?? skills;
   const head = skills?.querySelector<HTMLElement>('[data-graph="head"]') ?? null;
   const wide = window.matchMedia?.('(min-width: 768px)');
   const pose = { p: 0 };
@@ -42,6 +43,10 @@ export function createSkillsHandoff({ root, reduced, onArrive }: { root: HTMLEle
   let arrived: boolean | null = null;
   let paused = false;
   let alive = true;
+  // 지난 판정의 스크롤과, 바로 이동(nav, 화면 높이 넘는 한 번의 점프)으로 온 뒤 사용자가 아직 직접 스크롤하지 않았는지.
+  // 바로 이동은 재생하지 않는다(설계 "재생하지 않는 경우"). 늦게 켜지는 완료(MutationObserver)도 이 표시를 본다.
+  let lastY = window.scrollY;
+  let jumped = false;
 
   const report = (next: boolean) => {
     if (next === arrived) return;
@@ -104,10 +109,16 @@ export function createSkillsHandoff({ root, reduced, onArrive }: { root: HTMLEle
     const y = measureTimeline(section).tail - window.scrollY;
     return y >= 0 && y <= window.innerHeight;
   };
+  // Skills가 화면을 벗어났다(재생 중 세게 튕김). 끝으로 바로 놓는다.
+  const skillsOff = () => {
+    const box = center(skillsSection);
+    return !box || box.bottom <= 0 || box.top >= window.innerHeight;
+  };
+  const skip = () => jumped || skillsOff();
   const move = (next: number) => {
     goal = next;
     if (!next) report(false);
-    if (paused || document.hidden || !tailOnScreen()) return land(next);
+    if (paused || document.hidden || !tailOnScreen() || skip()) return land(next);
     tween?.kill();
     tween = null;
     stopHold();
@@ -137,6 +148,11 @@ export function createSkillsHandoff({ root, reduced, onArrive }: { root: HTMLEle
       goal = -1;
       return report(true);
     }
+    // Projects → Experience 경계와 같은 표시(data-navigation-target)로 nav 이동을 안다
+    const y = window.scrollY, dy = Math.abs(y - lastY);
+    lastY = y;
+    if (root.hasAttribute('data-navigation-target') || dy > window.innerHeight) jumped = true;
+    else if (dy) jumped = false;
     const row = center(skills?.querySelector('[data-skill-row]'));
     const next = line?.dataset.complete === 'true' && !!row && row.top + row.height / 2 <= TRIGGER * window.innerHeight ? 1 : 0;
     if (goal === -1) {
@@ -145,6 +161,7 @@ export function createSkillsHandoff({ root, reduced, onArrive }: { root: HTMLEle
       return land(next);
     }
     if (next !== goal) move(next);
+    else if (tween && skip()) land(goal);
   };
   // 재생 중 숨거나 멈추면 지금 향하던 끝으로 바로 놓는다
   const finish = () => { if (tween) land(goal); };

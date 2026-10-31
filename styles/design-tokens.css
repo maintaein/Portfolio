@@ -997,7 +997,7 @@ html[data-intro] .hero-ball { opacity: 0; }
 .experience .evidence-card + .evidence-card { transition-delay: calc((var(--d, 0) + 1) * 70ms); }
 .experience[data-progressive] .experience-chapter[data-state='future'] :is(.experience-reveal, .evidence-card) { opacity: 0; transform: translateY(18px); }
 
-@media (max-width: 760px) {
+@media (max-width: 767px) {
   .experience { padding: 0 16px; }
   .experience-chapter { grid-template-columns: 38px 1fr; min-height: auto; padding-bottom: 22svh; }
   .experience-company { font-size: 36px; }
@@ -1036,7 +1036,7 @@ html[data-intro] .hero-ball { opacity: 0; }
 .evidence-card[data-demo='calendar'] canvas { height: 300px; }
 .evidence-card[data-demo='security'] canvas { height: 190px; }
 
-@media (max-width: 760px) {
+@media (max-width: 767px) {
   .evidence-card[data-wide] { grid-column: auto; }
   .evidence-card[data-demo='inspect'] canvas { height: 500px; }
   .evidence-card[data-demo='calendar'] canvas { height: 560px; }

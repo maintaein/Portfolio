@@ -55,6 +55,8 @@ beforeEach(() => {
   const [na, nb] = [...root.querySelectorAll('[data-part="experience-node"]')];
   place(na, { x: 120, y: 1040, w: 600, h: 40 });
   place(nb, { x: 120, y: 1840, w: 600, h: 40 });
+  // Skills 섹션은 2850~3850. 스크롤 1950~3850에서 화면 안이다.
+  place(root.querySelector('#skills')!, { x: 0, y: 2850, w: 1440, h: 1000 });
   place(root.querySelector('[data-graph="head"]')!, { x: HEAD_X - 24, y: 2900, w: 48, h: 600 });
   rows = [...root.querySelectorAll<HTMLElement>('[data-skill-row]')];
   place(rows[0], { x: 200, y: ROW0 - 36, w: 300, h: 72 });
@@ -253,6 +255,87 @@ describe('Skills 넘김: 앞으로와 거꾸로', () => {
     expect(arrivals).toEqual([true, false, true, false]);
     expect(drawn()).toEqual([]);
     expect(last()).toBeNull();
+  });
+
+  // 설계 "재생하지 않는 경우": nav 이동은 선 끝이 화면 안이어도(도착 자리에서 약 12px) 재생 없이 도착 상태로 선다.
+  it('nav 이동(data-navigation-target) 중에 지점을 지나면 선 끝이 화면 안이어도 재생 없이 도착 상태다', () => {
+    line.dataset.complete = 'true';
+    create();
+    root.setAttribute('data-navigation-target', 'skills');
+    scrollAt(2200);
+    scrollAt(2330);
+    expect(TAIL - 2330).toBeGreaterThan(0);
+    expect(arrivals).toEqual([true, false, true]);
+    expect(drawn()).toEqual([]);
+    expect(gone(last())).toBe(true);
+    expect(calls.filter(c => c.startsWith('skills'))).toEqual(['skills false', 'skills true']);
+    // nav 표시가 걷힌 뒤 사용자가 직접 되지나면 거꾸로 재생한다
+    root.removeAttribute('data-navigation-target');
+    scrollAt(2310);
+    advance(.1);
+    expect(drawn().length).toBeGreaterThan(0);
+  });
+
+  it('Skills에서 nav로 Experience에 가면 거꾸로 재생 없이 바로 타임라인 상태다(빈 선 뒤 한 번에 나타나지 않는다)', () => {
+    line.dataset.complete = 'true';
+    create({ at: 2400 });
+    root.setAttribute('data-navigation-target', 'experience');
+    scrollAt(2300);
+    expect(arrivals).toEqual([true, false]);
+    expect(drawn()).toEqual([]);
+    expect(last()).toBeNull();
+  });
+
+  it('바로 이동(화면 높이 넘는 점프) 뒤 늦게 켜진 완료는 재생하지 않고 도착 상태로 놓는다', async () => {
+    create({ at: 1400 });
+    // 선 끝은 화면 안(390)이지만 한 번에 930px 뛰었다
+    scrollAt(2330);
+    expect(arrivals).toEqual([true, false]);
+    line.dataset.complete = 'true';
+    await Promise.resolve();
+    expect(arrivals).toEqual([true, false, true]);
+    expect(drawn()).toEqual([]);
+    expect(gone(last())).toBe(true);
+  });
+
+  it('nav 표시가 재생 도중에 서면 지금 향하던 끝으로 바로 놓는다', () => {
+    line.dataset.complete = 'true';
+    create();
+    scrollAt(2330);
+    advance(.3);
+    root.setAttribute('data-navigation-target', 'awards');
+    scrollAt(2340);
+    expect(arrivals).toEqual([true, false, true]);
+    expect(gone(last())).toBe(true);
+  });
+
+  it('거꾸로 재생 중 위로 세게 튕겨 Skills가 화면을 벗어나면 바로 0이고 타임라인으로 돌아온다', () => {
+    line.dataset.complete = 'true';
+    create({ at: 2400 });
+    scrollAt(2300);
+    advance(.3);
+    expect(drawn().length).toBeGreaterThan(0);
+    // 한 번에 화면 높이보다 적게씩 여러 번(트랙패드 플링)
+    scrollAt(1700);
+    scrollAt(1100);
+    expect(last()).toBeNull();
+    expect(arrivals).toEqual([true, false]);
+    const n = overlay.setHandoff.mock.calls.length;
+    advance(1);
+    expect(overlay.setHandoff.mock.calls.length).toBe(n);
+  });
+
+  it('앞으로 재생 중 아래로 세게 튕겨 Skills가 화면을 벗어나면 바로 1이고 Skills 헤드에 넘긴다', () => {
+    line.dataset.complete = 'true';
+    create();
+    scrollAt(2330);
+    advance(.3);
+    scrollAt(3100);
+    scrollAt(3900);
+    expect(arrivals).toEqual([true, false, true]);
+    expect(gone(last())).toBe(true);
+    expect(calls.at(-1)).toBe('overlay handed');
+    expect(calls.filter(c => c.startsWith('skills')).at(-1)).toBe('skills true');
   });
 
   it('재생 중 멈추면(setPaused) 바로 끝 상태다', () => {

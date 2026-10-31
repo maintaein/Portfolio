@@ -55,11 +55,12 @@ export default function EvidenceCard({ evidence, active, reduced }: { evidence: 
     io.observe(cv);
     addEventListener('resize', onResize);
     let alive = true;
+    // 청크를 못 받으면 그림 없이 둔다. 요약은 sr-only로 읽힌다.
     import('./demos').then((m) => {
       if (!alive) return;
       draw = m.DEMOS[demo];
       kick();
-    });
+    }).catch(() => {});
 
     return () => {
       alive = false;
