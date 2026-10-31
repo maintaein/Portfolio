@@ -11,6 +11,7 @@ import { SectionActivityProvider } from '@/components/common/SectionActivityCont
 import { AboutSection, AwardAndCertificateSection, ExperienceSection, Footer, ProjectsSection, SkillsSection } from '@/components/sections';
 import type { AboutSectionHandle } from '@/components/sections/AboutSection';
 import type { ProjectsSectionHandle } from '@/components/sections/ProjectsSection';
+import type { SkillsSectionHandle } from '@/components/sections/SkillsSection';
 import { createExperienceOverlay, type ExperienceOverlay } from '@/components/sections/ExperienceSection/overlay';
 import BootSequence, { type BootSequenceHandle, type IntroTargets } from '@/components/sections/BootSequence';
 import { useMotionPreference } from '@/hooks/useMotionPreference';
@@ -71,6 +72,7 @@ export default function HomeClient() {
   const [motionFailed, setMotionFailed] = useState(false);
   // Experience 선이 Skills 헤드로 내려앉았는지. 경계 모듈이 없거나 넘김이 없는 환경에서는 처음부터 도착이다.
   const [skillsHeadArrived, setSkillsHeadArrived] = useState(true);
+  const [skillsHead, setSkillsHead] = useState<SkillsSectionHandle | null>(null);
   const [logoReady, setLogoReady] = useState(false);
   // GL 로고는 쉬는 자리(hero·about)에서만 드러난다. 날아가는 도중에 준비돼도 내려앉은 뒤에 정적 실루엣과 바뀐다.
   const [logoLive, setLogoLive] = useState(false);
@@ -139,6 +141,7 @@ export default function HomeClient() {
     return () => { motion.destroy(); motionRef.current = null; setLogoOwner('none'); setLineArrived(false); setSkillsHeadArrived(true); };
   }, [motionModule, reducedMotion]);
   useEffect(() => { motionRef.current?.setLogo(logo); }, [logo, motionModule, reducedMotion]);
+  useEffect(() => { motionRef.current?.setSkillsHead(skillsHead); }, [skillsHead, motionModule, reducedMotion]);
   // 오버레이는 마운트 뒤에 와서 setLogo처럼 따로 넘긴다. 옵션으로 넘기면 오는 순간 경계 전체를 다시 지었다.
   useEffect(() => { motionRef.current?.setOverlay(overlay); }, [overlay, motionModule, reducedMotion]);
   useEffect(() => { motionRef.current?.setPaused(obscured || !pageVisible); }, [obscured, pageVisible, motionModule, reducedMotion]);
@@ -203,7 +206,7 @@ export default function HomeClient() {
         {HOME_SECTION_CONFIG.map(({ id, label }) => {
           const Section = id === SECTION_IDS.ABOUT || id === SECTION_IDS.PROJECTS || id === SECTION_IDS.EXPERIENCE || id === SECTION_IDS.SKILLS ? null : SECTION_COMPONENTS[id];
           return <div key={id} data-section={id} role="region" aria-label={label} tabIndex={-1} className="document-section">
-            {id === SECTION_IDS.EXPERIENCE ? <ExperienceSection lineArrived={motionFailed || lineArrived} overlay={overlay} /> : id === SECTION_IDS.SKILLS ? <SkillsSection headArrived={motionFailed || skillsHeadArrived} onHeadShown={releaseSkillsHead} /> : id === SECTION_IDS.PROJECTS ? <ProjectsSection ref={projectsRef} beforeAction={beforeProjectsAction} navigationPending={navigationTarget !== null} logoOwner={logoOwner} /> : Section ? <Section /> : <AboutSection ref={aboutRef} onChapterChange={setAboutChapter} navigationPending={navigationTarget !== null} logoOwner={logoOwner} />}
+            {id === SECTION_IDS.EXPERIENCE ? <ExperienceSection lineArrived={motionFailed || lineArrived} overlay={overlay} /> : id === SECTION_IDS.SKILLS ? <SkillsSection ref={setSkillsHead} headArrived={motionFailed || skillsHeadArrived} onHeadShown={releaseSkillsHead} /> : id === SECTION_IDS.PROJECTS ? <ProjectsSection ref={projectsRef} beforeAction={beforeProjectsAction} navigationPending={navigationTarget !== null} logoOwner={logoOwner} /> : Section ? <Section /> : <AboutSection ref={aboutRef} onChapterChange={setAboutChapter} navigationPending={navigationTarget !== null} logoOwner={logoOwner} />}
           </div>;
         })}
         {/* 공유 로고 host. About의 원형 마스크와 overflow-x: clip 밖, 문서 좌표에 산다.

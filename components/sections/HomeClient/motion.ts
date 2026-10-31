@@ -2,6 +2,7 @@ import type { CrystalizedBallHandle } from '@/components/blocks/CrystalizedBall'
 import type { ElectricLogoHandle } from '@/components/blocks/ElectricLogo';
 import { GATHER_SECONDS } from '@/components/sections/ExperienceSection/lineMotion';
 import type { ExperienceOverlay, GatherLetter } from '@/components/sections/ExperienceSection/overlay';
+import type { SkillsSectionHandle } from '@/components/sections/SkillsSection';
 import { clearCaptionReveal, revealCaption } from '@/components/sections/ProjectsSection/captionReveal';
 import { gsap, registerScrollTrigger, ScrollTrigger, SITE_EASE } from '@/lib/gsap';
 import { readingLineY } from '@/lib/utils/scrollGeometry';
@@ -15,6 +16,8 @@ export interface PortfolioMotion {
   setPaused(paused: boolean): void;
   setLogo(logo: ElectricLogoHandle | null): void;
   setOverlay(overlay: ExperienceOverlay | null): void;
+  // Skills 헤드 손잡이(늦게 와서 setLogo처럼 따로 받는다). Experience → Skills 넘김이 헤드를 맞바꾸는 데 쓴다.
+  setSkillsHead(head: SkillsSectionHandle | null): void;
   settleProjects(): void;
   // Skills가 도착한 자리에 제 헤드를 그렸다(Experience → Skills 넘김 헤드를 놓는다).
   releaseSkillsHead(): void;
@@ -771,6 +774,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       pose.t = 2;
       renderLogo();
     },
+    setSkillsHead: (next) => skillsHandoff.setSkillsHead(next),
     releaseSkillsHead: () => skillsHandoff.release(),
     destroy: () => {
       alive = false;

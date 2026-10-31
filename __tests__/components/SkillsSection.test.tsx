@@ -11,7 +11,8 @@ import { renderToString } from 'react-dom/server';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import gsap from 'gsap';
-import SkillsSection from '@/components/sections/SkillsSection';
+import SkillsSection, { type SkillsSectionHandle } from '@/components/sections/SkillsSection';
+import { createRef, type Ref } from 'react';
 import { SectionActivityProvider, type SectionActivityProviderProps } from '@/components/common/SectionActivityContext';
 import { SECTION_IDS } from '@/lib/constants';
 import { projects, skillCategories } from '@/lib/data';
@@ -29,7 +30,7 @@ const relations: Record<string, string[]> = {
 };
 const css = readFileSync(resolve(process.cwd(), 'styles/design-tokens.css'), 'utf8');
 
-function skillsWithActivity(state: Partial<Omit<SectionActivityProviderProps, 'children'>> = {}, props: { headArrived?: boolean; onHeadShown?: () => void } = {}) {
+function skillsWithActivity(state: Partial<Omit<SectionActivityProviderProps, 'children'>> = {}, props: { ref?: Ref<SkillsSectionHandle>; headArrived?: boolean; onHeadShown?: () => void } = {}) {
   return (
     <SectionActivityProvider obscured={false}
       routeResolved motionReady pageVisible reducedMotion={false} {...state}>
@@ -448,6 +449,23 @@ describe('SkillsSection signal map', () => {
     expect(linkD(container)).toMatch(/^M/);
     expectRevealed(container);
     expect(onHeadShown).toHaveBeenCalledTimes(1);
+  });
+
+  // Experience → Skills 넘김은 지점을 지난 scroll 안에서 손잡이로 헤드를 맞바꾼다. React 커밋을 기다리면 한 프레임 겹친다.
+  it('손잡이 setArrived(false)는 재렌더 없이 그 자리에서 헤드를 지우고 그리지 않으며, true면 다음 프레임에 다시 그린다', () => {
+    enableCanvas();
+    const ref = createRef<SkillsSectionHandle>();
+    render(skillsWithActivity({}, { ref }));
+    step(500);
+    const clears = contexts.at(-1)!.clearRect.mock.calls.length;
+    act(() => ref.current!.setArrived(false));
+    expect(contexts.at(-1)!.clearRect.mock.calls.length).toBe(clears + 1);
+    const drawn = gradients();
+    step(500);
+    expect(gradients()).toBe(drawn);
+    act(() => ref.current!.setArrived(true));
+    step(16);
+    expect(gradients()).toBeGreaterThan(drawn);
   });
 
   it('줄을 옮기면 헤드가 320ms에 새 줄에 닿고 옮기는 동안만 잔상을 그린다', () => {

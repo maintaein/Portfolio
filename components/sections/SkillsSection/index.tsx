@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useId, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { useId, useImperativeHandle, useLayoutEffect, useRef, useState, type CSSProperties, type Ref } from 'react';
 import { SECTION_IDS } from '@/lib/constants';
 import { projects, skillCategories } from '@/lib/data';
 import ScrollArea from '@/components/common/ScrollArea';
@@ -40,8 +40,11 @@ function rendered(view: { skill: Skill; leaving: string[] }) {
   return projects.filter((project) => view.skill.projects.includes(project) || view.leaving.includes(project.title));
 }
 
+// 넘김이 React를 거치지 않고 헤드를 바로 숨기거나 세운다. 같은 scroll 안에서 오버레이 헤드와 맞바꿔야 한 프레임도 겹치거나 비지 않는다.
+export interface SkillsSectionHandle { setArrived(arrived: boolean): void }
+
 // headArrived: Experience에서 넘어온 헤드가 도착했다. 도착한 뒤에 등장한다. onHeadShown: 도착 뒤 헤드를 처음 그렸다.
-export default function SkillsSection({ headArrived = true, onHeadShown }: { headArrived?: boolean; onHeadShown?: () => void } = {}) {
+export default function SkillsSection({ ref: handleRef, headArrived = true, onHeadShown }: { ref?: Ref<SkillsSectionHandle>; headArrived?: boolean; onHeadShown?: () => void } = {}) {
   const [view, setView] = useState({ skill: skills[0], leaving: [] as string[] });
   const selected = view.skill;
   const stageRef = useRef<HTMLDivElement>(null);
@@ -75,6 +78,8 @@ export default function SkillsSection({ headArrived = true, onHeadShown }: { hea
     return () => { graph.destroy(); graphRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [motionReady]);
+
+  useImperativeHandle(handleRef, () => ({ setArrived: (arrived) => graphRef.current?.setArrived(arrived) }), []);
 
   // 모션 감소의 정착(헤드 그리기)보다 먼저 도착 여부를 넘긴다.
   useLayoutEffect(() => { graphRef.current?.setArrived(headArrived); }, [headArrived, motionReady]);

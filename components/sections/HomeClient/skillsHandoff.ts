@@ -1,10 +1,13 @@
 import { buildHandoffTable, handoffCurveLength, handoffPose, type HandoffFrame, type HandoffTable } from '@/components/sections/ExperienceSection/handoff';
 import { measureTimeline } from '@/components/sections/ExperienceSection/geometry';
 import type { ExperienceOverlay } from '@/components/sections/ExperienceSection/overlay';
+import type { SkillsSectionHandle } from '@/components/sections/SkillsSection';
 import { gsap } from '@/lib/gsap';
 
 export interface SkillsHandoff {
   setOverlay(overlay: ExperienceOverlay | null): void;
+  // Skills 헤드 손잡이. 도착이 바뀌는 그 자리에서 헤드를 숨기거나 세운다(React 커밋을 기다리지 않는다).
+  setSkillsHead(head: SkillsSectionHandle | null): void;
   setPaused(paused: boolean): void;
   // Skills가 도착한 자리에 제 헤드를 그렸다. 잡아 둔 넘김 헤드를 놓는다.
   release(): void;
@@ -17,9 +20,6 @@ const TRIGGER = .7;
 const HOLD_SECONDS = .5;
 // 헤드를 Skills에 넘긴 뒤: 아무것도 그리지 않되 타임라인도 그리지 않는다
 const HANDED: HandoffFrame = { line: null, heads: [], head: null, ghosts: [] };
-// 도착한 자리(p 1)에서 거꾸로 출발할 때 첫 프레임을 늦추는 시간(초). 도착 아님은 React를 거쳐 다음 작업에서야 Skills 헤드를 지운다.
-// 지점을 지난 scroll과 같은 프레임에 넘김 헤드를 그리면 두 헤드가 한 프레임 겹쳤다(2026-10-31 실측). 120Hz에서도 한 프레임 넘게 늦춘다.
-const HIDE_SECONDS = .02;
 
 // Experience 선이 Skills 헤드로 빨려 가는 넘김의 재생. Projects → Experience 경계처럼 지점을 지나면 정해진 시간 동안 끝까지 돌고,
 // 되돌아 지나면 지금 진행도에서 거꾸로 돈다. 그림은 오버레이가, 쉬는 헤드는 Skills가 그린다. 아래쪽 입력은 막지 않는다(설계 판단).
@@ -36,6 +36,7 @@ export function createSkillsHandoff({ root, reduced, onArrive }: { root: HTMLEle
   let hold: gsap.core.Tween | null = null;
   let table: HandoffTable | null = null;
   let overlay: ExperienceOverlay | null = null;
+  let skillsHead: SkillsSectionHandle | null = null;
   // 오버레이에 넘김 프레임을 넘겨 둔 상태인가. 비울 때만 setHandoff(null)을 부른다.
   let shown = false;
   let arrived: boolean | null = null;
@@ -45,6 +46,8 @@ export function createSkillsHandoff({ root, reduced, onArrive }: { root: HTMLEle
   const report = (next: boolean) => {
     if (next === arrived) return;
     arrived = next;
+    // React 상태(onArrive)는 다음 작업에서야 커밋된다. 지점을 지난 scroll에서 오버레이 헤드와 같은 프레임에 맞바꾸려고 손잡이로 먼저 넘긴다.
+    skillsHead?.setArrived(next);
     onArrive(next);
   };
   const send = (frame: HandoffFrame | null) => {
@@ -104,9 +107,12 @@ export function createSkillsHandoff({ root, reduced, onArrive }: { root: HTMLEle
   const move = (next: number) => {
     goal = next;
     if (!next) report(false);
-    if (paused || document.hidden || !tailOnScreen() || pose.p === next) return land(next);
+    if (paused || document.hidden || !tailOnScreen()) return land(next);
     tween?.kill();
+    tween = null;
     stopHold();
+    // 아직 한 프레임도 가지 않은 채 되돌았다. 그 끝의 프레임을 다시 놓는다(1이면 Skills가 그릴 때까지 넘김 헤드를 잡아 둔다).
+    if (pose.p === next) return render();
     // 출발(0이나 1)할 때만 표를 만든다. 길의 시작은 지금 화면에 보이는 선의 윗끝이다(그 위는 이미 삼킨 것으로 친다).
     if (pose.p <= 0 || pose.p >= 1 || !table) {
       const t = measureTimeline(section!), y = window.scrollY;
@@ -114,9 +120,11 @@ export function createSkillsHandoff({ root, reduced, onArrive }: { root: HTMLEle
       table = buildHandoffTable(t.tail - top, handoffCurveLength({ axisX: t.axisX, tail: t.tail - y, target: target() }));
     }
     tween = gsap.to(pose, {
-      p: next, duration: Math.abs(next - pose.p) * table.total, ease: 'none', delay: pose.p >= 1 ? HIDE_SECONDS : 0,
+      p: next, duration: Math.abs(next - pose.p) * table.total, ease: 'none',
       onUpdate: render, onComplete: () => { tween = null; render(); },
     });
+    // 출발 프레임을 바로 보낸다. p 1에서 거꾸로 가면 위 report(false)가 Skills 헤드를 지운 같은 scroll에서 넘김 헤드가 선다.
+    render();
   };
   const decide = () => {
     if (!alive) return;
@@ -144,6 +152,9 @@ export function createSkillsHandoff({ root, reduced, onArrive }: { root: HTMLEle
 
   window.addEventListener('scroll', decide, { passive: true });
   window.addEventListener('resize', decide);
+  // 완료는 React가 늦게 쓴다. 한 번의 scroll이 완료와 지점을 함께 넘으면 그 scroll의 판정은 옛 값을 읽는다.
+  const completion = typeof MutationObserver === 'undefined' || !line ? null : new MutationObserver(decide);
+  completion?.observe(line!, { attributeFilter: ['data-complete'] });
   document.addEventListener('visibilitychange', onVisibility);
   decide();
 
@@ -158,6 +169,9 @@ export function createSkillsHandoff({ root, reduced, onArrive }: { root: HTMLEle
       goal = -1;
       decide();
     },
+    setSkillsHead(next) {
+      skillsHead = next;
+    },
     setPaused(next) {
       paused = next;
       if (next) finish();
@@ -171,6 +185,7 @@ export function createSkillsHandoff({ root, reduced, onArrive }: { root: HTMLEle
       send(null);
       window.removeEventListener('scroll', decide);
       window.removeEventListener('resize', decide);
+      completion?.disconnect();
       document.removeEventListener('visibilitychange', onVisibility);
     },
   };
