@@ -40,11 +40,15 @@ function rendered(view: { skill: Skill; leaving: string[] }) {
   return projects.filter((project) => view.skill.projects.includes(project) || view.leaving.includes(project.title));
 }
 
-export default function SkillsSection() {
+// headArrived: Experience에서 넘어온 헤드가 도착했다. 도착한 뒤에 등장한다. onHeadShown: 도착 뒤 헤드를 처음 그렸다.
+export default function SkillsSection({ headArrived = true, onHeadShown }: { headArrived?: boolean; onHeadShown?: () => void } = {}) {
   const [view, setView] = useState({ skill: skills[0], leaving: [] as string[] });
   const selected = view.skill;
   const stageRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<SkillGraph | null>(null);
+  // 그래프는 한 번 만들고, 부를 때마다 지금 받은 콜백을 쓴다.
+  const headShownRef = useRef(onHeadShown);
+  headShownRef.current = onHeadShown;
   // 두 번 마운트돼도 url(#…)이 남의 필터를 집지 않게 인스턴스마다 다른 id를 쓴다.
   const zapId = `skills-zap-${useId().replace(/[^\w-]/g, '')}`;
   const { routeResolved, motionReady, pageVisible, reducedMotion, obscured } = useSectionActivity();
@@ -65,11 +69,15 @@ export default function SkillsSection() {
     const graph = createSkillGraph(stageRef.current!, {
       reduced: reducedMotion,
       onGone: (title) => setView((prev) => prev.leaving.includes(title) ? { ...prev, leaving: prev.leaving.filter((item) => item !== title) } : prev),
+      onHeadShown: () => headShownRef.current?.(),
     });
     graphRef.current = graph;
     return () => { graph.destroy(); graphRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [motionReady]);
+
+  // 모션 감소의 정착(헤드 그리기)보다 먼저 도착 여부를 넘긴다.
+  useLayoutEffect(() => { graphRef.current?.setArrived(headArrived); }, [headArrived, motionReady]);
 
   useLayoutEffect(() => { graphRef.current?.setReduced(reducedMotion); }, [reducedMotion]);
 
@@ -82,9 +90,9 @@ export default function SkillsSection() {
   useLayoutEffect(() => {
     const graph = graphRef.current;
     if (!graph) return;
-    if (entered) graph.start();
+    if (entered && headArrived) graph.start();
     graph.setRunning(entered);
-  }, [entered, reducedMotion]);
+  }, [entered, reducedMotion, headArrived]);
 
   return (
     <section ref={ref} id={SECTION_IDS.SKILLS} aria-labelledby="skills-heading" className="skills-signal">
@@ -98,7 +106,7 @@ export default function SkillsSection() {
           className="signal-stage"
           aria-label="선택한 기술의 프로젝트 연결 지도"
         >
-          <span data-graph="head" className="signal-head" aria-hidden="true" />
+          <canvas data-graph="head" className="signal-head" aria-hidden="true" />
           <svg className="signal-lines" aria-hidden="true" focusable="false"><path data-graph="link" /></svg>
           <ScrollArea as="nav" className="signal-nav" aria-label="기술 선택">
             {skills.map((skill) => {

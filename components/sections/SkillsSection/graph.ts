@@ -1,4 +1,5 @@
 import gsap from 'gsap';
+import { createHeadLayer } from './headLayer';
 
 // Skills 그래프 모션. 승인 시안(.claude/designRefactoring2/skills-prototype)의 재출발 값 V와 상태 흐름, 수치를 옮겼다.
 // 전환은 A(겹치는 프로젝트는 남기고 재배선)뿐이다. 시간은 이 그래프의 가상 시계라 멈춘 동안 흐르지 않는다.
@@ -74,14 +75,17 @@ export interface SkillGraph {
   setRunning(on: boolean): void;
   // 모션 감소: 모든 값을 최종 상태에 놓고 돌지 않는다.
   setReduced(on: boolean): void;
+  // Experience에서 넘어온 헤드가 도착했는지. 도착 전에는 헤드를 그리지 않고, 풀리면 헤드→허브 선을 허브 쪽으로 걷는다.
+  setArrived(on: boolean): void;
   destroy(): void;
 }
 
-export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean; onGone: (title: string) => void }): SkillGraph {
+export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean; onGone: (title: string) => void; onHeadShown?: () => void }): SkillGraph {
   let vt = 0;
   const now = () => vt;
   const q = <T extends Element>(sel: string, root: ParentNode = stage) => root.querySelector<T>(sel)!;
-  const head = q<HTMLElement>('[data-graph="head"]');
+  const head = q<HTMLCanvasElement>('[data-graph="head"]');
+  const layer = createHeadLayer(head);
   const link = q<SVGPathElement>('[data-graph="link"]');
   const hub = q<HTMLElement>('[data-graph="hub"]');
   const iconA = q<HTMLElement>('[data-graph="icon-a"]'), iconB = q<HTMLElement>('[data-graph="icon-b"]');
@@ -90,6 +94,9 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
   const headY = new V(0, now), linkS = new V(0, now), hubA = new V(0, now);
   const nodes = new Map<string, Node>();
   let reduced = options.reduced, running = false, started = false, hubShown = false, dirty = true;
+  // arrived: 헤드가 와 있다. shown: 이번 도착 뒤 헤드를 그렸다. retract: 선을 허브 쪽 끝에서 그린다(걷히는 중).
+  // tailY는 줄을 옮길 때 헤드를 쫓는 꼬리 끝(임계 감쇠라 헤드를 지나치지 않는다). ringAt은 다시 도착한 시각(고리 펄스).
+  let arrived = true, shown = false, retract = false, tailY = 0, tailV = 0, ringAt = -1e9;
   let row = -1, order: string[] = [], pending: string[] = [], icon = '';
   // 허브 아이콘 모프(시안의 #zap). 번개처럼 일그러졌다 새 아이콘으로 맺힌다. t는 0~1.
   let morph: { to: string; t0: number; t: number } | null = null;
@@ -132,11 +139,18 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
     n.hubS.ease(0, 200, d + 220, easeInOut);
   };
   const enter = (n: Node, d: number, y: number) => { n.enterAt = now() + d; n.enterY = y; };
+  // 헤드를 바로 놓는다. 꼬리도 같은 자리라 잔상이 없다.
+  const placeHead = (y: number) => { headY.set(y); tailY = y; tailV = 0; };
+  const showHead = (time: number) => {
+    layer?.draw(geo.headX, headY.v, tailY, time, clamp(1 - (now() - ringAt) / 700));
+    // 캔버스가 없어도 부른다. 받는 쪽(넘김 오버레이)이 헤드를 잡아 둔 채 기다리지 않게 한다.
+    if (!shown) { shown = true; options.onHeadShown?.(); }
+  };
 
   // 모션 감소와 감소로 바뀌는 순간: 고른 노드는 다 자란 자리, 나머지는 사라진다.
   const settle = () => {
-    started = hubShown = true;
-    headY.set(geo.rows[row] ?? 0); linkS.set(1); hubA.set(1);
+    started = hubShown = true; retract = false;
+    placeHead(geo.rows[row] ?? 0); linkS.set(arrived ? 1 : 0); hubA.set(1);
     restIcon(icon);
     nodes.forEach((n, title) => {
       const k = order.indexOf(title);
@@ -147,6 +161,7 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
     });
     dirty = true;
     draw();
+    if (arrived) showHead(0);
   };
 
   const tick = () => {
@@ -188,8 +203,8 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
   const draw = () => {
     if (!dirty) return;
     dirty = false;
-    head.style.transform = `translate3d(0, ${headY.v}px, 0)`;
-    link.setAttribute('d', linkS.v > .001 ? curve(geo.headX + 12, headY.v, geo.hubX - 44, geo.hubY, linkS.v, .5) : '');
+    const hx = geo.headX + 12, ax = geo.hubX - 44;
+    link.setAttribute('d', linkS.v <= .001 ? '' : retract ? curve(ax, geo.hubY, hx, headY.v, linkS.v, .5) : curve(hx, headY.v, ax, geo.hubY, linkS.v, .5));
     hub.style.opacity = String(hubA.v);
     hub.style.transform = `scale(${.9 + .1 * hubA.v})`;
     nodes.forEach(n => {
@@ -219,9 +234,20 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
   // 시간은 실제대로 흘린다. 배경 때문에 프레임이 67~200ms인 기기에서 50ms 상한은 모션을 2~3배 늘였다(실측).
   // 500ms 넘는 멈춤은 gsap lagSmoothing이 먼저 33ms로 줄이고, 250~500ms 프레임만 여기서 끊는다. 아무것도 움직이지 않으면 스타일을 쓰지 않는다.
   const frame = (_time: number, deltaTime: number) => {
-    vt += Math.min(250, deltaTime);
+    const dt = Math.min(250, deltaTime);
+    vt += dt;
     if (tick()) dirty = true;
+    // 꼬리 끝은 헤드를 ω 13.6, ζ 1로 쫓는다. 프레임을 네 번 나눠 적분하고, 수치 오차로 헤드를 넘으면 헤드에 붙인다.
+    const w = 13.6, h = dt / 4000;
+    for (let i = 0; i < 4; i++) {
+      const gap = headY.v - tailY;
+      tailV += (w * w * gap - 2 * w * tailV) * h;
+      tailY += tailV * h;
+      if ((headY.v - tailY) * gap <= 0) { tailY = headY.v; tailV = 0; }
+    }
     draw();
+    // 와 있는 동안은 매 프레임 그린다(일렁임).
+    if (arrived) showHead(vt / 1000);
   };
 
   const sync = () => {
@@ -250,8 +276,9 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
     measure();
     if (reduced) { settle(); return; }
     nodes.forEach(n => (n.enterAt = null));
-    if (!started) headY.set(geo.rows[row] ?? 0);
-    else headY.spring(geo.rows[row] ?? 0, 0, 12, .72);
+    // 탄성 없이 320ms ease-in-out으로 새 줄에 간다. 꼬리 끝은 frame에서 쫓는다.
+    if (!started) placeHead(geo.rows[row] ?? 0);
+    else headY.ease(geo.rows[row] ?? 0, 320, 0, easeInOut);
     if (!started || !hubShown) { pending = order; restIcon(icon); }
     else {
       morphIcon(icon);
@@ -271,11 +298,12 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
 
   const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
     measure();
+    layer?.resize();
     if (reduced) settle();
     else {
       // 자리를 다시 잡는다. 탄성 없이 새 슬롯으로 옮긴다.
       nodes.forEach((n, title) => { const k = order.indexOf(title); if (k >= 0 && !n.y.tw) n.y.set(slot(k, order.length)); });
-      if (!headY.tw) headY.set(geo.rows[row] ?? 0);
+      if (!headY.tw) placeHead(geo.rows[row] ?? 0);
       draw();
     }
   });
@@ -303,6 +331,27 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
       gsap.ticker.remove(frame);
       measure();
       settle();
+    },
+    setArrived(on) {
+      if (on === arrived) return;
+      arrived = on;
+      if (!on) {
+        shown = false;
+        layer?.clear();
+        if (!started) return;
+        // 빈 자리에 매달리지 않게 허브 쪽으로 걷는다. 허브와 노드는 그대로 둔다.
+        retract = true;
+        if (reduced) linkS.set(0); else linkS.ease(0, 200, 0, easeInOut);
+        dirty = true;
+        draw();
+        return;
+      }
+      if (reduced) { settle(); return; }
+      ringAt = now();
+      if (!started) return;
+      // 노드 등장은 다시 하지 않는다. 선만 처음 등장 때처럼 다시 뻗는다.
+      retract = false;
+      linkS.spring(1, 0, 9.4);
     },
     destroy() {
       gsap.ticker.remove(frame);

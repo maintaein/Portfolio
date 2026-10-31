@@ -1072,17 +1072,14 @@ html[data-intro] .hero-ball { opacity: 0; }
 }
 
 .skills-signal .signal-head {
+  /* 헤드 열 위의 캔버스. 그래프가 빛 덩어리와 잔상을 무대 좌표로 그린다. 가운데가 --rail이다. */
   position: absolute;
   z-index: 3;
-  left: var(--rail);
+  left: calc(var(--rail) - 60px);
   top: 0;
-  width: 14px;
-  height: 14px;
-  margin: -7px 0 0 -7px;
-  border-radius: 50%;
-  background: #e9fdff;
-  box-shadow: 0 0 0 7px rgb(3 179 195 / .18), 0 0 18px 6px rgb(127 227 238 / .6);
-  transform: translateY(var(--row-top));
+  width: 120px;
+  height: 100%;
+  pointer-events: none;
 }
 
 .skills-signal :is(.signal-lines, .signal-node-lines) {

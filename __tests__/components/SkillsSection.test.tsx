@@ -15,6 +15,8 @@ import SkillsSection from '@/components/sections/SkillsSection';
 import { SectionActivityProvider, type SectionActivityProviderProps } from '@/components/common/SectionActivityContext';
 import { SECTION_IDS } from '@/lib/constants';
 import { projects, skillCategories } from '@/lib/data';
+import { drawOrb } from '@/components/sections/ExperienceSection/orb';
+import { K } from '@/components/sections/ExperienceSection/lineMotion';
 
 const visibleSkills = [
   'React', 'TypeScript', 'Next.js', 'Tailwind CSS',
@@ -27,14 +29,34 @@ const relations: Record<string, string[]> = {
 };
 const css = readFileSync(resolve(process.cwd(), 'styles/design-tokens.css'), 'utf8');
 
-function skillsWithActivity(state: Partial<Omit<SectionActivityProviderProps, 'children'>> = {}) {
+function skillsWithActivity(state: Partial<Omit<SectionActivityProviderProps, 'children'>> = {}, props: { headArrived?: boolean; onHeadShown?: () => void } = {}) {
   return (
     <SectionActivityProvider obscured={false}
       routeResolved motionReady pageVisible reducedMotion={false} {...state}>
-      <SkillsSection />
+      <SkillsSection {...props} />
     </SectionActivityProvider>
   );
 }
+
+// jsdom에는 2d 캔버스가 없다. ExperienceOverlay.test.ts처럼 모의 컨텍스트로 그리기 호출만 센다.
+// 매 프레임 호출을 다 기록하면 느려서 헤드를 보는 case만 켠다. 나머지는 컨텍스트 없음(헤드 생략) 경로다.
+type FakeContext = Record<string, ReturnType<typeof vi.fn>>;
+let contexts: FakeContext[];
+let canvas2d: boolean;
+function fakeContext(): FakeContext {
+  const store: Record<string | symbol, unknown> = {};
+  return new Proxy(store, {
+    get(target, key) {
+      if (!(key in target)) target[key] = key === 'createRadialGradient' ? vi.fn(() => ({ addColorStop: vi.fn() })) : vi.fn();
+      return target[key];
+    },
+    set(target, key, value) { target[key] = value; return true; },
+  }) as FakeContext;
+}
+const gradients = () => contexts.reduce((n, c) => n + c.createRadialGradient.mock.calls.length, 0);
+// 헤드는 잔상 다음, 고리 앞에 그린다. 고리가 없으면 마지막 방사 그라데이션의 y가 헤드 y다.
+const headY = () => contexts.at(-1)!.createRadialGradient.mock.calls.at(-1)![1] as number;
+const linkD = (container: HTMLElement) => container.querySelector('[data-graph="link"]')!.getAttribute('d');
 
 // 실제 ticker에는 등록하지 않고 콜백만 쥔다. jsdom의 rAF는 돌지 않아 시간은 테스트가 흘린다.
 let ticks: Set<gsap.TickerCallback>;
@@ -69,6 +91,11 @@ describe('SkillsSection signal map', () => {
       observe() {}
       disconnect() {}
     });
+    contexts = []; canvas2d = false;
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => {
+      if (!canvas2d) return null;
+      const c = fakeContext(); contexts.push(c); return c;
+    }) as unknown as HTMLCanvasElement['getContext']);
     ticks = new Set();
     added = vi.fn();
     vi.spyOn(gsap.ticker, 'add').mockImplementation((tick: Parameters<typeof gsap.ticker.add>[0]) => {
@@ -335,7 +362,7 @@ describe('SkillsSection signal map', () => {
     // 지연 청크가 풀릴 시간을 준다.
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 200)); });
     expect(screen.queryByTestId('skills-logo')).not.toBeInTheDocument();
-    expect(container.querySelector('canvas')).not.toBeInTheDocument();
+    expect(container.querySelector('canvas:not([data-graph="head"])')).not.toBeInTheDocument();
   });
 
   it('허브 아이콘은 고를 때 SVG 번개 모프(700ms)로 바뀌고 끝나면 필터 없이 새 아이콘에 선다', () => {
@@ -396,6 +423,87 @@ describe('SkillsSection signal map', () => {
     expect(css).toMatch(/\.signal-skill\s*\{[^}]*flex-shrink: 0/);
     expect(css).not.toMatch(/\.signal-nav[^}]*scrollbar-width: none/);
     expect(css).toMatch(/\.scroll-area::-webkit-scrollbar-button\s*\{[^}]*display: none/);
+  });
+
+  it('헤드가 도착하기 전에는 선도 헤드도 없고, 도착하면 진입이 시작되며 onHeadShown이 한 번 불린다', () => {
+    canvas2d = true;
+    const onHeadShown = vi.fn();
+    const { container, rerender } = render(skillsWithActivity({}, { headArrived: false, onHeadShown }));
+    step(1000);
+    expect(linkD(container)).toBe('');
+    expect(gradients()).toBe(0);
+    expect(onHeadShown).not.toHaveBeenCalled();
+    rerender(skillsWithActivity({}, { headArrived: true, onHeadShown }));
+    step(16);
+    expect(onHeadShown).toHaveBeenCalledTimes(1);
+    expect(gradients()).toBeGreaterThan(0);
+    step(3000);
+    expect(linkD(container)).toMatch(/^M/);
+    expectRevealed(container);
+    expect(onHeadShown).toHaveBeenCalledTimes(1);
+  });
+
+  it('줄을 옮기면 헤드가 320ms에 새 줄에 닿고 옮기는 동안만 잔상을 그린다', () => {
+    canvas2d = true;
+    // 줄마다 다른 y(156, 228, …)를 준다. jsdom은 레이아웃이 없어 모두 0이다.
+    vi.spyOn(HTMLElement.prototype, 'offsetTop', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.hasAttribute('data-skill-row') ? 156 + 72 * [...document.querySelectorAll('[data-skill-row]')].indexOf(this) : 0;
+    });
+    render(skillsWithActivity());
+    step(3000);
+    expect(headY()).toBe(156);
+    const frame = () => { const n = gradients(); step(16); return gradients() - n; };
+    const rest = frame();
+    fireEvent.click(screen.getByRole('button', { name: 'TypeScript' }));
+    step(144);
+    expect(frame()).toBeGreaterThan(rest);
+    expect(headY()).toBeGreaterThan(156);
+    expect(headY()).toBeLessThan(228);
+    step(160);
+    expect(headY()).toBe(228);
+    step(280);
+    expect(frame()).toBe(rest);
+    expect(headY()).toBe(228);
+  });
+
+  it('진입 뒤 도착이 풀리면 헤드→허브 선만 허브 쪽으로 200ms에 걷히고, 다시 도착하면 선만 다시 자란다', () => {
+    canvas2d = true;
+    const { container, rerender } = render(skillsWithActivity());
+    step(3000);
+    const thumbs = () => nodes(container).map((node) => node.querySelector<HTMLElement>('[data-part="thumb"]')!.style.maskImage);
+    rerender(skillsWithActivity({}, { headArrived: false }));
+    const drawn = gradients();
+    step(96);
+    // 허브 쪽 끝(hubX - 44, jsdom에서 -44)을 시작점으로 그린다.
+    expect(linkD(container)).toMatch(/^M-44 /);
+    step(112);
+    expect(linkD(container)).toBe('');
+    expect(gradients()).toBe(drawn);
+    expect(titles(container, 'in')).toEqual(WEB);
+    expect(thumbs().every((mask) => mask === 'none')).toBe(true);
+    rerender(skillsWithActivity({}, { headArrived: true }));
+    // 다시 도착하면 고리 펄스가 함께 그려진다.
+    const n = gradients(); step(16);
+    expect(gradients() - n).toBe(2);
+    for (let t = 0; t < 1500; t += 16) {
+      step(16);
+      expect(thumbs().every((mask) => mask === 'none')).toBe(true);
+    }
+    expect(linkD(container)).toMatch(/^M12 /);
+    expect(titles(container, 'in')).toEqual(WEB);
+  });
+
+  it('모션 감소에서 헤드는 time 0으로 멈춘 채 그려지고 ticker 없이 onHeadShown이 불린다', () => {
+    canvas2d = true;
+    const onHeadShown = vi.fn();
+    render(skillsWithActivity({ reducedMotion: true }, { onHeadShown }));
+    fireEvent.click(screen.getByRole('button', { name: 'Python' }));
+    expect(added).not.toHaveBeenCalled();
+    expect(onHeadShown).toHaveBeenCalledTimes(1);
+    const ref = fakeContext();
+    drawOrb(ref as unknown as CanvasRenderingContext2D, 0, 0, 12, 1, 0, 0, K);
+    const want = ref.lineTo.mock.calls;
+    expect(contexts.at(-1)!.lineTo.mock.calls.slice(-want.length)).toEqual(want);
   });
 
   it('keeps all eight skill descriptions and project names in server HTML', () => {
