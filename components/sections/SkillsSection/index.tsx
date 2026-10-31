@@ -98,7 +98,6 @@ export default function SkillsSection() {
           className="signal-stage"
           aria-label="선택한 기술의 프로젝트 연결 지도"
         >
-          <span data-graph="rail" className="signal-rail" aria-hidden="true" />
           <span data-graph="head" className="signal-head" aria-hidden="true" />
           <svg className="signal-lines" aria-hidden="true" focusable="false"><path data-graph="link" /></svg>
           <ScrollArea as="nav" className="signal-nav" aria-label="기술 선택">

@@ -49,7 +49,7 @@ const titles = (container: HTMLElement, state?: 'in' | 'out') =>
 function expectRevealed(container: HTMLElement) {
   for (const node of nodes(container)) {
     expect(node.dataset.state).toBe('in');
-    expect(node.querySelector<HTMLElement>('[data-part="thumb"]')!.style.clipPath).toBe('inset(0 0% 0 0)');
+    expect(node.querySelector<HTMLElement>('[data-part="thumb"]')!.style.maskImage).toBe('none');
     expect(node.querySelector('[data-line="hub"]')!.getAttribute('d')).toMatch(/^M/);
     expect(node.querySelector('[data-line="desc"]')!.getAttribute('d')).toMatch(/^M/);
     expect([...node.querySelectorAll<HTMLElement>('[data-part="text"] > *')].map((el) => el.style.opacity)).toEqual(['1', '1', '1']);
@@ -181,7 +181,7 @@ describe('SkillsSection signal map', () => {
     expect(titles(container)).toEqual(['PoseTive']);
     step(2000);
     const pose = container.querySelector<HTMLElement>('[data-project-node="PoseTive"]')!;
-    expect(pose.querySelector<HTMLElement>('[data-part="thumb"]')!.style.clipPath).toBe('inset(0 0% 0 0)');
+    expect(pose.querySelector<HTMLElement>('[data-part="thumb"]')!.style.maskImage).toBe('none');
   });
 
   it('전환 도중 다른 스킬을 고르면 마지막 선택의 노드 집합으로 끝난다', () => {
@@ -218,7 +218,7 @@ describe('SkillsSection signal map', () => {
     const check = () => {
       for (const node of nodes(container)) {
         expect(node.dataset.state).toBe('in');
-        expect(node.querySelector<HTMLElement>('[data-part="thumb"]')!.style.clipPath).toBe('inset(0 0% 0 0)');
+        expect(node.querySelector<HTMLElement>('[data-part="thumb"]')!.style.maskImage).toBe('none');
         for (const el of node.querySelectorAll<HTMLElement>('[data-part="text"] > *')) expect(el.style.opacity).toBe('1');
         expect(node.querySelector('[data-line="hub"]')!.getAttribute('d')).toMatch(/^M/);
         expect(node.querySelector('[data-line="desc"]')!.getAttribute('d')).toMatch(/^M/);
@@ -252,7 +252,7 @@ describe('SkillsSection signal map', () => {
     }
     step(3000);
     expect(styles(container)).not.toEqual(partial);
-    for (const node of nodes(container)) expect(node.querySelector<HTMLElement>('[data-part="thumb"]')!.style.clipPath).toBe('inset(0 0% 0 0)');
+    for (const node of nodes(container)) expect(node.querySelector<HTMLElement>('[data-part="thumb"]')!.style.maskImage).toBe('none');
   });
 
   it('keeps bare icons and focusable project links without the old surface drawing', () => {
@@ -291,13 +291,13 @@ describe('SkillsSection signal map', () => {
     const { container, rerender } = render(skillsWithActivity({ motionReady: false, reducedMotion: true }));
     rerender(skillsWithActivity());
     expect(container.querySelector('[data-graph="link"]')!.getAttribute('d')).toBe('');
-    expect(container.querySelector<HTMLElement>('[data-project-node] [data-part="thumb"]')!.style.clipPath).toBe('inset(0 100% 0 0)');
+    expect(container.querySelector<HTMLElement>('[data-project-node] [data-part="thumb"]')!.style.maskImage).toBe('linear-gradient(90deg, #000 -40%, transparent 0%)');
     localVisibility.visible = true;
     rerender(skillsWithActivity());
     expect(ticks.size).toBe(1);
     step(3000);
     expect(container.querySelector('[data-graph="link"]')!.getAttribute('d')).toMatch(/^M/);
-    expect(container.querySelector<HTMLElement>('[data-project-node] [data-part="thumb"]')!.style.clipPath).toBe('inset(0 0% 0 0)');
+    expect(container.querySelector<HTMLElement>('[data-project-node] [data-part="thumb"]')!.style.maskImage).toBe('none');
   });
 
   it('cleans up a running graph when reduced motion is enabled without replaying it', () => {
@@ -307,22 +307,22 @@ describe('SkillsSection signal map', () => {
     rerender(skillsWithActivity({ reducedMotion: true }));
     expect(ticks.size).toBe(0);
     expect(titles(container)).toEqual(['PoseTive']);
-    expect(container.querySelector<HTMLElement>('[data-project-node] [data-part="thumb"]')!.style.clipPath).toBe('inset(0 0% 0 0)');
+    expect(container.querySelector<HTMLElement>('[data-project-node] [data-part="thumb"]')!.style.maskImage).toBe('none');
     rerender(skillsWithActivity());
     expect(ticks.size).toBe(1);
     step(100);
-    expect(container.querySelector<HTMLElement>('[data-project-node] [data-part="thumb"]')!.style.clipPath).toBe('inset(0 0% 0 0)');
+    expect(container.querySelector<HTMLElement>('[data-project-node] [data-part="thumb"]')!.style.maskImage).toBe('none');
   });
 
   it('keeps direct-entry animation after StrictMode effect replay', () => {
     const { container } = render(<StrictMode>{skillsWithActivity()}</StrictMode>);
     expect(ticks.size).toBe(1);
     for (const node of nodes(container)) {
-      expect(node.querySelector<HTMLElement>('[data-part="thumb"]')!.style.clipPath).toBe('inset(0 100% 0 0)');
+      expect(node.querySelector<HTMLElement>('[data-part="thumb"]')!.style.maskImage).toBe('linear-gradient(90deg, #000 -40%, transparent 0%)');
     }
     step(3000);
     for (const node of nodes(container)) {
-      expect(node.querySelector<HTMLElement>('[data-part="thumb"]')!.style.clipPath).toBe('inset(0 0% 0 0)');
+      expect(node.querySelector<HTMLElement>('[data-part="thumb"]')!.style.maskImage).toBe('none');
     }
   });
 

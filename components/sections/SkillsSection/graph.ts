@@ -21,7 +21,8 @@ type Tween = { k: 's'; to: number; t0: number; w: number; z: number; from?: numb
 class V {
   v: number; to: number; tw: Tween | null = null;
   constructor(v: number, private now: () => number) { this.v = this.to = v; }
-  spring(to: number, delay = 0, w = 9.4, z = .5) { this.tw = { k: 's', to, t0: this.now() + delay, w, z }; this.to = to; }
+  // ζ .7은 약 5% 지나쳤다 돌아온다. 시안의 .5(16%)는 너무 튄다는 사용자 판단(2026-10-31).
+  spring(to: number, delay = 0, w = 9.4, z = .7) { this.tw = { k: 's', to, t0: this.now() + delay, w, z }; this.to = to; }
   ease(to: number, dur: number, delay = 0, f = easeOut) { this.tw = { k: 'e', to, t0: this.now() + delay, dur, f }; this.to = to; }
   set(v: number) { this.v = this.to = v; this.tw = null; }
   tick() {
@@ -83,7 +84,6 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
   const head = q<HTMLElement>('[data-graph="head"]');
   const link = q<SVGPathElement>('[data-graph="link"]');
   const hub = q<HTMLElement>('[data-graph="hub"]');
-  const rail = q<HTMLElement>('[data-graph="rail"]');
   const iconA = q<HTMLElement>('[data-graph="icon-a"]'), iconB = q<HTMLElement>('[data-graph="icon-b"]');
   const turb = q<SVGElement>('[data-graph="turb"]'), disp = q<SVGElement>('[data-graph="disp"]');
   const zap = turb.closest('filter')!.id;
@@ -103,7 +103,7 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
     morph = null;
     setIcon(iconA, src); iconA.style.opacity = '1'; iconB.style.opacity = '0'; hub.style.filter = '';
   };
-  let geo = { rail: 0, hubX: 0, hubY: 0, tx: 0, tw: 0, dot: 0, rows: [] as number[] };
+  let geo = { headX: 0, hubX: 0, hubY: 0, tx: 0, tw: 0, dot: 0, rows: [] as number[] };
 
   const slot = (k: number, n: number) => geo.hubY + (k - (n - 1) / 2) * GAP;
   const measure = () => {
@@ -111,7 +111,7 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
     const hubAt = offset(hub, stage);
     const thumb = first ? offset(first.thumb, stage).x : 0;
     geo = {
-      rail: offset(rail, stage).x + rail.offsetWidth / 2,
+      headX: offset(head, stage).x + head.offsetWidth / 2,
       hubX: hubAt.x + hub.offsetWidth / 2,
       hubY: hubAt.y + hub.offsetHeight / 2,
       tx: thumb,
@@ -164,8 +164,8 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
       }
       for (const v of [n.y, n.hubS, n.reveal, n.descS, n.text]) { busy ||= !!v.tw; v.tick(); }
       if (n.state === 'in') {
-        // 선이 썸네일 변에 닿는 순간 노드가 그 변에서 펼쳐지고, 펼쳐지는 도중 다음 선이 튀어나간다.
-        if (n.hubS.v >= .98 && n.reveal.to !== 1) { n.reveal.ease(1, 260); n.flashAt = now(); }
+        // 선이 썸네일 변에 닿기 직전부터 노드가 그 변에서 번져 나오고, 펼쳐지는 도중 다음 선이 뻗는다.
+        if (n.hubS.v >= .94 && n.reveal.to !== 1) { n.reveal.ease(1, 420); n.flashAt = now(); }
         if (n.reveal.v >= .7 && n.descS.to !== 1) n.descS.spring(1, 0, 12);
         if (n.descS.v >= .98 && n.text.to !== 1) n.text.ease(1, 320);
       } else if (n.state === 'out' && n.hubS.to === 0 && !n.hubS.tw) gone(title, n);
@@ -189,13 +189,15 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
     if (!dirty) return;
     dirty = false;
     head.style.transform = `translate3d(0, ${headY.v}px, 0)`;
-    link.setAttribute('d', linkS.v > .001 ? curve(geo.rail + 12, headY.v, geo.hubX - 44, geo.hubY, linkS.v, .5) : '');
+    link.setAttribute('d', linkS.v > .001 ? curve(geo.headX + 12, headY.v, geo.hubX - 44, geo.hubY, linkS.v, .5) : '');
     hub.style.opacity = String(hubA.v);
     hub.style.transform = `scale(${.9 + .1 * hubA.v})`;
     nodes.forEach(n => {
       const y = n.y.v, r = clamp(n.reveal.v), tx = clamp(n.text.v), flash = Math.exp(-(now() - n.flashAt) / 260);
       n.link.style.transform = `translate3d(0, ${y}px, 0)`;
-      n.thumb.style.clipPath = `inset(0 ${(1 - r) * 100}% 0 0)`;
+      // 경계가 40% 폭으로 번지는 닦아내기. 빛이 먼저 닿은 쪽이 밝았다가 원래 색으로 가라앉는다. 다 펼치면 마스크를 뗀다.
+      n.thumb.style.maskImage = r >= 1 ? 'none' : `linear-gradient(90deg, #000 ${r * 140 - 40}%, transparent ${r * 140}%)`;
+      n.thumb.style.filter = r >= 1 ? '' : `brightness(${1 + .8 * (1 - r)})`;
       n.edge.style.opacity = String(clamp(r * 4));
       n.edge.style.boxShadow = `-6px 0 ${18 + 26 * flash}px ${-10 + 8 * flash}px #7fe3ee`;
       n.dot.style.opacity = String(clamp(tx * 3));
