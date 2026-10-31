@@ -171,12 +171,13 @@ test.describe('접근성', () => {
     await expect(map.locator('[data-graph="hub"]')).toBeHidden();
   });
 
-  test('Skills 그래프는 Experience 선과 같은 x의 레일에서 키보드로 8개 기술을 고르고 프로젝트는 GitHub 새 탭 링크다', async ({ page }) => {
+  test('Skills 그래프는 Experience 선과 같은 x의 헤드 열에서 키보드로 8개 기술을 고르고 프로젝트는 GitHub 새 탭 링크다', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await enter(page, 'skills');
     const map = page.locator('[data-skill-map]');
     const center = (selector: string) => page.locator(selector).first().evaluate(el => { const box = el.getBoundingClientRect(); return box.left + box.width / 2; });
-    expect(Math.abs(await center('[data-graph="rail"]') - await center('[data-part="experience-axis"]'))).toBeLessThan(1);
+    // 레일은 빠졌다(b8a9311). 1440px부터 헤드 열이 Experience 축과 같은 x라 넘김이 곧은 세로선이다.
+    expect(Math.abs(await center('[data-graph="head"]') - await center('[data-part="experience-axis"]'))).toBeLessThan(1);
     const names = ['React', 'TypeScript', 'Next.js', 'Tailwind CSS', 'Python', 'React Query', 'Zustand', 'Figma'];
     await page.getByRole('button', { name: 'React', exact: true }).focus();
     for (const [index, name] of names.entries()) {
