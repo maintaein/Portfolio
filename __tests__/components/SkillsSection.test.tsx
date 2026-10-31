@@ -53,6 +53,13 @@ function fakeContext(): FakeContext {
     set(target, key, value) { target[key] = value; return true; },
   }) as FakeContext;
 }
+// 헤드 캔버스에 2d 컨텍스트를 주고, sized면 데스크톱처럼 크기(120×784)도 준다. jsdom은 레이아웃이 없어 크기가 0이다.
+function enableCanvas(sized = true) {
+  canvas2d = true;
+  if (!sized) return;
+  vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function (this: Element) { return this instanceof HTMLCanvasElement ? 120 : 0; });
+  vi.spyOn(Element.prototype, 'clientHeight', 'get').mockImplementation(function (this: Element) { return this instanceof HTMLCanvasElement ? 784 : 0; });
+}
 const gradients = () => contexts.reduce((n, c) => n + c.createRadialGradient.mock.calls.length, 0);
 // 헤드는 잔상 다음, 고리 앞에 그린다. 고리가 없으면 마지막 방사 그라데이션의 y가 헤드 y다.
 const headY = () => contexts.at(-1)!.createRadialGradient.mock.calls.at(-1)![1] as number;
@@ -426,7 +433,7 @@ describe('SkillsSection signal map', () => {
   });
 
   it('헤드가 도착하기 전에는 선도 헤드도 없고, 도착하면 진입이 시작되며 onHeadShown이 한 번 불린다', () => {
-    canvas2d = true;
+    enableCanvas();
     const onHeadShown = vi.fn();
     const { container, rerender } = render(skillsWithActivity({}, { headArrived: false, onHeadShown }));
     step(1000);
@@ -444,7 +451,7 @@ describe('SkillsSection signal map', () => {
   });
 
   it('줄을 옮기면 헤드가 320ms에 새 줄에 닿고 옮기는 동안만 잔상을 그린다', () => {
-    canvas2d = true;
+    enableCanvas();
     // 줄마다 다른 y(156, 228, …)를 준다. jsdom은 레이아웃이 없어 모두 0이다.
     vi.spyOn(HTMLElement.prototype, 'offsetTop', 'get').mockImplementation(function (this: HTMLElement) {
       return this.hasAttribute('data-skill-row') ? 156 + 72 * [...document.querySelectorAll('[data-skill-row]')].indexOf(this) : 0;
@@ -467,7 +474,7 @@ describe('SkillsSection signal map', () => {
   });
 
   it('진입 뒤 도착이 풀리면 헤드→허브 선만 허브 쪽으로 200ms에 걷히고, 다시 도착하면 선만 다시 자란다', () => {
-    canvas2d = true;
+    enableCanvas();
     const { container, rerender } = render(skillsWithActivity());
     step(3000);
     const thumbs = () => nodes(container).map((node) => node.querySelector<HTMLElement>('[data-part="thumb"]')!.style.maskImage);
@@ -493,8 +500,56 @@ describe('SkillsSection signal map', () => {
     expect(titles(container, 'in')).toEqual(WEB);
   });
 
+  it('걷히는 도중 다시 도착해도 선은 허브 쪽으로 다 걷힌 뒤 헤드 쪽에서 다시 자라고 한 프레임에 건너뛰지 않는다', () => {
+    const { container, rerender } = render(skillsWithActivity());
+    step(3000);
+    rerender(skillsWithActivity({}, { headArrived: false }));
+    step(96);
+    rerender(skillsWithActivity({}, { headArrived: true }));
+    const starts: string[] = [];
+    let end: number | null = null;
+    for (let t = 0; t < 1500; t += 16) {
+      step(16);
+      const d = linkD(container)!;
+      starts.push(d.split(' ')[0]);
+      if (!d) { end = null; continue; }
+      // 끝점이 프레임마다 조금씩만 움직인다(jsdom에서 선 길이는 56px).
+      const x = Number(d.split(' ').at(-2));
+      if (end !== null) expect(Math.abs(x - end)).toBeLessThan(10);
+      end = x;
+    }
+    // 시작점은 허브 쪽(-44)에서 빈 선을 거쳐야만 헤드 쪽(12)으로 바뀐다.
+    expect(starts.filter((v, i) => v !== starts[i - 1])).toEqual(['M-44', '', 'M12']);
+  });
+
+  it('헤드 층은 프레임마다 레이아웃을 읽지 않고, 크기가 0인 캔버스(모바일)에는 그리지 않는다', () => {
+    enableCanvas();
+    const reads = vi.fn();
+    for (const key of ['offsetLeft', 'offsetTop'] as const) {
+      vi.spyOn(HTMLElement.prototype, key, 'get').mockImplementation(function (this: HTMLElement) { if (this instanceof HTMLCanvasElement) reads(); return 0; });
+    }
+    const { unmount } = render(skillsWithActivity());
+    step(16);
+    reads.mockClear();
+    step(500);
+    expect(gradients()).toBeGreaterThan(0);
+    expect(reads).not.toHaveBeenCalled();
+    unmount();
+    vi.restoreAllMocks();
+    // beforeEach의 ticker와 getContext 모의를 다시 건다.
+    contexts = [];
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => { const c = fakeContext(); contexts.push(c); return c; }) as unknown as HTMLCanvasElement['getContext']);
+    vi.spyOn(gsap.ticker, 'add').mockImplementation((tick: Parameters<typeof gsap.ticker.add>[0]) => { ticks.add(tick); return tick; });
+    vi.spyOn(gsap.ticker, 'remove').mockImplementation((tick: Parameters<typeof gsap.ticker.remove>[0]) => { ticks.delete(tick); });
+    const onHeadShown = vi.fn();
+    render(skillsWithActivity({}, { onHeadShown }));
+    step(500);
+    expect(gradients()).toBe(0);
+    expect(onHeadShown).toHaveBeenCalledTimes(1);
+  });
+
   it('모션 감소에서 헤드는 time 0으로 멈춘 채 그려지고 ticker 없이 onHeadShown이 불린다', () => {
-    canvas2d = true;
+    enableCanvas();
     const onHeadShown = vi.fn();
     render(skillsWithActivity({ reducedMotion: true }, { onHeadShown }));
     fireEvent.click(screen.getByRole('button', { name: 'Python' }));

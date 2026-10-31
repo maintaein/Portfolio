@@ -168,6 +168,8 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
     let busy = false;
     // 이번 프레임에 트윈이 있었으면(끝나는 프레임 포함) 그린다.
     for (const v of [headY, linkS, hubA]) { busy ||= !!v.tw; v.tick(); }
+    // 걷혔으면(0에 닿으면) 그때 헤드 쪽에서 다시 뻗는다. 걷히는 도중에 기준점을 바꾸면 선이 한 프레임에 반대쪽 끝으로 건너뛴다.
+    if (arrived && started && linkS.to === 0 && !linkS.tw) { retract = false; linkS.spring(1, 0, 9.4); }
     if (linkS.v >= .98 && !hubShown) {
       hubShown = true; hubA.ease(1, 240);
       pending.forEach((title, k) => { const n = nodes.get(title); if (n) enter(n, 120 + k * 70, slot(k, pending.length)); });
@@ -340,18 +342,16 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
         layer?.clear();
         if (!started) return;
         // 빈 자리에 매달리지 않게 허브 쪽으로 걷는다. 허브와 노드는 그대로 둔다.
-        retract = true;
+        // 다 뻗어 쉬는 선만 기준점을 허브로 바꾼다(그때는 같은 곡선이다). 아직 뻗는 중이면 헤드 쪽으로 거둬 건너뛰지 않게 한다.
+        retract ||= !linkS.tw;
         if (reduced) linkS.set(0); else linkS.ease(0, 200, 0, easeInOut);
         dirty = true;
         draw();
         return;
       }
       if (reduced) { settle(); return; }
+      // 선은 tick이 걷힌 뒤 다시 뻗는다. 노드 등장은 다시 하지 않는다.
       ringAt = now();
-      if (!started) return;
-      // 노드 등장은 다시 하지 않는다. 선만 처음 등장 때처럼 다시 뻗는다.
-      retract = false;
-      linkS.spring(1, 0, 9.4);
     },
     destroy() {
       gsap.ticker.remove(frame);

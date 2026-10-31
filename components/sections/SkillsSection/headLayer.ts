@@ -15,11 +15,14 @@ const R = 12;
 export function createHeadLayer(canvas: HTMLCanvasElement): HeadLayer | null {
   const g = canvas.getContext('2d');
   if (!g) return null;
-  let dpr = 1;
+  // left·top은 CSS 상수라 여기서만 잰다. 매 프레임 읽으면 그래프가 스타일을 쓴 직후라 동기 레이아웃이 생긴다.
+  let dpr = 1, left = 0, top = 0;
   const resize = () => {
     dpr = Math.min(2, devicePixelRatio || 1);
     canvas.width = canvas.clientWidth * dpr;
     canvas.height = canvas.clientHeight * dpr;
+    left = canvas.offsetLeft;
+    top = canvas.offsetTop;
   };
   const clear = () => {
     g.setTransform(1, 0, 0, 1, 0, 0);
@@ -30,9 +33,11 @@ export function createHeadLayer(canvas: HTMLCanvasElement): HeadLayer | null {
     resize,
     clear,
     draw(x, y, tailY, time, ring) {
+      // 크기가 0이면(모바일에서 숨김) 그리지 않는다.
+      if (!canvas.width || !canvas.height) return;
       clear();
       // 캔버스는 무대 안 헤드 열에 있다. 그 왼쪽 위만큼 옮겨 무대 좌표로 그린다.
-      g.setTransform(dpr, 0, 0, dpr, -canvas.offsetLeft * dpr, -canvas.offsetTop * dpr);
+      g.setTransform(dpr, 0, 0, dpr, -left * dpr, -top * dpr);
       drawGhosts(g, ghostSpots(Math.abs(y - tailY)).map(s => ({ x, y: lerp(y, tailY, s.f), r: R * s.scale, a: s.a })), time);
       drawOrb(g, x, y, R, 1, 0, time, K);
       drawRing(g, x, y, R, ring);
