@@ -5,7 +5,7 @@ export const coreValues: CoreValue[] = [
       id: '1',
       title: '기본을 튼튼히 길러온 개발자',
       label: 'BASICS',
-      description: '약 2년 반 동안 개발 기초를 쌓고 프로젝트에 활용했습니다.\n\nWebGL 배경을 지연 로딩해 First Load JS를 369.7KB에서 166.3KB로 55% 줄여 LightHouse Performance를 90점 이상으로 개선했습니다.',
+      description: '약 2년 반 동안 개발 기초를 쌓고 프로젝트에 활용했습니다.\n\n 현재 포트폴리오 페이지에서 WebGL 배경을 지연 로딩해 First Load JS를 369.7KB에서 166.3KB로 55% 줄여 LightHouse Performance를 90점 이상으로 개선했습니다.',
       logoSrc: '/icons-mono/react.svg',
       evidenceStyle: 'metric',
       evidence: [
@@ -17,7 +17,7 @@ export const coreValues: CoreValue[] = [
       id: '2',
       title: '구현 이후를 고민하는 개발자',
       label: 'QUALITY',
-      description: '기능 구현을 프로젝트의 끝이라고 생각하지 않습니다.\n\n 파수에서 JS로 구현된 관리자페이지를 TS로 고도화해 타입 안정성을 확보하였으며, 반복적인 버전 업그레이드 작업의 효율성을 높였습니다.',
+      description: '기능 구현을 프로젝트의 끝이라고 생각하지 않습니다.\n\n JS로 구현했던 TUI 프로젝트를 TS로 고도화해 타입 안정성을 확보하였으며, 반복적인 버전 업그레이드나 리팩토링 작업의 효율성을 높였습니다.',
       logoSrc: '/about/fixtool.webp',
       evidenceStyle: 'metric',
       evidence: [

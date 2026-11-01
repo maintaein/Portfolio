@@ -36,15 +36,6 @@ export const tui: Project = {
       video:'/projects/TUI/demoApp.mp4'
     },
     {
-      category: '디자인 토큰 시스템',
-      items: [
-        'Theme Contract 기반 디자인 토큰 제공',
-        'TypeScript 자동완성으로 토큰 사용을 돕고, 존재하지 않는 토큰 참조를 컴파일 타임에 차단',
-      ],
-      intent: '디자인 기준을 토큰으로 관리해 컴포넌트 간 시각적 일관성을 유지하고 확장도 안전하게 할 수 있도록 설계했습니다.',
-      video:'/projects/TUI/designTokens.mp4'
-    },
-    {
       category: '빌드·배포 인프라',
       items: [
         '컴포넌트별 모듈 빌드로 필요한 컴포넌트만 소비자 번들에 포함되도록 구성',

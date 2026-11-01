@@ -8,9 +8,9 @@ export const experiences: Experience[] = [
       position: 'SW엔지니어 / 사원',
       period: '2025년 8월 ~ 현재',
       type: 'full-time',
-      description: '파수의 풀스택 SW 엔지니어로서 파수의 솔루션 개발 및 고객사 기술 지원을 수행하고 있습니다.',
+      description: '파수의 SW 엔지니어로서 파수의 솔루션 구축 및 고객사 기술 지원을 수행하고 있습니다.',
       responsibilities: [
-        '파수 솔루션 개발 및 고도화(FILM, FED 담당)',
+        '파수 솔루션 구축 및 고도화(Fasoo Enterprise DRM, WrapsodyEco)',
         '고객사 기술 지원, 솔루션 운영 및 유지보수',
         '소스코드/앱 보안 취약점 진단 및 개선'
       ],
