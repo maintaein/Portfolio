@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState, useCallback, type Ref } from 'react';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { isProjectModalReady } from '@/lib/utils/projectContract';
@@ -8,11 +8,26 @@ import { projects } from '@/lib/data';
 import { SECTION_IDS } from '@/lib/constants';
 import { setProjectModalObscured } from '@/hooks/useProjectModalObscured';
 import { useSectionActivity } from '@/components/common/SectionActivityContext';
-import type { Flip } from '@/lib/gsap';
+import { useSectionVisibility } from '@/hooks/useSectionVisibility';
+import { useChapterLock } from '@/hooks/useChapterLock';
+import { MUTED_ALPHA, drumItem, swipeOffset, swipeTarget, SWIPE_SLOP_PX } from './wheel';
+import { PREVIEW_CAPTION_SCRIM, clearCaptionReveal, hideCaption, revealCaption } from './captionReveal';
+import type { Flip, gsap } from '@/lib/gsap';
 import type { PreviewMorphHandle } from '@/components/blocks/PreviewMorph';
 
+// 상세 판 청크(또는 거기 딸린 GSAP 청크)를 못 받으면 lazy 렌더가 던져 페이지 전체가
+// 오류 화면으로 떨어졌다. 대신 열리자마자 닫아 History와 가림을 되돌린다. 누른
+// 이름은 선택만 된 채 페이지는 그대로 쓰인다.
+// shortcut: 실패한 청크는 이 페이지에서 다시 받지 않는다. 다시 시도가 필요해지면 loader를 열 때마다 부른다
+function ProjectModalUnavailable({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  useEffect(() => {
+    if (isOpen) onClose();
+  }, [isOpen, onClose]);
+  return null;
+}
+
 const ProjectModal = dynamic(
-  () => import('@/components/blocks/ProjectModal'),
+  () => import('@/components/blocks/ProjectModal').catch(() => ({ default: ProjectModalUnavailable })),
   { ssr: false }
 );
 
@@ -27,13 +42,20 @@ const DynamicPreviewMorph = dynamic(
       default: function PreviewMorphRefBridge({
         className,
         preload,
+        paused,
         onHandle,
       }: {
         className?: string;
         preload?: readonly string[];
+        paused?: boolean;
         onHandle: (handle: PreviewMorphHandle | null) => void;
       }) {
-        return <PreviewMorph ref={onHandle} className={className} preload={preload} />;
+        return <PreviewMorph ref={onHandle} className={className} preload={preload} paused={paused} />;
+      },
+    })).catch(() => ({
+      // 청크를 못 받으면 핸들이 오지 않아 모프 없는 전환으로 간다. 던지면 페이지 전체가 오류 화면이다
+      default: function PreviewMorphUnavailable() {
+        return null;
       },
     })),
   { ssr: false }
@@ -68,46 +90,20 @@ export function reconcileProjectModal(historyState: unknown): string | null {
   return id;
 }
 
-const MUTED = 'rgb(255 255 255 / 0.62)';
+const MUTED = `rgb(255 255 255 / ${MUTED_ALPHA})`;
 
-// 이름 목록의 휠 조형. 조형의 정본은
-// .claude/designRefactoring/optionWheel/optionWheel.tsx의 runFrame이고,
-// 여기로 옮겨 온 것은 배치 수학뿐이다. 휠 스크롤도 드래그도 순환도 안
-// 가져온다. 이 섹션에는 중첩 스크롤 계약이 이미 있어서 이름 위에서
-// wheel을 막으면 페이지 스크롤이 죽고, 여섯 개짜리 목록이 순환하면
-// 어디가 처음인지 사라진다. 선택은 클릭과 방향키로만 옮긴다. 호버도
-// 포커스도 선택을 옮기지 않는다.
-//
-// 값은 optionWheel의 기본값(항목 12개, 3rem 글자)이 아니라 우리 목록
-// (항목 여섯, 26px 글자)에 맞춘 것이다
-const WHEEL_TILT_DEG = 7; // 기본 6은 항목 12개의 곡률이다. 여섯이면 호가 직선으로 보인다
-const WHEEL_CURVE = 1;
-const WHEEL_BLUR_PX = 1.6; // 기본 2는 두 칸만 멀어져도 글자가 뭉갠다
-const WHEEL_FADE = 0.3; // 기본 0.25보다 세게. 항목이 적어 대비를 더 줘야 활성이 산다
-const WHEEL_MIN_OPACITY = 0.18; // 기본 0.05는 사실상 안 보인다. 몇 개인지가 이 목록의 정보다
+// 이름 목록의 휠. 화면 오른쪽 끝에 붙은 드럼이고 배치 수학은 ./wheel.ts의
+// drumItem이다(M4 Task 8). 휠 스크롤도 드래그도 순환도 optionWheel에서
+// 안 가져온다. 이 섹션의 세로 스크롤은 읽기 잠금(useChapterLock)의 것이고,
+// 여섯 개짜리 목록이 순환하면 어디가 처음인지 사라진다. 선택은 잠금의
+// 걸음, 클릭, 방향키로 옮기고 휠은 그 선택을 따라 돈다. 호버도 포커스도
+// 선택을 옮기지 않는다
 const WHEEL_SMOOTHING_MS = 200;
-// optionWheel의 side='right'. 호가 오른쪽으로 부풀어 활성 이름이 프리뷰에
-// 가장 가까운 자리에 남는다. 반대 부호였다면 먼 항목이 프리뷰 열을 침범한다
-const WHEEL_MIRROR = -1;
 // 모달이 열릴 때 휠의 나머지 이름이 벌어지는 폭과 블러. spread(0→1)가
 // 이 상수들에 곱해진다. 활성 항목(dist 0)은 안 받는다. 비행 손잡이가
 // 거기 있다
 const WHEEL_SPLIT_PX = 56;
 const WHEEL_SPLIT_BLUR_PX = 6;
-
-// 프리뷰 캡션 뒤 국소 그라데이션. 전면 카드로 덮지 않고 글자가 앉는
-// 아래쪽에만 깐다 - SkillsSection의 SKILL_DESCRIPTION_SCRIM, About의
-// ABOUT_SCRIMS_MOBILE와 같은 처방이고 방향(to top)도 같다. 알파 0.78도
-// SKILL_DESCRIPTION_SCRIM에서 가져온 값이다.
-//
-// 다만 저 둘과 달리 뒷배경이 Hyperspeed가 아니라 남의 앱 화면 녹화다.
-// 여섯 프로젝트 중 다섯이 밝은 테마라 캡션 뒤에 순백(255,255,255)이 그대로
-// 온다. 형제 섹션처럼 기울기를 계속 태우면 글자 윗줄이 알파 0.47 자리에
-// 앉아 대비가 3.25:1까지 내려간다(크롬 실측). 그래서 위 두 정지점의 알파를
-// 같게 두어 글자가 앉는 구간 전체를 평평한 0.78로 만들고, 기울기는 글자가
-// 없는 위쪽 여백(pt-12)에서만 진다. 어느 줄이 어디에 앉든 뒤가 같은 알파다
-const PREVIEW_CAPTION_SCRIM =
-  'linear-gradient(to top, rgb(0 0 0 / 0.78) 0%, rgb(0 0 0 / 0.78) 62%, rgb(0 0 0 / 0.3) 84%, rgb(0 0 0 / 0) 100%)';
 
 // 프로젝트가 갈릴 때 미디어 겹이 자리를 잡는 시간. --animate-duration-base와
 // 같은 값이다. 이름을 훑으면 매번 오는 전환이라 길면 걸리적거린다
@@ -117,17 +113,6 @@ const PREVIEW_SWAP_MS = 300;
 // 정본은 styles/design-tokens.css의 워드마크 flip 지속 변수다. HomeClient도
 // 같은 값을 복제해 둔다. 숫자 하나 때문에 공유 모듈을 파지 않는다
 const FLIP_DURATION_MS = 500;
-
-// 상세에서 돌아온 뒤 캡션이 들어오는 시간. 비행(500ms)보다 길다. 이 등장은
-// 비행이 다 끝나고 혼자 도는 구간이라 서둘 이유가 없고, 천천히 열려야 띠와
-// 글자가 한 몸으로 읽힌다
-const CAPTION_ENTER_MS = 800;
-
-// 캡션이 왼쪽부터 열릴 때 쓰는 두 끝값. 오른쪽 변만 움직이므로 왼쪽 끝에
-// 붙은 채로 폭이 자란다. 네 값 모두 같은 단위로 적어야 GSAP이 문자열을
-// 숫자 단위로 갈라 보간한다
-const CAPTION_CLIP_CLOSED = 'inset(0% 100% 0% 0%)';
-const CAPTION_CLIP_OPEN = 'inset(0% 0% 0% 0%)';
 
 // 제목만 100ms 더 날린다. 사용자가 글자 비행을 조금 느리게 보고 싶다고
 // 했다. 100ms는 느리다고 느껴지되 이미지와 따로 논다고 느껴지지는 않는
@@ -152,6 +137,12 @@ function asKillable(value: unknown): { kill: () => void } | null {
   return value && typeof (value as { kill?: unknown }).kill === 'function'
     ? (value as { kill: () => void })
     : null;
+}
+
+// 캡션 드러냄을 끊는 자리(전환, 다시 열기, lg 경계, 모션 감소)가 함께 쓴다
+function clearPreviewCaption(layer: HTMLElement | null) {
+  const caption = layer?.querySelector<HTMLElement>('[data-part="preview-caption"]');
+  if (caption) clearCaptionReveal(caption);
 }
 
 // 비행 동안 stage와 셸 사이 조상들의 자르기를 걷어야 한다. 증거 열에 걸린
@@ -210,9 +201,27 @@ function snapshotMedia(
   return canvas;
 }
 
-export default function ProjectsSection() {
-  const { routeResolved, motionReady, reducedMotion, heroRevealed } =
+// 읽기 잠금(M4 Task 7)의 한 걸음 간격. PreviewMorph의 녹음(DURATION_S .72초)과 이름 휠의 감쇠(WHEEL_SMOOTHING_MS의 네 배,
+// 98%)가 둘 다 끝난 뒤에 다음 프로젝트로 간다. 녹는 도중에 다음 녹음이 끼면 앞 그림이 반쯤 녹은 채 끊긴다.
+// PreviewMorph를 정적으로 부르면 three가 첫 번들에 딸려 와서 값을 가져오지 않고 적는다(테스트가 둘을 견준다).
+export const PROJECT_STEP_MS = 800;
+
+export interface ProjectsSectionHandle { release(): void }
+// 스크롤 인계 중의 입력이 원래 동작을 한 번만 하게 하는 관문(M4 Task 2). 셸이 정착을 마친 뒤 runOriginal을 동기로 한 번 부른다.
+// 없으면 바로 실행한다. 의도(눌린 인덱스, 이미 고른 이름인지, 방향)는 정착 전에 잡아 closure에 담는다.
+export interface ProjectsSectionProps {
+  beforeAction?: (runOriginal: () => void) => void;
+  // 명시적 이동 중이면 새 읽기 잠금을 잡지 않는다(About과 같다).
+  navigationPending?: boolean;
+  // 공유 로고의 자리(HomeClient motion.ts의 LogoOwner). 프리뷰로 날아오는 동안(preview)은 잠금을 미루고 내려앉으면(projects) 건다.
+  logoOwner?: 'hero' | 'about' | 'boundary' | 'preview' | 'projects' | 'none';
+}
+
+export default function ProjectsSection({ ref, beforeAction, navigationPending = false, logoOwner = 'none' }: ProjectsSectionProps & { ref?: Ref<ProjectsSectionHandle> } = {}) {
+  const { routeResolved, motionReady, reducedMotion, pageVisible, obscured } =
     useSectionActivity();
+  const { ref: visibilityRef, visible, hasEntered } = useSectionVisibility<HTMLElement>();
+  const decorationActive = visible && pageVisible && !obscured;
   const [activeIndex, setActiveIndex] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
   // 상세 판 내용의 등장 소유권은 ProjectModal에 있다. 여기는 비행과 셸 배경과
@@ -238,6 +247,15 @@ export default function ProjectsSection() {
   const spreadTweenRef = useRef<{ kill: () => void } | null>(null);
   const sectionRef = useRef<HTMLElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
+  const previewOpenRef = useRef<HTMLButtonElement | null>(null);
+  const [wide, setWide] = useState(true);
+  useEffect(() => {
+    const query = window.matchMedia?.(WIDE_QUERY);
+    const update = () => setWide(query?.matches ?? true);
+    update();
+    query?.addEventListener('change', update);
+    return () => query?.removeEventListener('change', update);
+  }, []);
   // 프로젝트 전환 tween이 붙는 겹. previewRef 자신이 아니라 그 안쪽이다 -
   // openModal이 Flip.getState(previewRef)로 뜨는 것은 previewRef의
   // getBoundingClientRect이고, 자식에 걸린 transform은 거기 안 섞인다.
@@ -245,13 +263,11 @@ export default function ProjectsSection() {
   // 않는 이유가 이것이다. 프리뷰 자신에 걸었다면 openModal에서 tween을
   // 먼저 죽여야 했을 것이다
   const mediaLayerRef = useRef<HTMLDivElement | null>(null);
-  const swapTweenRef = useRef<{ kill: () => void } | null>(null);
+  const swapTweenRef = useRef<gsap.core.Tween | null>(null);
+  const swappedIndexRef = useRef(activeIndex);
   // 비행 앞뒤로 접힘 프리뷰(previewRef 자신)에 거는 opacity tween. 전환
   // tween(swapTweenRef, mediaLayerRef 담당)과는 대상도 시점도 다르다
   const previewTweenRef = useRef<{ kill: () => void } | null>(null);
-  // 닫기 비행에서만 도는 캡션 등장 tween. 프리뷰 상자 전체를 채우는
-  // previewTweenRef와 대상도 구간도 다르므로 ref를 따로 둔다
-  const captionTweenRef = useRef<{ kill: () => void } | null>(null);
   // 셰이더 모프의 명령형 손잡이. next/dynamic이 늦게 풀어 주므로 처음 몇
   // 프레임은 null이고, 그동안의 전환은 아래 gsap 폴백이 맡는다
   const morphHandleRef = useRef<PreviewMorphHandle | null>(null);
@@ -320,9 +336,10 @@ export default function ProjectsSection() {
   }, [modalOpen]);
 
   useEffect(() => {
+    // 청크를 못 받으면 모듈 없이 둔다. 비행 관문이 닫혀 GSAP 없는 길로 열고 닫는다
     import('@/lib/gsap').then((mod) => {
       gsapModuleRef.current = mod;
-    });
+    }).catch(() => {});
   }, []);
 
   // 프로젝트 전환. 이 모션이 전하는 것 하나: "보고 있는 프로젝트가 바뀌었다".
@@ -333,7 +350,11 @@ export default function ProjectsSection() {
   // 이전 것을 죽이고 다음을 태운다
   useEffect(() => {
     activeIndexRef.current = activeIndex;
+    if (swappedIndexRef.current === activeIndex) return;
+    swappedIndexRef.current = activeIndex;
     const layer = mediaLayerRef.current;
+    // 글자 줄이 새 프로젝트 것으로 갈린다. 반쯤 든 줄과 새 줄이 섞이지 않게 드러냄을 끝낸다
+    clearPreviewCaption(layer);
     swapTweenRef.current?.kill();
     swapTweenRef.current = null;
     // 이 전환을 셰이더 모프가 맡았으면 겹에는 아무것도 걸지 않는다. 두 화면을
@@ -343,27 +364,43 @@ export default function ProjectsSection() {
     if (!layer) return;
     const mod = gsapModuleRef.current;
     // reduce에서는 즉시 교체로 무너진다. 죽은 tween이 남긴 transform도 걷는다
-    if (morphed || !mod || !motionReady || reducedMotion) {
+    if (morphed || !mod || reducedMotion) {
       layer.style.removeProperty('transform');
       layer.style.removeProperty('opacity');
       return;
     }
     mod.registerGsap();
-    swapTweenRef.current = asKillable(
-      mod.gsap.fromTo(
-        layer,
-        { opacity: 0, scale: 1.06, yPercent: 3 },
-        {
-          opacity: 1,
-          scale: 1,
-          yPercent: 0,
-          duration: PREVIEW_SWAP_MS / 1000,
-          ease: mod.SITE_EASE,
-          clearProps: 'transform',
-        }
-      )
+    swapTweenRef.current = mod.gsap.fromTo(
+      layer,
+      { opacity: 0, scale: 1.06, yPercent: 3 },
+      {
+        opacity: 1,
+        scale: 1,
+        yPercent: 0,
+        duration: PREVIEW_SWAP_MS / 1000,
+        paused: !motionReady || !decorationActive,
+        ease: mod.SITE_EASE,
+        clearProps: 'transform',
+      }
     );
-  }, [activeIndex, motionReady, reducedMotion]);
+  }, [activeIndex, motionReady, reducedMotion, decorationActive]);
+
+  useEffect(() => {
+    if (reducedMotion) {
+      swapTweenRef.current?.kill();
+      swapTweenRef.current = null;
+      mediaLayerRef.current?.style.removeProperty('transform');
+      mediaLayerRef.current?.style.removeProperty('opacity');
+    } else {
+      swapTweenRef.current?.paused(!motionReady || !decorationActive);
+    }
+  }, [motionReady, reducedMotion, decorationActive]);
+
+  // lg 경계를 넘거나 모션 감소로 바뀌면 도는 캡션 드러냄을 끝낸다. 누가 시작했든(motion.ts의 첫 진입이든
+  // 상세에서 돌아온 것이든) 캡션 요소 하나에 묶여 있어 여기서 같이 걷힌다
+  useEffect(() => {
+    clearPreviewCaption(mediaLayerRef.current);
+  }, [wide, reducedMotion]);
 
   // 모달이 사라지면 남은 비행과 재진입 잠금을 푼다. 정상 닫기에서는 이미 끝난
   // tween을 한 번 더 kill할 뿐이지만, popstate가 비행 중에 모달을 걷어가는
@@ -410,50 +447,16 @@ export default function ProjectsSection() {
     // 프리뷰가 처음으로 온전히 보이는 순간이기 때문이다. 비행이 도는 500ms
     // 안에 열어 봐야 소용이 없다. 그 구간의 프리뷰 상자는 바로 위
     // previewTween이 투명에서 채우는 중인 데다, 착지하는 stage가 그 위를
-    // 덮고 내려앉아 무엇을 움직여도 화면에 안 나온다. 미리 닫아 두는 것은
+    // 덮고 내려앉아 무엇을 움직여도 화면에 안 나온다. 미리 감춰 두는 것은
     // closeModal이 비행을 띄우는 시점에 이미 해 두었다.
-    // 어둠 띠와 글자가 같은 길이로 같이 움직여 한 덩어리로 들어온다.
-    // 비행 도중에 모달이 걷혀 갔거나(popstate) 애초에 안 열렸다면 열 것이
-    // 없으니 인라인 값만 걷는다
-    captionTweenRef.current?.kill();
-    captionTweenRef.current = null;
+    // 드러냄은 처음 들어올 때(motion.ts)와 같은 함수다(M4 Task 14).
+    // 비행 도중에 모달이 걷혀 갔거나(popstate) 애초에 안 열렸다면 감춤만 걷는다
     const captionEl = mediaLayerRef.current?.querySelector<HTMLElement>(
       '[data-part="preview-caption"]'
     );
-    const captionTextEl = mediaLayerRef.current?.querySelector<HTMLElement>(
-      '[data-part="preview-caption-text"]'
-    );
-    const captionMod = flipModule();
-    if (captionEl && captionTextEl && returning && captionMod) {
-      const seconds = CAPTION_ENTER_MS / 1000;
-      const bandTween = captionMod.gsap.to(captionEl, {
-        clipPath: CAPTION_CLIP_OPEN,
-        duration: seconds,
-        ease: captionMod.SITE_EASE,
-        clearProps: 'clipPath',
-      });
-      const textTween = captionMod.gsap.to(captionTextEl, {
-        xPercent: 0,
-        opacity: 1,
-        duration: seconds,
-        ease: captionMod.SITE_EASE,
-        clearProps: 'transform,opacity',
-      });
-      captionTweenRef.current = {
-        kill: () => {
-          bandTween.kill();
-          textTween.kill();
-        },
-      };
-    } else {
-      if (captionEl) {
-        gsapModuleRef.current?.gsap.set(captionEl, { clearProps: 'clipPath' });
-      }
-      if (captionTextEl) {
-        gsapModuleRef.current?.gsap.set(captionTextEl, {
-          clearProps: 'transform,opacity',
-        });
-      }
+    if (captionEl) {
+      if (returning && flipModule()) revealCaption(captionEl);
+      else clearCaptionReveal(captionEl);
     }
 
     // 닫기 비행이 프리뷰 상자에 얹어 둔 다리를 크로스페이드로 걷는다
@@ -502,6 +505,8 @@ export default function ProjectsSection() {
   // wasOpenRef가 없으면 첫 mount에서도 돌아 페이지를 열자마자 Projects
   // 이름 버튼으로 포커스를 훔쳐 간다
   const wasOpenRef = useRef(false);
+  // 돌려주는 포커스가 읽기 잠금을 걸어 닫힌 자리에서 페이지를 끌어오지 않게 한다(M4 Task 7)
+  const restoringFocusRef = useRef(false);
 
   useEffect(() => {
     if (modalOpen) {
@@ -512,11 +517,20 @@ export default function ProjectsSection() {
     wasOpenRef.current = false;
 
     const raf = requestAnimationFrame(() => {
-      const opener = nameRefs.current[activeIndex];
+      // lg 아래에는 이름 목록이 없다(M4 Task 8). 숨은 이름에 focus()를 보내면 아무 일도 없이 포커스가 문서 바닥으로 떨어진다.
+      // 그때는 모바일의 열기 단추로 돌려준다.
+      const name = nameRefs.current[activeIndex];
+      // checkVisibility가 없는 브라우저(Safari 17.4 전)는 목록 칸이 display none인지로 본다. offsetParent·getClientRects는 jsdom에서 늘 비어 쓰지 않는다
+      const hidden = !!name && (typeof name.checkVisibility === 'function'
+        ? !name.checkVisibility()
+        : getComputedStyle(name.closest('[data-part="index"]')?.parentElement ?? name).display === 'none');
+      const opener = hidden ? previewOpenRef.current : name;
       const usable =
         !!opener?.isConnected && !opener.closest('[inert], [aria-hidden="true"]');
       const fallback = sectionRef.current?.closest<HTMLElement>('[data-section]') ?? null;
+      restoringFocusRef.current = true;
       (usable ? opener : fallback)?.focus({ preventScroll: true });
+      restoringFocusRef.current = false;
     });
     return () => cancelAnimationFrame(raf);
   }, [modalOpen, activeIndex]);
@@ -570,6 +584,8 @@ export default function ProjectsSection() {
     (i: number) => {
       const mod = flipModule();
       openedIndexRef.current = i;
+      // 상세가 덮는다. 들어오던 캡션은 끝값으로 두어야 닫고 돌아올 때 다시 감출 수 있다
+      clearPreviewCaption(mediaLayerRef.current);
       // 이름 노드는 눌린 인덱스로 집는다. handleNameClick이 goTo(i)를 먼저
       // 부르지만 그건 비동기 상태 갱신이라 이 시점 DOM의 활성 이름은 아직
       // 이전 것일 수 있다 - activeIndex로 집으면 엉뚱한 노드가 날아간다
@@ -744,27 +760,14 @@ export default function ProjectsSection() {
           })
         );
 
-        // 돌아간 화면에서 왼쪽부터 열릴 캡션을 지금 미리 닫아 둔다. 실제로
-        // 여는 것은 모달이 다 내려간 뒤이고(modalOpen 정리 effect), 닫기만
+        // 돌아간 화면에서 들어올 캡션을 지금 미리 감춰 둔다. 실제로
+        // 들여보내는 것은 모달이 다 내려간 뒤이고(modalOpen 정리 effect), 감추기만
         // 여기서 하는 이유는 이 순간의 프리뷰 상자가 아직 투명이라 캡션이
-        // 사라지는 장면 자체가 안 보이기 때문이다.
-        // 어둠 띠는 clip으로 연다. 띠를 글자처럼 밀면 민 폭만큼 오른쪽 끝이
-        // 안 어두운 채로 남는다. clip은 자리를 안 옮기니 그 구간이 안 생긴다.
-        // 그림도 모프 캔버스도 그대로다
+        // 사라지는 장면 자체가 안 보이기 때문이다. 그림도 모프 캔버스도 그대로다
         const captionEl = previewLayer?.querySelector<HTMLElement>(
           '[data-part="preview-caption"]'
         );
-        const captionTextEl = previewLayer?.querySelector<HTMLElement>(
-          '[data-part="preview-caption-text"]'
-        );
-        captionTweenRef.current?.kill();
-        captionTweenRef.current = null;
-        if (captionEl) {
-          mod.gsap.set(captionEl, { clipPath: CAPTION_CLIP_CLOSED });
-        }
-        if (captionTextEl) {
-          mod.gsap.set(captionTextEl, { xPercent: -8, opacity: 0 });
-        }
+        if (captionEl) hideCaption(captionEl);
 
         flightRef.current = asKillable(
           mod.Flip.fit(stageEl, previewEl, {
@@ -1000,63 +1003,47 @@ export default function ProjectsSection() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 휠 배치 한 프레임. 단추는 흐름에 그대로 서 있고 여기서 주는 것은 그
-  // 평평한 자리에서의 어긋남이다. d가 0인 활성 항목은 x와 rot은 항등이지만
-  // y는 아니다. 휠의 중심은 목록의 세로 한가운데로 고정이고, 활성 항목이
-  // 항상 그 자리에 오도록 centerShift((CENTER - pos) * rowH)를 더한다.
-  // reduce 경로는 이 인라인 스타일을 안 걸기만 하면 지금의 평평한 목록으로
-  // 그대로 돌아간다.
+  // 휠 배치 한 프레임. 단추는 흐름에 그대로 서 있고(오른쪽 정렬) 여기서
+  // 주는 것은 그 평평한 자리에서 드럼 위 자리로의 어긋남이다(./wheel.ts
+  // drumItem). 드럼의 가운데는 목록의 세로 한가운데로 고정이고, i번째
+  // 이름의 흐름 자리를 그리로 옮기는 (CENTER - i) * rowH를 더한다. 활성
+  // 이름은 기울기·배율이 항등이고 x만 프리뷰 쪽으로 부푼다. 그 부풂만큼
+  // 목록 왼쪽에 여백이 잡혀 있다(JSX의 pl). reduce 경로는 이 인라인
+  // 스타일을 안 걸기만 하면 평평한 오른쪽 정렬 목록으로 돌아간다.
   //
   // filter와 opacity는 단추가 받고 안쪽 span은 깨끗이 둔다. filter가 걸린
   // 요소는 새 스택 문맥을 만들고 자손의 fixed 기준을 바꾸는데, 그 span이
   // 제목 비행의 손잡이다
   const applyWheel = useCallback((pos: number) => {
     const els = nameRefs.current;
-    // 줄 높이는 단추의 실제 높이로 잰다. 글자 크기가 lg에서 갈리므로 상수로
-    // 박으면 좁은 화면에서 호가 어긋난다. 첫 항목 하나로 전부를 대표하는 것은
-    // 단추의 whitespace-nowrap이 모든 줄을 한 줄로 지켜 줄 간격을 균일하게
-    // 만들기 때문이다
+    // 줄 높이는 단추의 실제 높이로 잰다. 글자 크기가 화면 높이를 따라가므로
+    // 상수로 박을 수 없다. 첫 항목 하나로 전부를 대표하는 것은 단추의
+    // whitespace-nowrap이 모든 줄을 한 줄로 지켜 줄 간격을 균일하게
+    // 만들기 때문이다. 못 재면(첫 그림, 숨은 목록) 0이고 drumItem이 자리를
+    // 안 옮긴다
     const rowH = els[0]?.offsetHeight ?? 0;
-    const tiltRad = (WHEEL_TILT_DEG * Math.PI) / 180;
-    // 이웃 두 항목 사이 호의 길이가 줄 높이와 같아지는 반지름. tilt가 곧
-    // 얼마나 말리는가다
-    // 줄 높이를 아직 못 재면(첫 그림, 숨은 섹션) rowH가 0이고 R도 0이라
-    // 아래 R > 0 가지가 통째로 안 돈다. 호만 안 걸리고 거리 표현은 산다
-    const R = rowH / tiltRad;
-    // 고른 항목은 흐름상 pos * rowH 자리에 있다. 이 항을 더하면 그 자리가
-    // 항상 정확히 목록의 세로 한가운데(CENTER * rowH)로 옮겨진다, pos가
-    // 무엇이든 같다. rowH가 0이면 이 항도 0이라 위 NaN 방지와 안 부딪힌다
-    const centerShift = (CENTER - pos) * rowH;
     // 모달이 열리며 벌어지는 정도(0→1). handleStageMount·closeModal의
     // tween이 이 값을 매 프레임 바꾸고 applyWheel을 다시 부른다
     const spread = wheelSpreadRef.current.v;
-    const blurScale = window.innerWidth < 1024 ? 0.45 : 1;
     for (let i = 0; i < N; i += 1) {
       const el = els[i];
       if (!el) continue;
       const d = i - pos;
       const dist = Math.abs(d);
-      let x = 0;
-      let y = centerShift;
-      let rot = 0;
-      if (R > 0) {
-        const ang = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, d * tiltRad));
-        y = R * Math.sin(ang) - d * rowH + centerShift;
-        x = -WHEEL_MIRROR * R * (1 - Math.cos(ang)) * WHEEL_CURVE;
-        rot = (WHEEL_MIRROR * ang * 180) / Math.PI;
-      }
-      let opacity = Math.max(WHEEL_MIN_OPACITY, 1 - dist * WHEEL_FADE);
+      const item = drumItem(i, pos, N, rowH);
+      let y = item.y + (CENTER - i) * rowH;
+      let opacity = item.opacity;
       // 활성 항목에는 blur를 아예 안 건다. blur(0px)도 none이 아닌 이상
       // 겹을 하나 만들고, 이 단추 안에 비행 출발 손잡이가 들어 있다
-      let blurPx = dist > 0 ? dist * WHEEL_BLUR_PX * blurScale : 0;
+      let blurPx = item.blur;
       // spread는 활성이 아닌 항목만 받는다. 활성(dist 0)의 span은 S-5가
       // 따로 감춘다. 여기서 더 손대면 그 감춤과 겹친다
       if (dist > 0) {
         y += spread * d * WHEEL_SPLIT_PX;
         opacity *= 1 - spread;
-        blurPx += spread * WHEEL_SPLIT_BLUR_PX * blurScale;
+        blurPx += spread * WHEEL_SPLIT_BLUR_PX;
       }
-      el.style.transform = `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) rotate(${rot.toFixed(3)}deg)`;
+      el.style.transform = `translate(${item.x.toFixed(2)}px, ${y.toFixed(2)}px) rotate(${item.rot.toFixed(3)}deg) scale(${item.scale.toFixed(4)}, ${item.scaleY.toFixed(4)})`;
       el.style.opacity = String(opacity);
       el.style.filter = blurPx > 0 ? `blur(${blurPx.toFixed(2)}px)` : 'none';
       el.style.setProperty(
@@ -1129,6 +1116,7 @@ export default function ProjectsSection() {
       clearWheel();
       return;
     }
+    if (!decorationActive && !modalOpen) return;
     if (modalOpen) {
       // 새로고침으로 복구된 모달은 openModal을 안 거치므로 snapWheel도 안
       // 불렸다. 여기서 못박지 않으면 휠 pos가 마운트 기본값에 멈춘 채라,
@@ -1149,7 +1137,7 @@ export default function ProjectsSection() {
       if (wheelRafRef.current != null) cancelAnimationFrame(wheelRafRef.current);
       wheelRafRef.current = null;
     };
-  }, [activeIndex, modalOpen, reducedMotion, startWheel, applyWheel, clearWheel, snapWheel]);
+  }, [activeIndex, modalOpen, reducedMotion, decorationActive, startWheel, applyWheel, clearWheel, snapWheel]);
 
   // 클릭과 키보드가 이 하나로 선택을 옮긴다. focus 옵션은 키보드 경로
   // 전용이다. 포커스 자체는 선택을 옮기지 않는다. mousedown이 클릭보다
@@ -1170,6 +1158,29 @@ export default function ProjectsSection() {
     if (opts?.focus) nameRefs.current[next]?.focus();
   }, []);
 
+  const runAction = useCallback((run: () => void) => (beforeAction ? beforeAction(run) : run()), [beforeAction]);
+
+  // About과 같은 읽기 잠금(M4 Task 7). 제스처 하나가 goTo 한 번이고 끝을 넘는 제스처는 문서로 돌려준다(순환하지 않는다).
+  // 위에서 들어오면 첫 프로젝트, Experience에서 올라오면 마지막 프로젝트다. 포커스가 목록에 있으면 고른 이름으로 따라간다.
+  const chapterLock = useChapterLock({
+    ref: sectionRef,
+    count: N,
+    current: () => activeIndexRef.current,
+    choose: index => goTo(index, { focus: !!sectionRef.current?.querySelector('[data-part="index"]')?.contains(document.activeElement) }),
+    // 진입 자리에서 먼저 고정한다. About·Hero 쪽에 있거나 날아오는 동안에는 걸음만 막고, 프리뷰에 내려앉으면 넘긴다.
+    logo: logoOwner === 'preview' ? 'flying' : logoOwner === 'projects' || logoOwner === 'none' ? 'landed' : 'away',
+    awayDefers: true,
+    pinWhileFlying: true,
+    stepMs: PROJECT_STEP_MS,
+    disabled: reducedMotion,
+    blocked: navigationPending || obscured,
+    // 휠은 lg 위에만 있고 글자 크기(곧 드럼 크기)를 화면 높이로 잡아 늘 들어온다(M4 Task 8). 그래서 잠금은 About과 같이
+    // 모션 감소와 짧은 화면에서만 꺼지고, 휠이 없는 lg 아래에서는 세로 스크롤을 잡지 않는다(가로 끌기로 넘긴다).
+    fits: () => window.matchMedia?.(WIDE_QUERY).matches ?? true,
+  });
+  const { release: releaseLock, select: selectProject } = chapterLock;
+  useImperativeHandle(ref, () => ({ release: releaseLock }), [releaseLock]);
+
   // 첫 클릭은 선택만 옮긴다. 이미 고른 이름을 다시 클릭해야 상세를 연다 -
   // 목록을 훑다가 실수로 상세가 펼쳐지지 않게 하는 장치다. 이미 그 항목인지는
   // activeIndex state가 아니라 activeIndexRef.current로 본다. goTo가 그 ref를
@@ -1179,14 +1190,20 @@ export default function ProjectsSection() {
   const handleNameClick = useCallback(
     (i: number) => {
       const alreadyActive = i === activeIndexRef.current;
-      goTo(i);
-      if (alreadyActive && isProjectModalReady(projects[i])) {
-        // 비행보다 먼저다. 출발 rect를 뜨는 것이 openModal 안이라 순서가 계약이다
-        if (!reducedMotion) snapWheel(i);
-        openModal(i);
-      }
+      runAction(() => {
+        // 잠기지 않았으면 그 프로젝트로 잠근다(About의 chapter 단어 클릭과 같다). 잠금이 꺼져 있으면 고르기만 한다.
+        // 로고가 프리뷰로 날아오는 동안의 클릭은 관문이 비행을 제자리에 정착시키고 고르기만 한다(Task 2). 페이지를 옮기지 않는다.
+        // 진입에서 이미 고정했다면 그대로 유지한다. 진입 전의 미룬 잠금만 버려 착지가 누른 이름을 되돌리지 않게 한다(Task 2·7 B1).
+        if (logoOwner === 'preview') { if (!chapterLock.locked) releaseLock(); goTo(i); }
+        else selectProject(i);
+        if (alreadyActive && isProjectModalReady(projects[i])) {
+          // 비행보다 먼저다. 출발 rect를 뜨는 것이 openModal 안이라 순서가 계약이다
+          if (!reducedMotion) snapWheel(i);
+          openModal(i);
+        }
+      });
     },
-    [goTo, openModal, snapWheel, reducedMotion]
+    [runAction, selectProject, releaseLock, goTo, logoOwner, openModal, snapWheel, reducedMotion, chapterLock.locked]
   );
 
   // 프리뷰 클릭은 이름의 두 번째 클릭과 같다. 이미 고른 프로젝트를 다시
@@ -1194,51 +1211,159 @@ export default function ProjectsSection() {
   // 순서는 handleNameClick과 같다: snapWheel이 openModal보다 먼저다
   const handlePreviewClick = useCallback(() => {
     const i = activeIndexRef.current;
-    if (!isProjectModalReady(projects[i])) return;
-    if (!reducedMotion) snapWheel(i);
-    openModal(i);
-  }, [openModal, snapWheel, reducedMotion]);
+    runAction(() => {
+      if (!isProjectModalReady(projects[i])) return;
+      if (!reducedMotion) snapWheel(i);
+      openModal(i);
+    });
+  }, [runAction, openModal, snapWheel, reducedMotion]);
 
   const handleIndexKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLElement>) => {
+      // 읽기 잠금이 켜진 화면에서 위아래 방향키는 잠금의 것이다(About의 chapter 단어와 같다). 한 번에 한 걸음이고
+      // 끝에서는 순환하지 않고 문서로 돌려준다. 여기서도 받으면 한 번 누름이 두 걸음이 된다. Home·End는 늘 목록의 것이다
+      if (!chapterLock.plain && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) return;
       let next: number | null = null;
-      if (event.key === 'ArrowUp') next = (activeIndex - 1 + N) % N;
-      else if (event.key === 'ArrowDown') next = (activeIndex + 1) % N;
+      // 끝에서 순환하지 않는다(M4 Task 8). 휠이 돌아 처음으로 감기면 어디가 처음인지 사라진다. 끝의 누름은 페이지에 그대로 둔다
+      if (event.key === 'ArrowUp') next = activeIndex > 0 ? activeIndex - 1 : null;
+      else if (event.key === 'ArrowDown') next = activeIndex < N - 1 ? activeIndex + 1 : null;
       else if (event.key === 'Home') next = 0;
       else if (event.key === 'End') next = N - 1;
 
       if (next === null) return;
       event.preventDefault();
-      goTo(next, { focus: true });
+      const to = next;
+      runAction(() => goTo(to, { focus: true }));
     },
-    [activeIndex, goTo]
+    [activeIndex, goTo, runAction, chapterLock.plain]
   );
+
+  // lg 아래의 이전·다음(M4 Task 8). 휠이 없는 화면에서 포인터 없이 넘기는 길이다. 끝에서는 순환하지 않는다
+  const stepProject = useCallback((dir: 1 | -1) => {
+    const to = activeIndexRef.current + dir;
+    if (to >= 0 && to < N) runAction(() => goTo(to));
+  }, [goTo, runAction]);
+
+  // lg 아래의 가로 끌기(M4 Task 8). 프리뷰를 왼쪽으로 끌면 다음, 오른쪽이면 이전 프로젝트로 녹아 넘어간다(goTo의 모프).
+  // touch-action: pan-y라 세로 끌기는 브라우저가 페이지 스크롤로 가져가고 pointercancel이 온다. 끄는 동안 프리뷰는 저항을
+  // 받으며 따라오고 끝에서는 고무줄처럼 늘었다가 돌아온다. 끈 뒤에 오는 click은 삼켜 끌기가 상세를 열지 않게 한다.
+  // 따라오는 것은 프리뷰 상자의 바깥 틀이다. 프리뷰 상자는 로고 착지의 앵커이자 FLIP 손잡이이고, 그 첫 자식은 motion.ts가 쓴다
+  const swipeRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ id: number; x: number; y: number; lastX: number; lastT: number; v: number; horizontal: boolean | null } | null>(null);
+  const draggedRef = useRef(false);
+  // 끌기를 그만두고 따라오던 자리를 제자리로 돌린다
+  const settleSwipe = useCallback(() => {
+    const el = swipeRef.current;
+    if (!el) return;
+    // 감속 곡선은 SITE_EASE_CUBIC(lib/gsap)과 같은 값이고 길이는 --animate-duration-base다. gsap을 정적으로 부르지 않으려고 값만 옮겨 적는다
+    el.style.transition = `transform ${PREVIEW_SWAP_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
+    el.style.removeProperty('transform');
+  }, []);
+  const handleSwipeDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    // 끌기가 남아 있는데 또 눌렸으면 따라오던 자리를 지운다. 두 번째 손가락(isPrimary 아님)은 끌기를 그만두게만 한다(핀치일 수 있다).
+    // 첫 손가락의 떼기를 놓친 채 새로 누른 주 포인터는 새 끌기를 시작한다
+    const stale = dragRef.current;
+    dragRef.current = null;
+    if (stale) {
+      settleSwipe();
+      if (!event.isPrimary) return;
+    }
+    draggedRef.current = false;
+    if (event.button !== 0 || window.matchMedia?.(WIDE_QUERY).matches) return;
+    dragRef.current = { id: event.pointerId, x: event.clientX, y: event.clientY, lastX: event.clientX, lastT: event.timeStamp, v: 0, horizontal: null };
+  }, [settleSwipe]);
+  const handleSwipeMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || event.pointerId !== drag.id) return;
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+    if (drag.horizontal === null) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_SLOP_PX) return;
+      drag.horizontal = Math.abs(dx) > Math.abs(dy);
+      if (!drag.horizontal) { dragRef.current = null; return; }
+      draggedRef.current = true;
+      swipeRef.current?.setPointerCapture?.(event.pointerId);
+    }
+    const dt = event.timeStamp - drag.lastT;
+    if (dt > 0) drag.v = (event.clientX - drag.lastX) / dt;
+    drag.lastX = event.clientX;
+    drag.lastT = event.timeStamp;
+    const el = swipeRef.current;
+    if (el && !reducedMotion) {
+      el.style.transition = 'none';
+      el.style.transform = `translateX(${swipeOffset(dx, activeIndexRef.current, N).toFixed(1)}px)`;
+    }
+  }, [reducedMotion]);
+  // pointercancel(브라우저가 세로 스크롤로 가져감)도 이 길로 와서 제자리로 돌아가고 넘기지는 않는다
+  const handleSwipeEnd = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || event.pointerId !== drag.id) return;
+    dragRef.current = null;
+    if (!drag.horizontal) return;
+    settleSwipe();
+    if (event.type !== 'pointerup') return;
+    // 손을 멈췄다 놓았으면 튕긴 것이 아니다. 마지막 움직임이 100ms보다 오래됐으면 속도를 버린다
+    const velocity = event.timeStamp - drag.lastT > 100 ? 0 : drag.v;
+    const to = swipeTarget(event.clientX - drag.x, velocity, activeIndexRef.current, N);
+    if (to !== null) runAction(() => goTo(to));
+  }, [goTo, runAction, settleSwipe]);
+  const stepButton = (dir: 1 | -1) => (
+    <button
+      type="button"
+      data-step={dir}
+      aria-label={dir < 0 ? '이전 프로젝트' : '다음 프로젝트'}
+      aria-disabled={dir < 0 ? activeIndex === 0 : activeIndex === N - 1}
+      onClick={() => stepProject(dir)}
+      className="size-11 grid place-items-center text-t5 text-[var(--color-text-secondary)] aria-disabled:opacity-30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)]"
+    >
+      <span aria-hidden="true">{dir < 0 ? '‹' : '›'}</span>
+    </button>
+  );
+  // 끌기 뒤 click이 안 오는 경우(터치)에 표시가 남아도 키보드의 click(detail 0)은 삼키지 않는다
+  const handleSwipeClick = useCallback((event: React.MouseEvent) => {
+    if (!draggedRef.current || event.detail === 0) return;
+    draggedRef.current = false;
+    event.preventDefault();
+    event.stopPropagation();
+  }, []);
 
   return (
     <section
-      ref={sectionRef}
+      ref={node => { sectionRef.current = node; visibilityRef.current = node; }}
       id={SECTION_IDS.PROJECTS}
-      // min-h-full은 .section-scroll(absolute inset-0)의 확정 높이를 받는다.
-      // h-screen을 쓰면 푸터 띠와 헤더를 두 번 빼야 해서 무대와 어긋난다.
-      // 세로 가운데는 justify-center가 아니라 자식의 my-auto로 잡는다 -
-      // 내용이 무대보다 길어지면 auto 여백이 0으로 접혀 위에서부터 흐르고,
-      // justify-center였다면 위쪽이 스크롤로 닿지 않는 자리에 잘린다
+      data-locked={chapterLock.locked}
+      // The document section supplies viewport height while content can grow.
       className="py-6 px-10 min-h-full flex flex-col"
     >
       <h2 className="sr-only">Projects</h2>
 
-      <div className="my-auto grid grid-cols-1 lg:grid-cols-[3fr_2fr]">
-        {/* 좁은 화면에서는 프리뷰가 w-full이라 justify-center가 할 일이 없다.
-            lg에서만 3fr 열 안의 80% 프리뷰를 가로 가운데로 민다 */}
-        <div className="flex items-center justify-center">
+      {/* 프리뷰는 왼쪽 열을 쓰고 휠은 오른쪽 끝에 붙는다.
+          휠 열은 가장 긴 이름의 굵은 글자 너비를 확보해 선택이 바뀌어도 폭이 같다.
+          두 열은 세로 가운데를 공유한다 */}
+      <div className="my-auto grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+        {/* lg 아래의 가로 끌기 표면. 끄는 동안 이 틀이 손가락을 따라간다(handleSwipeMove).
+            pan-y라 세로 끌기는 페이지 스크롤로 간다 */}
+        <div
+          ref={swipeRef}
+          data-part="preview-swipe"
+          className="flex items-center justify-center lg:justify-start max-lg:touch-pan-y"
+          onPointerDown={handleSwipeDown}
+          onPointerMove={handleSwipeMove}
+          onPointerUp={handleSwipeEnd}
+          onPointerCancel={handleSwipeEnd}
+          onClickCapture={handleSwipeClick}
+        >
           {/* 같은 data-flip-id를 가진 노드가 화면에 둘이면 Flip이 짝을 못
-              짓는다. 펼침이 살아 있는 동안은 접힘 쪽 손잡이를 뗀다 */}
+              짓는다. 펼침이 살아 있는 동안은 접힘 쪽 손잡이를 뗀다.
+              About 로고가 이 상자로 내려앉는다(HomeClient motion.ts). 경계는
+              이 상자를 재기만 하고, 쓰는 것은 아래 자르는 틀과 목록뿐이다 */}
           <div
             ref={previewRef}
             data-part="preview"
-            aria-hidden="true"
+            data-motion-anchor="projects-preview"
             data-flip-id={modalOpen ? undefined : `pv-${activeProject.title}`}
-            className="w-full lg:w-[80%] aspect-video"
+            // 데스크톱 프리뷰는 폭 75%를 유지하고 열 너비의 8%만큼 오른쪽으로 옮긴다. 모바일은 전체 폭이다
+            className="w-full lg:w-3/4 lg:ml-[8%] aspect-video"
           >
             {/* 자르는 쪽이 여기다. 그림은 object-cover로 상자를 넘치므로
                 반경만 줘서는 모서리가 안 깎인다. rounded-media는 상세 판
@@ -1249,7 +1374,7 @@ export default function ProjectsSection() {
               className="relative h-full w-full overflow-hidden rounded-media"
               style={{ background: 'rgb(255 255 255 / 0.06)' }}
             >
-            <div ref={mediaLayerRef} data-part="preview-media" className="absolute inset-0">
+            <div ref={mediaLayerRef} data-part="preview-media" aria-hidden="true" className="absolute inset-0">
               {mediaError ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-center px-4">
                   <span className="text-[13px] tabular-nums" style={{ color: MUTED }}>
@@ -1268,7 +1393,7 @@ export default function ProjectsSection() {
                   src={activeProject.image}
                   alt={activeProject.title}
                   fill
-                  sizes="(max-width: 1024px) 100vw, 660px"
+                  sizes="(min-width: 1024px) 45vw, calc(100vw - 80px)"
                   className="object-cover pointer-events-none"
                   onError={handleMediaError}
                 />
@@ -1279,18 +1404,19 @@ export default function ProjectsSection() {
                   읽힌다. 평소에는 opacity 0이고 rAF도 안 돈다. reduce에서는
                   아예 만들지 않는다(셰이더에 분기를 넣는 것보다 캔버스를
                   안 만드는 쪽이 싸다) */}
-              {motionReady && heroRevealed && !reducedMotion ? (
+              {motionReady && hasEntered && !reducedMotion ? (
                 <DynamicPreviewMorph
                   className="pointer-events-none absolute inset-0 h-full w-full"
                   preload={PROJECT_IMAGE_PATHS}
+                  paused={!decorationActive}
                   onHandle={handleMorphHandle}
                 />
               ) : null}
 
               {/* 그림 아래쪽에 늘 깔리는 어둠 띠. 캡션 글자가 어느 그림 위에
                   앉든 같은 바닥을 받게 한다. 상세를 한 번도 안 연 화면과 갔다
-                  온 화면이 달라 보이면 안 되므로 띠는 상시로 있고, 상세에서
-                  돌아올 때만 clip으로 왼쪽부터 열린다.
+                  온 화면이 달라 보이면 안 되므로 띠는 상시로 있고, 처음 들어올 때와
+                  상세에서 돌아올 때만 잡음을 따라 아래부터 찬다(captionReveal).
                   absolute라 subtitle이 있든 없든 프리뷰 높이가 안 흔들린다
                   (FLIP 출발 좌표가 곧 이 높이다). 오류 화면에는 이미 제목이
                   크게 있어 통째로 뺀다 */}
@@ -1300,11 +1426,9 @@ export default function ProjectsSection() {
                   className="pointer-events-none absolute inset-x-0 bottom-0 px-5 pb-4 pt-12"
                   style={{ background: PREVIEW_CAPTION_SCRIM }}
                 >
-                  {/* 자리를 옮기는 것은 이 안쪽 묶음뿐이다. 바깥 띠까지 같이
-                      밀면 민 폭만큼 오른쪽 끝이 안 어두운 채로 남아서, 띠는
-                      clip으로 연다. 프리뷰 컨테이너에 aria-hidden이 걸려
-                      있으므로 이 글자는 장식이고, 같은 내용을 오른쪽 이름
-                      목록이 이미 스크린리더에 준다. 그래서 이름 목록보다 작고
+                  {/* 떠오르는 것은 이 안쪽 묶음의 줄들뿐이다. 미디어 겹에 aria-hidden이 걸려
+                      있으므로 이 글자는 장식이다. 데스크톱은 오른쪽 이름 목록이,
+                      모바일은 프리뷰 열기 단추가 제목을 읽어 준다. 그래서 이름 목록보다 작고
                       흐리다. 같은 제목이 화면에 둘이니 어느 쪽이 주인공인지
                       크기와 색으로 갈라야 한다. subtitle은 선택 필드이고 TDS
                       것에는 리터럴 줄바꿈이 들어 있는데, HTML 공백 접기가
@@ -1332,36 +1456,61 @@ export default function ProjectsSection() {
                 과녁만 덧대 얹는다. 자르는 조상이 이미 있어 사각형 모서리가
                 따로 튀지 않는다 */}
             <button
+              ref={previewOpenRef}
               type="button"
               data-part="preview-open"
+              tabIndex={wide ? -1 : 0}
+              aria-hidden={wide || undefined}
               onClick={handlePreviewClick}
               aria-label={`${activeProject.title} 자세히 보기`}
               disabled={!isProjectModalReady(activeProject)}
-              className="absolute inset-0 block h-full w-full border-0 bg-transparent p-0 text-left [font:inherit] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)]"
+              className="absolute inset-0 block h-full w-full rounded-media border-0 bg-transparent p-0 text-left [font:inherit] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-cyan-core)]"
             />
             </div>
           </div>
         </div>
 
-        <p
-          aria-live="polite"
-          aria-atomic="true"
-          data-part="mobile-status"
-          className="mt-3 text-t7 text-[var(--color-text-secondary)] lg:hidden"
-        >
-          {String(activeIndex + 1).padStart(2, '0')} / {String(N).padStart(2, '0')} · 다음 프로젝트:{' '}
-          {projects[(activeIndex + 1) % N].title}
-        </p>
+        {/* lg 아래에서 끌기 말고 넘기는 길(M4 Task 8). 포인터 없는 사용자와 보조기기
+            사용자의 것이라 보이는 44px 단추로 둔다. 조용한 n / N 하나와 양옆 화살표뿐이다.
+            끝에서는 순환하지 않는다. disabled 대신 aria-disabled라 끝에 닿아도 포커스가
+            단추에 남는다. 지금 프로젝트 이름은 화면에는 캡션이 이미 보여 줘서 읽기만 한다 */}
+        <div data-part="mobile-pager" className="mt-2 flex items-center justify-center lg:hidden">
+          {stepButton(-1)}
+          <p
+            aria-live="polite"
+            aria-atomic="true"
+            data-part="mobile-status"
+            className="px-2 text-t7 tabular-nums text-[var(--color-text-secondary)]"
+          >
+            {String(activeIndex + 1).padStart(2, '0')} / {String(N).padStart(2, '0')}
+            <span className="sr-only"> · {activeProject.title}</span>
+          </p>
+          {stepButton(1)}
+        </div>
 
-        <div className="lg:pl-10">
+        <div className="max-lg:hidden pl-10">
+          {/* 글자는 기존보다 약 16.7% 키우되 줄 여백을 줄여 양 끝 이름과 헤더·화면 끝 사이에 여유를 둔다. 화면 높이(7svh)로 잡고,
+              lg 바로 위의 좁은 창에서는 폭(4.9vw)이 막아 프리뷰 자리를 남긴다. 왼쪽 여백
+              2.8em은 고른 이름이 프리뷰 쪽으로 부푸는 폭(drumItem의 x, 줄 높이의 1.84배)이다 */}
           <div
             data-part="index"
             role="tablist"
             aria-orientation="vertical"
             aria-label="프로젝트 목록"
-            className="flex flex-col"
+            className="flex flex-col items-end pl-[2.8em] text-[clamp(2.5rem,min(7svh,4.9vw),5.25rem)]"
             onKeyDown={handleIndexKeyDown}
+            // Tab으로 목록에 닿으면 그 이름의 프로젝트로 잠근다. 모달을 닫고 돌려받은 포커스는 사용자가 옮긴 것이 아니라 거른다
+            onFocus={event => {
+              const index = Number((event.target as HTMLElement).dataset.name);
+              if (!restoringFocusRef.current && Number.isInteger(index)) chapterLock.focus(event, index);
+            }}
           >
+            {/* 굵은 이름을 같은 칸에 겹쳐 열 너비만 확보하고 회전 과녁과 비행 손잡이는 그대로 둔다 */}
+            <div aria-hidden="true" className="invisible grid h-0 pointer-events-none font-bold leading-[1.1] tracking-[-0.02em]">
+              {projects.map(project => (
+                <span key={project.title} className="col-start-1 row-start-1 whitespace-nowrap">{project.title}</span>
+              ))}
+            </div>
             {projects.map((project, i) => {
               const isActive = i === activeIndex;
               return (
@@ -1381,14 +1530,15 @@ export default function ProjectsSection() {
                   // 띠가 생겨, 그 자리를 클릭해도 아무 이름도 안 잡힌다.
                   // py가 단추에 남아 있어야 줄과 줄 사이가 전부 과녁이다
                   //
-                  // 휠의 회전축은 글자가 시작하는 왼쪽 모서리다. 그래서 상자가
-                  // 오른쪽으로 넓을수록 그 오른쪽 끝이 세로로 크게 실린다.
-                  // 상자를 열 전체 너비로 쥐면 글자가 끝난 뒤의 빈 영역이
-                  // 통째로 실려 올라가 남의 줄 위를 덮고, 이름을 겨냥하지 않은
-                  // 자리에서 엉뚱한 프로젝트가 잡힌다. 과녁을 글자 너비로
-                  // 줄이면 보이는 것과 잡히는 것이 같아진다
-                  className={`block w-fit max-lg:max-w-full origin-left whitespace-nowrap max-lg:whitespace-normal max-lg:[overflow-wrap:anywhere] text-left text-t1 max-sm:text-[clamp(1.25rem,6.5vw,1.625rem)] lg:text-d3 font-bold tracking-[-0.02em] py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)] ${
-                    isActive ? 'text-[var(--color-text-primary)]' : ''
+                  // 휠의 회전축은 글자가 끝나는 오른쪽 모서리다(오른쪽에 붙은
+                  // 드럼). 그래서 상자가 왼쪽으로 넓을수록 그 왼쪽 끝이 세로로
+                  // 크게 실린다. 상자를 열 전체 너비로 쥐면 글자 밖의 빈 영역이
+                  // 통째로 실려 남의 줄 위를 덮고, 이름을 겨냥하지 않은 자리에서
+                  // 엉뚱한 프로젝트가 잡힌다. 과녁을 글자 너비로 줄이면 보이는
+                  // 것과 잡히는 것이 같아진다. 세로 여백도 em이라 줄 높이가
+                  // 글자 크기와 같이 간다(1.26em)
+                  className={`block w-fit origin-right whitespace-nowrap text-right leading-[1.1] tracking-[-0.02em] py-[0.08em] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-core)] ${
+                    isActive ? 'font-bold text-[var(--color-text-primary)]' : 'font-normal'
                   }`}
                   // 휠이 도는 동안 색도 같이 간다. --pj-wheel-p는 활성에서
                   // 1이고 한 칸만 멀어져도 0이라, 선택이 옮겨 가는 사이

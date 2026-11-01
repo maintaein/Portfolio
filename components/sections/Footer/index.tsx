@@ -6,23 +6,7 @@ import { useCopyToClipboard } from '@/hooks';
 
 const EMAIL_KEY = 'footer-email';
 
-interface FooterProps {
-  // overview는 착지 화면이다. 그 동안은 연락처 줄을 감춰 두고, 섹션으로
-  // 들어갈 때 아래에서 올려 보낸다. 실제 은닉과 등장은 design-tokens.css의
-  // site-footer-hidden/-visible이 쥔다.
-  atOverview: boolean;
-}
-
-// 섹션 위에 떠 있는 크롬 한 줄이다. CONTACT 목적지와 달리 콘텐츠가
-// 아니므로 CTA 문구를 담지 않는다. overview에서는 감춘다(FooterProps).
-//
-// .section-stage(styles/design-tokens.css)가 inset으로 하단
-// 45px + safe-area를 이미 비워 두므로 그 자리에 고정한다. 예전처럼
-// position:static 흐름에 두면 fixed 셸(.section-stage) 아래 유일한 흐름
-// 콘텐츠가 되어 문서 원점(y=0)에 렌더되고, section 배경이 투명해 모든 섹션
-// 위로 비쳐 보인다 — position:fixed로 문서 흐름 자체에서 빠지면 그 경로가
-// 구조적으로 없어진다.
-export default function Footer({ atOverview }: FooterProps) {
+export default function Footer() {
   const year = new Date().getFullYear();
   const { state, copy } = useCopyToClipboard();
   // 복사가 한 번 실패하면 이 페이지가 살아 있는 동안 이메일 라벨을
@@ -49,9 +33,7 @@ export default function Footer({ atOverview }: FooterProps) {
 
   return (
     <footer
-      className={`site-footer ${
-        atOverview ? 'site-footer-hidden' : 'site-footer-visible'
-      } fixed inset-x-0 bottom-0 z-40 flex items-center justify-center gap-x-6 border-t border-[rgb(255_255_255_/_0.08)] bg-[rgb(0_0_0_/_0.35)] backdrop-blur-md px-4 pb-[env(safe-area-inset-bottom,0px)] text-t8 text-[var(--color-text-secondary)]`}
+      className="site-footer relative flex flex-wrap items-center justify-center gap-x-6 border-t border-[rgb(255_255_255_/_0.08)] bg-[rgb(0_0_0_/_0.35)] px-4 py-8 text-t8 text-[var(--color-text-secondary)]"
     >
       <button
         type="button"

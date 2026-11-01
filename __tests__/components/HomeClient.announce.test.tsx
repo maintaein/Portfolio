@@ -1,0 +1,21 @@
+import { act, render, screen } from '@testing-library/react';
+import { expect, it, vi } from 'vitest';
+import HomeClient from '@/components/sections/HomeClient';
+const nav = vi.hoisted(() => ({ active: 'about', navigationTarget: null as string | null }));
+vi.mock('@/hooks/useSectionNav', () => ({ useSectionNav: () => ({ active: nav.active, routeResolved: true, navigationTarget: nav.navigationTarget, navigate: () => {} }) }));
+vi.mock('@/hooks/useProjectModalObscured', () => ({ useProjectModalObscured: () => false }));
+vi.mock('@/hooks/usePageVisibility', () => ({ usePageVisibility: () => true }));
+vi.mock('@/hooks/useMotionPreference', () => ({ useMotionPreference: () => ({ ready: true, reduced: false }) }));
+vi.mock('@/components/blocks/LuminousFlowBackground', () => ({ default: () => <aside /> }));
+vi.mock('@/components/sections', () => ({ AboutSection: () => <p>About</p>, ProjectsSection: () => <p>Projects</p>, ExperienceSection: () => <p>Experience</p>, SkillsSection: () => <p>Skills</p>, AwardAndCertificateSection: () => <p>Awards</p>, Footer: () => <footer>Contacts</footer> }));
+it('announces a section only when an explicit navigation arrives, not on manual reading changes', () => {
+  const { rerender } = render(<HomeClient />);
+  const status = screen.getByRole('status');
+  nav.active = 'projects'; rerender(<HomeClient />);
+  expect(status).toHaveTextContent('');
+  nav.active = 'skills'; nav.navigationTarget = 'skills'; rerender(<HomeClient />);
+  expect(status).toHaveTextContent('');
+  act(() => document.querySelector<HTMLElement>('[data-section="skills"]')!.focus());
+  nav.navigationTarget = null; rerender(<HomeClient />);
+  expect(status).toHaveTextContent('Skills section');
+});

@@ -1,5 +1,10 @@
+import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { INTRO_GATE_SCRIPT } from '@/lib/introGate';
+vi.mock('@/components/blocks/LuminousFlowBackground', () => ({ default: () => null }));
+vi.mock('@/components/sections/AboutSection/styles.module.css', () => ({ default: {} }));
+vi.mock('@/components/sections/AboutSection/chapter-focus.module.css', () => ({ default: {} }));
 import HomeClient from '@/components/sections/HomeClient';
 import {
   awards,
@@ -54,5 +59,168 @@ describe('HomeClient 실제 섹션 SSR 상주', () => {
 
     expect(html).toContain('data-section="awards-certificates"');
     expect(html).toContain(awards[0].title);
+  });
+});
+
+it('keeps the approved static Hero text and real future name destinations in SSR', () => {
+  const html = renderToString(<HomeClient />);
+  expect(html).toMatch(/<h1[^>]*>안녕하세요.\nSW개발자 김태인입니다.<\/h1>/);
+  expect(html).not.toContain('탄탄한 기본기를');
+  expect(html).toContain('data-motion-anchor="hero-name"');
+  expect(html).toContain('data-motion-anchor="nav-name"');
+  expect(html).not.toContain('section-hidden');
+});
+
+// 사용자 결정(2026-10-20). 커튼과 네 인사말이 없다. JS가 없으면 표시가 붙지 않아 완성된 첫 화면이다.
+it('ships no curtain and no greeting paragraph in SSR', () => {
+  const html = renderToString(<HomeClient />);
+  expect(html).not.toMatch(/intro-curtain|intro-greeting|잘부탁드립니다/);
+  expect(html).not.toContain('data-intro=');
+  const hero = html.slice(html.indexOf('id="overview"'), html.indexOf('data-section="about"'));
+  expect(hero).not.toContain('<p');
+  // 이름 버튼은 안쪽 span 하나를 품는다. 인트로는 그 span만, 경계는 버튼만 움직인다.
+  expect(html).toMatch(/data-testid="wordmark"[^>]*><span class="inline-block">KIM TAEIN<\/span><\/button>/);
+});
+
+// Task 5. JS가 없거나 오기 전에도 이름은 Hero 자리(CSS 배치)에 크게 선다. 빈 띠도, nav에서 뛰어내리는 첫 그림도 없다.
+it('ships the one name button in its Hero rest state inside the Hero name slot', () => {
+  const html = renderToString(<HomeClient />);
+  const hero = html.slice(html.indexOf('id="overview"'), html.indexOf('data-section="about"'));
+  expect(hero).toMatch(/data-motion-anchor="hero-name"[^>]*><button[^>]*data-testid="wordmark"[^>]*data-wordmark-mode="hero"/);
+  expect(html.match(/data-testid="wordmark"/g)).toHaveLength(1);
+  expect(html.match(/data-wordmark-mode=/g)).toHaveLength(1);
+  const nav = html.slice(html.indexOf('<nav'), html.indexOf('</nav>'));
+  expect(nav).toMatch(/data-motion-anchor="nav-name"[^>]*><\/div>/);
+  const css = readFileSync('styles/design-tokens.css', 'utf8');
+  // Task 9 (사용자 결정 2026-10-21): 이름은 가운데가 아니라 이름 자리(글 칸) 왼쪽 끝에 서고 문장이 바로 아래 같은 끝에 맞는다.
+  expect(css).toMatch(/\n\.hero-name \{ position: relative;/);
+  expect(css).toMatch(/\.site-name\[data-wordmark-mode='hero'\] \{[^}]*position: absolute;[^}]*left: 0; width: max-content; font-size: var\(--hero-name-size\);/);
+  expect(css).not.toMatch(/\.site-name\[data-wordmark-mode='hero'\] \{[^}]*margin-inline: auto/);
+  expect(css).toMatch(/\.site-name\[data-wordmark-mode='nav'\] \{ position: fixed; z-index: 51; \}/);
+  // 쉬는 자리에는 transform이 없다. 누르는 상자가 보이는 글자 줄이다.
+  expect(css).not.toMatch(/\.site-name[^{]*\{[^}]*(transform|scale)/);
+});
+
+// Task 9. JS가 없어도 Hero 오브젝트는 같은 구성의 정적 볼이다. 유리 모양과 핵심 기술 아이콘 여섯이 쉬는 자리에 선다.
+it('ships the static crystal ball with the six core icons at their rest positions and no canvas', async () => {
+  const { BALL_ICONS, fieldPoint, iconStyle } = await import('@/components/blocks/CrystalizedBall/field');
+  const html = renderToString(<HomeClient />);
+  const object = html.slice(html.indexOf('data-motion-anchor="hero-object"'), html.indexOf('data-section="about"'));
+  expect(object).toMatch(/^data-motion-anchor="hero-object" aria-hidden="true"/);
+  expect(object).toContain('class="hero-ball"');
+  expect(object).toContain('class="hero-ball-glass"');
+  expect(object).not.toContain('<canvas');
+  for (const icon of BALL_ICONS) {
+    const rest = iconStyle(fieldPoint(icon.home, icon.seed, 0, [0, 0], [0, 0, 0]));
+    expect(object).toContain(`transform:${rest.transform}`);
+    expect(object).toContain(`/icons-mono/${icon.name}.svg`);
+  }
+});
+
+// 최종 리뷰 I2. JS가 없거나 하이드레이션 전, 본 번들이 실패해도 About의 활성 chapter는 읽혀야 한다.
+// 숨긴 출발점은 HomeClient가 하이드레이션 뒤에 켜는 main[data-route-resolved="true"] 아래에서만 건다.
+it('About의 BASICS chapter와 단어는 서버 상태에서 CSS로 숨지 않는다', () => {
+  const html = renderToString(<HomeClient />);
+  expect(html).toMatch(/<main[^>]*data-route-resolved="false"/);
+  const basics = html.match(/<article[^>]*data-chapter="BASICS"[^>]*>/)![0];
+  expect(basics).toContain('data-position="active"');
+  expect(basics).not.toMatch(/inert|aria-hidden="true"/);
+  expect(html).toMatch(/data-chapter-word="BASICS"[^>]*><span>BASICS<\/span>/);
+  const css = ['styles.module.css', 'chapter-focus.module.css']
+    .map(name => readFileSync(`components/sections/AboutSection/${name}`, 'utf8'))
+    .join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
+  const hidden = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .filter(([, , body]) => /(^|[\s;])opacity:\s*0\s*(;|$)/.test(body))
+    .flatMap(([, selectors]) => selectors.split(',').map(selector => selector.trim()))
+    .filter(selector => /\.(articles|rail|word|label)(\[[^\]]*\]|:[\w-]+(\([^)]*\))?)*$/.test(selector));
+  expect(hidden.length).toBeGreaterThan(0);
+  for (const selector of hidden) expect(selector).toMatch(/^main\[data-route-resolved="true"\] /);
+});
+
+describe('그리기 전 인트로 판정(lib/introGate.ts)', () => {
+  const run = ({ path = '/', hash = '', reduced = false, type = 'navigate', saved }: { path?: string; hash?: string; reduced?: boolean; type?: string; saved?: number }) => {
+    document.documentElement.removeAttribute('data-intro');
+    document.documentElement.removeAttribute('data-name-side');
+    window.history.replaceState(saved === undefined ? null : { sectionScrollY: saved }, '', `${path}${hash}`);
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: reduced && query.includes('reduce') }));
+    vi.spyOn(performance, 'getEntriesByType').mockReturnValue([{ type } as unknown as PerformanceEntry]);
+    new Function(INTRO_GATE_SCRIPT)();
+    return document.documentElement.hasAttribute('data-intro');
+  };
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); document.documentElement.removeAttribute('data-intro'); document.documentElement.removeAttribute('data-name-side'); });
+
+  // M4 Task 0 (M3 #14). 경계 청크가 오기 전까지 이름이 화면 밖 Hero에 있어 nav 줄이 비었다가 재생 없이 나타났다.
+  // useSectionNav가 첫 스크롤을 정하는 규칙 그대로다: 새로고침·앞뒤 이동은 저장한 위치, 아니면 해시 섹션. 이름 문턱은 180px(motion.ts NAME_DOWN)이다.
+  const nameSide = (options: Parameters<typeof run>[0]) => {
+    run(options);
+    return document.documentElement.getAttribute('data-name-side');
+  };
+  it.each([
+    ['직접 해시', { hash: '#about' }],
+    ['아래 섹션 해시', { hash: '#projects' }],
+    ['모션 감소의 직접 해시', { hash: '#skills', reduced: true }],
+    ['저장된 읽기 위치가 문턱 아래인 새로고침', { type: 'reload', saved: 900 }],
+    ['저장된 읽기 위치가 문턱 아래인 앞뒤 이동', { type: 'back_forward', saved: 180 }],
+  ] as const)('%s는 첫 페인트부터 이름을 nav 자리에 둔다', (_, options) => {
+    expect(nameSide(options)).toBe('nav');
+  });
+  it.each([
+    ['첫 방문', {}],
+    ['#overview', { hash: '#overview' }],
+    ['모르는 해시', { hash: '#nowhere' }],
+    ['문턱 위에 저장된 새로고침', { type: 'reload', hash: '#about', saved: 179 }],
+    ['저장 위치 없는 앞뒤 이동의 첫 화면', { type: 'back_forward' }],
+    ['/ 밖의 경로', { path: '/background-preview', hash: '#about' }],
+  ] as const)('%s는 표시를 붙이지 않는다(Hero 자리)', (_, options) => {
+    expect(nameSide(options)).toBeNull();
+  });
+  // 판정 스크립트는 문턱을 옮겨 적었다. motion.ts의 이름 문턱과 어긋나면 첫 화면과 경계가 다른 자리를 고른다.
+  it('판정의 문턱은 motion.ts NAME_DOWN과 같다', () => {
+    const down = Number(readFileSync('components/sections/HomeClient/motion.ts', 'utf8').match(/\nconst NAME_DOWN = (\d+);/)![1]);
+    expect(INTRO_GATE_SCRIPT).toContain(`y>=${down}:`);
+    expect(nameSide({ type: 'reload', saved: down })).toBe('nav');
+    expect(nameSide({ type: 'reload', saved: down - 1 })).toBeNull();
+  });
+  it('표시가 있으면 CSS가 이름을 nav-name 앵커 자리(nav 안쪽 여백, max-w-7xl 칸의 왼쪽 끝, 위 16px)에 nav 크기로 세운다', () => {
+    const css = readFileSync('styles/design-tokens.css', 'utf8');
+    const rule = css.match(/html\[data-name-side='nav'\] \.site-name \{[^}]*\}/)![0];
+    expect(rule).toMatch(/position: fixed; z-index: 51; left: max\(24px, calc\(50% - 640px\)\); top: 16px; font-size: var\(--font-size-t6\);/);
+    expect(rule).toMatch(/text-shadow: none/);
+    expect(rule).not.toMatch(/transform|scale/);
+    // nav 자리 계산이 옮겨 적은 nav 배치와 같다.
+    const nav = readFileSync('components/blocks/Navigation/index.tsx', 'utf8');
+    expect(nav).toMatch(/fixed inset-x-0 top-0 z-50 bg-\[var\(--color-ink\)\] px-6 py-4/);
+    expect(nav).toMatch(/mx-auto flex max-w-7xl/);
+  });
+
+  it('첫 방문 / 와 #overview만 진입 출발 상태를 건다', () => {
+    expect(run({})).toBe(true);
+    expect(run({ hash: '#overview' })).toBe(true);
+    expect(run({ type: 'reload', saved: 0 })).toBe(true);
+  });
+  it.each([
+    ['직접 해시', { hash: '#about' }],
+    ['모션 감소', { reduced: true }],
+    ['앞뒤 이동', { type: 'back_forward' }],
+    ['저장된 읽기 위치가 있는 새로고침', { type: 'reload', saved: 900 }],
+    // 최종 리뷰 triage. 다른 경로에 표시가 남으면 load 뒤 3초 안의 클라이언트 이동으로 / 에서 인트로가 시작된다.
+    ['/ 밖의 경로', { path: '/background-preview' }],
+  ] as const)('%s는 완성된 첫 화면으로 바로 간다', (_, options) => {
+    expect(run(options)).toBe(false);
+  });
+  // 리뷰 Important 3. 시간을 나눠 도는 하이드레이션이 load 뒤 1초를 넘길 수 있다.
+  it('본 번들이 진입을 맡지 못하면 load 3초 뒤 숨긴 출발 상태를 걷고, 맡으면 손대지 않는다', () => {
+    vi.useFakeTimers();
+    run({});
+    window.dispatchEvent(new Event('load'));
+    vi.advanceTimersByTime(2999);
+    expect(document.documentElement.hasAttribute('data-intro')).toBe(true);
+    vi.advanceTimersByTime(1);
+    expect(document.documentElement.hasAttribute('data-intro')).toBe(false);
+    run({});
+    document.documentElement.setAttribute('data-intro', 'playing');
+    window.dispatchEvent(new Event('load'));
+    vi.advanceTimersByTime(10_000);
+    expect(document.documentElement.getAttribute('data-intro')).toBe('playing');
   });
 });

@@ -1,15 +1,32 @@
+import { useRef as useVisibilityRef } from 'react';
+vi.mock('@/hooks/useSectionVisibility', () => ({ useSectionVisibility: () => ({ ref: useVisibilityRef(null), visible: true, hasEntered: true }) }));
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import ProjectsSection from '@/components/sections/ProjectsSection';
 import { SectionActivityProvider } from '@/components/common/SectionActivityContext';
 import { projects } from '@/lib/data';
-import { SECTION_IDS } from '@/lib/constants';
 import { isProjectModalReady } from '@/lib/utils/projectContract';
 import { Flip, REVEAL_OUT_MS, SITE_EASE, gsap } from '@/lib/gsap';
+import {
+  clearCaptionReveal,
+  hideCaption,
+  revealCaption,
+} from '@/components/sections/ProjectsSection/captionReveal';
 import {
   setProjectModalObscured,
   useProjectModalObscured,
 } from '@/hooks/useProjectModalObscured';
+
+// 캡션 드러냄은 실제 구현을 그대로 돌리되 부른 자리를 보려고 감싼다(M4 Task 14)
+vi.mock('@/components/sections/ProjectsSection/captionReveal', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/components/sections/ProjectsSection/captionReveal')>();
+  return {
+    ...actual,
+    hideCaption: vi.fn(actual.hideCaption),
+    revealCaption: vi.fn(actual.revealCaption),
+    clearCaptionReveal: vi.fn(actual.clearCaptionReveal),
+  };
+});
 
 // ProjectsSection이 stage에 걸어 둔 콜백 ref를 붙잡는다. React가 fiber에
 // 넣어 둔 것을 밖에서 읽을 방법이 없어서, 진짜 ProjectModal을 그대로
@@ -70,6 +87,7 @@ interface Gates {
   routeResolved?: boolean;
   motionReady?: boolean;
   reducedMotion?: boolean;
+  beforeAction?: (run: () => void) => void;
 }
 
 // 배경 알림 싱글턴을 DOM으로 끌어내는 탐침. 닫기에서 배경이 언제 돌아오는지가
@@ -84,15 +102,15 @@ function obscured() {
 
 function renderSection(gates: Gates = {}) {
   return render(
-    <SectionActivityProvider
-      active={SECTION_IDS.PROJECTS}
-      entryAnimationTarget={null}
+    <SectionActivityProvider obscured={false}
+
+
       pageVisible
       routeResolved={gates.routeResolved ?? true}
       motionReady={gates.motionReady ?? true}
       reducedMotion={gates.reducedMotion ?? false}
     >
-      <ProjectsSection />
+      <ProjectsSection beforeAction={gates.beforeAction} />
       <ObscuredProbe />
     </SectionActivityProvider>
   );
@@ -216,6 +234,30 @@ describe('ProjectsFlip. 펼치기 비행', { timeout: 30_000 }, () => {
 
     expect(getState).toHaveBeenCalledTimes(1);
     expect(getState).toHaveBeenCalledWith([preview, pressed]);
+  });
+
+  // M4 Task 2. 인계 중의 두 번째 클릭은 정착을 마친 뒤에 상태를 떠야 한다. 정착 전의 날고 있는 프리뷰 상자를 뜨면 출발 좌표가 튄다.
+  it('관문이 정착을 마친 뒤에 Flip.getState가 한 번 불리고, 관문은 눌림당 한 번만 지난다', async () => {
+    const log: string[] = [];
+    const original = Flip.getState;
+    const getState = vi.spyOn(Flip, 'getState').mockImplementation(((targets: Element[], vars?: unknown) => {
+      log.push('getState');
+      return original(targets, vars as never);
+    }) as typeof Flip.getState);
+    renderSection({
+      beforeAction: run => {
+        log.push('gate');
+        log.push('settled');
+        run();
+      },
+    });
+    await flushGsapImport();
+    fireEvent.click(nameEl(READY_INDEX));
+    expect(getState).not.toHaveBeenCalled();
+    fireEvent.click(nameEl(READY_INDEX));
+    expect(log).toEqual(['gate', 'settled', 'gate', 'settled', 'getState']);
+    expect(getState).toHaveBeenCalledTimes(1);
+    expect(getState).toHaveBeenCalledWith([previewEl(), nameFlipEl(READY_INDEX)]);
   });
 
   // 이 과제가 존재하는 이유. 두 노드의 상자가 다르면 Flip.from은 그 비율을
@@ -690,35 +732,29 @@ describe('ProjectsFlip. 닫기 비행', { timeout: 30_000 }, () => {
     }
   });
 
-  it('비행 동안에는 캡션을 치워만 두고 모달이 내려간 뒤에 띠와 글자를 같이 들여보낸다', async () => {
+  it('비행 동안에는 캡션을 감춰만 두고 모달이 내려간 뒤에 잡음 띠와 흐림 글자로 들여보낸다', async () => {
     const reservations = stubDelayedCall();
     const fit = vi.spyOn(Flip, 'fit');
-    const set = vi.spyOn(gsap, 'set');
-    const to = vi.spyOn(gsap, 'to');
     const closeButton = await openAndGetCloseButton();
     vi.spyOn(window.history, 'back').mockImplementation(() => {});
+    vi.mocked(hideCaption).mockClear();
+    vi.mocked(revealCaption).mockClear();
 
     fireEvent.click(closeButton);
     act(() => {
       reservations[0].run();
     });
 
-    const band = document.querySelector('[data-part="preview-caption"]')!;
-    const text = document.querySelector('[data-part="preview-caption-text"]')!;
-    // 비행이 뜨는 순간에는 치우기만 한다. 이 구간의 프리뷰 상자는 아직
+    const caption = document.querySelector<HTMLElement>('[data-part="preview-caption"]')!;
+    // 비행이 뜨는 순간에는 감추기만 한다. 이 구간의 프리뷰 상자는 아직
     // 투명한 데다 착지하는 stage가 그 위를 덮으므로, 여기서 열면 아무도
     // 못 본다. 여기서 여는 코드로 되돌리면 이 어서션이 FAIL해야 한다
-    const bandStash = set.mock.calls.filter((call) => call[0] === band);
-    expect(bandStash).toHaveLength(1);
-    // 띠는 폭이 0인 채로 왼쪽 변에 붙어 있다. 오른쪽 변만 100퍼센트 안으로
-    // 들어와 있는 값이다
-    expect(bandStash[0][1]).toMatchObject({ clipPath: 'inset(0% 100% 0% 0%)' });
-    const textStash = set.mock.calls.filter((call) => call[0] === text);
-    expect(textStash).toHaveLength(1);
-    expect(textStash[0][1]).toMatchObject({ xPercent: -8, opacity: 0 });
-    expect(
-      to.mock.calls.some((call) => call[0] === band || call[0] === text)
-    ).toBe(false);
+    expect(hideCaption).toHaveBeenCalledTimes(1);
+    expect(hideCaption).toHaveBeenCalledWith(caption);
+    expect(caption.style.opacity).toBe('0');
+    expect(revealCaption).not.toHaveBeenCalled();
+    // 옛 띠 clip과 글자 밀기는 없다
+    expect(caption.style.clipPath).toBe('');
 
     // 착지 둘을 다 태워야 모달이 내려간다(S-1과 같은 순서)
     act(() => {
@@ -728,27 +764,56 @@ describe('ProjectsFlip. 닫기 비행', { timeout: 30_000 }, () => {
       (fit.mock.calls[1][2] as { onComplete: () => void }).onComplete();
     });
 
-    const open = to.mock.calls.find((call) => call[0] === band);
-    expect(open).toBeDefined();
-    const bandVars = open![1] as Record<string, unknown>;
-    expect(bandVars.clipPath).toBe('inset(0% 0% 0% 0%)');
-    // 인라인 값을 안 걷으면 다음 전환이 이 자리에서 시작한다
-    expect(bandVars.clearProps).toBe('clipPath');
+    expect(revealCaption).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(revealCaption).mock.calls[0][0]).toBe(caption);
+    // 감춤은 드러냄이 걷는다. 길이는 기본값(800ms)이다
+    expect(vi.mocked(revealCaption).mock.calls[0][1]?.duration).toBeUndefined();
+    expect(caption.style.opacity).toBe('');
+  });
 
-    const slide = to.mock.calls.find((call) => call[0] === text);
-    expect(slide).toBeDefined();
-    const textVars = slide![1] as Record<string, unknown>;
-    expect(textVars.xPercent).toBe(0);
-    expect(textVars.opacity).toBe(1);
-    expect(textVars.clearProps).toBe('transform,opacity');
+  it('돌아온 캡션이 들어오는 도중에 프로젝트를 바꾸거나 상세를 다시 열거나 모션 감소로 바뀌면 드러냄을 걷는다', async () => {
+    const reservations = stubDelayedCall();
+    const fit = vi.spyOn(Flip, 'fit');
+    const from = vi.spyOn(Flip, 'from');
+    vi.spyOn(window.history, 'back').mockImplementation(() => {});
+    const view = renderSection();
+    await flushGsapImport();
+    open();
+    await findDialog();
+    land(from);
+    fireEvent.click(screen.getByRole('button', { name: '닫기' }));
+    act(() => {
+      reservations[0].run();
+    });
+    act(() => {
+      (fit.mock.calls[0][2] as { onComplete: () => void }).onComplete();
+    });
+    act(() => {
+      (fit.mock.calls[1][2] as { onComplete: () => void }).onComplete();
+    });
+    const caption = document.querySelector<HTMLElement>('[data-part="preview-caption"]')!;
+    expect(revealCaption).toHaveBeenLastCalledWith(caption);
 
-    // 띠와 글자가 한 덩어리로 읽히려면 길이와 이징이 같아야 한다. 하나라도
-    // 어긋나면 어둠이 글자를 앞지르거나 뒤처져 두 겹으로 보인다
-    expect(bandVars.ease).toBe(SITE_EASE);
-    expect(textVars.ease).toBe(SITE_EASE);
-    expect(textVars.duration).toBe(bandVars.duration);
-    // 이 등장은 비행이 다 끝나고 혼자 도는 구간이라 비행(500ms)보다 길다
-    expect(textVars.duration as number).toBeGreaterThan(0.5);
+    // 프로젝트 전환. 글자 줄이 갈려 반쯤 든 줄과 새 줄이 섞이면 안 된다
+    vi.mocked(clearCaptionReveal).mockClear();
+    fireEvent.click(nameEl(OTHER_INDEX));
+    expect(clearCaptionReveal).toHaveBeenCalledWith(caption);
+
+    // 상세를 다시 연다
+    vi.mocked(clearCaptionReveal).mockClear();
+    open();
+    await findDialog();
+    expect(clearCaptionReveal).toHaveBeenCalledWith(caption);
+
+    // 모션 감소(lg 경계를 넘는 것과 같은 정리 자리다)
+    vi.mocked(clearCaptionReveal).mockClear();
+    view.rerender(
+      <SectionActivityProvider obscured={false} pageVisible routeResolved motionReady reducedMotion>
+        <ProjectsSection />
+        <ObscuredProbe />
+      </SectionActivityProvider>
+    );
+    expect(clearCaptionReveal).toHaveBeenCalledWith(caption);
   });
 
   it('붕괴 중에 모달이 걷혀 가면 예약된 비행이 취소된다', async () => {
@@ -1057,6 +1122,40 @@ describe('ProjectsFlip. 전환 tween이 비행 기하를 안 건드린다', { ti
     expect(targets[0]).toBe(preview);
     // 뜨는 순간에도 손잡이 상자는 여전히 깨끗하다. 전환을 프리뷰 자신에
     // 걸면 여기서 FAIL한다 - openModal이 tween을 먼저 죽이지 않는 한
+    expect(preview.style.transform).toBe('');
+  });
+});
+
+// M4 Task 1. About 로고가 프리뷰가 되는 경계(HomeClient motion.ts)는 프리뷰
+// 손잡이에 앵커 표시 하나만 받고, 자르는 틀(손잡이의 첫 자식)의 transform·
+// opacity·clip-path만 쓴다. 섹션은 그 세 값을 모르는 채 제 일을 해야 하고
+// 경계도 섹션의 겹·손잡이·data-flip-id를 안 건드린다
+describe('ProjectsFlip. 로고→프리뷰 경계의 소유 범위', { timeout: 30_000 }, () => {
+  it('앵커는 프리뷰 손잡이 자신이고, 경계가 틀에 쓴 값이 남아 있어도 선택 전환·손잡이·비행 상태 뜨기가 그대로다', async () => {
+    const getState = vi.spyOn(Flip, 'getState');
+    renderSection();
+    await flushGsapImport();
+    const preview = previewEl();
+    expect(document.querySelectorAll('[data-motion-anchor]')).toHaveLength(1);
+    expect(preview).toHaveAttribute('data-motion-anchor', 'projects-preview');
+    const frame = preview.firstElementChild as HTMLElement;
+    const layer = document.querySelector<HTMLElement>('[data-part="preview-media"]')!;
+    expect(frame.contains(layer)).toBe(true);
+    expect(frame.contains(document.querySelector('[data-part="preview-open"]'))).toBe(true);
+    // 경계가 65–90% 구간에 쓰는 값들
+    const boundary = { transform: 'translate(0px, 0px) scale(1.02, 1.02)', opacity: '0.5', clipPath: 'inset(0px round 13.7px / 13.7px)' };
+    Object.assign(frame.style, boundary);
+    const list = document.querySelector<HTMLElement>('[data-part="index"]')!;
+    list.style.opacity = '0.3';
+
+    fireEvent.click(nameEl(READY_INDEX));
+    expect(layer.style.transform).not.toBe('');
+    expect(preview).toHaveAttribute('data-flip-id', `pv-${projects[READY_INDEX].title}`);
+    expect(frame.style).toMatchObject(boundary);
+    expect(list.style.opacity).toBe('0.3');
+    fireEvent.click(nameEl(READY_INDEX));
+    expect(getState).toHaveBeenCalledTimes(1);
+    expect((getState.mock.calls[0][0] as HTMLElement[])[0]).toBe(preview);
     expect(preview.style.transform).toBe('');
   });
 });

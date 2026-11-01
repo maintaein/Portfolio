@@ -19,7 +19,7 @@ const TARGET_FILES = [
   path.resolve(process.cwd(), 'components/sections/HomeClient/index.tsx'),
 ];
 
-function analyzeGsapImports(filePath: string) {
+function analyzeGsapImports(filePath: string, target = '@/lib/gsap') {
   const source = readFileSync(filePath, 'utf8');
   const sourceFile = ts.createSourceFile(
     filePath,
@@ -37,7 +37,7 @@ function analyzeGsapImports(filePath: string) {
       const specifier = node.moduleSpecifier;
       if (
         ts.isStringLiteral(specifier) &&
-        specifier.text === '@/lib/gsap' &&
+        specifier.text === target &&
         !node.importClause?.isTypeOnly
       ) {
         hasValueImport = true;
@@ -52,7 +52,7 @@ function analyzeGsapImports(filePath: string) {
       if (
         specifier &&
         ts.isStringLiteral(specifier) &&
-        specifier.text === '@/lib/gsap'
+        specifier.text === target
       ) {
         hasDynamicImport = true;
       }
@@ -77,8 +77,34 @@ describe('GSAP 동적 경계 — First Load JS 표제 계약', () => {
   it.each(TARGET_FILES)(
     '%s은 @/lib/gsap을 동적으로 import한다(제거만 하고 안 쓰는 회귀 방지)',
     (filePath) => {
+      // HomeClient는 GSAP을 직접 부르지 않고 경계 모듈(motion.ts)을 통째로 늦게 부른다.
+      if (filePath.includes('HomeClient')) {
+        expect(analyzeGsapImports(filePath).hasDynamicImport).toBe(false);
+        return;
+      }
       const { hasDynamicImport } = analyzeGsapImports(filePath);
       expect(hasDynamicImport).toBe(true);
     }
   );
+
+  // motion.ts는 lib/gsap과 ScrollTrigger를 값으로 가져온다. 그 모듈을 정적으로 끌면
+  // GSAP 전체가 First Load로 따라온다.
+  it('HomeClient는 경계 모듈을 동적으로만 불러오고, 그 모듈이 GSAP을 등록한다', () => {
+    const home = TARGET_FILES[1];
+    const motion = path.resolve(process.cwd(), 'components/sections/HomeClient/motion.ts');
+    expect(analyzeGsapImports(home, './motion')).toEqual({ hasValueImport: false, hasDynamicImport: true });
+    expect(analyzeGsapImports(motion).hasValueImport).toBe(true);
+    expect(readFileSync(motion, 'utf8')).toContain('registerScrollTrigger()');
+  });
+
+  // 인트로는 첫 화면부터 렌더되므로 BootSequence는 정적으로 실린다. 그 안의 값 import는 react뿐이어야
+  // GSAP이나 옛 파티클 부팅이 First Load로 따라오지 않는다.
+  it('the intro ships in First Load with react only; GSAP comes through its dynamic import', () => {
+    const boot = ts.createSourceFile('boot.tsx', readFileSync(TARGET_FILES[0], 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const valueImports = boot.statements.filter(ts.isImportDeclaration)
+      .filter(node => !node.importClause?.isTypeOnly)
+      .map(node => (node.moduleSpecifier as ts.StringLiteral).text);
+    expect(valueImports).toEqual(['react']);
+    expect(analyzeGsapImports(TARGET_FILES[1], '@/components/sections/BootSequence').hasValueImport).toBe(true);
+  });
 });

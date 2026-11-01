@@ -1,557 +1,230 @@
 'use client';
 
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ComponentType,
-  type TransitionEvent,
-} from 'react';
-import HyperspeedBackground from '@/components/blocks/HyperspeedBackground';
+import dynamic from 'next/dynamic';
+import { useCallback, useEffect, useRef, useState, type ComponentType, type Ref } from 'react';
+import type { CrystalizedBallHandle } from '@/components/blocks/CrystalizedBall';
+import { BALL_ICONS, ICON_SIZE, fieldPoint, iconStyle } from '@/components/blocks/CrystalizedBall/field';
+import type { ElectricLogoHandle, ElectricLogoProps } from '@/components/blocks/ElectricLogo';
+import LuminousFlowBackground, { type LuminousFlowBackgroundHandle } from '@/components/blocks/LuminousFlowBackground';
 import Navigation from '@/components/blocks/Navigation';
 import { SectionActivityProvider } from '@/components/common/SectionActivityContext';
-import {
-  AboutSection,
-  AwardAndCertificateSection,
-  BootSequence,
-  ExperienceSection,
-  Footer,
-  ProjectsSection,
-  SkillsSection,
-} from '@/components/sections';
+import { AboutSection, AwardAndCertificateSection, ExperienceSection, Footer, ProjectsSection, SkillsSection } from '@/components/sections';
+import type { AboutSectionHandle } from '@/components/sections/AboutSection';
+import type { ProjectsSectionHandle } from '@/components/sections/ProjectsSection';
+import type { SkillsSectionHandle } from '@/components/sections/SkillsSection';
+import { createExperienceOverlay, type ExperienceOverlay } from '@/components/sections/ExperienceSection/overlay';
+import BootSequence, { type BootSequenceHandle, type IntroTargets } from '@/components/sections/BootSequence';
 import { useMotionPreference } from '@/hooks/useMotionPreference';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useProjectModalObscured } from '@/hooks/useProjectModalObscured';
-import { useSectionSwipe } from '@/hooks/useSectionSwipe';
-import {
-  NAV_SEQUENCE,
-  OVERVIEW,
-  useSectionNav,
-  type NavId,
-} from '@/hooks/useSectionNav';
-import {
-  HOME_SECTION_CONFIG,
-  NAV_ITEMS,
-  SECTION_IDS,
-  type HomeSectionId,
-} from '@/lib/constants';
-import type { Flip } from '@/lib/gsap';
-
-// 워드마크 FLIP 지속(ms). 네비 겹침 회피의 단일 출처(세 이음매 브리프
-// 3절). styles/design-tokens.css의 --wordmark-flip-duration
-// (.nav-strip-visible의 transition-delay)이 반드시 이 값과 같아야
-// "워드마크가 착지한 뒤에만 스트립이 나타난다"가 성립한다. TS와 CSS는
-// 빌드 타임에 값을 공유할 수 없으므로 WordmarkFlip.test.tsx가 두 파일을
-// 각각 읽어 숫자가 같은지 교차 검증한다. 한쪽만 바뀌면 그 테스트가
-// FAIL한다.
-const WORDMARK_FLIP_DURATION_MS = 500;
+import { useSectionNav } from '@/hooks/useSectionNav';
+import { HOME_SECTION_CONFIG, NAV_ITEMS, PERSONAL_INFO, SECTION_IDS, type HomeSectionId } from '@/lib/constants';
+import { coreValues } from '@/lib/data';
+import type { LogoOwner, PortfolioMotion } from './motion';
 
 const SECTION_COMPONENTS = {
-  [SECTION_IDS.ABOUT]: AboutSection,
   [SECTION_IDS.SKILLS]: SkillsSection,
   [SECTION_IDS.PROJECTS]: ProjectsSection,
   [SECTION_IDS.AWARDS_CERTIFICATES]: AwardAndCertificateSection,
   [SECTION_IDS.EXPERIENCE]: ExperienceSection,
-} satisfies Record<HomeSectionId, ComponentType<{ active?: boolean }>>;
+} satisfies Record<Exclude<HomeSectionId, typeof SECTION_IDS.ABOUT>, ComponentType>;
 
-function parseTransitionTime(value: string | undefined) {
-  if (!value) return 0;
-
-  const amount = Number.parseFloat(value);
-  if (!Number.isFinite(amount)) return 0;
-  return value.trim().endsWith('ms') ? amount : amount * 1000;
-}
-
-function hasOpacityTransition(element: HTMLElement) {
-  const style = window.getComputedStyle(element);
-  const properties = style.transitionProperty
-    .split(',')
-    .map((value) => value.trim());
-  const durations = style.transitionDuration
-    .split(',')
-    .map((value) => value.trim());
-  const delays = style.transitionDelay.split(',').map((value) => value.trim());
-
-  return properties.some((property, index) => {
-    if (property !== 'opacity' && property !== 'all') return false;
-
-    const duration = parseTransitionTime(durations[index % durations.length]);
-    const delay = parseTransitionTime(delays[index % delays.length]);
-    return duration + delay > 0;
-  });
-}
+// WebGL 장식은 셸에 한 번만 띄워 Hero와 About이 같은 로고를 나눠 쓴다.
+const DynamicElectricLogo = dynamic<ElectricLogoProps & { ref?: Ref<ElectricLogoHandle> }>(() => import('@/components/blocks/ElectricLogo'), { ssr: false });
+const LOGO_SRCS = coreValues.map(value => value.logoSrc);
+// Hero 오브젝트는 크리스털 볼이다. GL은 로고와 같이 진입 뒤에 뜨는 지연 청크(OGL 청크를 같이 쓴다)이고,
+// 정적 볼(유리 + 아이콘의 쉬는 자리)이 서버 HTML부터 같은 구성을 보인다. 쉬는 자리는 GL 첫 프레임(시간 0, 포인터 없음)과 같다.
+const DynamicCrystalizedBall = dynamic(() => import('@/components/blocks/CrystalizedBall'), { ssr: false });
+const BALL_REST = BALL_ICONS.map(icon => ({ name: icon.name, ...iconStyle(fieldPoint(icon.home, icon.seed, 0, [0, 0], [0, 0, 0])) }));
 
 export default function HomeClient() {
-  const wordmarkRef = useRef<HTMLButtonElement>(null);
-  // 이름이 "멀리서 도착"하는 scale을 여는 wrapper(Navigation 소유 DOM,
-  // 워드마크 버튼 자신이 아니다). BootSequence의 GSAP 타임라인이 이 노드에만
-  // scale을 건다. 부팅 안무 브리프 1절의 FLIP 불변식.
-  const wordmarkScaleRef = useRef<HTMLDivElement>(null);
-  // HERO 재순서 브리프. 파티클이 뭉쳐 이름이 완성되는 핸드오프 순간
-  // BootSequence가 이 값을 true로 뒤집는다. HyperspeedBackground는 이
-  // 값을 기다렸다가 배경을 페이드로 드러낸다(t=0 검은 화면 → 이름 완성 →
-  // 배경 등장, 브리프 2·3절). 씬 자체는 이 값과 무관하게 이미 일찍
-  // 로드·렌더되고 있다. "준비는 일찍, 노출은 늦게".
-  const [heroRevealed, setHeroRevealed] = useState(false);
-  const handleNameRevealed = useCallback(() => setHeroRevealed(true), []);
-  // GSAP은 정적 import에서 뺐다(First Load JS 예산. gsap-lazy-brief.md).
-  // 마운트 직후 미리 요청해 ref에 담아 두고, 아래 handleBeforeActiveChange는
-  // 이 ref를 동기적으로만 읽는다. Flip.getState()는 DOM이 바뀌기 직전에
-  // 동기 호출돼야 해서 await을 넣을 수 있는 자리가 아니기 때문이다. 아직
-  // 로드되지 않았으면(사용자가 첫 섹션 이동을 하기까지 보통 수백 ms가
-  // 걸리므로 드물다) FLIP 없이 넘어간다. 위치는 CSS가 바꾸므로 애니메이션만
-  // 없을 뿐 깨지지 않는다.
-  const gsapModuleRef = useRef<typeof import('@/lib/gsap') | null>(null);
-
-  useEffect(() => {
-    import('@/lib/gsap').then((mod) => {
-      gsapModuleRef.current = mod;
-    });
-  }, []);
-
-  // 워드마크 FLIP 브리지. hero/compact 경계를 넘는 실제 active 변경 직전에
-  // useSectionNav가 onBeforeActiveChange로 알려주면 Flip.getState()를 여기
-  // 담아 둔다. 값이 있으면 React가 hero/compact 클래스를 반영한 다음 커밋의
-  // useLayoutEffect([active])에서 꺼내 Flip.from()을 부른다(GSAP React FLIP
-  // 지침). motionReady·reducedMotion·routeResolved는 이 콜백이 정의되는
-  // 시점엔 아직 useSectionNav의 반환값이 없어 순환 참조가 생기므로, 매
-  // 렌더 갱신되는 ref로 최신값을 읽는다(이 파일의 activeRef와 동일 패턴).
-  const pendingWordmarkStateRef = useRef<Flip.FlipState | null>(null);
-  const motionReadyRef = useRef(false);
-  const reducedMotionRef = useRef(true);
-  const routeResolvedRef = useRef(false);
-
-  const handleBeforeActiveChange = useCallback(
-    (from: NavId, to: NavId) => {
-      if (
-        !routeResolvedRef.current ||
-        !motionReadyRef.current ||
-        reducedMotionRef.current
-      ) {
-        return;
-      }
-      const crossesOverviewBoundary = from === OVERVIEW || to === OVERVIEW;
-      if (!crossesOverviewBoundary || !wordmarkRef.current) return;
-
-      // 아직 GSAP 모듈이 로드되지 않았으면 FLIP 없이 넘어간다. 구조적으로
-      // 강제된다: pendingWordmarkStateRef가 비어 있으므로 아래
-      // useLayoutEffect([active])의 Flip.from()도 실행되지 않는다.
-      const mod = gsapModuleRef.current;
-      if (!mod) return;
-
-      // BootSequence는 active === overview일 때만 registerGsap()을 부른다.
-      // /#projects처럼 overview를 거치지 않고 다른 섹션에서 시작한 뒤 최초로
-      // overview 경계를 넘는 경우 그 등록이 아직 없었을 수 있으므로 여기서도
-      // 멱등하게 보장한다.
-      mod.registerGsap();
-      pendingWordmarkStateRef.current = mod.Flip.getState(wordmarkRef.current);
-    },
-    []
-  );
-
-  const {
-    active,
-    setActive,
-    goNext,
-    goPrevious,
-    isTransitioning,
-    completeTransition,
-    entryAnimationTarget,
-    routeResolved,
-    sectionTransition,
-  } = useSectionNav(handleBeforeActiveChange);
-  const swipeHandlers = useSectionSwipe({
-    onNext: goNext,
-    onPrevious: goPrevious,
-  });
-  const { ready: preferenceReady, reduced: reducedMotion } =
-    useMotionPreference();
+  const rootRef = useRef<HTMLElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
+  const { ready: preferenceReady, reduced: reducedMotion } = useMotionPreference();
   const pageVisible = usePageVisibility();
+  const obscured = useProjectModalObscured();
+  const aboutRef = useRef<AboutSectionHandle>(null);
+  const projectsRef = useRef<ProjectsSectionHandle>(null);
+  const wordmarkRef = useRef<HTMLButtonElement>(null);
+  const logoHostRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLCanvasElement>(null);
+  const heroStaticRef = useRef<HTMLDivElement>(null);
+  const ballIconsRef = useRef<HTMLDivElement>(null);
+  const ballRef = useRef<CrystalizedBallHandle>(null);
+  const headlineRef = useRef<HTMLHeadingElement>(null);
+  const bootRef = useRef<BootSequenceHandle>(null);
+  // 그리기 전 판정 스크립트(lib/introGate.ts)가 붙인 표시를 하이드레이션 때 한 번 읽는다. 마크업에는 쓰지 않는다.
+  const [introEnabled] = useState(() => typeof document !== 'undefined' && document.documentElement.hasAttribute('data-intro'));
+  // GL 로고는 진입이 끝난 뒤에 띄운다. WebGL 문맥 생성이 이 기기에서 메인 스레드를 1.4–2.3초 막아 진입을 멈춰 세웠다.
+  const [introPending, setIntroPending] = useState(introEnabled);
+  const introDone = useCallback(() => setIntroPending(false), []);
+  const [background, setBackground] = useState<LuminousFlowBackgroundHandle | null>(null);
+  const [introTargets, setIntroTargets] = useState<IntroTargets | null>(null);
+  // 공유 로고가 선택한 chapter를 따라가도록 셸이 들고 있는다.
+  const [aboutChapter, setAboutChapter] = useState(0);
+  const [wideScreen, setWideScreen] = useState(false);
+  const [motionModule, setMotionModule] = useState<typeof import('./motion') | null>(null);
+  const [logo, setLogo] = useState<ElectricLogoHandle | null>(null);
+  const [logoOwner, setLogoOwner] = useState<LogoOwner>('none');
+  // 프리뷰→헤드 경계가 첫 노드에 내려앉았는지. Experience가 첫 헤드와 첫 장을 공개한다.
+  const [lineArrived, setLineArrived] = useState(false);
+  // 경계 청크를 못 받으면 도착이 오지 않는다. Experience는 기다리지 않고 첫 장부터 읽기 진행으로 공개한다.
+  const [motionFailed, setMotionFailed] = useState(false);
+  // Experience 선이 Skills 헤드로 내려앉았는지. 경계 모듈이 없거나 넘김이 없는 환경에서는 처음부터 도착이다.
+  const [skillsHeadArrived, setSkillsHeadArrived] = useState(true);
+  const [skillsHead, setSkillsHead] = useState<SkillsSectionHandle | null>(null);
+  const [logoReady, setLogoReady] = useState(false);
+  // GL 로고는 쉬는 자리(hero·about)에서만 드러난다. 날아가는 도중에 준비돼도 내려앉은 뒤에 정적 실루엣과 바뀐다.
+  const [logoLive, setLogoLive] = useState(false);
+  // GL 볼이 첫 그림을 그린 뒤에만 정적 유리가 물러난다.
+  const [ballReady, setBallReady] = useState(false);
+  // GL 볼도 로고처럼 쉬는 자리에서만 정적 유리와 바뀐다. 접히거나 펼쳐지는 도중에 준비돼도 Hero에 돌아와 쉴 때 바꾼다.
+  const [ballLive, setBallLive] = useState(false);
+  const ballDone = useCallback(() => setBallReady(true), []);
+  const motionRef = useRef<PortfolioMotion | null>(null);
+  const releaseSkillsHead = useCallback(() => motionRef.current?.releaseSkillsHead(), []);
+  // 명시적 이동 직전에 About과 Projects의 읽기 잠금을 풀어 목적지로 가는 스크롤을 붙잡지 않는다.
+  const { active, routeResolved, navigationTarget, navigate } = useSectionNav({ rootRef, headerRef, blocked: obscured, reducedMotion, onBeforeNavigate: () => { bootRef.current?.finish(); aboutRef.current?.release(); projectsRef.current?.release(); } });
   const motionReady = routeResolved && preferenceReady;
-  motionReadyRef.current = motionReady;
-  reducedMotionRef.current = reducedMotion;
-  routeResolvedRef.current = routeResolved;
-  const isProjectModalOpen = useProjectModalObscured();
-
-  // 전환 끊김 완화. 비활성 섹션은 .section-hidden의 content-visibility:
-  // auto로 렌더를 건너뛴다. active가 바뀌는 순간 .section-visible로
-  // 올라가며 건너뛰던 서브트리 전체의 레이아웃·페인트가 전환이 시작되는 그
-  // 프레임에 몰려 워드마크 FLIP, 섹션 진입 타임라인과 겹쳤다. NAV_SEQUENCE
-  // 순서상 지금 active의 "다음" 섹션 하나만 미리 content-visibility를
-  // 올려 두면(opacity·pointer-events·inert는 .section-hidden 값 그대로)
-  // 그 비용이 전환 전에 이미 끝나 있다.
-  // START의 420ms 충전 구간을 굳이 별도로 훅하지 않은 이유는 이렇다.
-  // active 파생값이라 overview에 머무는 동안 계속 예열돼 420ms보다 훨씬
-  // 긴 여유를 번다. 순방향 연속 이동(about에서 projects로 같은 네비 클릭,
-  // 스와이프)도 같은 이유로 자연히 덮인다. 다만 역방향 이동과 건너뛰는
-  // 네비 점프(예: about에서 contact로)는 목적지가 "다음 하나"가 아니므로
-  // 덮이지 않는다(리포트 참고). reducedMotion에서는 애니메이션 자체가
-  // 없으므로 예열도 하지 않는다.
-  //
-  // isTransitioning을 함께 보는 이유가 이 예열의 핵심이다. prewarmId가
-  // active만 보고 파생되면, overview에서 about으로 넘어가는 그 커밋에서
-  // about이 싸게 올라가는 대신 projects가 hidden에서 prewarm으로 바뀐다.
-  // content-visibility가 그 프레임에 다시 올라가므로 지키려던 바로 그
-  // 프레임에 새 서브트리의 첫 렌더가 들어앉고, 끊김이 사라지는 게 아니라
-  // 옆 섹션으로 옮겨간다. setActive가 setActiveState와 setIsTransitioning을
-  // 같은 배치에서 부르므로 전환이 시작되는 렌더에는 이미 isTransitioning이
-  // true다. 그동안 예열을 멈췄다가 transitionend로 completeTransition이
-  // 닫아 준 뒤, 아무것도 움직이지 않을 때 다음 섹션을 데운다.
-  const prewarmId =
-    motionReady && !reducedMotion && !isTransitioning
-      ? NAV_SEQUENCE[NAV_SEQUENCE.indexOf(active) + 1]
-      : undefined;
-
-  // 유휴 예열. 위 prewarmId는 NAV_SEQUENCE의 "다음 하나"만 덮어 건너뛰는
-  // 이동(예: about에서 experience로)은 놓친다. 컨트롤러가 프로덕션
-  // 빌드·실제 GPU로 실측한 값이 이 구멍을 그대로 보여준다. about에서
-  // experience로 처음 이동할 때 긴 작업(long task)이 138ms·102ms 뛰고
-  // 프레임 간격이 최대 150ms까지 벌어졌다. 재방문에서는 둘 다 0에 가깝다.
-  // content-visibility: auto가 비활성 섹션의 첫 렌더를 미뤄 두는데, 그
-  // 비용이 전환이 시작되는 바로 그 프레임에 몰려 메인 스레드를 막기
-  // 때문이다. 그래서 300ms 이탈 애니메이션의 절반이 그려지지 않고,
-  // 떠나는 섹션이 확대도 흐려짐도 없이 선명한 채로 멈췄다가 툭 사라진다.
-  //
-  // 그래서 유휴 시간에 아직 안 데운 섹션을 하나씩 데워 이 비용을 전환
-  // 밖으로 옮긴다. 한 번 데운 섹션은 절대 다시 식히지 않는다(warmed 상태는
-  // 늘기만 한다). 이게 이 수정의 요점이다. 한 프레임에 전부 데우면 그
-  // 자체가 유휴 시간에 긴 작업을 만들므로 반드시 하나씩 예약한다.
-  const [warmedSectionIds, setWarmedSectionIds] = useState<
-    ReadonlySet<HomeSectionId>
-  >(() => new Set());
+  // 프리뷰로 날아가는 동안의 Projects 입력: About 잠금을 풀고 비행을 끝 자리로 정착시킨 뒤 원래 동작을 한 번 부른다(다시 관문으로 보내지 않는다).
+  const beforeProjectsAction = useCallback((run: () => void) => { aboutRef.current?.release(); motionRef.current?.settleProjects(); run(); }, []);
+  // About 레일과 같이 1024px부터만 WebGL 로고와 볼을 띄운다. 그 아래와 모션 감소는 앵커의 정적 실루엣과 정적 볼이다.
+  const glLogo = wideScreen && preferenceReady && !reducedMotion && !introPending;
+  // 쉬는 자리마다 그리는 GL host는 하나다. Hero에서는 볼이 돌고 로고는 한 장만 미리 그린 채 멈춘다.
+  // About에서는 로고가 돌고 볼은 접혀 사라진 채 멈춘다. 변신 동안(boundary)만 둘이 함께 그린다.
+  // 프리뷰로 가는 동안(preview)은 로고만 돌고, 프리뷰에 넘긴 뒤(projects)에는 숨은 로고도 멈춘다.
+  const heroResting = logoOwner === 'hero' || logoOwner === 'none';
+  const logoIdle = heroResting || logoOwner === 'projects';
+  const ballRuns = heroResting || logoOwner === 'boundary';
+  const activeLabel = HOME_SECTION_CONFIG.find(section => section.id === active)?.label ?? 'Overview';
+  const [announcement, setAnnouncement] = useState('');
+  // 경력 선과 프리뷰 morph를 그리는 오버레이 손잡이. ExperienceSection이 읽기 진행을, motion이 프리뷰→헤드 경계를 넘긴다.
+  const [overlay, setOverlay] = useState<ExperienceOverlay | null>(null);
+  useEffect(() => {
+    const canvas = overlayRef.current;
+    if (!canvas) return;
+    const overlay = createExperienceOverlay(canvas);
+    if (!overlay) return;
+    setOverlay(overlay);
+    return () => { overlay.destroy(); setOverlay(null); };
+  }, []);
+  // 모션 감소에서 오버레이는 경계를 재생하지 않고 선과 헤드를 멈춘 채 그린다.
+  useEffect(() => { overlay?.setReduced(reducedMotion); }, [overlay, reducedMotion]);
+  // 명시적 이동이 도착해 목적지에 포커스가 간 때만 알린다. 수동으로 읽어 넘긴 섹션은 알리지 않는다.
+  useEffect(() => {
+    if (navigationTarget) setAnnouncement('');
+    else if (document.activeElement === rootRef.current?.querySelector(`[data-section="${active}"]`)) setAnnouncement(`${activeLabel} section`);
+  }, [navigationTarget, active, activeLabel]);
 
   useEffect(() => {
-    // 전환 중에 데우면 지금 고치려는 문제를 그 프레임에 그대로 재현하므로
-    // routeResolved가 아직이거나 전환이 진행 중이면 예약하지 않는다.
-    if (!routeResolved || isTransitioning) return;
-
-    const nextId = HOME_SECTION_CONFIG.map(({ id }) => id).find(
-      (id) => !warmedSectionIds.has(id)
-    );
-    if (!nextId) return;
-
-    // requestIdleCallback이 없는 브라우저(Safari 구버전)는 setTimeout으로
-    // 대체한다.
-    const hasIdleCallback = typeof window.requestIdleCallback === 'function';
-    const warm = () => {
-      setWarmedSectionIds((prev) => {
-        if (prev.has(nextId)) return prev;
-        return new Set(prev).add(nextId);
-      });
-    };
-    const handle = hasIdleCallback
-      ? window.requestIdleCallback(warm)
-      : window.setTimeout(warm, 0);
-
-    return () => {
-      if (hasIdleCallback) window.cancelIdleCallback(handle);
-      else window.clearTimeout(handle);
-    };
-  }, [isTransitioning, routeResolved, warmedSectionIds]);
-
-  const sectionRefs = useRef<
-    Partial<Record<NavId, HTMLDivElement | null>>
-  >({});
-  const lastFocusedActive = useRef<NavId>(OVERVIEW);
-  const runningTransitions = useRef(new Set<NavId>());
-
-  // React가 hero/compact 클래스를 커밋한 직후 pending Flip 상태를 소비한다.
-  // 최초 마운트에는 pendingWordmarkStateRef가 비어 있으므로 Flip이 실행되지
-  // 않는다(구멍 없이 구조적으로 보장). Overview 경계를 넘지 않은 전환(예:
-  // about → projects)도 관찰자가 상태를 담지 않으므로 여기서 no-op한다.
-  useLayoutEffect(() => {
-    const state = pendingWordmarkStateRef.current;
-    if (!state) return;
-    pendingWordmarkStateRef.current = null;
-    if (!wordmarkRef.current) return;
-
-    // state가 있다는 것은 handleBeforeActiveChange가 그 시점에 이미
-    // gsapModuleRef를 채워 뒀다는 뜻이므로(같은 조건에서만 둘 다 세팅) 여기
-    // 도달했을 때 모듈이 없는 경우는 없다.
-    const mod = gsapModuleRef.current;
-    if (!mod) return;
-
-    mod.Flip.from(state, {
-      duration: WORDMARK_FLIP_DURATION_MS / 1000,
-      ease: mod.SITE_EASE,
-      scale: true,
-      absolute: true,
-    });
-  }, [active]);
-
-  const activeLabel =
-    active === OVERVIEW
-      ? 'Overview'
-      : HOME_SECTION_CONFIG.find(({ id }) => id === active)?.label ??
-        'Overview';
-
-  // reduced-motion이나 0초 전환에서는 CSS 이벤트가 없으므로 계산값으로 닫는다.
-  useLayoutEffect(() => {
+    const query = window.matchMedia?.('(min-width: 1024px)');
+    if (!query) return;
+    const update = () => setWideScreen(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+  // 경계 모듈은 GSAP·ScrollTrigger를 품어 First Load 밖에서 늦게 부른다. 모션 감소도 같은 지점에서 이름 자리를 바꾸므로 부른다.
+  useEffect(() => {
     if (!motionReady) return;
-    if (!isTransitioning) {
-      runningTransitions.current.clear();
-      return;
-    }
-
-    const destination = sectionRefs.current[active];
-    if (reducedMotion || !destination || !hasOpacityTransition(destination)) {
-      completeTransition(active);
-    }
-  }, [
-    active,
-    completeTransition,
-    isTransitioning,
-    motionReady,
-    reducedMotion,
-  ]);
-
-  // 상태 훅은 DOM을 모른다. 완료 뒤 region에만 포커스하고 scrollTop은 보존한다.
+    let alive = true;
+    // 청크를 못 받으면 모듈 없이 둔다. 이름·로고·볼은 CSS 쉬는 자리에 남고, 직접 해시의 nav 표시도 걷히지 않는다.
+    import('./motion').then(module => { if (alive) setMotionModule(module); }).catch(() => { if (alive) setMotionFailed(true); });
+    return () => { alive = false; };
+  }, [motionReady]);
+  // 모듈 준비와 모션 감소 전환 때만 다시 잇는다. GL 손잡이는 날던 이름·로고를 끊지 않게 따로 넘긴다.
   useEffect(() => {
-    if (
-      !routeResolved ||
-      isTransitioning ||
-      lastFocusedActive.current === active
-    ) {
-      return;
-    }
+    const root = rootRef.current, header = headerRef.current, wordmark = wordmarkRef.current, logoHost = logoHostRef.current;
+    if (!motionModule || !root || !header || !wordmark || !logoHost) return;
+    const motion = motionModule.createPortfolioMotion({ root, header, wordmark, logoHost, ball: ballRef, reduced: reducedMotion, onLogoOwnerChange: setLogoOwner, onLineArrive: setLineArrived, onSkillsHeadArrive: setSkillsHeadArrived });
+    motionRef.current = motion;
+    return () => { motion.destroy(); motionRef.current = null; setLogoOwner('none'); setLineArrived(false); setSkillsHeadArrived(true); };
+  }, [motionModule, reducedMotion]);
+  useEffect(() => { motionRef.current?.setLogo(logo); }, [logo, motionModule, reducedMotion]);
+  useEffect(() => { motionRef.current?.setSkillsHead(skillsHead); }, [skillsHead, motionModule, reducedMotion]);
+  // 오버레이는 마운트 뒤에 와서 setLogo처럼 따로 넘긴다. 옵션으로 넘기면 오는 순간 경계 전체를 다시 지었다.
+  useEffect(() => { motionRef.current?.setOverlay(overlay); }, [overlay, motionModule, reducedMotion]);
+  useEffect(() => { motionRef.current?.setPaused(obscured || !pageVisible); }, [obscured, pageVisible, motionModule, reducedMotion]);
+  useEffect(() => {
+    if (!logoReady || logoOwner === 'none') setLogoLive(false);
+    else if (logoOwner !== 'boundary' && logoOwner !== 'preview') setLogoLive(true);
+  }, [logoReady, logoOwner]);
+  // 진입 대상은 경계가 이름을 Hero 자리에 놓은 뒤에 넘긴다. 숨긴 이름이 nav에서 나타나 뛰어내리지 않는다.
+  // 오브젝트는 Hero 앵커 안 정적 실루엣의 껍질이다. 경계가 재는 앵커 상자는 건드리지 않는다.
+  // 경계 모듈이 오지 않으면 대상도 없고, BootSequence가 제한 시간 뒤 정적 첫 화면을 준다.
+  useEffect(() => {
+    const wordmark = wordmarkRef.current?.firstElementChild, headline = headlineRef.current, heroObject = heroStaticRef.current;
+    if (!introEnabled || !motionModule || !(wordmark instanceof HTMLElement) || !headline || !heroObject) return;
+    setIntroTargets({ wordmark, headline, heroObject });
+  }, [introEnabled, motionModule]);
+  useEffect(() => { if (!logo) setLogoReady(false); }, [logo]);
+  useEffect(() => { if (!glLogo) setBallReady(false); }, [glLogo]);
+  useEffect(() => {
+    if (!glLogo || !ballReady) setBallLive(false);
+    else if (logoOwner === 'hero' || logoOwner === 'none') setBallLive(true);
+  }, [glLogo, ballReady, logoOwner]);
 
-    lastFocusedActive.current = active;
-    sectionRefs.current[active]?.focus({ preventScroll: true });
-  }, [active, isTransitioning, routeResolved]);
-
-  const isOwnOpacityTransition = (
-    event: TransitionEvent<HTMLDivElement>
-  ) => {
-    // React 19는 transitionrun/cancel을 일반 SyntheticEvent로 전달하므로
-    // 그 두 이벤트의 propertyName은 nativeEvent에서 보완해야 한다.
-    const nativePropertyName =
-      'propertyName' in event.nativeEvent &&
-      typeof event.nativeEvent.propertyName === 'string'
-        ? event.nativeEvent.propertyName
-        : '';
-    const propertyName = event.propertyName || nativePropertyName;
-
-    return event.target === event.currentTarget && propertyName === 'opacity';
-  };
-
-  const handleSectionTransitionRun = (
-    id: NavId,
-    event: TransitionEvent<HTMLDivElement>
-  ) => {
-    if (
-      isTransitioning &&
-      id === active &&
-      isOwnOpacityTransition(event)
-    ) {
-      runningTransitions.current.add(id);
-    }
-  };
-
-  const handleSectionTransitionDone = (
-    id: NavId,
-    event: TransitionEvent<HTMLDivElement>
-  ) => {
-    if (!isOwnOpacityTransition(event)) return;
-    if (!runningTransitions.current.has(id)) return;
-
-    runningTransitions.current.delete(id);
-    completeTransition(id);
-  };
-
-  // 전환 표식은 들어오는 섹션 하나와 나가는 섹션 하나에만 단다. 그래야
-  // 매 전환마다 그 둘의 animation-name이 반드시 바뀌어 같은 방향으로
-  // 연속 이동해도 애니메이션이 다시 재생된다. 전부에 달면 비활성 여섯 개가
-  // 함께 뛴다. reducedMotion이면 아예 달지 않아 CSS가 걸릴 자리가 없다.
-  //
-  // isTransitioning 게이트(최종 리뷰 I2). sectionTransition은 한 번
-  // 기록되면 다음 이동 전까지 초기화되지 않는다. 이 게이트가 없으면
-  // reducedMotion이 켜진 채로 이동해 표식 없이 도착한 뒤(아무 애니메이션도
-  // 없음), 한참 뒤 OS 모션 설정이 꺼져 재렌더가 일어나면 표식이 새로
-  // 붙어 아무 데도 가지 않았는데 진입 애니메이션이 재생된다. setActive가
-  // setActiveState와 setIsTransitioning(true)를 같은 배치에서 부르므로
-  // 전환 첫 렌더에는 이미 표식이 붙어 있어 안전하다.
-  function transitionAttributes(id: NavId): Record<string, string> {
-    if (reducedMotion || !isTransitioning || sectionTransition.direction === 'none') {
-      return {};
-    }
-    if (id === active) {
-      return { 'data-section-direction': sectionTransition.direction };
-    }
-    if (id === sectionTransition.from) {
-      return {
-        'data-section-direction': sectionTransition.direction,
-        'data-section-leaving': '',
-      };
-    }
-    return {};
-  }
-
-  return (
-    <SectionActivityProvider
-      active={active}
-      entryAnimationTarget={entryAnimationTarget}
-      pageVisible={pageVisible}
-      routeResolved={routeResolved}
-      motionReady={motionReady}
-      reducedMotion={reducedMotion}
-      heroRevealed={heroRevealed}
-    >
-      <HyperspeedBackground
-        active={active}
-        isTransitioning={isTransitioning}
-        obscured={isProjectModalOpen}
-        pageVisible={pageVisible}
-        routeResolved={routeResolved}
-        motionReady={motionReady}
-        reducedMotion={reducedMotion}
-        heroRevealed={heroRevealed}
-      />
-
-      {/* 모달이 열리면 셸(Navigation)을 inert로 격리한다 — NEXT/스와이프로
-          섹션이 바뀌면 모달 뒤에서 배경이 갈리는 모순이 생긴다. Navigation은
-          inert를 직접 받지 않으므로 이 wrapper가 대신 짊어진다(계획 5 T2
-          Task 9 §7.4). data-obscured는 design-tokens.css의 규칙이 읽어
-          nav를 흐리며 물러나게 한다(Task S) */}
-      <div inert={isProjectModalOpen} data-obscured={isProjectModalOpen ? '' : undefined}>
-        <Navigation
-          items={NAV_ITEMS}
-          active={active}
-          onNavigate={setActive}
-          reducedMotion={reducedMotion}
-          wordmarkRef={wordmarkRef}
-          wordmarkScaleRef={wordmarkScaleRef}
-        />
+  return <SectionActivityProvider pageVisible={pageVisible} routeResolved={routeResolved} motionReady={motionReady} reducedMotion={reducedMotion} obscured={obscured}>
+    {/* 준비 전 기본값(reduced: true)으로 진입을 끝내지 않는다. 그리기 전 판정이 이미 모션 감소를 걸렀다.
+        배경 손잡이는 대상보다 먼저 넘겨 첫 그림부터 공개값 0이다. */}
+    <BootSequence ref={bootRef} enabled={introEnabled} reducedMotion={preferenceReady && reducedMotion} targets={introTargets} background={background} onComplete={introDone} />
+    <div className="portfolio-document" data-logo-owner={logoOwner} data-logo-live={logoLive ? '' : undefined}>
+      <LuminousFlowBackground ref={setBackground} scrollScene paused={!pageVisible || !motionReady || reducedMotion || obscured} />
+      <div inert={obscured} data-obscured={obscured ? '' : undefined}>
+        <Navigation items={NAV_ITEMS} active={active} onNavigate={navigate} reducedMotion={reducedMotion} headerRef={headerRef} />
       </div>
-
-      {/* 워드마크와 같은 셸 레벨 — overview 섹션(.section-hidden의
-          content-visibility) 밖에 둔다. 섹션 안에 있으면 paint containment가
-          이 fixed 캡션을 뷰포트가 아니라 섹션 컨테이닝 박스 기준으로
-          재배치해 START를 누르는 순간 아래로 튀었다(부팅 안무 브리프 3절).
-          BootSequence는 항상 마운트 상태를 유지한다(active로 조건부 렌더하지
-          않는다) — 그래야 hasStartedRef가 살아남아 재방문 시 재생되지 않는다는
-          계약을 지킨다. 보이기/숨기기·inert는 BootSequence 자신이 active를
-          보고 소유한다. */}
-      <BootSequence
-        active={active}
-        routeResolved={routeResolved}
-        motionReady={motionReady}
-        reducedMotion={reducedMotion}
-        wordmarkRef={wordmarkRef}
-        onStart={() => setActive(SECTION_IDS.ABOUT)}
-        onNameRevealed={handleNameRevealed}
-        transitionAttributes={transitionAttributes(OVERVIEW)}
-      />
-
-      <main
-        className={`section-stage${
-          active === SECTION_IDS.PROJECTS || active === SECTION_IDS.EXPERIENCE
-            ? ' section-stage-horizontal'
-            : ''
-        }`}
-        data-route-resolved={routeResolved}
-        data-motion-ready={motionReady}
-        data-reduced-motion={reducedMotion}
-        // 계획 6 Task 5a. Playwright가 붙잡을 관측 속성. entryAnimationTarget은
-        // useSectionNav의 captureFirstEntry가 최초 방문 id 또는(재방문) null로
-        // 이미 소유하고 있다. WhenVisible.tsx의 shouldEnter와 같은 비교식이다.
-        data-entry-motion={entryAnimationTarget === active ? 'enter' : 'steady'}
-        // jsdom은 inert의 포인터 차단을 구현하지 않으므로(실제 브라우저와
-        // 달리 pointerdown이 그대로 발화한다), 모달이 열려 있으면 스와이프
-        // 핸들러 자체를 붙이지 않는다. inert 하나로는 스와이프를 막지
-        // 못한다(계획 5 T2 Task 9 §7.4)
-        inert={isProjectModalOpen}
-        {...(isProjectModalOpen ? {} : swipeHandlers)}
-      >
-        <div
-          ref={(node) => {
-            sectionRefs.current[OVERVIEW] = node;
-          }}
-          data-section={OVERVIEW}
-          role="region"
-          aria-label="Overview"
-          tabIndex={-1}
-          className={`section-scroll ${
-            active === OVERVIEW ? 'section-visible' : 'section-hidden'
-          }`}
-          inert={active !== OVERVIEW}
-          aria-hidden={active !== OVERVIEW}
-          {...transitionAttributes(OVERVIEW)}
-          onTransitionRun={(event) =>
-            handleSectionTransitionRun(OVERVIEW, event)
-          }
-          onTransitionEnd={(event) =>
-            handleSectionTransitionDone(OVERVIEW, event)
-          }
-          onTransitionCancel={(event) =>
-            handleSectionTransitionDone(OVERVIEW, event)
-          }
-        />
-        {/* overview는 이제 셸 레벨의 BootSequence만 보여준다(위 참고) — 이
-            wrapper는 section 상태(visible/hidden·inert)와 SEO용 region
-            상주만을 위해 빈 채로 남는다. */}
-
-        {HOME_SECTION_CONFIG.map(({ id, label }) => {
-          const Section = SECTION_COMPONENTS[id];
-          const isActive = active === id;
-          // id === prewarmId는 전환 직후 다음 섹션을 즉시 덮고, warmedSectionIds는
-          // 유휴 시간에 하나씩 쌓인 데워진 섹션 전체를 덮는다. 활성 섹션에는
-          // 붙이지 않는다(!isActive). 이미 section-visible이라 예열이 필요 없다.
-          const isPrewarm =
-            !isActive && (id === prewarmId || warmedSectionIds.has(id));
-
-          return (
-            <div
-              ref={(node) => {
-                sectionRefs.current[id] = node;
-              }}
-              key={id}
-              data-section={id}
-              role="region"
-              aria-label={label}
-              tabIndex={-1}
-              className={`section-scroll ${
-                isActive
-                  ? 'section-visible'
-                  : isPrewarm
-                    ? 'section-hidden section-prewarm'
-                    : 'section-hidden'
-              }`}
-              // 비활성 섹션은 보이지 않아도 Tab으로 들어갈 수 있으므로 inert가 필요하다.
-              inert={!isActive}
-              aria-hidden={!isActive}
-              {...transitionAttributes(id)}
-              onTransitionRun={(event) =>
-                handleSectionTransitionRun(id, event)
-              }
-              onTransitionEnd={(event) =>
-                handleSectionTransitionDone(id, event)
-              }
-              onTransitionCancel={(event) =>
-                handleSectionTransitionDone(id, event)
-              }
-            >
-              <Section active={isActive} />
+      <main ref={rootRef} className="section-stage" inert={obscured}
+        data-route-resolved={routeResolved} data-motion-ready={motionReady} data-reduced-motion={reducedMotion}
+        data-navigation-target={navigationTarget ?? undefined} data-active-section={active}>
+        <section id="overview" data-section="overview" role="region" aria-label="Overview" tabIndex={-1} className="document-section portfolio-hero">
+          <div className="hero-copy">
+            {/* 이름 버튼은 문서에 하나뿐이다. 서버 HTML부터 이 자리(Hero)에 크게 서고, 경계가 지점을 넘으면 nav 자리로 옮긴다.
+                버튼 transform은 경계가, 안쪽 span의 opacity·자세는 인트로가 쓴다. 키보드로 누른 클릭(detail 0)은 smooth 없이 바로 간다. */}
+            <div data-motion-anchor="hero-name" className="hero-name">
+              <button ref={wordmarkRef} data-testid="wordmark" data-wordmark-mode="hero" aria-label={`${PERSONAL_INFO.NAME_EN}, 개요로 이동`}
+                onClick={event => navigate('overview', { focus: true, behavior: reducedMotion || event.detail === 0 ? 'auto' : 'smooth' })}
+                className="site-name min-h-11 text-left text-t6 font-bold tracking-widest"><span className="inline-block">{PERSONAL_INFO.NAME_EN}</span></button>
             </div>
-          );
+            <h1 ref={headlineRef}>{'안녕하세요.\nSW개발자 김태인입니다.'}</h1>
+          </div>
+          {/* 볼이 앉는 자리이자 로고가 떠나는 자리. 볼은 정면이고 앵커를 꽉 채운다.
+              D5-A: 1024px부터 문장 오른쪽, 그 아래는 이름·문장 다음이다. */}
+          <div data-motion-anchor="hero-object" aria-hidden="true" className="hero-object">
+            {/* 껍질은 인트로의 opacity·크기와 로고와의 교대를 받는다. 아이콘 층은 하나뿐이고 유리(캔버스) 아래에 있다.
+                기술 이름은 Skills에 있어 아이콘은 장식이다. */}
+            <div ref={heroStaticRef} className="hero-ball" data-ball-live={ballLive ? '' : undefined}>
+              <div className="hero-ball-glass" />
+              <div ref={ballIconsRef} className="hero-ball-icons">
+                {BALL_REST.map(({ name, transform, opacity, zIndex }) => <span key={name} style={{ width: `${ICON_SIZE * 100}%`, transform, opacity, zIndex }}>
+                  <span style={{ maskImage: `url(/icons-mono/${name}.svg)`, WebkitMaskImage: `url(/icons-mono/${name}.svg)` }} />
+                </span>)}
+              </div>
+              {glLogo ? <DynamicCrystalizedBall ref={ballRef} icons={ballIconsRef} paused={!ballRuns || !motionReady || !pageVisible || obscured} onReady={ballDone} /> : null}
+            </div>
+          </div>
+        </section>
+        {HOME_SECTION_CONFIG.map(({ id, label }) => {
+          const Section = id === SECTION_IDS.ABOUT || id === SECTION_IDS.PROJECTS || id === SECTION_IDS.EXPERIENCE || id === SECTION_IDS.SKILLS ? null : SECTION_COMPONENTS[id];
+          return <div key={id} data-section={id} role="region" aria-label={label} tabIndex={-1} className="document-section">
+            {id === SECTION_IDS.EXPERIENCE ? <ExperienceSection lineArrived={motionFailed || lineArrived} overlay={overlay} /> : id === SECTION_IDS.SKILLS ? <SkillsSection ref={setSkillsHead} headArrived={motionFailed || skillsHeadArrived} onHeadShown={releaseSkillsHead} /> : id === SECTION_IDS.PROJECTS ? <ProjectsSection ref={projectsRef} beforeAction={beforeProjectsAction} navigationPending={navigationTarget !== null} logoOwner={logoOwner} /> : Section ? <Section /> : <AboutSection ref={aboutRef} onChapterChange={setAboutChapter} navigationPending={navigationTarget !== null} logoOwner={logoOwner} />}
+          </div>;
         })}
+        {/* 공유 로고 host. About의 원형 마스크와 overflow-x: clip 밖, 문서 좌표에 산다.
+            바깥은 경계가 옮기고, 안쪽 불투명도는 변신 진행도(Hero에서 0)다. */}
+        <div ref={logoHostRef} data-logo-host aria-hidden="true" className="logo-host">
+          <div>
+            {/* Hero에서 쉬는 동안 host는 숨어 돌지 않는다. 한 장만 미리 그려 준비를 알리고 변신이 시작되면 돈다.
+                About을 떠나 프리뷰로 가고 돌아오는 동안은 chapter 로고 그대로다. 되돌아올 때 About에서 보던 로고로 접힌다. */}
+            {glLogo ? <DynamicElectricLogo ref={setLogo} src={LOGO_SRCS[heroResting || logoOwner === 'boundary' ? 0 : aboutChapter]} active={!logoIdle && motionReady && pageVisible && !obscured}
+              prewarm preloadSrcs={LOGO_SRCS} onReady={() => setLogoReady(true)} color="#7fe3ee" glowColor="#03b3c3"
+              intensity={0.65} glow={0.3} speed={1.1} flicker={0.25} interactive={false} /> : null}
+          </div>
+        </div>
+        {/* 페이지 전용 오버레이 캔버스. 경력 선·헤드와 프리뷰→헤드 morph를 그린다. 화면 좌표에 고정되고 누르거나 읽을 것이 아니다. */}
+        <canvas ref={overlayRef} data-motion-overlay aria-hidden="true" className="motion-overlay" />
       </main>
-
-      <div
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-        className="sr-only"
-      >
-        {isTransitioning ? '' : `${activeLabel} section`}
-      </div>
-
-      {/* Footer도 셸의 일부다 — 모달이 열려 있는 동안 포커스 순서에서
-          빠지도록 inert로 격리한다 */}
-      <div inert={isProjectModalOpen}>
-        <Footer atOverview={active === OVERVIEW} />
-      </div>
-    </SectionActivityProvider>
-  );
+      <div inert={obscured} data-flow-finale=""><Footer /></div>
+      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">{announcement}</div>
+    </div>
+  </SectionActivityProvider>;
 }

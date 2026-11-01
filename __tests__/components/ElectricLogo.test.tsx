@@ -1,0 +1,598 @@
+import { act, cleanup, render } from '@testing-library/react';
+import { createRef } from 'react';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+
+// The GL mock records uniforms per draw and counts renderer/texture lifetimes. Visual continuity is checked in M4.
+type Drawn = Record<string, number | number[]>;
+const gpu = vi.hoisted(() => ({ renderers: 0, textures: 0, uploads: 0, deleted: 0, drawn: [] as Record<string, number | number[]>[] }));
+vi.mock('ogl', () => {
+  class Renderer {
+    dpr: number; isWebgl2 = true; width = 0; height = 0;
+    gl: Record<string, unknown> & { canvas: HTMLCanvasElement };
+    constructor({ dpr }: { dpr: number }) {
+      gpu.renderers++;
+      this.dpr = dpr;
+      this.gl = { canvas: document.createElement('canvas'), getExtension: () => null, clearColor() {}, deleteTexture() { gpu.deleted++; }, renderer: this };
+    }
+    setSize(width: number, height: number) {
+      this.width = width; this.height = height;
+      this.gl.canvas.width = width * this.dpr; this.gl.canvas.height = height * this.dpr;
+      Object.assign(this.gl.canvas.style, { width: `${width}px`, height: `${height}px` });
+    }
+    render({ scene }: { scene: { program: { uniforms: Record<string, { value: unknown }> } } }) {
+      gpu.drawn.push(Object.fromEntries(Object.entries(scene.program.uniforms)
+        .filter(([, u]) => typeof u.value === 'number' || Array.isArray(u.value) || typeof (u.value as { id?: unknown })?.id === 'number')
+        // A texture uniform is recorded as its texture id, so a rebind is visible.
+        .map(([key, u]) => [key, Array.isArray(u.value) ? [...u.value] : typeof u.value === 'number' ? u.value : (u.value as { id: number }).id])));
+    }
+  }
+  class Program {
+    uniforms: unknown;
+    constructor(public gl: unknown, { vertex, fragment, uniforms }: { vertex: string; fragment: string; uniforms: unknown }) {
+      this.uniforms = uniforms;
+      (this as unknown as { setShaders: (s: object) => void }).setShaders({ vertex, fragment });
+    }
+    setShaders() {}
+  }
+  class Mesh { program: unknown; constructor(_gl: unknown, { program }: { program: unknown }) { this.program = program; } }
+  class Triangle {}
+  // needsUpdate queues a GPU re-upload on the next draw, so setting it is what gets counted.
+  // update() uploads now; a picture whose src contains "taint" throws like a cross-origin texImage2D.
+  class Texture {
+    id: number; image?: { currentSrc?: string };
+    constructor() { this.id = ++gpu.textures; }
+    set needsUpdate(value: boolean) { if (value) gpu.uploads++; }
+    update() { if (this.image?.currentSrc?.includes('taint')) throw new DOMException('tainted', 'SecurityError'); }
+  }
+  return { Renderer, Program, Mesh, Triangle, Texture };
+});
+
+import ElectricLogo, { type ElectricLogoHandle } from '@/components/blocks/ElectricLogo';
+
+let clock = 1000;
+let side = 200;
+const frames = new Map<number, FrameRequestCallback>();
+const images: { onload?: () => void }[] = [];
+beforeEach(() => {
+  gpu.renderers = 0; gpu.textures = 0; gpu.uploads = 0; gpu.deleted = 0; gpu.drawn.length = 0;
+  frames.clear(); images.length = 0; clock = 1000; side = 200;
+  let id = 0;
+  vi.spyOn(performance, 'now').mockImplementation(() => clock);
+  vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => { frames.set(++id, callback); return id; }));
+  vi.stubGlobal('cancelAnimationFrame', vi.fn((frame: number) => frames.delete(frame)));
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  vi.stubGlobal('IntersectionObserver', class { observe() {} disconnect() {} });
+  vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false })));
+  vi.stubGlobal('Image', class { onload?: () => void; naturalWidth = 64; naturalHeight = 64; set src(_value: string) { images.push(this); } });
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(400);
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(400);
+  // A centred opaque square of `side` raster pixels; changing `side` gives a different logo.
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => ({
+    drawImage() {},
+    getImageData: (_x: number, _y: number, w: number, h: number) => {
+      const data = new Uint8ClampedArray(w * h * 4);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        if (Math.abs(x + 0.5 - w / 2) < side / 2 && Math.abs(y + 0.5 - h / 2) < side / 2) data[(y * w + x) * 4 + 3] = 255;
+      }
+      return { data };
+    },
+  }) as unknown as CanvasRenderingContext2D);
+});
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+const tick = (step = 16) => act(() => {
+  clock += step;
+  const pending = [...frames.values()];
+  frames.clear();
+  pending.forEach((callback) => callback(clock));
+});
+const loadImages = (nextSide: number) => act(() => { side = nextSide; images.splice(0).forEach((image) => image.onload?.()); });
+const last = () => gpu.drawn.at(-1) as Drawn;
+const canvas = (container: HTMLElement) => container.querySelector('canvas')!;
+const box = { width: 640, height: 360, radius: 24 };
+
+// A logo showing `src` after its trace, then optionally mid-way through a 1 s morph to `next`.
+function mount(src: string, next?: string, ref = createRef<ElectricLogoHandle>()) {
+  const view = render(<ElectricLogo ref={ref} src={src} />);
+  loadImages(200);
+  tick();
+  if (next) {
+    view.rerender(<ElectricLogo ref={ref} src={next} />);
+    loadImages(120);
+    tick();
+    tick(384);
+  }
+  return { ...view, ref };
+}
+
+it('keeps the 1 s time morph for a logo without a ref', () => {
+  const view = render(<ElectricLogo src="plain-a.svg" />);
+  loadImages(200);
+  tick();
+  view.rerender(<ElectricLogo src="plain-b.svg" />);
+  loadImages(120);
+  tick();
+  expect(last().uMorph).toBeCloseTo(0.016, 3);
+  tick(484);
+  expect(last().uMorph).toBeCloseTo(0.5, 3);
+  tick(500);
+  expect(last().uMorph).toBe(1);
+});
+
+it('refuses to begin before a shape is visible and begins once it is', () => {
+  const ref = createRef<ElectricLogoHandle>();
+  render(<ElectricLogo ref={ref} src="ready-a.svg" />);
+  tick();
+  expect(ref.current!.beginBoundary(box)).toBe(false);
+  loadImages(200);
+  tick();
+  expect(ref.current!.beginBoundary(box)).toBe(true);
+});
+
+it('starts from the visible mid-morph shape and follows seeks in order without time advancing it', () => {
+  const { ref } = mount('seek-a.svg', 'seek-b.svg');
+  const start = last();
+  expect(start.uMorph).toBeCloseTo(0.4, 3);
+  expect(ref.current!.beginBoundary(box)).toBe(true);
+  for (const p of [0, 0.5, 0.2, 1]) {
+    ref.current!.seekBoundary(p);
+    tick(250);
+    expect(last().uBoundary).toBe(p);
+    expect(last().uMorph).toBe(start.uMorph);
+    expect(last().uMapFrom).toEqual(start.uMapFrom);
+    expect(last().uMapTo).toEqual(start.uMapTo);
+  }
+  ref.current!.seekBoundary(-1);
+  tick();
+  expect(last().uBoundary).toBe(0);
+  ref.current!.seekBoundary(2);
+  tick();
+  expect(last().uBoundary).toBe(1);
+});
+
+it('allocates the boundary footprint at begin and target change, not per seek', () => {
+  const { ref, container } = mount('size-a.svg');
+  const textures = gpu.textures;
+  ref.current!.beginBoundary(box);
+  tick();
+  const [fw, fh] = last().uResolution as number[];
+  expect(fw).toBeGreaterThan(640);
+  expect(fh).toBeGreaterThanOrEqual(400);
+  expect(last().uOrigin).toEqual([(fw - 400) / 2, (fh - 400) / 2]);
+  expect(last().uBox).toEqual([200, 200, 320, 180]);
+  // Out of flow, so the larger canvas cannot raise the min-content size of a flex parent.
+  expect(canvas(container).style).toMatchObject({ position: 'absolute', left: `${(400 - fw) / 2}px`, top: `${(400 - fh) / 2}px` });
+  const size = [canvas(container).width, canvas(container).height, canvas(container).style.cssText];
+  for (const p of [0.1, 0.6, 0.3, 0.9]) {
+    ref.current!.seekBoundary(p);
+    tick();
+    expect([canvas(container).width, canvas(container).height, canvas(container).style.cssText]).toEqual(size);
+  }
+  expect(gpu.renderers).toBe(1);
+  expect(gpu.textures).toBe(textures);
+});
+
+it('changes the destination on a target update without re-capturing the start', () => {
+  const { ref } = mount('target-a.svg', 'target-b.svg');
+  ref.current!.beginBoundary(box);
+  ref.current!.seekBoundary(0.5);
+  tick();
+  const before = last();
+  ref.current!.setBoundaryTarget({ width: 300, height: 200, radius: 500 });
+  tick();
+  expect(last().uBox).toEqual([200, 200, 150, 100]);
+  expect(last().uBoxRadius).toBe(100);
+  expect(last().uBoundary).toBe(0.5);
+  for (const key of ['uMorph', 'uMapFrom', 'uMapTo', 'uSizeFrom', 'uSizeTo']) expect(last()[key]).toEqual(before[key]);
+});
+
+it('keeps a src change during the boundary out until end, then restores the 1 s morph', () => {
+  const { ref, rerender, container } = mount('end-a.svg');
+  const shown = last();
+  ref.current!.beginBoundary(box);
+  rerender(<ElectricLogo ref={ref} src="end-b.svg" />);
+  loadImages(120);
+  ref.current!.seekBoundary(0.7);
+  tick(500);
+  expect(last().uSizeTo).toEqual(shown.uSizeTo);
+  expect(last().uMorph).toBe(1);
+  ref.current!.endBoundary();
+  tick();
+  expect(last().uBoundary).toBe(0);
+  expect(last().uResolution).toEqual([400, 400]);
+  expect(last().uOrigin).toEqual([0, 0]);
+  expect(canvas(container).style).toMatchObject({ position: '', left: '', top: '', width: '400px', height: '400px' });
+  expect((container.firstChild as HTMLElement).style.overflow).toBe('');
+  expect(last().uSizeTo).not.toEqual(shown.uSizeTo);
+  expect(last().uMorph).toBeCloseTo(0.016, 3);
+  tick(484);
+  expect(last().uMorph).toBeCloseTo(0.5, 3);
+  tick(500);
+  expect(last().uMorph).toBe(1);
+});
+
+it('resumes an interrupted morph where begin froze it', () => {
+  const { ref } = mount('resume-a.svg', 'resume-b.svg');
+  ref.current!.beginBoundary(box);
+  tick(3000);
+  ref.current!.endBoundary();
+  tick(100);
+  expect(last().uMorph).toBeCloseTo(0.5, 3);
+});
+
+// Task 1 review carryovers for the shared logo host (M3 2b).
+function observeVisibility() {
+  const observers: ((entries: { isIntersecting: boolean }[]) => void)[] = [];
+  vi.stubGlobal('IntersectionObserver', class {
+    constructor(callback: (entries: { isIntersecting: boolean }[]) => void) { observers.push(callback); }
+    observe() {} disconnect() {}
+  });
+  return (isIntersecting: boolean) => act(() => observers.forEach((callback) => callback([{ isIntersecting }])));
+}
+
+it('keeps drawing boundary seeks after the container leaves the viewport, because the footprint is larger', () => {
+  const setVisible = observeVisibility();
+  const { ref } = mount('gate-a.svg');
+  ref.current!.beginBoundary(box);
+  tick();
+  setVisible(false);
+  // The frame already queued runs once and the loop stops.
+  tick();
+  ref.current!.seekBoundary(0.6);
+  tick();
+  expect(last().uBoundary).toBe(0.6);
+});
+
+it('draws a boundary end made off screen and inactive once the container returns', () => {
+  const setVisible = observeVisibility();
+  const ref = createRef<ElectricLogoHandle>();
+  const view = render(<ElectricLogo ref={ref} src="dirty-a.svg" />);
+  loadImages(200);
+  tick();
+  ref.current!.beginBoundary(box);
+  tick();
+  view.rerender(<ElectricLogo ref={ref} src="dirty-a.svg" active={false} />);
+  setVisible(false);
+  ref.current!.endBoundary();
+  tick();
+  const draws = gpu.drawn.length;
+  expect(last().uBoundary).toBe(0);
+  expect(last().uResolution).not.toEqual([400, 400]);
+  setVisible(true);
+  tick();
+  expect(gpu.drawn.length).toBe(draws + 1);
+  expect(last().uResolution).toEqual([400, 400]);
+  tick();
+  expect(gpu.drawn.length).toBe(draws + 1);
+});
+
+// M4 Task 1: the first box consumer (About logo -> project preview) and the remaining M3 Task 1 carryovers.
+const preview = { width: 640 * 1.04, height: 360 * 1.04, radius: 14 };
+function observeResize() {
+  let resized = () => {};
+  vi.stubGlobal('ResizeObserver', class { constructor(callback: () => void) { resized = callback; } observe() {} disconnect() {} });
+  return (width: number) => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(width);
+    act(() => resized());
+  };
+}
+
+it('a preview box begun mid chapter morph starts from the visible blend, and a reverse seek returns to exactly that start', () => {
+  const { ref } = mount('box-a.svg', 'box-b.svg');
+  const start = last();
+  expect(start.uMorph).toBeCloseTo(0.4, 3);
+  ref.current!.beginBoundary(preview);
+  ref.current!.seekBoundary(0);
+  tick();
+  const zero = last();
+  expect(zero.uBoundary).toBe(0);
+  for (const key of ['uMorph', 'uMapFrom', 'uMapTo', 'uSizeFrom', 'uSizeTo']) expect(zero[key]).toEqual(start[key]);
+  for (const p of [0.4, 1, 0.7, 0.2, 0]) {
+    ref.current!.seekBoundary(p);
+    tick();
+  }
+  for (const key of ['uBoundary', 'uMorph', 'uMapFrom', 'uMapTo', 'uSizeFrom', 'uSizeTo', 'uBox', 'uBoxRadius']) expect(last()[key]).toEqual(zero[key]);
+});
+
+it('a container resize during the box boundary keeps the same start shape, re-centred, and re-centres the box', () => {
+  const resizeTo = observeResize();
+  const { ref } = mount('rs-a.svg', 'rs-b.svg');
+  ref.current!.beginBoundary(preview);
+  ref.current!.seekBoundary(0.5);
+  tick();
+  const before = last();
+  resizeTo(500);
+  ref.current!.seekBoundary(0.5);
+  tick();
+  const after = last();
+  expect(after.uMorph).toBe(before.uMorph);
+  for (const key of ['uMapTo', 'uMapFrom'] as const) {
+    const [x0, y0, fit0] = before[key] as number[];
+    const [x1, y1, fit1] = after[key] as number[];
+    expect(x1).toBeCloseTo(x0 + 50, 6);
+    expect([y1, fit1]).toEqual([y0, fit0]);
+  }
+  expect((after.uBox as number[]).slice(0, 2)).toEqual([250, 200]);
+});
+
+it('ending a boundary held while the loop was paused does not advance the frozen morph by the paused time', () => {
+  const ref = createRef<ElectricLogoHandle>();
+  const view = render(<ElectricLogo ref={ref} src="pause-a.svg" />);
+  loadImages(200);
+  tick();
+  view.rerender(<ElectricLogo ref={ref} src="pause-b.svg" />);
+  loadImages(120);
+  tick();
+  tick(384);
+  expect(last().uMorph).toBeCloseTo(0.4, 3);
+  ref.current!.beginBoundary(preview);
+  // Inactive: no frame runs while the clock moves on.
+  view.rerender(<ElectricLogo ref={ref} src="pause-b.svg" active={false} />);
+  tick();
+  act(() => { clock += 3000; });
+  ref.current!.endBoundary();
+  tick();
+  // Without the reset in end the 3 s would count as morph time and the blend would jump to the finished logo.
+  expect(last().uMorph).toBeCloseTo(0.4, 3);
+});
+
+// Resizing the backing store clears the canvas. In headed Chrome the next frame came one frame interval later, so the cleared
+// canvas was composited once: the visible About logo blinked out at the start of the flight and at the landing.
+it('draws the resized canvas in the same call that begins, grows or ends the boundary', () => {
+  const { ref } = mount('blank-a.svg');
+  let drawn = gpu.drawn.length;
+  ref.current!.beginBoundary(preview);
+  expect(gpu.drawn.length).toBe(drawn + 1);
+  expect(last().uResolution).not.toEqual([400, 400]);
+  drawn = gpu.drawn.length;
+  ref.current!.setBoundaryTarget({ width: 1200, height: 700, radius: 14 });
+  expect(gpu.drawn.length).toBe(drawn + 1);
+  drawn = gpu.drawn.length;
+  ref.current!.seekBoundary(0.5);
+  expect(gpu.drawn.length).toBe(drawn);
+  tick();
+  drawn = gpu.drawn.length;
+  ref.current!.endBoundary();
+  expect(gpu.drawn.length).toBe(drawn + 1);
+  expect(last().uResolution).toEqual([400, 400]);
+  // One frame stays queued for the loop, not two.
+  tick();
+  expect(gpu.drawn.length).toBe(drawn + 2);
+});
+
+it('a box boundary re-uploads no texture: seeks, target changes, a resize and end only change uniforms and the canvas', () => {
+  const resizeTo = observeResize();
+  const { ref } = mount('up-a.svg', 'up-b.svg');
+  tick(1000);
+  const [uploads, textures] = [gpu.uploads, gpu.textures];
+  expect(uploads).toBeGreaterThan(0);
+  ref.current!.beginBoundary(preview);
+  for (const p of [0.1, 0.5, 0.9]) {
+    ref.current!.seekBoundary(p);
+    ref.current!.setBoundaryTarget({ width: 300 + 400 * p, height: 360, radius: 14 });
+    tick();
+  }
+  resizeTo(500);
+  tick();
+  ref.current!.endBoundary();
+  tick();
+  tick(1000);
+  expect([gpu.uploads, gpu.textures]).toEqual([uploads, textures]);
+});
+
+// M4 Task 3 (user choice A, 2026-10-23): in box mode the shape fills with light and becomes a surface. The fill rides on seekBoundary.
+it('a boundary seek carries the surface fill to its uniform, clamped, and a seek without it draws no surface', () => {
+  const { ref } = mount('fill-a.svg');
+  ref.current!.beginBoundary(preview);
+  for (const [p, fill, drawn] of [[0, 0.3, 0.3], [0.5, 1, 1], [0.7, 2, 1], [0.7, -1, 0], [0.2, 0.6, 0.6]]) {
+    ref.current!.seekBoundary(p, fill);
+    tick();
+    expect(last().uBoundary).toBe(p);
+    expect(last().uSurface).toBe(drawn);
+  }
+  ref.current!.seekBoundary(0.4);
+  tick();
+  expect(last().uSurface).toBe(0);
+});
+
+it('outside boundary mode the logo draws no surface: before begin, after end, and for a logo without a ref', () => {
+  const plain = render(<ElectricLogo src="nofill-plain.svg" />);
+  loadImages(200);
+  tick();
+  expect(last().uSurface).toBe(0);
+  plain.unmount();
+  const { ref } = mount('nofill-a.svg');
+  expect(last().uSurface).toBe(0);
+  const before = last();
+  ref.current!.beginBoundary(preview);
+  ref.current!.seekBoundary(1, 1);
+  tick();
+  expect(last().uSurface).toBe(1);
+  ref.current!.endBoundary();
+  tick();
+  expect(last().uSurface).toBe(0);
+  for (const key of ['uBoundary', 'uFill', 'uMorph', 'uMapTo', 'uSizeTo', 'uResolution', 'uOrigin']) expect(last()[key]).toEqual(before[key]);
+});
+
+// M4 Task 4 (user choice (가) + (i), 2026-10-23): the preview image is drawn inside the morphing shape, revealed from the centre
+// outward, and the edge strands thin to nothing. The image rides on the boundary target; reveal and strand width ride on the seek.
+const picture = (src: string, width: number, height: number, complete = true) =>
+  ({ complete, naturalWidth: width, naturalHeight: height, currentSrc: src, src }) as unknown as HTMLImageElement;
+// A 2:1 picture covering the 640 x 360 box: cover scale .72, drawn 720 x 360, centred on the box.
+const withPicture = (source: HTMLImageElement, width = 640, height = 360) => ({ ...box, image: { source, width, height } });
+
+it('a boundary target image reaches its uniforms and its texture, mapped like object-fit: cover on the box centre', () => {
+  const { ref } = mount('img-a.svg');
+  const uploads = gpu.uploads;
+  ref.current!.beginBoundary(withPicture(picture('/_next/image?a', 1000, 500)));
+  ref.current!.seekBoundary(0.6, 1, 0.5, 0.4);
+  tick();
+  expect(last().uImage).toBe(1);
+  expect(last().uImageBox).toEqual([200, 200, 360, 180]);
+  // A mild downscale samples the full-size level.
+  expect(last().uImageLod).toBe(0);
+  expect(last().uReveal).toBe(0.5);
+  expect(last().uStrandWidth).toBe(0.4);
+  expect(gpu.uploads).toBe(uploads + 1);
+  // The same picture again uploads nothing.
+  for (const p of [0.7, 0.8]) {
+    ref.current!.seekBoundary(p, 1, 0.9, 0.1);
+    tick();
+  }
+  expect(gpu.uploads).toBe(uploads + 1);
+  // A strong downscale (cover .28125) samples one level above its texels per pixel.
+  ref.current!.setBoundaryTarget(withPicture(picture('/_next/image?big', 2560, 1280)));
+  tick();
+  expect(last().uImageLod as number).toBeCloseTo(Math.log2(1 / 0.28125) - 1, 6);
+});
+
+it('falls back to light only without a picture, or with a picture that has not loaded, and uploads nothing', () => {
+  const { ref } = mount('img-none.svg');
+  const [uploads, textures] = [gpu.uploads, gpu.textures];
+  ref.current!.beginBoundary(box);
+  ref.current!.seekBoundary(0.5, 1, 0.5, 0.5);
+  tick();
+  expect(last().uImage).toBe(0);
+  for (const source of [picture('/_next/image?late', 1000, 500, false), picture('/_next/image?empty', 0, 0)]) {
+    ref.current!.setBoundaryTarget(withPicture(source));
+    ref.current!.seekBoundary(0.5, 1, 0.5, 0.5);
+    tick();
+    expect(last().uImage).toBe(0);
+  }
+  expect([gpu.uploads, gpu.textures]).toEqual([uploads, textures]);
+});
+
+// M4 Task 6 (user request 2026-10-24): no cyan energy band while a picture morphs. The constant reaches the shader as uPictureEnergy only in
+// picture mode; the light-only fallback and everything outside a boundary keep full energy (1 restores the Task 5 look).
+it('a picture boundary draws with no band, sheet or strip (uPictureEnergy 0), and every other path keeps energy 1', () => {
+  const plain = render(<ElectricLogo src="energy-plain.svg" />);
+  loadImages(200);
+  tick();
+  expect(last().uPictureEnergy).toBe(1);
+  plain.unmount();
+  const { ref } = mount('energy-a.svg');
+  expect(last().uPictureEnergy).toBe(1);
+  ref.current!.beginBoundary(box);
+  ref.current!.seekBoundary(0.5, 1, 0.5, 0.5);
+  tick();
+  expect([last().uImage, last().uPictureEnergy]).toEqual([0, 1]);
+  ref.current!.setBoundaryTarget(withPicture(picture('/_next/image?late', 1000, 500, false)));
+  tick();
+  expect([last().uImage, last().uPictureEnergy]).toEqual([0, 1]);
+  ref.current!.setBoundaryTarget(withPicture(picture('/_next/image?energy', 1000, 500)));
+  ref.current!.seekBoundary(0.6, 1, 0.5, 0.5);
+  tick();
+  expect([last().uImage, last().uPictureEnergy]).toEqual([1, 0]);
+  ref.current!.endBoundary();
+  tick();
+  expect([last().uImage, last().uPictureEnergy]).toEqual([0, 1]);
+});
+
+it('follows a new picture: same size re-uploads into the texture, a new size deletes it and makes a new one', () => {
+  const { ref } = mount('img-swap.svg');
+  ref.current!.beginBoundary(withPicture(picture('/_next/image?a', 1000, 500)));
+  ref.current!.seekBoundary(1, 1, 1, 0);
+  tick();
+  const [uploads, textures, deleted] = [gpu.uploads, gpu.textures, gpu.deleted];
+  ref.current!.setBoundaryTarget(withPicture(picture('/_next/image?b', 1000, 500)));
+  tick();
+  expect([gpu.uploads, gpu.textures, gpu.deleted]).toEqual([uploads + 1, textures, deleted]);
+  const bound = last().tImage;
+  ref.current!.setBoundaryTarget(withPicture(picture('/_next/image?c', 800, 800)));
+  tick();
+  expect([gpu.uploads, gpu.textures, gpu.deleted]).toEqual([uploads + 2, textures + 1, deleted + 1]);
+  // The sampler now points at the new texture (review m5), not the deleted one.
+  expect(last().tImage).toBe(gpu.textures);
+  expect(last().tImage).not.toBe(bound);
+  // Cover on 640 x 360: scale .8, drawn 640 x 640.
+  expect(last().uImageBox).toEqual([200, 200, 320, 320]);
+  ref.current!.setBoundaryTarget(withPicture(picture('/_next/image?c', 800, 800)));
+  tick();
+  expect([gpu.uploads, gpu.textures, gpu.deleted]).toEqual([uploads + 2, textures + 1, deleted + 1]);
+});
+
+it('a boundary seek carries the strand width ramp and the reveal, clamped; a seek without them keeps full strands and no reveal', () => {
+  const { ref } = mount('thin-a.svg');
+  ref.current!.beginBoundary(box);
+  for (const [reveal, strands, r, s] of [[0.2, 1, 0.2, 1], [0.6, 0.5, 0.6, 0.5], [2, -1, 1, 0], [-1, 2, 0, 1], [1, 0, 1, 0]]) {
+    ref.current!.seekBoundary(0.8, 1, reveal, strands);
+    tick();
+    expect([last().uReveal, last().uStrandWidth]).toEqual([r, s]);
+  }
+  ref.current!.seekBoundary(0.4, 1);
+  tick();
+  expect([last().uReveal, last().uStrandWidth]).toEqual([0, 1]);
+});
+
+it('outside boundary mode there is no picture, no reveal and full strands: before begin, after end, and for a logo without a ref', () => {
+  const plain = render(<ElectricLogo src="noimg-plain.svg" />);
+  loadImages(200);
+  tick();
+  expect([last().uImage, last().uReveal, last().uStrandWidth]).toEqual([0, 0, 1]);
+  plain.unmount();
+  const { ref } = mount('noimg-a.svg');
+  expect([last().uImage, last().uReveal, last().uStrandWidth]).toEqual([0, 0, 1]);
+  const before = last();
+  ref.current!.beginBoundary(withPicture(picture('/_next/image?a', 1000, 500)));
+  ref.current!.seekBoundary(1, 1, 1, 0);
+  tick();
+  expect([last().uImage, last().uReveal, last().uStrandWidth]).toEqual([1, 1, 0]);
+  ref.current!.endBoundary();
+  tick();
+  expect([last().uImage, last().uReveal, last().uStrandWidth]).toEqual([0, 0, 1]);
+  for (const key of ['uBoundary', 'uSurface', 'uThickness', 'uFill', 'uMorph', 'uMapTo', 'uSizeTo', 'uResolution', 'uOrigin']) expect(last()[key]).toEqual(before[key]);
+});
+
+// Task 4 review m4: an upload that throws (a cross-origin picture) falls back to light only and keeps the loop drawing.
+it('falls back to light only when the picture upload throws, keeps drawing, and does not retry the same picture', () => {
+  const { ref } = mount('img-taint.svg');
+  ref.current!.beginBoundary(withPicture(picture('https://elsewhere.test/taint.png', 1000, 500)));
+  ref.current!.seekBoundary(0.6, 1, 0.5, 0.5);
+  expect(() => tick()).not.toThrow();
+  expect(last().uImage).toBe(0);
+  const [uploads, draws] = [gpu.uploads, gpu.drawn.length];
+  ref.current!.seekBoundary(0.7, 1, 0.6, 0.4);
+  tick();
+  expect(gpu.drawn.length).toBe(draws + 1);
+  expect([last().uImage, last().uBoundary, gpu.uploads]).toEqual([0, 0.7, uploads]);
+  // A good picture afterwards draws.
+  ref.current!.setBoundaryTarget(withPicture(picture('/_next/image?ok', 1000, 500)));
+  tick();
+  expect(last().uImage).toBe(1);
+});
+
+// Task 4 review m3: the picture texture is released with the logo.
+it('deletes the picture texture on unmount', () => {
+  const { ref, unmount } = mount('img-unmount.svg');
+  ref.current!.beginBoundary(withPicture(picture('/_next/image?a', 1000, 500)));
+  tick();
+  const deleted = gpu.deleted;
+  unmount();
+  expect(gpu.deleted).toBe(deleted + 1);
+});
+
+// M4 Task 5 (user request 2026-10-24): the outline advances unevenly by direction while it spreads. The displacement rides on the
+// seek (clamped, default 0) and is 0 outside a boundary. Each boundary gets its own noise offset, so the pattern differs per visit.
+it('a boundary seek carries the outline displacement, clamped; it is 0 without it and outside a boundary, and each boundary gets a new noise offset', () => {
+  const { ref } = mount('rag-a.svg');
+  expect(last().uRag).toBe(0);
+  ref.current!.beginBoundary(box);
+  for (const [rag, expected] of [[0.5, 0.5], [2, 1], [-1, 0], [1, 1]]) {
+    ref.current!.seekBoundary(0.6, 1, 0.5, 0.5, rag);
+    tick();
+    expect(last().uRag).toBe(expected);
+  }
+  const first = last().uRagSeed;
+  ref.current!.seekBoundary(0.6, 1, 0.5, 0.5);
+  tick();
+  expect(last().uRag).toBe(0);
+  // The offset holds for the whole boundary.
+  expect(last().uRagSeed).toEqual(first);
+  ref.current!.endBoundary();
+  tick();
+  expect(last().uRag).toBe(0);
+  ref.current!.beginBoundary(box);
+  ref.current!.seekBoundary(0.6, 1, 0.5, 0.5, 1);
+  tick();
+  expect(last().uRagSeed).not.toEqual(first);
+});

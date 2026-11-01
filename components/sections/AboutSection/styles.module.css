@@ -1,0 +1,50 @@
+/* 원 시안의 배경판(::before)이 좌우로 넘쳐도 문서 폭을 늘리지 않는다. */
+.section { position: relative; overflow-x: clip; }
+/* 잠금 위치(헤더 아래 16px)에서 머리글과 본문이 한 화면에 든다. */
+.stage { position: relative; width: min(1280px, calc(100% - 112px)); height: calc(100svh - 92px); margin-inline: auto; display: grid; grid-template-columns: .85fr 1.15fr; gap: 10%; align-items: center; }
+.header { position: absolute; inset: 24px 0 auto; z-index: 3; }
+.rail { min-width: 0; display: grid; place-items: center; align-self: stretch; transition: opacity var(--animate-duration-slow) cubic-bezier(.23, 1, .32, 1), transform var(--animate-duration-slow) cubic-bezier(.23, 1, .32, 1); }
+.stage[data-entered="true"] .rail { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+.stage[data-entered="true"] .articles { opacity: 1; transform: translate3d(0, 0, 0); transition-delay: 80ms; }
+.articles { --reading-orbit-radius: clamp(480px, 75svh, 720px); display: grid; min-width: 0; position: relative; transition: opacity var(--animate-duration-slow) cubic-bezier(.23, 1, .32, 1), transform var(--animate-duration-slow) cubic-bezier(.23, 1, .32, 1); }
+/* 숨긴 출발점은 하이드레이션 뒤(HomeClient의 data-route-resolved)에만 건다. JS가 없거나 번들이 실패해도 활성 chapter는 읽힌다. */
+main[data-route-resolved="true"] .stage[data-entered="false"] .rail { opacity: 0; transform: translate3d(0, 24px, 0) scale(.96); }
+main[data-route-resolved="true"] .stage[data-entered="false"] .articles { opacity: 0; transform: translate3d(0, 24px, 0); }
+/* closest-side라 상자 가장자리에서 0이 된다. 판 가장자리가 직사각형으로 보이지 않고, 넓힌 안쪽이 본문 대비를 지킨다. */
+.articles::before { content: ''; position: absolute; inset: -120px; pointer-events: none; background: radial-gradient(closest-side, rgb(0 0 0 / .94) 55%, rgb(0 0 0 / .68) 75%, transparent); }
+.panelViewport { display: grid; perspective: 1400px; padding-block: 96px; margin-block: -96px; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, transparent, black 40px, black calc(100% - 40px), transparent); mask-image: linear-gradient(to bottom, transparent, black 40px, black calc(100% - 40px), transparent); }
+/* Keep the spherical arc close to the reading area; blur before it leaves. */
+.panel { grid-area: 1 / 1; position: relative; opacity: 0; filter: blur(8px); transform: rotateX(-25deg); transform-origin: 50% 50% calc(0px - var(--reading-orbit-radius)); transition: opacity calc(var(--chapter-transition) * .45) ease, filter calc(var(--chapter-transition) * .6) ease, transform var(--chapter-transition) cubic-bezier(.77, 0, .175, 1); transition-delay: calc(var(--chapter-transition) * .375), calc(var(--chapter-transition) * .3), 0ms; }
+.panel[data-position="active"] { opacity: 1; filter: blur(0); transform: rotateX(0); transition-duration: calc(var(--chapter-transition) * .825), calc(var(--chapter-transition) * .825), var(--chapter-transition); transition-delay: calc(var(--chapter-transition) * .1), calc(var(--chapter-transition) * .075), 0ms; }
+.panel[data-position="past"] { transform: rotateX(25deg); }
+.title { margin: 24px 0 32px; font-size: clamp(28px, 3vw, 42px); line-height: 1.4; font-weight: 500; letter-spacing: -.045em; }
+.evidence { display: flex; flex-wrap: wrap; gap: 36px; margin: 28px 0 32px; }
+.evidence div { display: flex; flex-direction: column-reverse; gap: 9px; }
+.evidence dt { color: var(--color-text-secondary); font-size: var(--font-size-t7); }
+.evidence dd { font-size: clamp(23px, 2.2vw, 34px); line-height: 1.2; font-weight: 500; letter-spacing: -.04em; }
+.description { font-size: var(--font-size-t5); line-height: 1.85; color: var(--color-text-secondary); overflow-wrap: anywhere; }
+.description p + p { margin-top: 18px; }
+/* WebGL 로고는 1024px부터만 띄운다. 그 아래는 글이 폭 전체를 쓴다. */
+@media (max-width: 1023px) {
+  .stage { display: flex; flex-direction: column; justify-content: center; }
+  .rail { display: none; }
+}
+@media (max-width: 767px) {
+  .stage { width: calc(100% - 40px); padding-top: 56px; }
+  .header { top: 18px; }
+  .title { font-size: 29px; margin: 18px 0 24px; }
+  .evidence { margin: 0 0 26px; gap: 26px; }
+  .evidence dd { font-size: 27px; }
+  .description { font-size: 15px; line-height: 1.75; }
+}
+@media (prefers-reduced-motion: reduce) { .panel, .rail, .articles { transition: none; transform: none; } }
+/* 정적 원문. JS(data-static)를 기다리지 않고 첫 페인트부터 이 배치여야 해시 이동이 잰 위치가 밀리지 않는다.
+   조건은 index.tsx의 disabled와 같다. 세 chapter를 겹치지 않고 차례로 쌓는다. */
+@media (prefers-reduced-motion: reduce), (max-height: 640px) {
+  .stage { display: block; height: auto; padding-top: 0; }
+  .header { display: none; }
+  .rail, .articles { opacity: 1; transform: none; transition: none; }
+  .articles { display: block; }
+  .panelViewport { display: block; overflow: visible; -webkit-mask-image: none; mask-image: none; padding-block: 0; margin-block: 0; }
+  .stage .panel[data-position] { opacity: 1; filter: none; transform: none; padding: 60px 0; border-top: 1px solid rgb(255 255 255 / .15); transition: none; }
+}

@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { Renderer, Program, Mesh, Triangle, Texture } from 'ogl';
+import { Renderer, Mesh, Triangle, Texture } from 'ogl';
+import { ParallelProgram } from '@/lib/parallelProgram';
 import { ELECTRIC_LOGO_MORPH_SECONDS } from './motion';
 
 const BOLT = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
@@ -15,10 +16,42 @@ const ARCS = 5;
 const PULSES = 3;
 const PIXEL_BUDGET = 4e6;
 const MAX_DPR = 1.25;
+// Uneven spread in a picture boundary (M4 Task 5, user request 2026-10-24), tunable. One slow noise field (PreviewMorph's fbm) of the
+// position in box half-heights drives the picture front and the outline, so some directions race ahead and others lag.
+// Noise cells per box half-height.
+const SPREAD_SCALE = 1.2;
+// Extra lead (and lag) of the picture front, in box half-sizes at full reveal. The lagging side keeps the Task 4 speed.
+const SPREAD_FRONT = 1.0;
+// Outline bulge and lag at full raggedness, in logo units (about 2.5 px at 1440). Stays inside the canvas margin of 40 units.
+const SPREAD_EDGE = 14;
+// Drift of the field per shader time unit (2.5 per second), so the pattern moves slowly during the leg.
+const SPREAD_DRIFT = 0.05;
+// Cyan energy in a picture boundary (M4 Task 6, user request 2026-10-24): the band on the picture front, the light sheet ahead of it, the edge strip
+// and the rim. 0 leaves the picture as the only fill; 1 restores the Task 5 look. The light-only fallback is unaffected.
+const PICTURE_ENERGY = 0;
 const MORPH_DURATION = ELECTRIC_LOGO_MORPH_SECONDS;
 const EMPTY_PRELOAD_SRCS: string[] = [];
 
 type Rgb = [number, number, number];
+
+export type ElectricBoundaryTarget = {
+  width: number;
+  height: number;
+  radius: number;
+  // A loaded picture drawn inside the shape, covering a width x height box (object-fit: cover, centred) on the target centre.
+  // Without it, or while it has not loaded, the boundary draws light only.
+  image?: { source: HTMLImageElement; width: number; height: number };
+};
+
+export interface ElectricLogoHandle {
+  beginBoundary(target: ElectricBoundaryTarget): boolean;
+  setBoundaryTarget(target: ElectricBoundaryTarget): void;
+  // fill 0-1: the shape's interior fills with light and becomes a surface. Boundary only; a seek without it draws no surface.
+  // reveal 0-1: the target image shows from the centre outward. strands 1-0: the edge strands, their glow and the image wobble thin to nothing.
+  // ragged 0-1: the box outline advances unevenly by direction (a slow noise displacement); 0 is the exact box.
+  seekBoundary(progress: number, fill?: number, reveal?: number, strands?: number, ragged?: number): void;
+  endBoundary(): void;
+}
 
 export interface ElectricLogoProps {
   src?: string;
@@ -68,67 +101,6 @@ interface Shape {
 
 const shapeCache = new Map<string, Shape>();
 
-class ParallelProgram extends Program {
-  ready!: boolean;
-  private parallel!: KHR_parallel_shader_compile | null;
-
-  setShaders({ vertex, fragment }: { vertex: string; fragment: string }) {
-    const gl = this.gl;
-    this.parallel = gl.getExtension('KHR_parallel_shader_compile');
-    if (!this.parallel) {
-      super.setShaders({ vertex, fragment });
-      this.ready = true;
-      return;
-    }
-
-    gl.shaderSource(this.vertexShader, vertex);
-    gl.compileShader(this.vertexShader);
-    gl.shaderSource(this.fragmentShader, fragment);
-    gl.compileShader(this.fragmentShader);
-    gl.linkProgram(this.program);
-    this.ready = false;
-    this.uniformLocations = new Map();
-    this.attributeLocations = new Map();
-    this.attributeOrder = '';
-  }
-
-  finish() {
-    if (this.ready) return true;
-    const gl = this.gl;
-    if (!gl.getProgramParameter(this.program, this.parallel!.COMPLETION_STATUS_KHR)) return false;
-    if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
-      console.warn(gl.getProgramInfoLog(this.program));
-      return false;
-    }
-
-    this.uniformLocations = new Map();
-    for (let i = 0, count = gl.getProgramParameter(this.program, gl.ACTIVE_UNIFORMS); i < count; i++) {
-      const uniform = gl.getActiveUniform(this.program, i) as Parameters<typeof this.uniformLocations.set>[0] | null;
-      if (!uniform) continue;
-      const location = gl.getUniformLocation(this.program, uniform.name);
-      if (!location) continue;
-      const [name, ...parts] = uniform.name.match(/(\w+)/g) ?? [];
-      if (!name) continue;
-      this.uniformLocations.set(uniform, location);
-      uniform.uniformName = name;
-      uniform.nameComponents = parts;
-    }
-    this.attributeLocations = new Map();
-    const locations: string[] = [];
-    for (let i = 0, count = gl.getProgramParameter(this.program, gl.ACTIVE_ATTRIBUTES); i < count; i++) {
-      const attribute = gl.getActiveAttrib(this.program, i);
-      if (!attribute) continue;
-      const location = gl.getAttribLocation(this.program, attribute.name);
-      if (location < 0) continue;
-      locations[location] = attribute.name;
-      this.attributeLocations.set(attribute, location);
-    }
-    this.attributeOrder = locations.join('');
-    this.ready = true;
-    return true;
-  }
-}
-
 interface Slot {
   shape: Shape | null;
   field: Texture;
@@ -150,6 +122,28 @@ interface Focus {
   x: number;
   y: number;
   radius: number;
+}
+
+interface Placement {
+  fit: number;
+  ox: number;
+  oy: number;
+  unit: number;
+}
+
+interface Boundary {
+  progress: number;
+  fill: number;
+  reveal: number;
+  strands: number;
+  ragged: number;
+  // Offset into the spread noise, new per boundary, so each visit spreads in its own pattern.
+  seed: [number, number];
+  target: ElectricBoundaryTarget;
+  room: [number, number];
+  near: Placement;
+  far: Placement;
+  overflow: string;
 }
 
 interface Spark {
@@ -491,6 +485,20 @@ uniform float uFill;
 uniform float uInk;
 uniform vec4 uArcEnds[${ARCS}];
 uniform vec4 uArcShape[${ARCS}];
+uniform float uBoundary;
+uniform float uSurface;
+uniform sampler2D tImage;
+uniform float uImage;
+uniform float uPictureEnergy;
+uniform vec4 uImageBox;
+uniform float uImageLod;
+uniform float uReveal;
+uniform float uStrandWidth;
+uniform float uRag;
+uniform vec2 uRagSeed;
+uniform vec4 uBox;
+uniform float uBoxRadius;
+uniform vec2 uOrigin;
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -515,16 +523,53 @@ vec2 glowAt(sampler2D tex, vec4 map, vec4 size, vec2 p) {
   return textureLod(tex, f / (size.zw * ${CELL}.0), 0.0).rg;
 }
 
+// Spread noise, ported from PreviewMorph: value-noise fbm, centred to -1..1.
+float hash21(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float valueNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash21(i), hash21(i + vec2(1.0, 0.0)), u.x), mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0)), u.x), u.y);
+}
+
+float spreadNoise(vec2 p) {
+  float v = 0.0;
+  float a = 0.5;
+  for (int i = 0; i < 4; i++) {
+    v += a * valueNoise(p);
+    p *= 2.0;
+    a *= 0.5;
+  }
+  return v / 0.46875 - 1.0;
+}
+
+// Outline displacement at this pixel (px, positive pushes the box outline out). Set once per pixel in main, 0 outside a ragged boundary.
+float rag = 0.0;
+
+float box(vec2 p) {
+  vec2 q = abs(p - uBox.xy) - uBox.zw + uBoxRadius;
+  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - uBoxRadius - rag;
+}
+
 float shape(vec2 p, float k) {
   float to = fieldAt(tFieldTo, uMapTo, uSizeTo, p);
-  if (k >= 1.0) return to;
-  return mix(fieldAt(tFieldFrom, uMapFrom, uSizeFrom, p), to, k);
+  float logo = k >= 1.0 ? to : mix(fieldAt(tFieldFrom, uMapFrom, uSizeFrom, p), to, k);
+  return uBoundary > 0.0 ? mix(logo, box(p), uBoundary) : logo;
 }
 
 vec2 aura(vec2 p, float k) {
   vec2 to = glowAt(tGlowTo, uMapTo, uSizeTo, p);
-  if (k >= 1.0) return to;
-  return mix(glowAt(tGlowFrom, uMapFrom, uSizeFrom, p), to, k);
+  vec2 logo = k >= 1.0 ? to : mix(glowAt(tGlowFrom, uMapFrom, uSizeFrom, p), to, k);
+  if (uBoundary <= 0.0) return logo;
+  // The traced glow is an edge gaussian 3.5 and 13 units wide; the box gets the same profile.
+  float b = box(p);
+  vec2 s = uUnit * vec2(3.5, 13.0);
+  return mix(logo, exp(-b * b / (2.0 * s * s)), uBoundary);
 }
 
 vec4 corner(ivec2 c, uint seed) {
@@ -646,7 +691,7 @@ void addArc(vec2 p, vec4 ends, vec4 info, float t, inout vec3 light, inout float
 }
 
 void main() {
-  vec2 p = vec2(vUv.x, 1.0 - vUv.y) * uResolution;
+  vec2 p = vec2(vUv.x, 1.0 - vUv.y) * uResolution - uOrigin;
   float t = uTime;
   vec3 light = vec3(0.0);
   float energy = 0.0;
@@ -656,6 +701,20 @@ void main() {
   vec2 pr = p - ripple(p, surge);
   float k = uMorph >= 1.0 ? 1.0 : smoothstep(0.0, 1.0, clamp(uMorph * 1.7 - 0.35 + 0.35 * wobble(p / uUnit * 0.018, 41u), 0.0, 1.0));
   float transit = uMorph >= 1.0 ? 0.0 : sin(3.14159265 * uMorph);
+  // Uneven spread: the field is evaluated only where it shows, near the displaced outline and near the picture front.
+  // A bulging direction also reveals early. The displacement fades out away from the outline, so the deep inside keeps the plain box.
+  float uneven = 0.0;
+  float spreadAt = 0.0;
+  if (uBoundary > 0.0 && (uRag > 0.0 || uImage > 0.0)) {
+    float swing = uRag * ${SPREAD_EDGE.toFixed(3)} * uUnit;
+    float near = uRag > 0.0 ? smoothstep(swing + uUnit * 48.0, swing + uUnit * 16.0, abs(box(pr))) : 0.0;
+    spreadAt = length((pr - uBox.xy) / max(uBox.zw, vec2(1.0)));
+    bool front = uImage > 0.0 && uSurface > 0.0 && abs(uReveal * (1.75 + ${SPREAD_FRONT.toFixed(3)}) - spreadAt) < uReveal * ${SPREAD_FRONT.toFixed(3)} + 0.45;
+    if (near > 0.0 || front) {
+      uneven = spreadNoise((pr - uBox.xy) / max(uBox.w, 1.0) * ${SPREAD_SCALE.toFixed(3)} + uRagSeed + t * ${SPREAD_DRIFT.toFixed(3)});
+      rag = swing * uneven * near;
+    }
+  }
   float base = shape(pr, k);
 
   vec2 toHover = p - uHover.xy;
@@ -667,14 +726,15 @@ void main() {
   float edge = abs(base);
   vec2 halo = aura(pr, k);
   float ink = uInk;
-  float bloom = (halo.x * 0.16 + halo.y * 0.08) * (1.0 - ink * 0.65) * uGlow * (1.0 + heat * 1.2);
+  // uStrandWidth is 1 outside a boundary. In a boundary it thins the strands to nothing, and their glow goes with them.
+  float bloom = (halo.x * 0.16 + halo.y * 0.08) * (1.0 - ink * 0.65) * uGlow * (1.0 + heat * 1.2) * uStrandWidth;
   float body = smoothstep(0.75, -0.75, base) * uFill * (0.06 + 1.2 * min(halo.x, 1.0)) * (1.0 + heat * 0.5);
   light += uGlowColor * bloom * grow * grow;
   energy += bloom * grow * grow;
 
   float reachScale = mix(0.15, 1.0, grow) * (1.0 + heat * 0.9);
   float reach = (uUnit * uBend * 16.0 + uCrackle * 3.0) * (1.0 + heatCap * 0.9) + uThickness * 20.0 + 8.0;
-  if (edge < reach && grow > 0.0) {
+  if (edge < reach && grow > 0.0 && uStrandWidth > 0.0) {
     float fade = smoothstep(reach, reach * 0.55, edge);
     vec2 q = pr / uUnit;
     float count = min(uStrands + heat * 2.5, 6.0);
@@ -694,10 +754,10 @@ void main() {
       float d = dw / max(length(slope + jac * slope), 0.3);
       float spread = shape(pr + sway, k);
       float swell = 0.5 + 0.5 * wobble(q * 0.06 + vec2(t * 0.9, fi * 5.1 - t * 0.6), seed + 8u);
-      float w = uThickness * mix(0.5, 1.0, lead) * (0.5 + swell);
+      float w = uThickness * uStrandWidth * mix(0.5, 1.0, lead) * (0.5 + swell);
       float vis = mix(0.3 + 0.45 * smoothstep(-0.25, 0.2, wobble(q * 0.035 + vec2(t * 0.21, fi * 3.7), seed + 5u)), 1.0, lead);
       float spark = 1.0 - uFlicker * 0.3 * (0.5 + 0.5 * wobble(vec2(t * 6.0, fi * 2.3), seed + 6u));
-      float weight = max(vis, heat * 0.85) * spark * fade * present * (0.7 + 0.6 * swell);
+      float weight = max(vis, heat * 0.85) * spark * fade * present * (0.7 + 0.6 * swell) * uStrandWidth;
       vec2 g = glowShape(d, spread, w) * weight;
       float soft = mix(1.0, mix(0.5, 1.0, lead), ink);
       vec3 stroke = mix(uColor, uGlowColor, ink * (1.0 - lead) * 0.65);
@@ -719,13 +779,55 @@ void main() {
   float tint = (1.0 - exp(-body * gain * 1.2)) * grow * grow * (1.0 - ink * 0.82);
   color += uGlowColor * tint * (1.0 - alpha);
   alpha += tint * (1.0 - alpha);
+  if (uSurface > 0.0 && base < 0.75) {
+    // Boundary surface: the interior holds a dim, drifting sheet of light that brightens toward the edge. Alpha stays well below 1, so no white-out.
+    vec2 q = pr / uUnit;
+    float inside = smoothstep(0.75, -0.75, base);
+    float rim = exp(-max(-base, 0.0) / (uUnit * 7.0));
+    mat2 jac;
+    vec2 flow = drift(q * 0.04 + vec2(t * 0.23, -t * 0.17), 61u, jac);
+    float slow = flow.x;
+    float fine = wobble(q * 0.13 + vec2(slow * 0.8 - t * 0.7, t * 0.5), 62u);
+    float sheet = inside * (0.16 + 0.5 * rim) * (1.0 + 0.45 * slow + 0.3 * fine);
+    // Picture: a front grows from the box centre (distance in box half-sizes, ragged by the fine noise). Behind it the picture shows,
+    // on it rides a band of brighter surface, and the edge keeps a strip of light as wide as the strands are thick.
+    // The spread field moves the front by up to SPREAD_FRONT x reveal either way; at full reveal the lagging side still clears the corners.
+    float shown = 0.0;
+    float band = 0.0;
+    if (uImage > 0.0) {
+      float ahead = uReveal * (1.75 + ${SPREAD_FRONT.toFixed(3)} * (1.0 + uneven)) + 0.06 * fine - spreadAt;
+      // uPictureEnergy scales the band, the sheet outside the front, the strip and the rim. At 0 the picture is the only fill and the strip is gone.
+      float keep = uPictureEnergy > 0.0 && uStrandWidth > 0.0 ? mix(1.0, smoothstep(0.35, 1.0, -base / (uUnit * 12.0 * uStrandWidth)), uPictureEnergy) : 1.0;
+      shown = smoothstep(0.0, 0.25, ahead) * keep;
+      if (uPictureEnergy > 0.0) {
+        float crest = (ahead - 0.08) / 0.09;
+        band = exp(-crest * crest) * uPictureEnergy;
+      }
+      sheet = (sheet * (1.0 - shown) + inside * band * (0.45 + 0.25 * fine)) * uPictureEnergy;
+    }
+    if (uImage <= 0.0 || uPictureEnergy > 0.0) {
+      float lit = (1.0 - exp(-max(sheet, 0.0) * gain * 1.5)) * uSurface * (1.0 - ink * 0.82);
+      color += mix(uGlowColor, uColor, max(rim, band) * 0.7) * lit * (1.0 - alpha);
+      alpha += lit * (1.0 - alpha);
+    }
+    if (shown > 0.0) {
+      // Straight-alpha sRGB texels go under the light as premultiplied colour, untinted. The liquid wobble dies with the strands.
+      vec2 uv = (pr + flow * uUnit * 2.0 * uStrandWidth - uImageBox.xy) / (2.0 * uImageBox.zw) + 0.5;
+      vec4 texel = textureLod(tImage, uv, uImageLod);
+      // A bulge past the picture's edge shows light, not stretched edge texels. Inside the picture (and so at the handoff) this is 1.
+      vec2 past = max(-uv, uv - 1.0) * 2.0 * uImageBox.zw;
+      float a = texel.a * shown * inside * clamp(1.0 - max(past.x, past.y) / uUnit, 0.0, 1.0);
+      color += texel.rgb * a * (1.0 - alpha);
+      alpha += a * (1.0 - alpha);
+    }
+  }
   float grain = (fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) - 0.5) / 255.0;
   alpha = clamp(alpha + grain, 0.0, 1.0);
   fragColor = vec4(clamp(color + grain, 0.0, alpha), alpha);
 }
 `;
 
-const ElectricLogo = ({
+const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function ElectricLogo({
   src = BOLT,
   active = true,
   prewarm = false,
@@ -752,8 +854,15 @@ const ElectricLogo = ({
   theme = 'dark',
   className = '',
   style
-}: ElectricLogoProps) => {
+}, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const engineRef = useRef<ElectricLogoHandle | null>(null);
+  useImperativeHandle(ref, () => ({
+    beginBoundary: (next) => engineRef.current?.beginBoundary(next) ?? false,
+    setBoundaryTarget: (next) => engineRef.current?.setBoundaryTarget(next),
+    seekBoundary: (progress, fill, reveal, strands, ragged) => engineRef.current?.seekBoundary(progress, fill, reveal, strands, ragged),
+    endBoundary: () => engineRef.current?.endBoundary()
+  }), []);
   const settingsRef = useRef<Settings | null>(null);
   const shapeRef = useRef<Shape | null>(null);
   const onReadyRef = useRef(onReady);
@@ -902,6 +1011,13 @@ const ElectricLogo = ({
       })
     });
     const slots = [makeSlot(), makeSlot()];
+    // The boundary picture. A picture of another size gets a new texture rather than a re-specified one, so no storage keeps an old size.
+    const makePhoto = () => new Texture(gl, { generateMipmaps: true, minFilter: gl.LINEAR_MIPMAP_LINEAR, magFilter: gl.LINEAR, flipY: false });
+    let photo = makePhoto();
+    let photoSrc = '';
+    let photoSize = [0, 0];
+    // A picture whose upload threw (cross-origin). It is not retried; its visits draw light only.
+    let photoBroken = '';
 
     const arcEnds = Array.from({ length: ARCS * 4 }, () => 0);
     const arcShape = Array.from({ length: ARCS * 4 }, () => 0);
@@ -937,7 +1053,21 @@ const ElectricLogo = ({
       uFill: { value: 0.5 },
       uInk: { value: 0 },
       uArcEnds: { value: arcEnds },
-      uArcShape: { value: arcShape }
+      uArcShape: { value: arcShape },
+      uBoundary: { value: 0 },
+      uSurface: { value: 0 },
+      tImage: { value: photo },
+      uImage: { value: 0 },
+      uPictureEnergy: { value: 1 },
+      uImageBox: { value: [0, 0, 1, 1] },
+      uImageLod: { value: 0 },
+      uReveal: { value: 0 },
+      uStrandWidth: { value: 1 },
+      uRag: { value: 0 },
+      uRagSeed: { value: [0, 0] },
+      uBox: { value: [0, 0, 0, 0] },
+      uBoxRadius: { value: 0 },
+      uOrigin: { value: [0, 0] }
     };
     const mesh = new Mesh(gl, {
       geometry: new Triangle(gl),
@@ -968,7 +1098,12 @@ const ElectricLogo = ({
     let last = performance.now();
     let lastRenderedAt = -Infinity;
     let visible = true;
+    let boundary: Boundary | null = null;
+    let dirty = false;
     const shouldRun = () => visible && (activeRef.current || (prewarmRef.current && !prewarmPainted));
+    // A seek or end must reach the screen even while the loop is paused.
+    // A boundary footprint is larger than the observed container, so it keeps painting while the container is off screen.
+    const wants = () => shouldRun() || ((visible || !!boundary) && dirty);
 
     const load = (slot: Slot, next: Shape) => {
       slot.shape = next;
@@ -982,7 +1117,7 @@ const ElectricLogo = ({
       slot.glow.needsUpdate = true;
     };
 
-    const place = (shape: Shape, s: Settings) => {
+    const place = (shape: Shape, s: Settings): Placement => {
       const fit = Math.max(1e-4, Math.min((width * s.scale) / shape.logoWidth, (height * s.scale) / shape.logoHeight));
       return {
         fit,
@@ -992,23 +1127,33 @@ const ElectricLogo = ({
       };
     };
 
+    const recentre = (at: Placement, k: number): Placement => ({ ...at, ox: at.ox + (k * width) / 2, oy: at.oy + (k * height) / 2 });
+
     const resize = () => {
       width = Math.max(1, container.clientWidth);
       height = Math.max(1, container.clientHeight);
-      renderer.dpr = Math.min(window.devicePixelRatio || 1, maxDprRef.current, Math.sqrt(PIXEL_BUDGET / (width * height)));
-      renderer.setSize(width, height);
-      uniforms.uResolution.value = [width, height];
+      // A boundary canvas already holds the destination box and its glow, so seeks never resize it.
+      const fw = boundary ? Math.max(width, boundary.room[0]) : width;
+      const fh = boundary ? Math.max(height, boundary.room[1]) : height;
+      renderer.dpr = Math.min(window.devicePixelRatio || 1, maxDprRef.current, Math.sqrt(PIXEL_BUDGET / (fw * fh)));
+      renderer.setSize(fw, fh);
+      // Out of flow, or the larger canvas raises the min-content size of a flex parent and shifts the layout.
+      canvas.style.position = boundary ? 'absolute' : '';
+      canvas.style.left = boundary ? `${(width - fw) / 2}px` : '';
+      canvas.style.top = boundary ? `${(height - fh) / 2}px` : '';
+      uniforms.uResolution.value = [fw, fh];
+      uniforms.uOrigin.value = [(fw - width) / 2, (fh - height) / 2];
     };
 
     const frame = (now: number) => {
       raf = 0;
       if (now - lastRenderedAt + .5 < 1000 / Math.max(1, maxFpsRef.current)) {
-        if (shouldRun()) raf = requestAnimationFrame(frame);
+        if (wants()) raf = requestAnimationFrame(frame);
         return;
       }
       lastRenderedAt = now;
       if (!(mesh.program as ParallelProgram).finish()) {
-        if (shouldRun()) raf = requestAnimationFrame(frame);
+        if (wants()) raf = requestAnimationFrame(frame);
         return;
       }
       const s = settingsRef.current;
@@ -1016,26 +1161,29 @@ const ElectricLogo = ({
       const dt = Math.min(0.05, elapsed);
       last = now;
 
-      const incoming = shapeRef.current;
-      if (incoming && incoming !== slots[target].shape) pending = incoming;
-      if (pending && morph >= 1) {
-        if (slots[target].shape) {
-          target = 1 - target;
-          morph = 0;
-          sparks.length = 0;
+      // A boundary owns the shape: new sources wait and the time morph holds until end.
+      if (!boundary) {
+        const incoming = shapeRef.current;
+        if (incoming && incoming !== slots[target].shape) pending = incoming;
+        if (pending && morph >= 1) {
+          if (slots[target].shape) {
+            target = 1 - target;
+            morph = 0;
+            sparks.length = 0;
+          }
+          load(slots[target], pending);
+          pending = null;
         }
-        load(slots[target], pending);
-        pending = null;
+        if (morph < 1) morph = Math.min(1, morph + elapsed / MORPH_DURATION);
       }
-      if (morph < 1) morph = Math.min(1, morph + elapsed / MORPH_DURATION);
 
       const to = slots[target].shape;
       const from = morph < 1 ? slots[1 - target].shape : null;
       const presence = 1;
 
       if (to && s) {
-        const near = place(to, s);
-        const far = from ? place(from, s) : near;
+        const near = boundary ? recentre(boundary.near, 1) : place(to, s);
+        const far = boundary ? recentre(boundary.far, 1) : from ? place(from, s) : near;
         const blend = morph * morph * (3 - 2 * morph);
         const unit = far.unit + (near.unit - far.unit) * blend;
 
@@ -1053,7 +1201,7 @@ const ElectricLogo = ({
         hover.power += ((engaged ? 1 : 0) - hover.power) * (1 - Math.exp(-dt / (engaged ? 0.3 : 0.55)));
 
         const motion = reducedMotion ? 0.2 : 1;
-        time += dt * s.speed * motion;
+        if (shouldRun()) time += dt * s.speed * motion;
 
         for (let i = sparks.length - 1; i >= 0; i--) {
           if (time - sparks[i].born > sparks[i].life) sparks.splice(i, 1);
@@ -1063,14 +1211,14 @@ const ElectricLogo = ({
           y: (spot.y - near.oy) / near.fit,
           radius: Math.max(1, s.cursorRadius) / near.fit
         });
-        if (burst && morph >= 1 && s.arcs > 0) {
+        if (burst && morph >= 1 && !boundary && s.arcs > 0) {
           for (let i = 0; i < 3 && sparks.length < ARCS; i++) {
             const spark = spawnArc(to, time, focus(burst));
             if (spark) sparks.push(spark);
           }
         }
         burst = null;
-        if (!reducedMotion && presence > 0.8 && morph >= 1 && sparks.length < ARCS) {
+        if (!reducedMotion && presence > 0.8 && morph >= 1 && !boundary && sparks.length < ARCS) {
           const chance = dt * s.speed * s.arcs;
           if (Math.random() < chance * 6 * hover.power * s.cursorIntensity) {
             const spark = spawnArc(to, time, focus(hover));
@@ -1131,6 +1279,53 @@ const ElectricLogo = ({
           uniforms.uSizeFrom.value = [from.width, from.height, from.glowWidth, from.glowHeight];
         }
         uniforms.uMorph.value = morph;
+        uniforms.uBoundary.value = boundary ? boundary.progress : 0;
+        uniforms.uSurface.value = boundary ? boundary.fill : 0;
+        uniforms.uReveal.value = boundary ? boundary.reveal : 0;
+        uniforms.uStrandWidth.value = boundary ? boundary.strands : 1;
+        uniforms.uRag.value = boundary ? boundary.ragged : 0;
+        if (boundary) uniforms.uRagSeed.value = boundary.seed;
+        const picture = boundary?.target.image;
+        const src = picture ? picture.source.currentSrc || picture.source.src : '';
+        let ready = !!picture && picture.source.complete && picture.source.naturalWidth > 0 && src !== photoBroken;
+        if (picture && ready) {
+          const { source } = picture;
+          const { naturalWidth: iw, naturalHeight: ih } = source;
+          const renew = () => {
+            gl.deleteTexture(photo.texture);
+            photo = makePhoto();
+            uniforms.tImage.value = photo;
+          };
+          if (src !== photoSrc) {
+            if (iw !== photoSize[0] || ih !== photoSize[1]) renew();
+            photo.image = source;
+            photo.needsUpdate = true;
+            photoSrc = src;
+            photoSize = [iw, ih];
+            // Upload here, not inside render: a cross-origin picture throws (SecurityError) and would stop the loop (review m4).
+            try {
+              photo.update();
+            } catch {
+              renew();
+              [photoBroken, photoSrc, photoSize, ready] = [src, '', [0, 0], false];
+            }
+          }
+        }
+        if (picture && ready) {
+          const { naturalWidth: iw, naturalHeight: ih } = picture.source;
+          // object-fit: cover, centred on the box, like the DOM frame. The mip level follows the picture's texels per canvas pixel,
+          // one level sharper: plain trilinear was visibly softer than Chrome's own downscale at the handoff (1024 px, 1024 -> 446).
+          const cover = Math.max(picture.width / iw, picture.height / ih);
+          uniforms.uImageBox.value = [width / 2, height / 2, (iw * cover) / 2, (ih * cover) / 2];
+          uniforms.uImageLod.value = Math.max(0, Math.log2(1 / (cover * renderer.dpr)) - 1);
+        }
+        uniforms.uImage.value = ready ? 1 : 0;
+        uniforms.uPictureEnergy.value = ready ? PICTURE_ENERGY : 1;
+        if (boundary) {
+          const { width: w, height: h, radius } = boundary.target;
+          uniforms.uBox.value = [width / 2, height / 2, w / 2, h / 2];
+          uniforms.uBoxRadius.value = Math.min(Math.max(0, radius), w / 2, h / 2);
+        }
         uniforms.uUnit.value = unit;
         uniforms.uTime.value = time;
         uniforms.uPresence.value = presence;
@@ -1158,17 +1353,19 @@ const ElectricLogo = ({
         uniforms.uInk.value = ink;
         renderer.render({ scene: mesh });
         prewarmPainted = true;
+        dirty = false;
         if (to.src && to.src !== lastReadySrc) {
           lastReadySrc = to.src;
           onReadyRef.current?.(to.src);
         }
       }
 
-      if (shouldRun()) raf = requestAnimationFrame(frame);
+      if (wants()) raf = requestAnimationFrame(frame);
     };
 
     const start = () => {
-      if (raf || !shouldRun()) return;
+      // A change made off screen while inactive is drawn when the container returns.
+      if (raf || !wants()) return;
       last = performance.now();
       raf = requestAnimationFrame(frame);
     };
@@ -1177,6 +1374,67 @@ const ElectricLogo = ({
       else {
         cancelAnimationFrame(raf);
         raf = 0;
+      }
+    };
+
+    const paint = () => {
+      dirty = true;
+      if (!raf && wants()) raf = requestAnimationFrame(frame);
+    };
+    // Resizing the backing store clears the canvas, and the next rAF came one frame later, so the cleared canvas reached the screen.
+    const repaint = () => {
+      dirty = true;
+      if (!wants()) return;
+      cancelAnimationFrame(raf);
+      frame(performance.now());
+    };
+    const aim = (next: ElectricBoundaryTarget) => {
+      if (!boundary) return;
+      boundary.target = next;
+      const margin = Math.max(boundary.near.unit, boundary.far.unit) * 40;
+      const [rw, rh] = boundary.room;
+      // Grow only, so a target that keeps changing size does not reallocate the canvas each time.
+      boundary.room = [Math.max(rw, Math.ceil(next.width + margin * 2)), Math.max(rh, Math.ceil(next.height + margin * 2))];
+      if (boundary.room[0] === rw && boundary.room[1] === rh) paint();
+      else {
+        resize();
+        repaint();
+      }
+    };
+    engineRef.current = {
+      beginBoundary: (next) => {
+        const to = slots[target].shape;
+        const s = settingsRef.current;
+        if (!prewarmPainted || !to || !s) return false;
+        if (!boundary) {
+          // Freeze what is on screen now, including a half-finished morph, as the start shape.
+          const from = morph < 1 ? slots[1 - target].shape : null;
+          const near = place(to, s);
+          boundary = { progress: 0, fill: 0, reveal: 0, strands: 1, ragged: 0, seed: [Math.random() * 64, Math.random() * 64], target: next, room: [0, 0], near: recentre(near, -1), far: recentre(from ? place(from, s) : near, -1), overflow: container.style.overflow };
+          sparks.length = 0;
+          container.style.overflow = 'visible';
+        }
+        aim(next);
+        return true;
+      },
+      setBoundaryTarget: aim,
+      seekBoundary: (progress, fill = 0, reveal = 0, strands = 1, ragged = 0) => {
+        if (!boundary) return;
+        const unit = (value: number) => Math.min(1, Math.max(0, value));
+        boundary.progress = unit(progress);
+        boundary.fill = unit(fill);
+        boundary.reveal = unit(reveal);
+        boundary.strands = unit(strands);
+        boundary.ragged = unit(ragged);
+        paint();
+      },
+      endBoundary: () => {
+        if (!boundary) return;
+        container.style.overflow = boundary.overflow;
+        boundary = null;
+        resize();
+        last = performance.now();
+        repaint();
       }
     };
 
@@ -1215,6 +1473,8 @@ const ElectricLogo = ({
     return () => {
       visible = false;
       onActivationRef.current = null;
+      engineRef.current = null;
+      if (boundary) container.style.overflow = boundary.overflow;
       cancelAnimationFrame(raf);
       resizeObserver.disconnect();
       intersectionObserver.disconnect();
@@ -1223,12 +1483,13 @@ const ElectricLogo = ({
       container.removeEventListener('pointerleave', onLeave);
       container.removeEventListener('pointercancel', onLeave);
       if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
+      gl.deleteTexture(photo.texture);
     };
   }, []);
 
   return (
     <div ref={containerRef} className={`relative w-full h-full overflow-hidden ${className}`.trim()} style={style} />
   );
-};
+});
 
 export default ElectricLogo;

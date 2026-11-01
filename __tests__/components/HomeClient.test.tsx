@@ -1,1400 +1,582 @@
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { renderToString } from 'react-dom/server';
-import ts from 'typescript';
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from '@testing-library/react';
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from 'vitest';
-import { firePointer } from '@/__tests__/helpers/pointerEvents';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { forwardRef, useImperativeHandle } from 'react';
+import { beforeEach, expect, it, vi } from 'vitest';
 import HomeClient from '@/components/sections/HomeClient';
-import {
-  HOME_SECTION_CONFIG,
-  type HomeSectionId,
-} from '@/lib/constants';
-
-const motionSpies = vi.hoisted(() => ({
-  dynamicLoader: vi.fn(),
-  gsapTimeline: vi.fn(),
+import { HOME_SECTION_CONFIG } from '@/lib/constants';
+import { coreValues } from '@/lib/data';
+const flags = vi.hoisted(() => ({ obscured: false, pageVisible: true, reduced: false, wide: false, ready: true }));
+const motion = vi.hoisted(() => ({
+  create: vi.fn(), destroy: vi.fn(), setPaused: vi.fn(), setLogo: vi.fn(), setOverlay: vi.fn(), refresh: vi.fn(), settleProjects: vi.fn(), releaseSkillsHead: vi.fn(), setSkillsHead: vi.fn(),
+  owner: null as ((owner: 'hero' | 'about' | 'boundary' | 'preview' | 'projects' | 'none') => void) | null,
+  skillsHead: null as ((arrived: boolean) => void) | null,
 }));
-
-// HyperspeedBackground는 Task 5의 산출물이다. 실제 WebGL 씬은 여기서
-// 검증하지 않는다(components/blocks/HyperspeedBackground.tsx 자체 테스트가
-// 맡는다). 여기서는 HomeClient가 단일 useSectionNav·usePageVisibility·
-// useMotionPreference에서 파생한 값을 그대로 넘기는지, 그리고 재마운트하지
-// 않는지만 probe로 관측한다.
-const hyperspeedBackgroundSpies = vi.hoisted(() => ({
-  mountCount: 0,
-}));
-
-vi.mock('@/components/blocks/HyperspeedBackground', async () => {
-  const { useEffect } = await import('react');
+const skills = vi.hoisted(() => ({ props: null as null | { headArrived?: boolean; onHeadShown?: () => void } }));
+vi.mock('@/hooks/useProjectModalObscured', () => ({ useProjectModalObscured: () => flags.obscured }));
+vi.mock('@/hooks/usePageVisibility', () => ({ usePageVisibility: () => flags.pageVisible }));
+vi.mock('@/hooks/useMotionPreference', () => ({ useMotionPreference: () => ({ ready: flags.ready, reduced: flags.reduced }) }));
+const flow = vi.hoisted(() => ({ setRevealProgress: () => {} }));
+vi.mock('@/components/blocks/LuminousFlowBackground', async () => {
+  const { forwardRef, useImperativeHandle } = await import('react');
+  return { default: forwardRef<typeof flow, { paused: boolean }>(function Flow({ paused }, ref) { useImperativeHandle(ref, () => flow, []); return <aside data-testid="flow" data-paused={paused} />; }) };
+});
+// 인트로 자체는 BootSequence 테스트가 본다. 여기서는 셸이 무엇을 넘기는지만 잡는다.
+type BootProps = import('@/components/sections/BootSequence').BootSequenceProps;
+const boot = vi.hoisted(() => ({ props: null as null | BootProps, finish: vi.fn() }));
+vi.mock('@/components/sections/BootSequence', async () => {
+  const { forwardRef, useImperativeHandle } = await import('react');
   return {
-    default: function HyperspeedBackgroundProbe(props: {
-      active: string;
-      isTransitioning: boolean;
-      obscured: boolean;
-      pageVisible: boolean;
-      routeResolved: boolean;
-      motionReady: boolean;
-      reducedMotion: boolean;
-    }) {
-      useEffect(() => {
-        hyperspeedBackgroundSpies.mountCount += 1;
-      }, []);
-      return (
-        <div
-          data-testid="hyperspeed-background-probe"
-          data-active={props.active}
-          data-is-transitioning={props.isTransitioning}
-          data-obscured={props.obscured}
-          data-page-visible={props.pageVisible}
-          data-route-resolved={props.routeResolved}
-          data-motion-ready={props.motionReady}
-          data-reduced-motion={props.reducedMotion}
-        />
-      );
-    },
+    default: forwardRef<unknown, BootProps>(function Boot(props, ref) { boot.props = props; useImperativeHandle(ref, () => ({ finish: boot.finish }), []); return null; }),
   };
 });
-
+const projectsGate = vi.hoisted(() => ({ before: null as null | ((run: () => void) => void), release: vi.fn() }));
+const projectsLock = vi.hoisted(() => ({ release: vi.fn(), props: null as null | { navigationPending?: boolean; logoOwner?: string } }));
 vi.mock('@/components/sections', async () => {
-  const { useEffect, useRef } = await import('react');
-  const { default: ProjectsSection } = await import(
-    '@/components/sections/ProjectsSection'
-  );
-  const { default: WhenVisible } = await import(
-    '@/components/common/WhenVisible'
-  );
-
-  interface MotionStateEffectsProps {
-    label: string;
-    paused: boolean;
-    shouldEnter: boolean;
-    shouldLoad: boolean;
-  }
-
-  function MotionStateEffects({
-    label,
-    paused,
-    shouldEnter,
-    shouldLoad,
-  }: MotionStateEffectsProps) {
-    const previewRef = useRef<HTMLVideoElement>(null);
-
-    useEffect(() => {
-      if (shouldLoad) motionSpies.dynamicLoader(label);
-    }, [label, shouldLoad]);
-
-    useEffect(() => {
-      if (shouldEnter) motionSpies.gsapTimeline(label);
-    }, [label, shouldEnter]);
-
-    useEffect(() => {
-      if (paused) return;
-      requestAnimationFrame(() => {});
-      if (label === 'preview') void previewRef.current?.play();
-    }, [label, paused]);
-
-    return (
-      <div
-        data-testid={`motion-${label}`}
-        data-paused={paused}
-        data-should-enter={shouldEnter}
-        data-should-load={shouldLoad}
-      >
-        {label === 'preview' ? <video ref={previewRef} /> : null}
-      </div>
-    );
-  }
-
-  function MotionProbe({
-    label,
-    section,
-  }: {
-    label: string;
-    section: 'overview' | HomeSectionId;
-  }) {
-    return (
-      <WhenVisible section={section}>
-        {(state) => <MotionStateEffects label={label} {...state} />}
-      </WhenVisible>
-    );
-  }
-
-  function SectionShell({
-    label,
-    marker,
-  }: {
-    label: string;
-    marker: string;
-  }) {
-    return (
-      <section>
-        <h2>{label}</h2>
-        <p>{marker}</p>
-        <button>{label} content action</button>
-      </section>
-    );
-  }
-
-  return {
-    AboutSection: () => (
-      <>
-        <SectionShell label="About" marker="2년 6개월" />
-        <MotionProbe label="about-decoration-one" section="about" />
-        <MotionProbe label="about-decoration-two" section="about" />
-      </>
-    ),
-    AwardAndCertificateSection: () => (
-      <SectionShell label="Awards" marker="Grand Prize" />
-    ),
-    ExperienceSection: () => (
-      <SectionShell label="Experience" marker="Software Experience" />
-    ),
-    Footer: ({ atOverview }: { atOverview: boolean }) => (
-      <a href="mailto:test@example.com" data-at-overview={String(atOverview)}>
-        Contact footer
-      </a>
-    ),
-    // 실제 BootSequence는 wordmarkRef 등 여러 prop을 받지만, 이 mock의
-    // 관심사는 HomeClient가 단일 matchMedia listener로 motion 소비자
-    // 여럿(WhenVisible 3개)을 함께 정지·재개시키는지이지 BootSequence 자체
-    // 구현이 아니다(그건 BootSequence.test.tsx·WordmarkFlip.test.tsx가 실제
-    // 컴포넌트로 직접 검증한다). 대부분의 props는 무시해도 안전하다.
-    // transitionAttributes(최종 리뷰 I1)만은 예외다. HomeClient가
-    // transitionAttributes(OVERVIEW) 호출 결과를 이 컴포넌트에도 그대로
-    // 내려보내는지가 여기서 볼 계약이므로 루트에 그대로 편다.
-    BootSequence: (props: { transitionAttributes?: Record<string, string> }) => (
-      <section data-testid="boot-sequence-probe" {...props.transitionAttributes}>
-        <h1>Overview profile</h1>
-        <button>Overview content action</button>
-        <MotionProbe label="boot-sequence" section="overview" />
-        <MotionProbe label="hyperspeed" section="overview" />
-        <MotionProbe label="preview" section="overview" />
-      </section>
-    ),
-    ProjectsSection,
-    SkillsSection: () => (
-      <SectionShell label="Skills" marker="TypeScript" />
-    ),
-  };
+  const { forwardRef, useImperativeHandle } = await import('react');
+  const About = forwardRef<unknown, { onChapterChange: (index: number) => void; logoOwner: string }>(function About({ onChapterChange, logoOwner }, ref) {
+    useImperativeHandle(ref, () => ({ release: projectsGate.release }), []);
+    return <p data-logo-owner-prop={logoOwner} onClick={() => onChapterChange(2)}>About original body</p>;
+  });
+  return { AboutSection: About, ProjectsSection: ({ ref, beforeAction, navigationPending, logoOwner }: { ref?: import('react').Ref<unknown>; beforeAction?: (run: () => void) => void; navigationPending?: boolean; logoOwner?: string }) => { projectsGate.before = beforeAction ?? null; projectsLock.props = { navigationPending, logoOwner }; useImperativeHandle(ref, () => ({ release: projectsLock.release }), []); return <p>Projects original body</p>; }, ExperienceSection: () => <p>Experience original body</p>, SkillsSection: (props: { headArrived?: boolean; onHeadShown?: () => void }) => { skills.props = props; return <p>Skills original body</p>; }, AwardAndCertificateSection: () => <p>Awards original body</p>, Footer: () => <footer>Contacts</footer> };
 });
-
-interface MockMediaController {
-  fire: (matches: boolean) => void;
-  listenerCount: () => number;
-}
-
-const homeClientPath = path.resolve(
-  process.cwd(),
-  'components/sections/HomeClient/index.tsx'
-);
-
-let transitionProperty = 'opacity';
-let transitionDuration = '400ms';
-let transitionDelay = '0ms';
-
-function installMatchMedia(reduced: boolean): MockMediaController {
-  const listeners = new Set<(event: MediaQueryListEvent) => void>();
-  const reducedQuery = {
-    matches: reduced,
-    media: '(prefers-reduced-motion: reduce)',
-    addEventListener: vi.fn(
-      (type: string, listener: (event: MediaQueryListEvent) => void) => {
-        if (type === 'change') listeners.add(listener);
-      }
-    ),
-    removeEventListener: vi.fn(
-      (type: string, listener: (event: MediaQueryListEvent) => void) => {
-        if (type === 'change') listeners.delete(listener);
-      }
-    ),
-  };
-
-  vi.stubGlobal(
-    'matchMedia',
-    vi.fn((query: string) => {
-      if (query === reducedQuery.media) return reducedQuery;
-      return {
-        matches: false,
-        media: query,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-      };
-    })
-  );
-
-  return {
-    fire(matches: boolean) {
-      reducedQuery.matches = matches;
-      listeners.forEach((listener) =>
-        listener({ matches } as MediaQueryListEvent)
-      );
-    },
-    listenerCount: () => listeners.size,
-  };
-}
-
-function fireOpacityTransition(
-  target: Element,
-  type: 'transitionrun' | 'transitionend' | 'transitioncancel'
-) {
-  const event = new window.Event(type, {
-    bubbles: true,
-    cancelable: true,
-  });
-  Object.defineProperty(event, 'propertyName', {
-    configurable: true,
-    enumerable: true,
-    value: 'opacity',
-  });
-  fireEvent(target, event);
-}
-
-function getSection(container: HTMLElement, id: string) {
-  const section = container.querySelector<HTMLElement>(
-    `[data-section="${id}"]`
-  );
-  expect(section, `${id} 섹션이 DOM에 없다`).not.toBeNull();
-  return section!;
-}
-
-function navigateTo(label: RegExp) {
-  // 같은 섹션 이름이 내비 밖에도 단추로 나타나면 느슨한 정규식이
-  // 양쪽에 동시에 걸려 "여러 개 찾음" 에러가 난다. 메인 내비게이션 안으로만
-  // 질의를 좁힌다.
-  const nav = screen.getByRole('navigation', { name: '메인 네비게이션' });
-  fireEvent.click(within(nav).getByRole('button', { name: label }));
-}
-
+const overlay = vi.hoisted(() => ({ setBoundary: vi.fn(), setTimeline: vi.fn(), setReduced: vi.fn(), destroy: vi.fn() }));
+vi.mock('@/components/sections/ExperienceSection/overlay', () => ({ createExperienceOverlay: () => overlay }));
+vi.mock('@/components/sections/HomeClient/motion', () => ({
+  createPortfolioMotion: (options: { onLogoOwnerChange: (owner: 'hero' | 'about' | 'boundary' | 'preview' | 'projects' | 'none') => void; onSkillsHeadArrive?: (arrived: boolean) => void }) => {
+    motion.create(options); motion.owner = options.onLogoOwnerChange; motion.skillsHead = options.onSkillsHeadArrive ?? null;
+    return { destroy: motion.destroy, setPaused: motion.setPaused, setLogo: motion.setLogo, setOverlay: motion.setOverlay, refresh: motion.refresh, settleProjects: motion.settleProjects, releaseSkillsHead: motion.releaseSkillsHead, setSkillsHead: motion.setSkillsHead };
+  },
+}));
+// App Router 빌드는 next/dynamic을 app-dynamic으로 바꿔 ref를 실제 컴포넌트까지 넘긴다.
+// vitest에는 그 별칭이 없어 Pages용 loadable이 ref를 가로챈다.
+vi.mock('next/dynamic', async () => {
+  const appDynamic = await import('next/dist/shared/lib/app-dynamic') as unknown as { default?: unknown };
+  return { default: appDynamic.default ?? appDynamic };
+});
+const handle = vi.hoisted(() => ({ beginBoundary: () => true, setBoundaryTarget: () => {}, seekBoundary: () => {}, endBoundary: () => {} }));
+vi.mock('@/components/blocks/ElectricLogo', () => ({
+  default: forwardRef<typeof handle, { src: string; active: boolean; prewarm?: boolean; onReady?: (src: string) => void }>(function Logo({ src, active, prewarm, onReady }, ref) {
+    useImperativeHandle(ref, () => handle, []);
+    return <div data-electric-src={src} data-electric-active={active} data-electric-prewarm={prewarm}><span data-signal-ready onClick={() => onReady?.(src)} /></div>;
+  }),
+}));
+const ball = vi.hoisted(() => ({ icons: null as null | { current: HTMLElement | null }, handle: { setCollapse: () => {} } }));
+vi.mock('@/components/blocks/CrystalizedBall', () => ({
+  default: forwardRef<typeof ball.handle, { icons: { current: HTMLElement | null }; paused?: boolean; onReady?: () => void }>(function Ball({ icons, paused, onReady }, ref) {
+    ball.icons = icons;
+    useImperativeHandle(ref, () => ball.handle, []);
+    return <div data-ball-gl data-ball-paused={String(!!paused)}><span data-ball-ready onClick={() => onReady?.()} /></div>;
+  }),
+}));
 beforeEach(() => {
-  window.history.replaceState(null, '', '/');
-  transitionProperty = 'opacity';
-  transitionDuration = '400ms';
-  transitionDelay = '0ms';
-  motionSpies.dynamicLoader.mockReset();
-  motionSpies.gsapTimeline.mockReset();
-  hyperspeedBackgroundSpies.mountCount = 0;
-
-  installMatchMedia(false);
-  vi.stubGlobal(
-    'IntersectionObserver',
-    vi.fn(() => ({
-      disconnect: vi.fn(),
-      observe: vi.fn(),
-      takeRecords: vi.fn(() => []),
-      unobserve: vi.fn(),
-    }))
-  );
-  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
-  vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1));
-  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
-
-  const getComputedStyle = window.getComputedStyle.bind(window);
-  vi.spyOn(window, 'getComputedStyle').mockImplementation((element) => {
-    const style = getComputedStyle(element);
-    if (!(element instanceof HTMLElement) || !element.hasAttribute('data-section')) {
-      return style;
-    }
-
-    return new Proxy(style, {
-      get(target, property, receiver) {
-        if (property === 'transitionProperty') return transitionProperty;
-        if (property === 'transitionDuration') return transitionDuration;
-        if (property === 'transitionDelay') return transitionDelay;
-        return Reflect.get(target, property, receiver);
-      },
-    });
-  });
+  flags.obscured = false; flags.pageVisible = true; flags.reduced = false; flags.wide = false; flags.ready = true;
+  Object.values(motion).forEach(value => typeof value === 'function' && 'mockClear' in value && value.mockClear());
+  Object.values(overlay).forEach(fn => fn.mockClear());
+  motion.owner = null; motion.skillsHead = null; skills.props = null;
+  boot.props = null; boot.finish.mockClear(); document.documentElement.removeAttribute('data-intro');
+  window.history.replaceState(null, '', '/'); vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  vi.stubGlobal('matchMedia', vi.fn((query: string) => ({ matches: query === '(min-width: 1024px)' && flags.wide, media: query, addEventListener: () => {}, removeEventListener: () => {} })));
+});
+// next/dynamic과 동적 import가 풀릴 때까지 기다린다.
+const flush = () => act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); });
+it('renders all section bodies in document order without single-active hiding or swipe capture', () => {
+  const { container } = render(<HomeClient />);
+  expect([...container.querySelectorAll('[data-section]')].map(el => el.getAttribute('data-section'))).toEqual(['overview', ...HOME_SECTION_CONFIG.map(section => section.id)]);
+  expect(container.querySelector('[data-section][inert], [data-section][aria-hidden="true"]')).toBeNull();
+  expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument(); expect(screen.queryByRole('button', { name: 'START' })).toBeNull();
+  expect(container.querySelector('#overview [data-motion-anchor="hero-object"] [style*="/icons-mono/react.svg"]')).not.toBeNull();
+  fireEvent.pointerDown(screen.getByRole('main'), { clientX: 300, pointerId: 1 }); fireEvent.pointerUp(screen.getByRole('main'), { clientX: 20, pointerId: 1 });
+  expect(location.hash).toBe('');
+});
+it.each(['obscured', 'pageVisible', 'reduced'] as const)('pauses the flow for %s', flag => {
+  flags[flag] = flag !== 'pageVisible'; render(<HomeClient />); expect(screen.getByTestId('flow')).toHaveAttribute('data-paused', 'true');
+});
+it('only the modal obscures the readable main and navigation', () => {
+  flags.obscured = true; const { container } = render(<HomeClient />);
+  expect(screen.getByRole('main')).toHaveAttribute('inert'); expect(container.querySelector('nav')!.parentElement).toHaveAttribute('inert');
+  expect(screen.getByText('Contacts').parentElement).toHaveAttribute('inert');
+  expect(container.querySelectorAll('[data-section][inert]')).toHaveLength(0);
 });
 
-afterEach(() => {
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
+it('keeps one name button, one GL host and one Hero h1; anchors hold no readable text or controls', async () => {
+  flags.wide = true;
+  const { container } = render(<HomeClient />); await flush();
+  // 최종 리뷰 M-4(WCAG 2.5.3): 읽기 이름이 보이는 글자로 시작해야 음성 입력의 "KIM TAEIN 클릭"이 닿는다.
+  expect(screen.getAllByRole('button', { name: 'KIM TAEIN, 개요로 이동' })).toHaveLength(1);
+  expect(screen.queryByRole('button', { name: '개요로 이동' })).toBeNull();
+  expect(container.querySelectorAll('[data-logo-host]')).toHaveLength(1);
+  expect(container.querySelectorAll('[data-logo-host] [data-electric-src]')).toHaveLength(1);
+  // Hero 오브젝트의 GL host는 볼 하나다. Electric 로고 host는 About의 오브젝트로 남는다.
+  expect(container.querySelectorAll('[data-ball-gl]')).toHaveLength(1);
+  expect(container.querySelector('#overview [data-motion-anchor="hero-object"] [data-ball-gl]')).not.toBeNull();
+  expect(container.querySelector('#overview [data-electric-src]')).toBeNull();
+  expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+  const objectAnchor = container.querySelector('#overview [data-motion-anchor="hero-object"]')!;
+  expect(objectAnchor).toHaveAttribute('aria-hidden', 'true');
+  expect(objectAnchor.textContent).toBe('');
+  expect(objectAnchor.querySelector('a, button')).toBeNull();
+  // 이름 버튼은 서버 HTML부터 Hero 자리에 산다. nav의 이름 앵커는 경계가 옮겨 갈 빈 자리다.
+  const nameAnchor = container.querySelector('#overview [data-motion-anchor="hero-name"]')!;
+  expect(nameAnchor.querySelectorAll('button')).toEqual(expect.objectContaining({ length: 1 }));
+  expect(nameAnchor.querySelector('button')).toBe(screen.getByTestId('wordmark'));
+  expect(screen.getByTestId('wordmark')).toHaveAttribute('data-wordmark-mode', 'hero');
+  expect(screen.getByTestId('wordmark')).toHaveClass('site-name', 'min-h-11');
+  const navAnchor = container.querySelector('nav [data-motion-anchor="nav-name"]')!;
+  expect(navAnchor.childElementCount).toBe(0);
+  expect(navAnchor).toHaveClass('min-h-11');
 });
 
-describe('HomeClient SSR 셸 구조', () => {
-  it('서버 HTML에 overview와 다섯 섹션 래퍼를 항목별로 모두 렌더한다', () => {
-    const html = renderToString(<HomeClient />);
-
-    expect(html).toContain('data-section="overview"');
-    for (const { id } of HOME_SECTION_CONFIG) {
-      expect(html, `${id} 래퍼가 서버 HTML에 없다`).toContain(
-        `data-section="${id}"`
-      );
-    }
-    expect(html.match(/data-section=/g)).toHaveLength(
-      HOME_SECTION_CONFIG.length + 1
-    );
-  });
-
-  it('Navigation과 단일 워드마크가 최초 서버 HTML부터 상주한다', () => {
-    const html = renderToString(<HomeClient />);
-
-    expect(html).toContain('aria-label="메인 네비게이션"');
-    expect(html.match(/data-testid="wordmark"/g)).toHaveLength(1);
-  });
-
-  it('최초 route 해석 전에는 모든 motion 소비자를 fail-closed로 둔다', () => {
-    const html = renderToString(<HomeClient />);
-
-    expect(html).toContain('data-route-resolved="false"');
-    expect(html).toContain('data-motion-ready="false"');
-    expect(html.match(/data-paused="true"/g)).toHaveLength(5);
-    expect(html.match(/data-should-enter="false"/g)).toHaveLength(5);
-    expect(html.match(/data-should-load="false"/g)).toHaveLength(5);
-    expect(motionSpies.dynamicLoader).not.toHaveBeenCalled();
-    expect(motionSpies.gsapTimeline).not.toHaveBeenCalled();
-    expect(requestAnimationFrame).not.toHaveBeenCalled();
-    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
-  });
-
-  it('모든 의미 section shell을 정적 import하고 timeout 완료 경로를 만들지 않는다', () => {
-    const source = readFileSync(homeClientPath, 'utf8');
-    const sourceFile = ts.createSourceFile(
-      homeClientPath,
-      source,
-      ts.ScriptTarget.Latest,
-      true,
-      ts.ScriptKind.TSX
-    );
-    const staticSectionImports = new Set<string>();
-    const dynamicImports: string[] = [];
-    const timeoutCalls: number[] = [];
-    let importsNextDynamic = false;
-
-    for (const statement of sourceFile.statements) {
-      if (!ts.isImportDeclaration(statement)) continue;
-      const specifier = statement.moduleSpecifier;
-      if (!ts.isStringLiteral(specifier)) continue;
-      if (specifier.text === 'next/dynamic') importsNextDynamic = true;
-      if (specifier.text !== '@/components/sections') continue;
-
-      const bindings = statement.importClause?.namedBindings;
-      if (!bindings || !ts.isNamedImports(bindings)) continue;
-      for (const element of bindings.elements) {
-        staticSectionImports.add(element.name.text);
-      }
-    }
-
-    const visit = (node: ts.Node) => {
-      if (ts.isCallExpression(node)) {
-        if (node.expression.kind === ts.SyntaxKind.ImportKeyword) {
-          const [specifier] = node.arguments;
-          dynamicImports.push(
-            specifier && ts.isStringLiteral(specifier)
-              ? specifier.text
-              : '<non-literal>'
-          );
-        }
-        if (
-          ts.isIdentifier(node.expression) &&
-          node.expression.text === 'setTimeout'
-        ) {
-          timeoutCalls.push(sourceFile.getLineAndCharacterOfPosition(node.pos).line + 1);
-        }
-      }
-      ts.forEachChild(node, visit);
-    };
-    visit(sourceFile);
-
-    expect([...staticSectionImports].sort()).toEqual(
-      [
-        'AboutSection',
-        'AwardAndCertificateSection',
-        'BootSequence',
-        'ExperienceSection',
-        'Footer',
-        'ProjectsSection',
-        'SkillsSection',
-      ].sort()
-    );
-    expect(importsNextDynamic).toBe(false);
-    // GSAP은 First Load JS 예산 때문에 동적 경계로 뺐다(gsap-lazy-brief.md).
-    // HomeClient가 만드는 동적 import는 정확히 이 하나뿐이어야 한다. 다른
-    // 지연 로딩이 몰래 추가되지 않았는지도 함께 고정한다.
-    expect(dynamicImports).toEqual(['@/lib/gsap']);
-    expect(timeoutCalls).toEqual([]);
-  });
+it('the name button goes to the overview, smooth for a pointer click and instant for a keyboard click', () => {
+  render(<HomeClient />);
+  fireEvent.click(screen.getByTestId('wordmark'), { detail: 1 });
+  expect(window.scrollTo).toHaveBeenLastCalledWith(expect.objectContaining({ behavior: 'smooth' }));
+  window.history.replaceState(null, '', '/#about');
+  fireEvent.click(screen.getByTestId('wordmark'), { detail: 0 });
+  expect(window.scrollTo).toHaveBeenLastCalledWith(expect.objectContaining({ behavior: 'auto' }));
+  expect(location.hash).toBe('#overview');
 });
 
-// render(<HomeClient />)는 전 섹션을 한 번에 마운트한다. About이 계획 4에서
-// dynamic 장식을 붙이기 시작하면서 이 렌더가 무거워졌고, 39개 파일을 병렬로
-// 돌리는 전체 스위트에서 기본 5초를 넘겨 여덟 번에 한 번꼴로 붉었다. 수행
-// 시간이 아니라 CPU 경합에 따른 대기가 원인이라 같은 파일의
-// HyperspeedBackground 배선 describe와 같은 방식으로 여유를 준다.
-describe('HomeClient section 상태', { timeout: 30_000 }, () => {
-  it('projects가 활성일 때만 stage에 가로 스크롤 클래스를 붙인다', () => {
-    const { container } = render(<HomeClient />);
-    const stage = container.querySelector<HTMLElement>('.section-stage');
-
-    expect(stage).not.toBeNull();
-    expect(stage).not.toHaveClass('section-stage-horizontal');
-
-    navigateTo(/projects/i);
-    expect(stage).toHaveClass('section-stage-horizontal');
-
-    navigateTo(/about/i);
-    expect(stage).not.toHaveClass('section-stage-horizontal');
-  });
-
-  it('초기 활성과 비활성 섹션의 visible·hidden·inert 상태가 배타적이다', () => {
-    const { container } = render(<HomeClient />);
-    const overview = getSection(container, 'overview');
-
-    expect(overview).toHaveClass('section-scroll', 'section-visible');
-    expect(overview).not.toHaveAttribute('inert');
-    expect(overview).toHaveAttribute('aria-hidden', 'false');
-
-    for (const { id } of HOME_SECTION_CONFIG) {
-      const section = getSection(container, id);
-      expect(section, id).toHaveClass('section-scroll', 'section-hidden');
-      expect(section, id).toHaveAttribute('inert');
-      expect(section, id).toHaveAttribute('aria-hidden', 'true');
-    }
-  });
-
-  it('이동하면 이전 섹션은 inert가 되고 목적지만 inert에서 빠진다', () => {
-    const { container } = render(<HomeClient />);
-    navigateTo(/about/i);
-
-    const overview = getSection(container, 'overview');
-    const about = getSection(container, 'about');
-    expect(overview).toHaveClass('section-hidden');
-    expect(overview).toHaveAttribute('inert');
-    expect(about).toHaveClass('section-visible');
-    expect(about).not.toHaveAttribute('inert');
-
-    for (const { id } of HOME_SECTION_CONFIG) {
-      if (id === 'about') continue;
-      expect(getSection(container, id), id).toHaveAttribute('inert');
-    }
-  });
-
-  it('비활성 섹션의 모든 Tab 후보는 inert 경계 안에 격리된다', () => {
-    const { container } = render(<HomeClient />);
-
-    const inactiveCandidates = container.querySelectorAll<HTMLElement>(
-      '.section-hidden a, .section-hidden button, .section-hidden input, .section-hidden textarea, .section-hidden select, .section-hidden [tabindex]'
-    );
-
-    expect(inactiveCandidates.length).toBeGreaterThan(0);
-    for (const candidate of inactiveCandidates) {
-      const inertBoundary = candidate.closest('[inert]');
-
-      expect(inertBoundary, '비활성 Tab 후보가 inert 밖에 있다').not.toBeNull();
-      expect(inertBoundary).toHaveClass('section-hidden');
-    }
-  });
-
-  it('왼쪽 touch 스와이프가 같은 상태머신의 다음 섹션으로 이동한다', () => {
-    const { container } = render(<HomeClient />);
-    const stage = container.querySelector<HTMLElement>('.section-stage');
-    expect(stage).not.toBeNull();
-
-    firePointer(stage!, 'pointerdown', {
-      pointerId: 1,
-      pointerType: 'touch',
-      clientX: 240,
-      clientY: 200,
-    });
-    firePointer(stage!, 'pointerup', {
-      pointerId: 1,
-      pointerType: 'touch',
-      clientX: 160,
-      clientY: 205,
-    });
-
-    expect(getSection(container, 'about')).toHaveClass('section-visible');
-  });
-
-  it('섹션 DOM과 내부 scrollTop을 떠남·재방문 뒤에도 보존한다', () => {
-    const { container } = render(<HomeClient />);
-    const about = getSection(container, 'about');
-    about.scrollTop = 240;
-
-    navigateTo(/about/i);
-    fireOpacityTransition(about, 'transitionrun');
-    fireOpacityTransition(about, 'transitionend');
-
-    navigateTo(/projects/i);
-    const projects = getSection(container, 'projects');
-    fireOpacityTransition(projects, 'transitionrun');
-    fireOpacityTransition(projects, 'transitionend');
-
-    navigateTo(/about/i);
-    fireOpacityTransition(about, 'transitionrun');
-    fireOpacityTransition(about, 'transitionend');
-
-    expect(getSection(container, 'about')).toBe(about);
-    expect(about.scrollTop).toBe(240);
-  });
+it('loads the boundary module after the route resolves, connects the real anchors and hands the GL handle over separately', async () => {
+  flags.wide = true;
+  const { container } = render(<HomeClient />); await flush();
+  expect(motion.create).toHaveBeenCalledTimes(1);
+  expect(motion.create).toHaveBeenLastCalledWith(expect.objectContaining({
+    root: screen.getByRole('main'), header: container.querySelector('nav'), wordmark: screen.getByTestId('wordmark'),
+    logoHost: container.querySelector('[data-logo-host]'), reduced: false,
+  }));
+  expect(motion.setLogo).toHaveBeenLastCalledWith(handle);
+  expect(motion.setPaused).toHaveBeenLastCalledWith(false);
+  // 볼 손잡이는 ref로 넘겨 경계가 매 프레임 접힘 정도를 쓴다. 볼이 늦게 떠도 다시 잇지 않는다.
+  expect(motion.create.mock.calls[0][0].ball.current).toBe(ball.handle);
 });
 
-describe('HomeClient opacity 전환 생명주기', () => {
-  it('transitionrun 없는 end는 무시하고 run 뒤 end에서만 완료한다', () => {
-    const { container } = render(<HomeClient />);
-    navigateTo(/about/i);
-    const about = getSection(container, 'about');
-    const status = screen.getByRole('status');
-
-    expect(status).toBeEmptyDOMElement();
-    fireOpacityTransition(about, 'transitionend');
-    expect(status).toBeEmptyDOMElement();
-    expect(about).not.toHaveFocus();
-
-    fireOpacityTransition(about, 'transitionrun');
-    expect(status).toBeEmptyDOMElement();
-    fireOpacityTransition(about, 'transitionend');
-
-    expect(status).toHaveTextContent('About section');
-    expect(about).toHaveFocus();
-  });
-
-  it('현재 목적지의 transitioncancel도 전환을 완료한다', () => {
-    const { container } = render(<HomeClient />);
-    navigateTo(/about/i);
-    const about = getSection(container, 'about');
-
-    fireOpacityTransition(about, 'transitionrun');
-    fireOpacityTransition(about, 'transitioncancel');
-
-    expect(screen.getByRole('status')).toHaveTextContent('About section');
-    expect(about).toHaveFocus();
-  });
-
-  it('연속 이동 중 과거 목적지 이벤트는 마지막 전환을 닫지 않는다', () => {
-    const { container } = render(<HomeClient />);
-    navigateTo(/about/i);
-    const about = getSection(container, 'about');
-    fireOpacityTransition(about, 'transitionrun');
-
-    navigateTo(/projects/i);
-    const projects = getSection(container, 'projects');
-    fireOpacityTransition(projects, 'transitionrun');
-    fireOpacityTransition(about, 'transitionend');
-
-    expect(screen.getByRole('status')).toBeEmptyDOMElement();
-    expect(projects).not.toHaveFocus();
-
-    fireOpacityTransition(projects, 'transitionend');
-    expect(screen.getByRole('status')).toHaveTextContent('Projects section');
-    expect(projects).toHaveFocus();
-  });
-
-  it('계산된 opacity duration과 delay 합이 0이면 이벤트 없이 즉시 완료한다', () => {
-    transitionDuration = '0s';
-    transitionDelay = '0ms';
-    const { container } = render(<HomeClient />);
-
-    navigateTo(/about/i);
-    const about = getSection(container, 'about');
-
-    expect(screen.getByRole('status')).toHaveTextContent('About section');
-    expect(about).toHaveFocus();
-  });
-
-  it('opacity가 아닌 전환 이벤트는 완료 신호로 취급하지 않는다', () => {
-    const { container } = render(<HomeClient />);
-    navigateTo(/about/i);
-    const about = getSection(container, 'about');
-    const event = new Event('transitionrun', { bubbles: true });
-    Object.defineProperty(event, 'propertyName', { value: 'transform' });
-    fireEvent(about, event);
-    const end = new Event('transitionend', { bubbles: true });
-    Object.defineProperty(end, 'propertyName', { value: 'transform' });
-    fireEvent(about, end);
-
-    expect(screen.getByRole('status')).toBeEmptyDOMElement();
-    expect(about).not.toHaveFocus();
-  });
-
-  it('완료 포커스는 preventScroll 옵션으로 목적지 region에만 이동한다', () => {
-    const originalFocus = HTMLElement.prototype.focus;
-    const focus = vi
-      .spyOn(HTMLElement.prototype, 'focus')
-      .mockImplementation(function (
-        this: HTMLElement,
-        options?: FocusOptions
-      ) {
-        originalFocus.call(this, options);
-      });
-    const { container } = render(<HomeClient />);
-    focus.mockClear();
-    navigateTo(/about/i);
-    const about = getSection(container, 'about');
-
-    fireOpacityTransition(about, 'transitionrun');
-    fireOpacityTransition(about, 'transitionend');
-
-    expect(focus).toHaveBeenCalledTimes(1);
-    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
-    expect(about).toHaveFocus();
-  });
+// Task 10. 쉬는 자리마다 그리는 GL host는 하나다. Hero에서는 볼만 돌고 Electric 로고는 한 장만 미리 그린 채 멈춰 있다.
+// About에서는 로고만 돌고 볼은 멈춘다. 변신 동안(boundary)만 둘이 함께 그린다.
+it('one GL host draws at each rest; both draw only during the transformation', async () => {
+  flags.wide = true;
+  const { container } = render(<HomeClient />); await flush();
+  const drawing = () => [container.querySelector('[data-ball-gl]')!.getAttribute('data-ball-paused') === 'false', container.querySelector('[data-electric-src]')!.getAttribute('data-electric-active') === 'true'];
+  act(() => motion.owner!('hero'));
+  expect(drawing()).toEqual([true, false]);
+  expect(container.querySelector('[data-electric-src]')).toHaveAttribute('data-electric-prewarm', 'true');
+  act(() => motion.owner!('boundary'));
+  expect(drawing()).toEqual([true, true]);
+  act(() => motion.owner!('about'));
+  expect(drawing()).toEqual([false, true]);
+  act(() => motion.owner!('boundary'));
+  expect(drawing()).toEqual([true, true]);
+  act(() => motion.owner!('hero'));
+  expect(drawing()).toEqual([true, false]);
 });
 
-describe('HomeClient motion 구독 통합', () => {
-  it('최초 reduced-motion이면 여러 소비자도 listener 하나로 모두 정지한다', () => {
-    const media = installMatchMedia(true);
-    const addDocumentListener = vi.spyOn(document, 'addEventListener');
-    render(<HomeClient />);
-
-    expect(media.listenerCount()).toBe(1);
-    expect(
-      addDocumentListener.mock.calls.filter(
-        ([type]) => type === 'visibilitychange'
-      )
-    ).toHaveLength(1);
-    expect(screen.getAllByTestId(/^motion-/)).toHaveLength(5);
-    for (const consumer of screen.getAllByTestId(/^motion-/)) {
-      expect(consumer).toHaveAttribute('data-paused', 'true');
-      expect(consumer).toHaveAttribute('data-should-enter', 'false');
-      expect(consumer).toHaveAttribute('data-should-load', 'false');
-    }
-    expect(motionSpies.dynamicLoader).not.toHaveBeenCalled();
-    expect(motionSpies.gsapTimeline).not.toHaveBeenCalled();
-    expect(requestAnimationFrame).not.toHaveBeenCalled();
-    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+// Task 9: Hero 오브젝트는 크리스털 볼이다. 정적 유리와 핵심 아이콘 여섯이 서버 HTML부터 쉬는 자리에 서고,
+// GL은 같은 아이콘 층을 움직인다. 아이콘은 장식이라 읽히지 않는다(기술 이름은 Skills에 있다).
+it('the Hero object is the crystal ball: one icon layer of the six core icons at rest that the GL ball drives', async () => {
+  const { BALL_ICONS, fieldPoint, iconStyle } = await import('@/components/blocks/CrystalizedBall/field');
+  flags.wide = true;
+  const { container } = render(<HomeClient />); await flush();
+  const anchor = container.querySelector('#overview [data-motion-anchor="hero-object"]')!;
+  const shell = anchor.querySelector(':scope > .hero-ball')!;
+  expect(shell.querySelector(':scope > .hero-ball-glass')).not.toBeNull();
+  const icons = shell.querySelectorAll<HTMLElement>(':scope > .hero-ball-icons > span');
+  expect(icons).toHaveLength(6);
+  icons.forEach((icon, index) => {
+    const rest = iconStyle(fieldPoint(BALL_ICONS[index].home, BALL_ICONS[index].seed, 0, [0, 0], [0, 0, 0]));
+    expect(icon.style.transform).toBe(rest.transform);
+    expect(icon.style.opacity).toBe(String(rest.opacity));
+    expect(icon.firstElementChild!.getAttribute('style')).toContain(`/icons-mono/${BALL_ICONS[index].name}.svg`);
   });
-
-  it('설정이 false에서 true로 바뀌면 같은 listener가 모든 소비자를 멈춘다', async () => {
-    const media = installMatchMedia(false);
-    render(<HomeClient />);
-
-    await waitFor(() => {
-      expect(motionSpies.dynamicLoader).toHaveBeenCalled();
-      expect(motionSpies.gsapTimeline).toHaveBeenCalled();
-      expect(requestAnimationFrame).toHaveBeenCalled();
-      expect(HTMLMediaElement.prototype.play).toHaveBeenCalled();
-    });
-    const callsBeforeReduction = {
-      loader: motionSpies.dynamicLoader.mock.calls.length,
-      timeline: motionSpies.gsapTimeline.mock.calls.length,
-      frame: vi.mocked(requestAnimationFrame).mock.calls.length,
-      play: vi.mocked(HTMLMediaElement.prototype.play).mock.calls.length,
-    };
-
-    act(() => media.fire(true));
-
-    expect(media.listenerCount()).toBe(1);
-    for (const consumer of screen.getAllByTestId(/^motion-/)) {
-      expect(consumer).toHaveAttribute('data-paused', 'true');
-    }
-    expect(motionSpies.dynamicLoader).toHaveBeenCalledTimes(
-      callsBeforeReduction.loader
-    );
-    expect(motionSpies.gsapTimeline).toHaveBeenCalledTimes(
-      callsBeforeReduction.timeline
-    );
-    expect(requestAnimationFrame).toHaveBeenCalledTimes(
-      callsBeforeReduction.frame
-    );
-    expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(
-      callsBeforeReduction.play
-    );
-  });
+  expect(ball.icons!.current).toBe(shell.querySelector('.hero-ball-icons'));
+  expect(anchor.closest('[aria-hidden="true"]')).toBe(anchor);
+  expect(screen.queryByRole('img')).toBeNull();
 });
 
-// 이 블록의 ProjectModal 테스트는 gsap 동적 import와 ProjectModal 청크 로드가
-// 겹쳐 단독으로도 ~1.7초가 걸린다. 전체 스위트 부하에서는 기본 5초를 넘겼다.
-describe('HomeClient → HyperspeedBackground 배선', { timeout: 30_000 }, () => {
-  it('단일 useSectionNav·usePageVisibility·useMotionPreference의 값이 일곱 prop으로 그대로 전달된다', () => {
-    render(<HomeClient />);
-    const probe = screen.getByTestId('hyperspeed-background-probe');
-
-    expect(probe).toHaveAttribute('data-active', 'overview');
-    expect(probe).toHaveAttribute('data-is-transitioning', 'false');
-    expect(probe).toHaveAttribute('data-obscured', 'false');
-    expect(probe).toHaveAttribute('data-page-visible', 'true');
-    expect(probe).toHaveAttribute('data-route-resolved', 'true');
-    expect(probe).toHaveAttribute('data-motion-ready', 'true');
-    expect(probe).toHaveAttribute('data-reduced-motion', 'false');
-
-    navigateTo(/about/i);
-    expect(probe).toHaveAttribute('data-active', 'about');
-    expect(probe).toHaveAttribute('data-is-transitioning', 'true');
-  });
-
-  it('pageVisible과 routeResolved는 서로 다른 값으로 각각 정확한 prop에 꽂힌다', () => {
-    // 마운트 직후엔 둘 다 true라 자리가 뒤바뀌어도 겉보기 결과가 같다 —
-    // 실제로 self-mutation(HomeClient에서 pageVisible↔routeResolved를
-    // swap)을 주입했더니 위 테스트가 통과해버려서 찾은 구멍이다. 문서에서
-    // visibilitychange만 쏴서 pageVisible을 false로 갈라놓아야 routeResolved
-    // (계속 true)와 실제로 구별된다.
-    render(<HomeClient />);
-    const probe = screen.getByTestId('hyperspeed-background-probe');
-    expect(probe).toHaveAttribute('data-page-visible', 'true');
-    expect(probe).toHaveAttribute('data-route-resolved', 'true');
-
-    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
-    act(() => {
-      document.dispatchEvent(new Event('visibilitychange'));
-    });
-
-    expect(probe).toHaveAttribute('data-page-visible', 'false');
-    expect(probe).toHaveAttribute('data-route-resolved', 'true');
-  });
-
-  // 제한 시간을 테스트 자체에 준다. 아래 findByRole에 5000ms를 줬는데
-  // vitest의 기본 테스트 제한도 5000ms라, 대기가 끝나기 전에 테스트가 먼저
-  // 죽었다. 예산이 애초에 성립하지 않았고 전체 스위트(40개 파일 병렬)에서
-  // CPU가 경합할 때 그것이 드러났다. 테스트 예산을 대기 예산보다 크게 둔다.
-  it('ProjectModal이 열리면 obscured가 true, 닫히면 다시 false다', async () => {
-    window.history.replaceState(null, '', '/#projects');
-    const { container } = render(<HomeClient />);
-    const probe = screen.getByTestId('hyperspeed-background-probe');
-    expect(probe).toHaveAttribute('data-obscured', 'false');
-
-    const projectsSection = getSection(container, 'projects');
-    const card = projectsSection.querySelector<HTMLElement>('[data-name="0"]');
-    expect(card).not.toBeNull();
-
-    fireEvent.click(card!);
-    expect(probe).toHaveAttribute('data-obscured', 'true');
-
-    // 되돌아오는 방향까지 확인한다. 이 어서션이 없으면 obscured를 한 번
-    // true로 만들고 영원히 두는 구현도 통과한다. 모달을 닫은 뒤 배경이
-    // 어두운 채로 남는 것이 정확히 그 결함이다.
-    // ProjectModal은 next/dynamic이라 클릭 직후에는 아직 DOM에 없다. 이 파일은
-    // '@/lib/gsap'을 mock하지 않으므로 HomeClient의 마운트 effect가 실제
-    // gsap 패키지를 처음으로 동적 import하면서 겪는 실 transform·평가 비용이
-    // ProjectModal 자체의 청크 로드와 겹쳐 기본 1000ms 예산을 종종 넘는다
-    // (실측: 최대 ~1.7초). 로직 문제가 아니라 타이밍 여유를 넉넉히 준다.
-    fireEvent.click(
-      await screen.findByRole('button', { name: '닫기' }, { timeout: 20_000 })
-    );
-    expect(probe).toHaveAttribute('data-obscured', 'false');
-  }, 30_000);
-
-  it('섹션을 연속 전환해도 HyperspeedBackground는 재마운트되지 않는다', () => {
-    render(<HomeClient />);
-    expect(hyperspeedBackgroundSpies.mountCount).toBe(1);
-
-    navigateTo(/about/i);
-    navigateTo(/projects/i);
-    navigateTo(/skills/i);
-
-    expect(hyperspeedBackgroundSpies.mountCount).toBe(1);
-  });
+// 볼은 GL 로고와 같은 규칙으로 뜬다(1024px부터, 모션 감소가 아니고 진입이 끝난 뒤). 첫 그림 뒤에만 정적 유리가 물러난다.
+// 모달, 숨은 탭, 로고가 About에 내려앉은 동안(볼이 접혀 사라진 동안)은 멈춘다.
+it('the GL ball mounts like the GL logo, hides the static glass after its first frame and pauses on the activity flags', async () => {
+  flags.wide = true;
+  const view = render(<HomeClient />); await flush();
+  const shell = view.container.querySelector('.hero-ball')!;
+  const gl = () => view.container.querySelector('[data-ball-gl]');
+  expect(shell).not.toHaveAttribute('data-ball-live');
+  act(() => motion.owner!('hero'));
+  expect(gl()).toHaveAttribute('data-ball-paused', 'false');
+  fireEvent.click(view.container.querySelector('[data-ball-ready]')!);
+  expect(shell).toHaveAttribute('data-ball-live');
+  // 변신 동안 볼은 접히며 돌고, About에 내려앉으면 멈춘다.
+  act(() => motion.owner!('boundary'));
+  expect(gl()).toHaveAttribute('data-ball-paused', 'false');
+  act(() => motion.owner!('about'));
+  expect(gl()).toHaveAttribute('data-ball-paused', 'true');
+  act(() => motion.owner!('hero'));
+  expect(gl()).toHaveAttribute('data-ball-paused', 'false');
+  flags.obscured = true; view.rerender(<HomeClient />);
+  expect(gl()).toHaveAttribute('data-ball-paused', 'true');
+  flags.obscured = false; flags.pageVisible = false; view.rerender(<HomeClient />);
+  expect(gl()).toHaveAttribute('data-ball-paused', 'true');
+  view.unmount();
+  flags.pageVisible = true; flags.wide = false;
+  const narrow = render(<HomeClient />); await flush();
+  expect(narrow.container.querySelector('[data-ball-gl]')).toBeNull();
+  expect(narrow.container.querySelectorAll('.hero-ball-icons > span')).toHaveLength(6);
 });
 
-// 계획 5 T2 Task 9의 셸 격리는 HomeClient가 소유한 inert 배선이라 계획서의
-// ProjectsSection.test.tsx 파일 목록에는 없지만 여기서 고정하지 않으면
-// 검증되지 않는다(구현 담당 서브에이전트 브리프가 명시적으로 요구·승인한
-// 계획 일탈). "ProjectModal이 열리면 obscured가..." 테스트의 열기/닫기
-// 흐름을 그대로 재사용한다.
-// 이 파일의 beforeEach는 requestAnimationFrame을 콜백을 절대 안 부르는
-// 껍데기로 바꿔 둔다(다른 테스트가 호출 횟수만 세기 때문이다). 포커스
-// 복원은 한 프레임 뒤에 도는 것이 계약이라 그 껍데기 아래서는 관측 자체가
-// 안 된다. 그래서 이 두 테스트만 콜백을 실제로 돌려주는 것으로 되돌린다.
-// afterEach의 unstubAllGlobals가 원래대로 돌려놓는다
-function installRunnableAnimationFrame() {
-  vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) =>
-    setTimeout(() => cb(0), 0) as unknown as number
-  );
-  vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
-}
-
-describe('HomeClient 모달-only History와 셸 격리', { timeout: 30_000 }, () => {
-  it('모달이 열리면 Navigation·main·Footer가 inert가 되고, 닫히면 다시 풀린다', async () => {
-    window.history.replaceState(null, '', '/#projects');
-    const { container } = render(<HomeClient />);
-    const stage = container.querySelector<HTMLElement>('.section-stage')!;
-    const navButton = screen.getByRole('button', { name: /^about$/i });
-    const footerLink = screen.getByText('Contact footer');
-
-    expect(stage.closest('[inert]')).toBeNull();
-    expect(navButton.closest('[inert]')).toBeNull();
-    expect(footerLink.closest('[inert]')).toBeNull();
-
-    const projectsSection = getSection(container, 'projects');
-    const card = projectsSection.querySelector<HTMLElement>('[data-name="0"]');
-    fireEvent.click(card!);
-    const closeButton = await screen.findByRole(
-      'button',
-      { name: '닫기' },
-      { timeout: 20_000 }
-    );
-
-    // 뮤테이션: main에 inert를 안 걸면 여기서 stage.closest가 null을 돌려줘
-    // FAIL한다
-    expect(stage).toHaveAttribute('inert');
-    expect(navButton.closest('[inert]')).not.toBeNull();
-    expect(footerLink.closest('[inert]')).not.toBeNull();
-
-    fireEvent.click(closeButton);
-
-    // 되돌아오는 방향도 확인한다. 한 번 inert를 걸고 영원히 두면 모달을
-    // 닫아도 셸이 죽어 있는 결함이다
-    expect(stage).not.toHaveAttribute('inert');
-    expect(navButton.closest('[inert]')).toBeNull();
-    expect(footerLink.closest('[inert]')).toBeNull();
-  });
-
-  // 계획 5 T2 phase D task S-7. data-obscured는 design-tokens.css가 읽어
-  // nav를 흐리며 물러나게 하는 훅이다. inert와 같은 wrapper에 실려 있지만
-  // 서로 다른 속성이라 따로 잠근다. inert만 잠그면 data-obscured가 빠진
-  // 채로도 통과해 nav가 안 흐려지는 결함을 못 잡는다
-  it('모달이 열리면 nav 래퍼에 data-obscured가 붙고, 닫히면 떨어진다', async () => {
-    window.history.replaceState(null, '', '/#projects');
-    const { container } = render(<HomeClient />);
-    const navButton = screen.getByRole('button', { name: /^about$/i });
-    const navWrapper = navButton.closest('nav')!.parentElement!;
-
-    expect(navWrapper).not.toHaveAttribute('data-obscured');
-
-    const projectsSection = getSection(container, 'projects');
-    const card = projectsSection.querySelector<HTMLElement>('[data-name="0"]');
-    fireEvent.click(card!);
-    const closeButton = await screen.findByRole(
-      'button',
-      { name: '닫기' },
-      { timeout: 20_000 }
-    );
-
-    // 뮤테이션: data-obscured를 안 붙이면 여기서 빈 문자열 속성이 없어
-    // FAIL한다
-    expect(navWrapper).toHaveAttribute('data-obscured', '');
-
-    fireEvent.click(closeButton);
-
-    expect(navWrapper).not.toHaveAttribute('data-obscured');
-  });
-
-  it('모달이 열려 있으면 스와이프로 섹션이 바뀌지 않는다', async () => {
-    window.history.replaceState(null, '', '/#projects');
-    const { container } = render(<HomeClient />);
-    const stage = container.querySelector<HTMLElement>('.section-stage')!;
-
-    const projectsSection = getSection(container, 'projects');
-    const card = projectsSection.querySelector<HTMLElement>('[data-name="0"]');
-    fireEvent.click(card!);
-    await screen.findByRole('button', { name: '닫기' }, { timeout: 20_000 });
-
-    // 뮤테이션: 모달이 열려 있어도 swipeHandlers를 계속 뿌리면(inert만 믿으면)
-    // jsdom은 inert의 포인터 차단을 구현하지 않으므로 이 pointerdown/up이
-    // 그대로 섹션을 넘겨 FAIL한다
-    firePointer(stage, 'pointerdown', {
-      pointerId: 1,
-      pointerType: 'touch',
-      clientX: 240,
-      clientY: 200,
-    });
-    firePointer(stage, 'pointerup', {
-      pointerId: 1,
-      pointerType: 'touch',
-      clientX: 160,
-      clientY: 205,
-    });
-
-    expect(getSection(container, 'projects')).toHaveClass('section-visible');
-    expect(getSection(container, 'experience')).not.toHaveClass('section-visible');
-  });
-
-  it('모달은 portal로 body에 붙어 main의 inert에 갇히지 않는다', async () => {
-    window.history.replaceState(null, '', '/#projects');
-    const { container } = render(<HomeClient />);
-    const stage = container.querySelector<HTMLElement>('.section-stage')!;
-
-    const projectsSection = getSection(container, 'projects');
-    const card = projectsSection.querySelector<HTMLElement>('[data-name="0"]');
-    fireEvent.click(card!);
-    const dialog = await screen.findByRole('dialog', {}, { timeout: 20_000 });
-
-    // main이 inert라도 모달은 main의 자손이 아니라 document.body의 직속
-    // 자손(portal)이라 갇히지 않는다. 뮤테이션으로 Modal의 portal 대상을
-    // main 내부로 옮기면 이 어서션이 FAIL한다
-    expect(stage).toHaveAttribute('inert');
-    expect(stage.contains(dialog)).toBe(false);
-    expect(dialog.closest('[inert]')).toBeNull();
-  });
-
-  // 표제 계약: 모달을 닫으면 포커스가 opener 카드로 돌아온다. 이 어서션이
-  // 없으면 포커스가 body로 새도 아무 테스트가 울지 않는다. Modal atom의
-  // 복원은 셸의 격리가 아직 안 풀린 시점에 돌아 opener가 갇혔다고 보고
-  // 포기하므로, ProjectsSection이 한 프레임 뒤에 직접 되돌려준다.
-  it('모달을 닫으면 포커스가 opener 카드로 돌아온다', async () => {
-    installRunnableAnimationFrame();
-    window.history.replaceState(null, '', '/#projects');
-    const { container } = render(<HomeClient />);
-    const projectsSection = getSection(container, 'projects');
-    const card = projectsSection.querySelector<HTMLElement>('[data-name="0"]')!;
-
-    fireEvent.click(card);
-    const closeButton = await screen.findByRole(
-      'button',
-      { name: '닫기' },
-      { timeout: 20_000 }
-    );
-
-    fireEvent.click(closeButton);
-
-    // 복원이 한 프레임 뒤라 동기 단언은 못 쓴다
-    await waitFor(() => {
-      expect(document.activeElement).toBe(card);
-    });
-  });
-
-  // 반대쪽 갈래. opener가 없어졌을 때 아무 데도 안 보내면 포커스는 body로
-  // 떨어진다. 복원이 opener만 보고 fallback을 빼먹으면 여기서 FAIL한다
-  it('opener가 사라지면 포커스가 활성 section region으로 떨어진다', async () => {
-    installRunnableAnimationFrame();
-    window.history.replaceState(null, '', '/#projects');
-    const { container } = render(<HomeClient />);
-    const projectsSection = getSection(container, 'projects');
-    const card = projectsSection.querySelector<HTMLElement>('[data-name="0"]')!;
-
-    fireEvent.click(card);
-    const closeButton = await screen.findByRole(
-      'button',
-      { name: '닫기' },
-      { timeout: 20_000 }
-    );
-
-    // 모달이 열려 있는 동안 opener를 DOM에서 뜯어낸다
-    card.remove();
-    fireEvent.click(closeButton);
-
-    await waitFor(() => {
-      expect(document.activeElement).toBe(getSection(container, 'projects'));
-    });
-  });
-
-  // 복원 effect의 첫 mount 가드. 이게 없으면 페이지를 열자마자 Projects
-  // 카드가 포커스를 훔쳐 간다. rAF 호출 횟수를 세는 다른 테스트가 우연히
-  // 그걸 잡기는 하지만 지연 수단만 바꿔도 사라지는 catch라 여기서 직접 본다
-  it('모달을 연 적이 없으면 첫 렌더에서 포커스를 가져가지 않는다', async () => {
-    installRunnableAnimationFrame();
-    window.history.replaceState(null, '', '/#projects');
-    const { container } = render(<HomeClient />);
-    const card = getSection(container, 'projects').querySelector<HTMLElement>(
-      '[data-name="0"]'
-    )!;
-
-    const focusedBeforeFrame = document.activeElement;
-
-    // 프레임이 실제로 돌았다는 것을 같이 확인한다. 이게 없으면 프레임이 한 번도
-    // 안 돌아 통과하는 죽은 프로브와 구분이 안 된다
-    let framesRan = 0;
-    await act(async () => {
-      requestAnimationFrame(() => {
-        framesRan += 1;
-      });
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-
-    expect(framesRan).toBe(1);
-    expect(focusedBeforeFrame).not.toBe(card);
-    expect(document.activeElement).not.toBe(card);
-  });
+// Task 10 리뷰 Minor 2. GL 볼도 로고처럼 Hero에서 쉬는 동안에만 정적 유리와 바뀐다. 변신 중(boundary)이나 About에서 준비돼도
+// 접히는 정적 볼을 그대로 두고, Hero에 돌아와 쉴 때 바꾼다. 한 번 바뀐 뒤에는 변신 동안에도 그대로다.
+it('the GL ball replaces the static glass only while it rests at the Hero, never during a flight', async () => {
+  flags.wide = true;
+  const view = render(<HomeClient />); await flush();
+  const shell = view.container.querySelector('.hero-ball')!;
+  act(() => motion.owner!('boundary'));
+  fireEvent.click(view.container.querySelector('[data-ball-ready]')!);
+  expect(shell).not.toHaveAttribute('data-ball-live');
+  act(() => motion.owner!('about'));
+  expect(shell).not.toHaveAttribute('data-ball-live');
+  act(() => motion.owner!('boundary'));
+  expect(shell).not.toHaveAttribute('data-ball-live');
+  act(() => motion.owner!('hero'));
+  expect(shell).toHaveAttribute('data-ball-live');
+  for (const owner of ['boundary', 'about', 'boundary'] as const) {
+    act(() => motion.owner!(owner));
+    expect(shell).toHaveAttribute('data-ball-live');
+  }
 });
 
-describe('HomeClient Footer. 표제 계약', () => {
-  // "Footer가 더 이상 문서 흐름에서 섹션 뒤로 비치지 않는다"의 구조적 절반이다.
-  // 나머지 절반(Footer 자체가 position:fixed인지)은 Footer.test.tsx가 격리된
-  // 컴포넌트로 고정한다. 여기서는 이 mock으로도 관측 가능한 두 가지만 본다:
-  // (1) Footer가 .section-stage 안으로 흡수되지 않았는가(=위장 여섯 번째
-  // 섹션이 되지 않았는가), (2) active와 무관하게 항상 렌더되는가.
-  it('Footer는 .section-stage의 자손이 아니며 active가 바뀌어도 항상 렌더된다', () => {
-    const { container } = render(<HomeClient />);
-    const stage = container.querySelector('.section-stage');
-
-    expect(stage).not.toBeNull();
-    const footerLink = screen.getByText('Contact footer');
-    // main(.section-stage) 밖 형제여야 한다. main 안으로 들어가면 다른
-    // 비활성 섹션과 함께 inert·hidden 처리되어 "섹션 위에 상주한다"는 계약이
-    // 구조적으로 깨진다.
-    expect(stage!.contains(footerLink)).toBe(false);
-
-    navigateTo(/^about$/i);
-    expect(screen.getByText('Contact footer')).toBeInTheDocument();
-
-    navigateTo(/^awards$/i);
-    // overview에서만 렌더하도록 되돌리면(뮤테이션 g) 이 시점엔 이미 overview를
-    // 벗어났으므로 이 어서션이 FAIL해야 한다.
-    expect(screen.getByText('Contact footer')).toBeInTheDocument();
-  });
-
-  it('overview에서만 Footer에 은닉 신호를 주고 섹션에 들어가면 푼다', () => {
-    // DOM에 상주하는 것과 화면에 보이는 것은 다른 계약이다. 위 테스트가
-    // 상주를, 이 테스트가 노출을 맡는다. 실제 내려가기·올라오기는
-    // design-tokens.css의 site-footer-hidden/-visible이 하고, 여기서는
-    // HomeClient가 active를 그 신호로 옳게 번역하는지만 본다.
-    render(<HomeClient />);
-    const footer = () => screen.getByText('Contact footer');
-
-    expect(footer().dataset.atOverview).toBe('true');
-
-    navigateTo(/^about$/i);
-    expect(footer().dataset.atOverview).toBe('false');
-
-    navigateTo(/^awards$/i);
-    expect(footer().dataset.atOverview).toBe('false');
-  });
+it('connects only the name channel when the GL logo is not mounted (narrow screens)', async () => {
+  const { container } = render(<HomeClient />); await flush();
+  expect(container.querySelector('[data-electric-src]')).toBeNull();
+  expect(motion.create).toHaveBeenCalledTimes(1);
+  expect(motion.setLogo).toHaveBeenLastCalledWith(null);
 });
 
-describe('HomeClient AWARDS-CERTIFICATES 섹션 등록', () => {
-  it('AWARDS-CERTIFICATES가 다른 네 섹션과 같은 경로(nav·해시·data-section)로 등록된다', () => {
-    // 리터럴 'awards-certificates'를 직접 어서션한다. HOME_SECTION_CONFIG를
-    // 순회하는 검사는 AWARDS-CERTIFICATES가 배열에서 통째로 빠져도(뮤테이션 b)
-    // 순회 범위 자체가 줄어들 뿐이라 못 잡는다. 존재를 하드코딩해야 그
-    // 구멍이 막힌다.
-    const { container } = render(<HomeClient />);
-
-    expect(
-      screen.getByRole('button', { name: /^awards$/i })
-    ).toBeInTheDocument();
-
-    navigateTo(/^awards$/i);
-
-    expect(window.location.hash).toBe('#awards-certificates');
-    const awardsSection = getSection(container, 'awards-certificates');
-    expect(awardsSection).toHaveClass('section-visible');
-    expect(awardsSection).toHaveTextContent('Grand Prize');
-  });
+// 모션 감소도 같은 지점에서 이름 자리를 바꾼다. 재생은 없고 GL 로고도 없다.
+it('reduced motion creates a reduced motion context and no GL logo; static anchors stay', async () => {
+  flags.reduced = true; flags.wide = true;
+  const { container } = render(<HomeClient />); await flush();
+  expect(motion.create).toHaveBeenCalledTimes(1);
+  expect(motion.create).toHaveBeenLastCalledWith(expect.objectContaining({ reduced: true }));
+  expect(motion.setLogo).toHaveBeenLastCalledWith(null);
+  expect(container.querySelector('[data-electric-src]')).toBeNull();
+  expect(container.querySelector('[data-ball-gl]')).toBeNull();
+  expect(container.querySelectorAll('.hero-ball-icons > span')).toHaveLength(6);
+  expect(container.querySelector('.portfolio-document')).not.toHaveAttribute('data-logo-live');
+  expect(screen.getByTestId('wordmark').style.transform).toBe('');
 });
 
-// START(그리고 순방향 네비·스와이프)를 누르면 다음 섹션이
-// .section-hidden(content-visibility: auto)에서 .section-visible로 한 번에
-// 바뀌며 건너뛰던 서브트리의 레이아웃·페인트가 전환 프레임에 몰렸다.
-// HomeClient는 지금 active의 "다음" 섹션 하나에만 미리 content-visibility를
-// 올려(.section-prewarm) 그 비용을 전환 전에 끝낸다. jsdom은
-// content-visibility를 실제로 계산하지 않으므로 여기서는 "어떤 섹션에 어떤
-// 클래스가 붙는가"라는 구조만 고정한다. 실제 프레임 비용 절감 여부는
-// 실기기 몫이다.
-describe('HomeClient 다음 섹션 예열(전환 끊김 완화)', () => {
-  // 계약 갱신: 유휴 예열(브리프 "유휴 시간에 모든 섹션을 한 번씩 데운다")이
-  // 추가되기 전에는 "about만 예열되고 나머지는 절대 예열되지 않는다"가
-  // 영구적인 계약이었다. 지금은 다르다. 유휴 콜백(jsdom엔 requestIdleCallback이
-  // 없으므로 폴백 setTimeout)은 render() 직후 예약될 뿐 이 동기 테스트
-  // 안에서는 아직 발화하지 않으므로, 아래 어서션은 "커밋 직후 그 프레임"의
-  // 상태만 고정한다. 유휴 시간이 실제로 지나면 나머지도 하나씩 데워진다.
-  // 그 새 계약은 아래 "HomeClient 유휴 예열" describe가 별도로 고정한다.
-  it('overview에서 마운트 직후에는 about 하나만 예열되고 나머지는 아직 예열되지 않는다, 뮤테이션 (a)·(c)', () => {
-    const { container } = render(<HomeClient />);
-    const about = getSection(container, 'about');
-
-    // 뮤테이션 (a): 예열 자체를 지우면 about에 section-prewarm이 붙지
-    // 않아 FAIL한다.
-    expect(about).toHaveClass('section-scroll', 'section-hidden', 'section-prewarm');
-    expect(about).not.toHaveClass('section-visible');
-
-    // 뮤테이션 (c): 다음 섹션 하나만 예열하는 게이트를 지우고 마운트하는
-    // 그 프레임에 비활성 섹션 전부를 한 번에 예열하도록 바꾸면 아래
-    // 나머지 다섯 곳 중 하나 이상이 이 시점에 이미 section-prewarm을 갖게
-    // 되어 FAIL한다. 유휴 예열은 하나씩만 예약되므로 아직 발화 전인 이
-    // 시점에는 여전히 about 하나뿐이어야 한다.
-    for (const { id } of HOME_SECTION_CONFIG) {
-      if (id === 'about') continue;
-      expect(getSection(container, id), id).not.toHaveClass('section-prewarm');
-    }
-  });
-
-  it('예열된 섹션도 여전히 보이지 않는다, inert·aria-hidden 유지, 뮤테이션 (b)', () => {
-    const { container } = render(<HomeClient />);
-    const about = getSection(container, 'about');
-
-    // 뮤테이션 (b): 예열된 섹션의 inert·aria-hidden을 벗기면(opacity나
-    // pointer-events를 함께 열어주는 구현으로 바뀌면) 아래 둘 중 하나가
-    // FAIL한다. content-visibility만 올라갈 뿐 여전히 비활성 섹션이다.
-    expect(about).toHaveAttribute('inert');
-    expect(about).toHaveAttribute('aria-hidden', 'true');
-  });
-
-  it('이동하면 예열 대상이 다음 섹션으로 옮겨간다, 순방향 네비 클릭도 자연히 덮인다', () => {
-    const { container } = render(<HomeClient />);
-    navigateTo(/about/i);
-
-    const about = getSection(container, 'about');
-    const projects = getSection(container, 'projects');
-
-    // 활성 섹션 자신은 이미 진짜 section-visible이므로 예열 클래스가 필요
-    // 없다.
-    expect(about).toHaveClass('section-visible');
-    expect(about).not.toHaveClass('section-prewarm');
-
-    // 전환이 끝난 뒤에야 다음 대상이 옮겨온다. 아래 "전환 중에는 예열하지
-    // 않는다" 테스트가 그 이유를 지킨다. transitionend는 transitionrun으로
-    // 등록된 전환에만 반응하므로(handleSectionTransitionDone) 둘을 짝지어
-    // 보낸다.
-    fireOpacityTransition(about, 'transitionrun');
-    fireOpacityTransition(about, 'transitionend');
-    // HOME_SECTION_CONFIG 순서상 about 다음은 projects다.
-    expect(projects).toHaveClass('section-prewarm');
-  });
-
-  // 이 예열의 핵심 계약이다. prewarmId가 active만 보고 파생되면 overview에서
-  // about으로 넘어가는 그 커밋에서 about이 싸게 올라가는 대신 projects가
-  // hidden에서 prewarm으로 바뀐다. content-visibility가 그 프레임에 다시
-  // 올라가므로 지키려던 바로 그 프레임에 새 서브트리의 첫 렌더가 들어앉고,
-  // 끊김이 사라지는 게 아니라 옆 섹션으로 옮겨간다.
-  it('전환이 진행되는 동안에는 다음 대상을 예열하지 않는다, 끊김이 옆 섹션으로 옮겨가는 것을 막는다', () => {
-    const { container } = render(<HomeClient />);
-    navigateTo(/about/i);
-
-    // isTransitioning 게이트를 지우면(active만 보고 파생하면) projects가
-    // 이 시점에 이미 section-prewarm을 갖게 되어 FAIL한다.
-    expect(getSection(container, 'projects')).not.toHaveClass('section-prewarm');
-
-    // 전환 중이라고 해서 이미 데워 둔 목적지를 식히지도 않는다. about은
-    // 활성이 됐으므로 예열 클래스 없이 section-visible이어야 한다.
-    expect(getSection(container, 'about')).toHaveClass('section-visible');
-  });
-
-  // 계약 갱신: 여기서 보는 prewarmId(다음 하나) 경로는 reducedMotion에서
-  // 여전히 꺼진다(변경 없음). 다만 유휴 예열 경로는 reducedMotion과
-  // 무관하게 계속 도는데, 이 테스트는 마운트 직후 동기 시점만 보므로 아직
-  // 발화 전이라 결과가 같다. reducedMotion에서도 유휴 예열이 실제로
-  // 진행되는지는 아래 "HomeClient 유휴 예열" describe가 별도로 고정한다.
-  it('reducedMotion에서 마운트 직후에는 예열되지 않는다, 애니메이션이 없으므로 프레임 비용을 뺄 이유도 없다', () => {
-    installMatchMedia(true);
-    const { container } = render(<HomeClient />);
-
-    for (const { id } of HOME_SECTION_CONFIG) {
-      expect(getSection(container, id), id).not.toHaveClass('section-prewarm');
-    }
-  });
+// GL 로고는 쉬는 자리에서만 정적 실루엣과 바뀐다. 날아가는 동안 준비돼도 내려앉은 뒤에 드러나고, 이미 드러났으면 날아가는 동안 그대로다.
+// About은 로고가 내려앉은 뒤에만 잠근다.
+it('the GL logo turns live only at rest and About is told whether the logo has landed', async () => {
+  flags.wide = true;
+  const { container } = render(<HomeClient />); await flush();
+  const documentRoot = container.querySelector('.portfolio-document')!;
+  const about = screen.getByText('About original body');
+  act(() => motion.owner!('hero'));
+  act(() => motion.owner!('boundary'));
+  expect(about).toHaveAttribute('data-logo-owner-prop', 'boundary');
+  fireEvent.click(container.querySelector('[data-signal-ready]')!);
+  expect(documentRoot).not.toHaveAttribute('data-logo-live');
+  act(() => motion.owner!('about'));
+  expect(documentRoot).toHaveAttribute('data-logo-live');
+  expect(about).toHaveAttribute('data-logo-owner-prop', 'about');
+  act(() => motion.owner!('boundary'));
+  expect(documentRoot).toHaveAttribute('data-logo-live');
+  act(() => motion.owner!('hero'));
+  expect(documentRoot).toHaveAttribute('data-logo-live');
+  expect(motion.create).toHaveBeenCalledTimes(1);
 });
 
-// 유휴 예열의 새 계약이다(위 describe의 "마운트 직후" 테스트들과 짝을
-// 이룬다). jsdom엔 requestIdleCallback이 없으므로(전역에 없다는 것을
-// 확인했다) HomeClient는 항상 setTimeout 폴백 경로를 탄다. 각 섹션은
-// 한 번에 하나씩 예약되므로 waitFor로 실 타이머가 순서대로 흘러가길
-// 기다린다.
-//
-// 제한 시간을 넉넉히 준 이유가 있다. 섹션 여섯을 데우려면
-// effect에서 setTimeout, setState, 다시 effect를 여섯 번 순차로 돌아야
-// 한다. waitFor의 기본 1초는 이 파일 하나만 돌릴 때는 충분하지만 전체
-// 스위트(40개 파일 병렬)에서는 CPU 경합만으로 넘긴다. 실제로 그렇게
-// 깨졌다. 수행 시간이 아니라 대기가 원인이라
-// useIntersection.test.tsx가 같은 이유로 쓰는 처방을 따른다.
-describe('HomeClient 유휴 예열', { timeout: 30_000 }, () => {
-  const IDLE_WARM_WAIT = { timeout: 20_000 } as const;
-
-  it('유휴 시간이 지나면 비활성 섹션 전부가 section-prewarm을 받는다', async () => {
-    const { container } = render(<HomeClient />);
-
-    // 뮤테이션: 유휴 예열 effect 자체를 지우면(또는 routeResolved 게이트를
-    // 반대로 뒤집으면) about을 제외한 다섯 섹션이 끝까지 section-prewarm을
-    // 받지 못해 waitFor가 기본 제한 시간 안에 timeout으로 FAIL한다.
-    await waitFor(() => {
-      for (const { id } of HOME_SECTION_CONFIG) {
-        expect(getSection(container, id), id).toHaveClass('section-prewarm');
-      }
-    }, IDLE_WARM_WAIT);
-  });
-
-  // 이 예열의 가장 중요한 불변식이다. content-visibility만 올리고
-  // opacity·pointer-events·inert는 .section-hidden 값 그대로 둬야 한다.
-  it('유휴로 데워진 섹션도 여전히 보이지 않는다, section-hidden·inert·aria-hidden 유지', async () => {
-    const { container } = render(<HomeClient />);
-    // awards-certificates는 HOME_SECTION_CONFIG 마지막이라 prewarmId가
-    // 아니라 유휴 경로로만 데워진다. 이 테스트가 실제로 유휴 경로를
-    // 관측하고 있음을 보장한다.
-    const lastSection = getSection(container, 'awards-certificates');
-
-    await waitFor(() => {
-      expect(lastSection).toHaveClass('section-prewarm');
-    }, IDLE_WARM_WAIT);
-
-    // 뮤테이션: 유휴 예열이 opacity나 pointer-events까지 함께 열어주는
-    // 구현으로 바뀌면(section-hidden을 걷어내거나 inert를 벗기면) 아래
-    // 셋 중 하나가 FAIL한다.
-    expect(lastSection).toHaveClass('section-hidden');
-    expect(lastSection).toHaveAttribute('inert');
-    expect(lastSection).toHaveAttribute('aria-hidden', 'true');
-  });
-
-  it('전환 중에는 유휴 예열이 새로 진행되지 않는다', async () => {
-    const { container } = render(<HomeClient />);
-    // isTransitioning이 true가 되는 순간 렌더가 커밋되므로, 유휴 콜백이
-    // 아직 한 번도 발화하지 않은 상태에서 곧바로 전환을 시작한다.
-    navigateTo(/about/i);
-
-    const projects = getSection(container, 'projects');
-    expect(projects).not.toHaveClass('section-prewarm');
-
-    // transitionend를 보내지 않아 isTransitioning은 계속 true다. 실 시간을
-    // 흘려보내도(폴백 setTimeout 여러 틱이 지날 만큼 충분히) 새 유휴
-    // 예약이 생기지 않아야 한다.
-    // 뮤테이션: isTransitioning 게이트를 지우면 about이 먼저 warmedSectionIds에
-    // 쌓이고(활성이라 눈에 보이지 않는다) 이어서 다음 순번인 projects가
-    // section-prewarm을 받아 FAIL한다.
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    });
-
-    expect(projects).not.toHaveClass('section-prewarm');
-  });
-
-  it('reducedMotion에서도 유휴 예열은 계속된다, 애니메이션이 없어도 150ms 정지는 그대로 느껴진다', async () => {
-    installMatchMedia(true);
-    const { container } = render(<HomeClient />);
-
-    // 뮤테이션: 유휴 예열 effect에 reducedMotion 게이트를 새로 걸면
-    // section-prewarm이 끝까지 붙지 않아 waitFor가 timeout으로 FAIL한다.
-    await waitFor(() => {
-      expect(getSection(container, 'about')).toHaveClass('section-prewarm');
-    });
-  });
-
-  it('언마운트하면 예약해 둔 유휴(폴백 setTimeout) 콜백을 취소한다', () => {
-    const setTimeoutSpy = vi.spyOn(window, 'setTimeout');
-    const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout');
-    const { unmount } = render(<HomeClient />);
-
-    const scheduledHandle = setTimeoutSpy.mock.results.at(-1)?.value;
-    expect(scheduledHandle).toBeDefined();
-
-    unmount();
-
-    // 뮤테이션: cleanup에서 clearTimeout(handle) 호출을 지우면 이 handle로
-    // clearTimeout이 불리지 않아 FAIL한다. 취소하지 않고 언마운트하면
-    // 나중에 발화하는 콜백이 이미 사라진 컴포넌트의 setState를 부른다.
-    expect(clearTimeoutSpy).toHaveBeenCalledWith(scheduledHandle);
-  });
+it('the shared logo follows the selected chapter at About and shows BASICS React on the first screen', async () => {
+  flags.wide = true;
+  const { container } = render(<HomeClient />); await flush();
+  const logo = container.querySelector('[data-electric-src]')!;
+  expect(logo).toHaveAttribute('data-electric-src', coreValues[0].logoSrc);
+  expect(coreValues[0].logoSrc).toBe('/icons-mono/react.svg');
+  act(() => motion.owner!('about'));
+  fireEvent.click(screen.getByText('About original body'));
+  expect(container.querySelector('[data-electric-src]')).toBe(logo);
+  expect(logo).toHaveAttribute('data-electric-src', coreValues[2].logoSrc);
+  act(() => motion.owner!('hero'));
+  expect(logo).toHaveAttribute('data-electric-src', coreValues[0].logoSrc);
 });
 
-// Task 4의 CSS가 .section-visible[data-section-direction]과
-// .section-hidden[data-section-leaving][data-section-direction]으로 깊이
-// 애니메이션을 건다. 표식이 관련된 둘(들어오는 섹션·나가는 섹션)에만 붙어야
-// 비활성 여섯 개가 함께 뛰지 않는다.
-describe('HomeClient 전환 방향 표식', () => {
-  it('들어오는 섹션과 나가는 섹션에만 방향 표식이 붙는다', () => {
-    const { container } = render(<HomeClient />);
-    const stage = container.querySelector('.section-stage');
-    expect(stage).not.toBeNull();
-    navigateTo(/about/i);
-
-    expect(getSection(container, 'about')).toHaveAttribute(
-      'data-section-direction',
-      'forward'
-    );
-    expect(getSection(container, 'overview')).toHaveAttribute(
-      'data-section-leaving'
-    );
-
-    // 나머지는 깨끗해야 한다. 안 그러면 이탈 애니메이션이 여섯 개에서 뛴다.
-    expect(getSection(container, 'projects')).not.toHaveAttribute(
-      'data-section-direction'
-    );
-
-    // 이월 1(Important로 승격): 위는 표본 하나(projects)만 본다. .section-scroll
-    // 래퍼 일곱 개(overview + 여섯 섹션) 전체에서 표식이 정확히 둘인지
-    // 센다. 이 설계 전체가 서 있는 불변식이다. .section-stage로 범위를
-    // 좁히는 이유는 BootSequence(최종 리뷰 I1)가 overview가 관련된 전환에서
-    // 같은 transitionAttributes(OVERVIEW)를 받아 자기 루트(.section-stage
-    // 밖 셸 레벨)에도 같은 표식을 펴기 때문이다. 그 표식까지 한 카운터에
-    // 세면 이 불변식이 ".section-scroll 일곱 중 둘"이 아니라 DOM 전체
-    // 얘기로 흐려진다. BootSequence 쪽 배선은 아래 별도 테스트가 고정한다.
-    expect(stage!.querySelectorAll('[data-section-direction]')).toHaveLength(2);
-  });
-
-  it('모션을 끄면 표식을 달지 않는다', () => {
-    installMatchMedia(true);
-    const { container } = render(<HomeClient />);
-    navigateTo(/about/i);
-
-    expect(getSection(container, 'about')).not.toHaveAttribute(
-      'data-section-direction'
-    );
-  });
-
-  // 최종 리뷰 I1: overview의 실제 화면(Software DEVELOPER 캡션, START)은
-  // .section-scroll 빈 wrapper가 아니라 BootSequence가 그린다. overview가
-  // 관련된 전환에서는 BootSequence 루트도 같은 표식을 받아야 그 화면에도
-  // 깊이 애니메이션이 그려진다.
-  it('overview를 떠나면 BootSequence 루트가 이탈 표식을 받는다', () => {
-    render(<HomeClient />);
-    navigateTo(/about/i);
-
-    const bootProbe = screen.getByTestId('boot-sequence-probe');
-    expect(bootProbe).toHaveAttribute('data-section-direction', 'forward');
-    expect(bootProbe).toHaveAttribute('data-section-leaving');
-  });
-
-  it('overview로 돌아오면 BootSequence 루트가 진입 표식을 받는다', () => {
-    render(<HomeClient />);
-    navigateTo(/about/i);
-    fireEvent.click(screen.getByTestId('wordmark'));
-
-    const bootProbe = screen.getByTestId('boot-sequence-probe');
-    expect(bootProbe).toHaveAttribute('data-section-direction', 'backward');
-    expect(bootProbe).not.toHaveAttribute('data-section-leaving');
-  });
-
-  // 최종 리뷰 I2: sectionTransition은 다음 이동 전까지 초기화되지 않는다.
-  // isTransitioning 게이트가 없으면 reducedMotion을 끄는 것만으로(이동
-  // 없이) 표식이 새로 붙어 진입 애니메이션이 재생된다. 전환이 끝난 뒤
-  // (transitionend) 표식이 사라지는지로 이 게이트를 고정한다.
-  it('전환이 끝나면 방향 표식이 사라진다', () => {
-    const { container } = render(<HomeClient />);
-    navigateTo(/about/i);
-    const about = getSection(container, 'about');
-
-    expect(about).toHaveAttribute('data-section-direction', 'forward');
-    expect(getSection(container, 'overview')).toHaveAttribute(
-      'data-section-leaving'
-    );
-
-    fireOpacityTransition(about, 'transitionrun');
-    fireOpacityTransition(about, 'transitionend');
-
-    // 뮤테이션: isTransitioning 게이트를 지우면(sectionTransition.direction만
-    // 보면) 전환이 끝난 뒤에도 이 값들이 그대로 남아 FAIL한다.
-    expect(about).not.toHaveAttribute('data-section-direction');
-    expect(getSection(container, 'overview')).not.toHaveAttribute(
-      'data-section-leaving'
-    );
-  });
+// M4 Task 1. About↔Projects 비행(preview) 동안에는 로고만 돌고 볼은 멈춘다. 프리뷰에 넘긴 뒤(projects)에는 숨은 로고도 멈춘다.
+// 로고는 그동안 chapter 모양 그대로라 되돌아올 때 About에서 보던 로고로 접힌다. GL은 날아가는 동안 받아들이지 않는다.
+it('the logo keeps the chapter shape and draws only while flying to the preview; handed over it rests hidden', async () => {
+  flags.wide = true;
+  const { container } = render(<HomeClient />); await flush();
+  const documentRoot = container.querySelector('.portfolio-document')!;
+  const logo = () => container.querySelector('[data-electric-src]')!;
+  const ballPaused = () => container.querySelector('[data-ball-gl]')!.getAttribute('data-ball-paused');
+  act(() => motion.owner!('about'));
+  fireEvent.click(screen.getByText('About original body'));
+  act(() => motion.owner!('preview'));
+  fireEvent.click(container.querySelector('[data-signal-ready]')!);
+  expect(documentRoot).not.toHaveAttribute('data-logo-live');
+  expect(logo()).toHaveAttribute('data-electric-src', coreValues[2].logoSrc);
+  expect(logo()).toHaveAttribute('data-electric-active', 'true');
+  expect(ballPaused()).toBe('true');
+  act(() => motion.owner!('projects'));
+  expect(documentRoot).toHaveAttribute('data-logo-live');
+  expect(logo()).toHaveAttribute('data-electric-src', coreValues[2].logoSrc);
+  expect(logo()).toHaveAttribute('data-electric-active', 'false');
+  expect(ballPaused()).toBe('true');
+  expect(screen.getByText('About original body')).toHaveAttribute('data-logo-owner-prop', 'projects');
+  act(() => motion.owner!('preview'));
+  act(() => motion.owner!('about'));
+  expect(logo()).toHaveAttribute('data-electric-src', coreValues[2].logoSrc);
+  expect(logo()).toHaveAttribute('data-electric-active', 'true');
 });
 
-// 계획 6 Task 5a. Playwright가 붙잡을 관측 속성. entryAnimationTarget은
-// useSectionNav의 captureFirstEntry가 소유한다(최초 방문 id 또는 재방문
-// null). main.section-stage에 그 값과 active의 일치 여부를 그대로 편다.
-describe('HomeClient. data-entry-motion 관측 속성', () => {
-  it('최초 진입한 섹션(overview)이 활성이면 enter다', () => {
-    const { container } = render(<HomeClient />);
-    const stage = container.querySelector<HTMLElement>('.section-stage');
+it('a chapter onReady never rebuilds the boundary; the static fallbacks hide once the GL logo is live', async () => {
+  flags.wide = true;
+  const { container } = render(<HomeClient />); await flush();
+  const documentRoot = container.querySelector('.portfolio-document')!;
+  act(() => motion.owner!('hero'));
+  expect(documentRoot).not.toHaveAttribute('data-logo-live');
+  fireEvent.click(container.querySelector('[data-signal-ready]')!);
+  expect(documentRoot).toHaveAttribute('data-logo-live');
+  act(() => motion.owner!('about'));
+  fireEvent.click(screen.getByText('About original body'));
+  fireEvent.click(container.querySelector('[data-signal-ready]')!);
+  expect(motion.create).toHaveBeenCalledTimes(1);
+  expect(motion.destroy).not.toHaveBeenCalled();
+  act(() => motion.owner!('none'));
+  expect(documentRoot).not.toHaveAttribute('data-logo-live');
+});
 
-    expect(stage).toHaveAttribute('data-entry-motion', 'enter');
-  });
+it('pauses the boundary while the modal covers the page and destroys it on unmount', async () => {
+  flags.wide = true;
+  const view = render(<HomeClient />); await flush();
+  flags.obscured = true; view.rerender(<HomeClient />);
+  expect(motion.setPaused).toHaveBeenLastCalledWith(true);
+  view.unmount();
+  expect(motion.destroy).toHaveBeenCalledTimes(1);
+});
 
-  it('처음 방문하는 섹션으로 이동하면 그 섹션에서도 enter다', () => {
-    const { container } = render(<HomeClient />);
-    navigateTo(/about/i);
-    const stage = container.querySelector<HTMLElement>('.section-stage');
+// 브라우저 검사에서 잡혔다. aspect-ratio의 자동 최소 폭이 이전 크기의 캔버스를 붙잡아,
+// 창을 줄이면 host가 줄어든 앵커보다 넓게 남았다.
+it('the shared logo host lives outside clipping ancestors and can shrink with its anchor', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync('styles/design-tokens.css', 'utf8');
+  expect(css).toMatch(/\.logo-host \{[^}]*position: absolute;[^}]*min-width: 0;/);
+  flags.wide = true;
+  const { container } = render(<HomeClient />); await flush();
+  const host = container.querySelector('[data-logo-host]')!;
+  expect(host.parentElement).toBe(screen.getByRole('main'));
+  expect(host.closest('#about, .about-electric')).toBeNull();
+});
 
-    expect(stage).toHaveAttribute('data-entry-motion', 'enter');
-  });
+it('Korean text breaks by word site-wide while long Latin strings can still wrap', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync('styles/design-tokens.css', 'utf8');
+  expect(css).toMatch(/@layer base \{[^@]*\n  body \{[^}]*word-break: keep-all;[^}]*overflow-wrap: anywhere;/);
+});
 
-  it('재방문이면 steady다', () => {
-    const { container } = render(<HomeClient />);
-    const stage = container.querySelector<HTMLElement>('.section-stage');
+// D5-A: 1024px부터 왼쪽 문장·오른쪽 오브젝트, 그 아래는 이름·문장·오브젝트 순서. 크기는 소개 문장(h1)에 걸고
+// 낮은 화면에서는 오브젝트가 먼저 준다. 로고는 날아가는 동안 chapter 단어 줄(z 3) 아래로 지나간다.
+// 이름 자리는 큰 이름의 줄 높이만큼 비워 둔다. 두 줄 인사는 원문 개행으로 나눈다.
+it('lays the Hero out as name, sentence, then object, and the object shrinks first on low screens', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync('styles/design-tokens.css', 'utf8');
+  const { container } = render(<HomeClient />);
+  const order = [...container.querySelectorAll('#overview [data-motion-anchor], #overview h1')].map(el => el.getAttribute('data-motion-anchor') ?? el.tagName);
+  expect(order).toEqual(['hero-name', 'H1', 'hero-object']);
+  expect(container.querySelector('#overview [data-motion-anchor="hero-name"]')).toHaveClass('hero-name');
+  expect(css).toMatch(/\n\.hero-name \{[^}]*display: flex; align-items: center; height: calc\(var\(--hero-name-size\) \* 1\.5\);/);
+  expect(css).toMatch(/\.portfolio-hero h1 \{[^}]*white-space: pre-line;/);
+  expect(css).toMatch(/\.portfolio-hero h1 \{[^}]*font-size: var\(--font-size-t1\)/);
+  // 1024–1535px은 큰 이름이 문장보다 크게 읽히도록 문장을 36px로 줄인다(사용자 결정 2026-10-20).
+  expect(css).toMatch(/@media \(min-width: 1024px\) \{[^@]*\.portfolio-hero \{[^}]*flex-direction: row;[^@]*\.portfolio-hero h1 \{ font-size: 2\.25rem;/);
+  expect(css).toMatch(/@media \(min-width: 1536px\) \{[^@]*\.portfolio-hero h1 \{ font-size: var\(--font-size-d2\)/);
+  expect(css).toMatch(/--hero-object-size: min\([^;]*svh\);/);
+  expect(css).toMatch(/\.hero-object \{ width: var\(--hero-object-size\); \}/);
+  // JS 전·JS 없이도 큰 이름은 CSS만으로 볼 상자(광휘 포함) 앞에서 멈춘다(motion.ts의 볼 상한과 같은 식). 이름은 글 칸 왼쪽(8vw)에서 시작한다.
+  expect(css).toMatch(/--hero-name-size: min\(clamp\(56px, 6\.5vw, 128px\), calc\(\(84vw - 1\.1 \* var\(--hero-object-size\) - 32px\) \/ 5\.67\)\);/);
+  // 최종 리뷰 M-3: 1024px 아래도 CSS만으로 이름(끝 자간 포함 5.77em)이 글 칸에 든다. 경계가 첫 화면 뒤에 줄여 튀지 않는다.
+  // 16px은 스크롤바 몫이다(1024px 규칙과 같다).
+  expect(css).toMatch(/\.portfolio-hero \{ --hero-name-size: min\(clamp\(56px, 6\.5vw, 128px\), calc\(\(84vw - 16px\) \/ 5\.77\)\);/);
+  for (const vw of [320, 360, 375, 390, 768, 1023]) {
+    const size = Math.min(Math.max(56, Math.min(.065 * vw, 128)), (.84 * vw - 16) / 5.77);
+    expect(size * 5.77, `${vw}px`).toBeLessThanOrEqual(vw - 16 - 2 * Math.max(24, .08 * vw) + 1e-9);
+  }
+  expect(css).not.toContain('2.835');
+  expect(css).not.toMatch(/\.portfolio-hero (p|h1) \{[^}]*svh/);
+  expect(css).toMatch(/\.logo-host \{[^}]*z-index: 2;/);
+});
 
-    // about을 처음 방문(enter)한 뒤 overview로 돌아온다. overview는 이미
-    // 최초 마운트 때 한 번 본 섹션이라 재방문 시 entryAnimationTarget이
-    // null로 떨어져야 한다.
-    navigateTo(/about/i);
-    fireEvent.click(screen.getByTestId('wordmark'));
+// Task 9: 볼은 정면이다(눕힌 평면 캔버스는 원을 타원으로 누른다). Task 10: 볼과 로고의 교대는 CSS 교차 페이드가 아니라
+// 경계(motion.ts)가 진행도로 쓰는 변신이다. host는 GL이 살아 있으면 보이고, 안쪽 불투명도는 경계가 쓴다(Hero에서 0).
+// GL 볼은 첫 그림 뒤에 정적 유리와 같은 길이로 엇갈려 나타난다(Task 9 리뷰 Minor 1: 툭 튀어나왔다).
+it('the Hero ball is frontal; the ball/logo exchange is the boundary transformation, not a CSS cross-fade', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync('styles/design-tokens.css', 'utf8');
+  expect(css).not.toContain('hero-object-tilt');
+  expect(css).toMatch(/\n\[data-logo-live\] \.logo-host \{ opacity: 1; \}/);
+  expect(css).toMatch(/\.logo-host > div \{[^}]*opacity: 0;/);
+  expect(css).not.toMatch(/data-logo-owner='(hero|boundary|about)'/);
+  expect(css).not.toMatch(/\.hero-ball \{[^}]*transition/);
+  expect(css).not.toMatch(/html\[data-intro\] \.hero-ball \{ transition/);
+  expect(css).toMatch(/\.hero-ball\[data-ball-live\] \.hero-ball-glass \{ opacity: 0; \}/);
+  expect(css).toMatch(/\.hero-ball:not\(\[data-ball-live\]\) canvas \{ opacity: 0; \}/);
+  expect(css).toMatch(/\.hero-ball canvas \{ transition: opacity 250ms ease; \}/);
+  // 가려진 실루엣의 충전 애니메이션이 GL 뒤에서 계속 돌면 첫 화면 프레임이 무거워진다(e2e에서 잡혔다).
+  expect(css).toMatch(/\[data-logo-live\] \[data-motion-anchor\] \.about-electric-static-shape \{ animation: none; \}/);
+  const { container } = render(<HomeClient />);
+  expect(container.querySelector('#overview .about-electric-static')).toBeNull();
+});
 
-    expect(stage).toHaveAttribute('data-entry-motion', 'steady');
+// 사용자 결정(2026-10-20). 인사말 교대와 커튼이 없다. Hero 왼쪽 두 줄 인사가 유일한 h1이고 옛 소개 문장은 없다.
+it('the Hero text is the two-line greeting h1; no greeting paragraph and no old intro sentence', () => {
+  const { container } = render(<HomeClient />);
+  const hero = container.querySelector('#overview')!;
+  expect(hero.querySelectorAll('p')).toHaveLength(0);
+  expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+  expect(hero.querySelector('h1')!.textContent).toBe('안녕하세요.\nSW개발자 김태인입니다.');
+  expect(container.textContent).not.toContain('탄탄한 기본기를');
+});
 
-    // about도 재방문하면 같은 이유로 steady다.
-    navigateTo(/about/i);
-    expect(stage).toHaveAttribute('data-entry-motion', 'steady');
-  });
+it('without the pre-paint gate (hash, revisit, reduced, no JS) the intro is disabled and nothing is held back', async () => {
+  flags.wide = true;
+  const { container } = render(<HomeClient />); await flush();
+  expect(boot.props).toMatchObject({ enabled: false, reducedMotion: false, targets: null });
+  expect(screen.getByTestId('flow')).toHaveAttribute('data-paused', 'false');
+  expect(container.querySelector('[data-electric-src]')).toHaveAttribute('data-electric-active', 'false');
+  // Hero에서 쉬는 동안 로고 host는 숨어 있어 돌지 않는다. 한 장만 미리 그려 준비를 알리고, Hero를 떠나면 돈다.
+  expect(container.querySelector('[data-electric-src]')).toHaveAttribute('data-electric-prewarm', 'true');
+  act(() => motion.owner!('hero'));
+  expect(container.querySelector('[data-electric-src]')).toHaveAttribute('data-electric-active', 'false');
+  for (const owner of ['boundary', 'about'] as const) {
+    act(() => motion.owner!(owner));
+    expect(container.querySelector('[data-electric-src]')).toHaveAttribute('data-electric-active', 'true');
+  }
+});
+
+// 헤드 Chrome에서 WebGL 문맥 생성이 메인 스레드를 1.4–2.3초 막았다. GL 로고는 진입 뒤에 뜬다.
+// 배경은 기다리지 않고 바로 돈다. 공개값 0은 대상보다 먼저 배경 손잡이에 건다.
+it.each([['wide', true], ['narrow', false]] as const)('first visit (%s): the background runs at once with its handle passed before the targets, targets come after the boundary placed the name, and the GL logo mounts only after the entrance', async (_, wide) => {
+  flags.wide = wide;
+  document.documentElement.setAttribute('data-intro', '');
+  const { container } = render(<HomeClient />);
+  expect(boot.props).toMatchObject({ enabled: true, targets: null, background: flow });
+  expect(boot.props).not.toHaveProperty('onRevealStart');
+  await flush();
+  expect(motion.create).toHaveBeenCalledTimes(1);
+  expect(motion.setLogo).toHaveBeenLastCalledWith(null);
+  const targets = boot.props!.targets!;
+  expect(targets.wordmark).toBe(screen.getByTestId('wordmark').firstElementChild);
+  expect(targets.headline).toBe(screen.getByRole('heading', { level: 1 }));
+  expect(targets).not.toHaveProperty('background');
+  // 오브젝트는 Hero 앵커 안 볼의 껍질이다. 경계가 재는 앵커 상자는 진입이 쓰지 않는다(리뷰 Minor 2).
+  const anchor = container.querySelector('#overview [data-motion-anchor="hero-object"]')!;
+  expect(targets.heroObject).toBe(anchor.querySelector(':scope > .hero-ball'));
+  expect(targets.heroObject).not.toBe(anchor);
+  expect((targets.heroObject as HTMLElement).querySelectorAll(':scope > .hero-ball-icons > span')).toHaveLength(6);
+  expect(container.querySelector('[data-electric-src]')).toBeNull();
+  expect(container.querySelector('[data-ball-gl]')).toBeNull();
+  expect(screen.getByTestId('flow')).toHaveAttribute('data-paused', 'false');
+  act(() => boot.props!.onComplete());
+  await flush();
+  if (wide) {
+    expect(container.querySelector('[data-electric-src]')).not.toBeNull();
+    expect(container.querySelector('[data-ball-gl]')).not.toBeNull();
+    expect(motion.setLogo).toHaveBeenLastCalledWith(handle);
+  } else {
+    expect(container.querySelector('[data-electric-src]')).toBeNull();
+    expect(container.querySelector('[data-ball-gl]')).toBeNull();
+  }
+  // GL 손잡이가 와도 경계를 다시 만들지 않는다. 날던 이름·로고가 끊기지 않는다.
+  expect(motion.create).toHaveBeenCalledTimes(1);
+});
+
+// 헤드 Chrome에서 잡혔다. 준비 전 기본값 reduced: true가 첫 레이아웃에서 인트로를 끝냈다.
+it('the pre-ready preference default does not end the intro; a resolved reduce does', () => {
+  document.documentElement.setAttribute('data-intro', '');
+  flags.ready = false; flags.reduced = true;
+  const view = render(<HomeClient />);
+  expect(boot.props).toMatchObject({ enabled: true, reducedMotion: false });
+  flags.ready = true; view.rerender(<HomeClient />);
+  expect(boot.props).toMatchObject({ reducedMotion: true });
+});
+
+it('a nav click during the intro finishes it first and keeps the navigation', async () => {
+  document.documentElement.setAttribute('data-intro', '');
+  render(<HomeClient />); await flush();
+  fireEvent.click(screen.getAllByRole('button', { name: HOME_SECTION_CONFIG[1].label })[0]);
+  expect(boot.finish).toHaveBeenCalledTimes(1);
+  expect(location.hash).toBe(`#${HOME_SECTION_CONFIG[1].id}`);
+});
+
+it('hands Projects input to motion: releases the About lock, settles, then runs the original action exactly once', async () => {
+  render(<HomeClient />); await flush();
+  const order: string[] = [];
+  projectsGate.release.mockImplementation(() => order.push('release'));
+  motion.settleProjects.mockImplementation(() => order.push('settle'));
+  expect(projectsGate.before).toEqual(expect.any(Function));
+  const run = vi.fn(() => order.push('run'));
+  projectsGate.before!(run);
+  expect(order).toEqual(['release', 'settle', 'run']);
+  expect(run).toHaveBeenCalledTimes(1);
+});
+
+it('the gate passed to Projects is stable across renders', async () => {
+  const view = render(<HomeClient />); await flush();
+  const first = projectsGate.before;
+  view.rerender(<HomeClient />);
+  expect(projectsGate.before).toBe(first);
+});
+
+// M4 Task 7. Projects도 About처럼 읽기 잠금을 가진다. 명시적 이동 직전에 둘 다 풀고, 이동 중 표시와 로고 자리를 About과 같이 넘긴다.
+it('releases the Projects reading lock with About before a nav move and passes it the navigation and logo state', async () => {
+  render(<HomeClient />); await flush();
+  expect(projectsLock.props).toEqual({ navigationPending: false, logoOwner: 'none' });
+  act(() => motion.owner!('projects'));
+  expect(projectsLock.props!.logoOwner).toBe('projects');
+  projectsGate.release.mockClear(); projectsLock.release.mockClear();
+  fireEvent.click(screen.getAllByRole('button', { name: HOME_SECTION_CONFIG[2].label })[0]);
+  expect(projectsGate.release).toHaveBeenCalledTimes(1);
+  expect(projectsLock.release).toHaveBeenCalledTimes(1);
+  expect(projectsLock.props!.navigationPending).toBe(true);
+});
+
+// 오버레이는 HomeClient가 쓰는 같은 선호(useMotionPreference)로 모션 감소를 받는다.
+it('passes the reduced-motion preference to the experience overlay and follows changes', () => {
+  flags.reduced = true;
+  const { rerender } = render(<HomeClient />);
+  expect(overlay.setReduced).toHaveBeenLastCalledWith(true);
+  flags.reduced = false;
+  rerender(<HomeClient />);
+  expect(overlay.setReduced).toHaveBeenLastCalledWith(false);
+});
+
+// 오버레이는 마운트 뒤에 와서 경계를 다시 짓지 않고 따로 넘긴다(Task 6).
+it('hands the experience overlay to the boundary separately without rebuilding it', async () => {
+  render(<HomeClient />); await flush();
+  expect(motion.create).toHaveBeenCalledTimes(1);
+  expect(motion.setOverlay).toHaveBeenLastCalledWith(overlay);
+});
+
+// Task 5. Skills 헤드는 Experience에서 넘어온 헤드가 도착한 뒤에 선다. 도착은 경계 모듈이 알리고, Skills가 헤드를 그리면 넘김 헤드를 놓게 한다.
+it('경계 모듈이 알린 Skills 헤드 도착을 넘기고, Skills가 제 헤드를 그리면 넘김 헤드를 놓게 한다', async () => {
+  const { unmount } = render(<HomeClient />);
+  expect(skills.props!.headArrived).toBe(true);
+  await flush();
+  act(() => motion.skillsHead!(false));
+  expect(skills.props!.headArrived).toBe(false);
+  act(() => motion.skillsHead!(true));
+  expect(skills.props!.headArrived).toBe(true);
+  skills.props!.onHeadShown!();
+  expect(motion.releaseSkillsHead).toHaveBeenCalledTimes(1);
+  act(() => motion.skillsHead!(false));
+  unmount();
+});
+
+// 경계 청크를 못 받으면 도착을 알릴 쪽이 없다. Skills 헤드는 처음부터 도착한 상태다.
+// skillsHeadArrived는 처음 true이고 경계 모듈만 바꾸므로, 청크 실패에서는 prop의 motionFailed 항이 없어도 true다. 이 case는 끝 상태만 잠근다.
+it('경계 청크를 못 받으면 Skills 헤드는 처음부터 도착한 상태다', async () => {
+  vi.resetModules();
+  vi.doMock('@/components/sections/HomeClient/motion', () => { throw new Error('chunk failed'); });
+  const { default: FailingHome } = await import('@/components/sections/HomeClient');
+  render(<FailingHome />); await flush();
+  expect(motion.create).not.toHaveBeenCalled();
+  expect(skills.props!.headArrived).toBe(true);
+  vi.doUnmock('@/components/sections/HomeClient/motion');
 });

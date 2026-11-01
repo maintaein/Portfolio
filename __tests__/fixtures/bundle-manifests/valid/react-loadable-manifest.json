@@ -1,10 +1,30 @@
 {
-  "components\\blocks\\HyperspeedBackground.tsx -> @/components/blocks/Hyperspeed": {
-    "id": 1001,
-    "files": [
-      "static/chunks/shared.js",
-      "static/chunks/hyperspeed-789abc.js",
-      "static/css/hyperspeed.css"
-    ]
+  "components\\sections\\ProjectsSection\\index.tsx -> @/lib/gsap": {
+    "id": 2650,
+    "files": ["static/chunks/202.aaa111.js", "static/chunks/650.bbb222.js"]
+  },
+  "components\\sections\\BootSequence\\index.tsx -> @/lib/gsap": {
+    "id": 2650,
+    "files": ["static/chunks/202.aaa111.js", "static/chunks/650.bbb222.js"]
+  },
+  "components\\sections\\ProjectsSection\\index.tsx -> @/components/blocks/PreviewMorph": {
+    "id": 3462,
+    "files": ["static/chunks/shared.js", "static/chunks/202.aaa111.js", "static/chunks/462.ccc333.js", "static/css/layout.css"]
+  },
+  "components\\blocks\\PreviewMorph\\index.tsx -> ./Inner": {
+    "id": 7770,
+    "files": ["static/chunks/777.ddd444.js"]
+  },
+  "components\\sections\\AboutSection\\index.tsx -> @/components/blocks/ElectricLogo": {
+    "id": 1512,
+    "files": ["static/chunks/948.eee555.js", "static/chunks/131.fff666.js"]
+  },
+  "app\\prototypes\\about\\GestureReading.tsx -> @/components/blocks/ElectricLogo": {
+    "id": 1512,
+    "files": ["static/chunks/948.eee555.js", "static/chunks/512.ggg777.js"]
+  },
+  "app\\prototypes\\about\\Lab.tsx -> @/components/blocks/PrototypeOnly": {
+    "id": 8880,
+    "files": ["static/chunks/888.hhh888.js"]
   }
 }

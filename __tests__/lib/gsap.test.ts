@@ -6,13 +6,16 @@ import {
   REVEAL_IN_MS,
   REVEAL_OUT_MS,
   registerGsap,
+  registerScrollTrigger,
   Flip as LibFlip,
   SplitText as LibSplitText,
+  ScrollTrigger as LibScrollTrigger,
 } from '@/lib/gsap';
 import gsap from 'gsap';
 import { CustomEase } from 'gsap/CustomEase';
 import { Flip } from 'gsap/Flip';
 import { MotionPathPlugin } from 'gsap/MotionPathPlugin';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { SplitText } from 'gsap/SplitText';
 
 // registerGsap이 이 파일 안에서 몇 번째 it()으로 처음 불리든 그 실제 등록 호출을
@@ -119,6 +122,21 @@ describe('lib/gsap', () => {
     expect(new Set(registeredPlugins)).toEqual(
       new Set([CustomEase, MotionPathPlugin, Flip, SplitText])
     );
+  });
+
+  // Hero→About 경계(components/sections/HomeClient/motion.ts)가 문서 스크롤을 본다.
+  // 등록은 그 모듈만 하고, 경계가 다시 이어져도 한 번뿐이다
+  it('registerScrollTrigger는 공용 등록 뒤 ScrollTrigger를 한 번만 등록하고 같은 참조를 재노출한다', () => {
+    vi.stubGlobal('matchMedia', vi.fn((media: string) => ({ matches: false, media, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} })));
+    try {
+      registerScrollTrigger();
+      registerScrollTrigger();
+      expect(registerPluginSpy.mock.calls.filter((call) => call.includes(ScrollTrigger))).toHaveLength(1);
+      expect(registerPluginSpy.mock.calls.filter((call) => call.includes(Flip))).toHaveLength(1);
+      expect(LibScrollTrigger).toBe(ScrollTrigger);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   // PreviewMorph의 모프 전용 커브. 이름을 잘못 등록하면 gsap.parseEase가

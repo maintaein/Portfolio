@@ -1,447 +1,182 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { BOOT_DURATION_SECONDS } from '@/lib/constants';
-import { OVERVIEW, type NavId } from '@/hooks/useSectionNav';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import type { LuminousFlowBackgroundHandle } from '@/components/blocks/LuminousFlowBackground';
 import type { gsap } from '@/lib/gsap';
-import { detectQuality, type QualityTier } from '@/lib/deviceQuality';
-import ParticleText, {
-  type ParticleTextHandle,
-  type ParticleTextTier,
-} from '@/components/blocks/ParticleText';
 
+export interface IntroTargets { wordmark: HTMLElement; headline: HTMLElement; heroObject: HTMLElement }
+export interface BootSequenceHandle { finish(): void }
 export interface BootSequenceProps {
-  active: NavId;
-  routeResolved: boolean;
-  motionReady: boolean;
-  reducedMotion: boolean;
-  wordmarkRef: RefObject<HTMLButtonElement | null>;
-  onStart: () => void;
-  // HERO 재순서 브리프 — 파티클 뭉침이 끝나 DOM 이름이 나타나는 그 순간
-  // (아래 NAME_HANDOFF_AT) 정확히 한 번 불린다. 부모(HomeClient)는 이 신호로
-  // Hyperspeed 배경을 페이드로 드러낸다("배경이 이름 다음에 온다"). GSAP
-  // 타임라인이 도는 정상 경로뿐 아니라 실패·이탈 등 모든 폴백 경로에서도
-  // revealFinalState()가 함께 불러 배경이 영원히 숨은 채로 남지 않는다.
-  onNameRevealed?: () => void;
-  // 최종 리뷰 I1. overview의 data-section wrapper는 빈 div라 섹션 전환
-  // 키프레임이 걸려도 그릴 픽셀이 없다. 실제 overview 화면은 이 컴포넌트가
-  // 그리므로, HomeClient가 자신의 transitionAttributes(OVERVIEW) 호출
-  // 결과를 그대로 여기로 내려 같은 표식을 이 컴포넌트의 루트에도 편다.
-  transitionAttributes?: Record<string, string>;
+  enabled: boolean; reducedMotion: boolean; targets: IntroTargets | null;
+  background: LuminousFlowBackgroundHandle | null;
+  onComplete: () => void;
 }
 
-// HERO 재순서 브리프 — "아무것도 없는 배경 → 이름이 파티클로 뭉쳐 만들어짐 →
-// Hyperspeed 배경이 자연스럽게 등장". 이전 라운드들이 시도한 광선 부팅
-// 안무(느리게 시작 → 개수 램프와 함께 빨라짐 → idle 정착, 소실점 압축 해제
-// 등)는 세 라운드에 걸쳐도 실기기에서 읽히지 않아 사용자가 전부 취소했다 —
-// 이번에 전부 걷어내고(Hyperspeed/index.tsx 참고) 광선과 이름을 동기화하던
-// sceneReady/타임아웃 게이트도 함께 지웠다. 이름은 이제 배경 상태와 무관하게
-// 시작한다 — 애초에 배경이 이름이 끝날 때까지 보이지 않으므로 동기화할
-// 대상이 없다.
-//
-// 파티클이 먼저 완전히 뭉치고, 뭉침이 끝나는 정확히 그 순간 DOM 이름이
-// 나타난다(핸드오프) — 크로스페이드가 아니다. NAME_HANDOFF_AT 하나가 세
-// 가지 시각의 단일 출처다: 파티클 형성 종료 = DOM 이름 등장 = 배경 노출
-// 시작(onNameRevealed). 파티클의 durationMs prop도 이 값에서 파생된다
-// (NAME_HANDOFF_AT_MS) — 두 컴포넌트가 각자 다른 상수를 들고 있지 않다.
-//
-// 파티클 이음매 브리프(5차) — "뭉친 파티클"과 "안티앨리어싱된 실제 글자"는
-// 애초에 다른 그림이라(반지름 vs 안티앨리어싱) 한 프레임 하드 스왑은
-// 아무리 타이밍을 맞춰도 툭 끊겨 보였다. 마지막 SEAM_OVERLAP_MS 동안만
-// 캔버스 페이드아웃(ParticleText 내부, seamMs prop)과 DOM 이름 페이드인이
-// 겹친다 — 3차 피드백이 거부한 0.55초 병렬 페이드(반 초 동안 파티클과
-// 이름이 둘 다 따로 보였다)와는 다르다. 상한은 150ms(테스트가 고정), 지금
-// 쓰는 값은 그 안의 120ms다.
-//
-//   0.00–0.78  캔버스에서 파티클이 흩어진 상태→이름 형태로 뭉친다 | DOM 이름은 opacity 0, 배경은 보이지 않는다
-//   0.78–0.90  겹침(SEAM_OVERLAP_MS) — 캔버스가 흐려지며 사라진다 | DOM 이름이 같은 창에서 페이드인한다
-//   0.90       핸드오프 종료 — 파티클 캔버스 완전히 비움, DOM opacity 1 확정, 배경 페이드 시작
-//   1.05–1.30  idle                                               | 역할 라벨
-//   1.30–1.55  idle                                               | START + 밑줄 draw(0.35s, 1.90 종료)
-//   1.55–2.00  버퍼
-const NAME_HANDOFF_AT = 0.9;
-const NAME_HANDOFF_AT_MS = NAME_HANDOFF_AT * 1000;
-// 이음매 겹침 구간(ms) — 위 표의 [0.78, 0.90] 창의 길이. 상한 150ms를
-// 테스트가 고정한다(__tests__/components/BootSequence.test.tsx).
-const SEAM_OVERLAP_MS = 120;
-const SEAM_OVERLAP_SECONDS = SEAM_OVERLAP_MS / 1000;
-const ROLE_REVEAL_AT = 1.05;
-const ROLE_REVEAL_DURATION = 0.25; // 종료 시각 1.30초
-const START_REVEAL_AT = 1.3;
-const START_REVEAL_DURATION = 0.25; // 종료 시각 1.55초
+// 통합 설계 5.4의 포트폴리오 제안값(초)이다. 네 진입이 0초에 함께 출발한다.
+// 배경은 가닥마다 제 길을 따라 자라므로 더 길다(사용자 결정 2026-10-21). LuminousFlowBackground/entrance.ts의 REVEAL_SECONDS와 같은 값이다.
+// 이 모듈은 react만 값으로 가져온다(First Load 계약). 그래서 가져오지 않고 같은 수를 둔다.
+export const INTRO_TIMING = { name: .6, words: .9, word: .35, object: 1.2, background: 2.9 } as const;
+// 모듈이나 대상이 이 안에 오지 않으면 숨긴 출발 상태를 걷고 완성된 첫 화면을 준다.
+const LOAD_LIMIT_MS = 3000;
+// 첫 입력은 막지 않는다. 진입만 끝내고 원래 동작(스크롤·탐색)이 그대로 이어진다.
+const INPUTS = ['wheel', 'touchstart', 'pointerdown', 'keydown', 'scroll'] as const;
+// 진입 도중 첫 입력은 남은 진입(가닥별 배경과 덜 끝난 이름·문장·오브젝트)을 이만큼(초) 감속으로 마저 돌린다.
+// 배경이 2.9초라 첫 휠이 한가운데 떨어지기 쉽고, 한 번에 끝내면 배경 전체가 툭 바뀐다(최종 리뷰 I-1).
+const FAST_FINISH = .35;
 
-export default function BootSequence({
-  active,
-  routeResolved,
-  motionReady,
-  reducedMotion,
-  wordmarkRef,
-  onStart,
-  onNameRevealed,
-  transitionAttributes = {},
-}: BootSequenceProps) {
-  const roleRef = useRef<HTMLSpanElement>(null);
-  const startRef = useRef<HTMLButtonElement>(null);
-  const hasDecidedRef = useRef(false);
-  // 이름 파티클 형성(ParticleText)의 재생 트리거. GSAP 타임라인이 t=0에
-  // tl.call()로 이 ref의 play()를 부른다. 아래 eligible 게이트가 tier를
-  // 포함하므로 "기기 등급 미확정"은 더 이상 null의 이유가 아니다(파티클
-  // 경합 브리프). 그래도 reducedMotion·low tier(캔버스 자체를 안 만드는
-  // 경우)나 getContext 실패 같은 준비 실패로 null일 수 있어, 옵셔널
-  // 체이닝으로 조용히 아무 일도 없게 둔다. DOM 워드마크의 opacity 전환은
-  // 이 호출과 무관하게 항상 스케줄되므로, 파티클이 실패해도 "이름이 안
-  // 보이는" 사고로 이어지지 않는다(아래 wordmarkEl 트윈 참고).
-  const particleRef = useRef<ParticleTextHandle>(null);
-  // START를 누를 때마다 새 키로 텍스트 span을 다시 마운트해 반짝임
-  // 애니메이션(.boot-start-flash)을 처음부터 재생한다. 0이면 아직 한 번도
-  // 누르지 않은 것이라 클래스를 걸지 않는다(상시 맥동이 아니다).
-  const [flashKey, setFlashKey] = useState(0);
-  // 이미 눌렀는가. 사용자가 "누르는 효과와 동시에 이동"으로 바꾸면서 클릭과
-  // 전환 사이의 지연이 사라졌고, 지연 예약의 존재 자체가 맡던 중복 클릭
-  // 가드도 함께 근거를 잃었다. 그것을 이 불리언이 대신한다. 같은 태스크에서
-  // 두 번 눌러도 React가 아직 다시 그리기 전이므로 두 번째 클릭은 여기서
-  // 걸린다. 아래 active를 보는 effect가 이동이 끝나면 풀어 줘서 overview로
-  // 돌아왔을 때 START가 다시 눌린다.
-  const startPressedRef = useRef(false);
+export const introWordStagger = (count: number) =>
+  count > 1 ? (INTRO_TIMING.words - INTRO_TIMING.word) / (count - 1) : 0;
 
-  // 기기 등급(low/medium/high) — 파티클 형성을 돌릴지, 돌린다면 어떤
-  // 파라미터로 돌릴지의 단일 출처(lib/deviceQuality.ts). null은 "아직
-  // 모른다"이고, 아래 eligible 게이트가 이 null을 막는다. 등급이 정해지고
-  // (필요하면) ParticleText가 마운트돼 ref가 붙은 뒤에야 부팅 타임라인이
-  // 만들어진다(파티클 경합 브리프 (나)). GSAP 청크가 캐시에서 즉시 와도
-  // ParticleText가 아직 마운트 전이라 particleRef.current가 null이던
-  // 경합이 근본 원인이었다. 이 게이트가 tier를 영영 못 받으면 부팅이
-  // 영원히 시작 안 되는 위험을 새로 만들므로, lib/deviceQuality.ts의
-  // readBattery()에 상한을 둬 detectQuality()가 반드시 끝나게 한다(그쪽
-  // 주석 참고). 이 게이트와 그 상한은 한 몸이다. low는 영구히 파티클을
-  // 만들지 않는다. 대신 DOM 워드마크의 opacity 트윈(단순 페이드)이 그대로
-  // 이름을 보여준다.
-  const [tier, setTier] = useState<QualityTier | null>(null);
+// 공백 덩어리는 원래 텍스트 노드로 두고 단어만 감싼다. 원문·공백·줄바꿈 자리가 그대로이고, 읽기는 aria-label 한 번이다.
+function splitWords(headline: HTMLElement) {
+  const text = headline.textContent ?? '';
+  headline.setAttribute('aria-label', text.replace(/\s+/g, ' '));
+  const words = text.split(/(\s+)/).filter(Boolean).map(part => {
+    if (/^\s+$/.test(part)) return document.createTextNode(part);
+    const word = document.createElement('span');
+    word.setAttribute('aria-hidden', 'true');
+    word.style.display = 'inline-block';
+    word.textContent = part;
+    return word;
+  });
+  headline.replaceChildren(...words);
+  return { words: words.filter((node): node is HTMLSpanElement => node instanceof HTMLSpanElement), revert: () => { headline.textContent = text; headline.removeAttribute('aria-label'); } };
+}
+
+const clearPose = (element: HTMLElement) => {
+  element.style.removeProperty('opacity');
+  element.style.removeProperty('transform');
+};
+
+const BootSequence = forwardRef<BootSequenceHandle, BootSequenceProps>(function BootSequence({ enabled, reducedMotion, targets, background, onComplete }, ref) {
+  const [gsapModule, setGsapModule] = useState<typeof import('@/lib/gsap') | null>(null);
+  const [done, setDone] = useState(false);
+  const playing = enabled && !reducedMotion && !done;
+  const targetsRef = useRef(targets);
+  targetsRef.current = targets;
+  const backgroundRef = useRef(background);
+  backgroundRef.current = background;
+  const completeRef = useRef(onComplete);
+  completeRef.current = onComplete;
+  // 배경 공개값. 진입이 켜져 있으면 0에서 출발하고, 늦게 붙은 배경 ref도 이 현재값을 받는다.
+  const reveal = useRef({ value: enabled && !reducedMotion ? 0 : 1 });
+  const run = useRef<{ timeline: gsap.core.Timeline | null; fast: gsap.core.Tween | null; play: (() => void) | null; split: ReturnType<typeof splitWords> | null; limit: ReturnType<typeof setTimeout> | undefined; completed: boolean; claimed: boolean }>(
+    { timeline: null, fast: null, play: null, split: null, limit: undefined, completed: false, claimed: false });
+
+  const applyReveal = (value: number) => {
+    reveal.current.value = value;
+    backgroundRef.current?.setRevealProgress(value);
+  };
+  const tidy = () => {
+    const state = run.current;
+    clearTimeout(state.limit);
+    const built = state.timeline !== null;
+    if (state.play) gsapModule?.gsap.ticker.remove(state.play);
+    state.play = null;
+    state.fast?.kill();
+    state.fast = null;
+    state.timeline?.kill();
+    state.timeline = null;
+    state.split?.revert();
+    state.split = null;
+    const current = targetsRef.current;
+    if (current && built) {
+      clearPose(current.wordmark);
+      clearPose(current.heroObject);
+      current.headline.style.removeProperty('width');
+    }
+  };
+  const tidyRef = useRef(tidy);
+  tidyRef.current = tidy;
+  // 완료·중단·해시·모션 감소가 모두 여기로 온다. 원문을 되돌리고 공개값 1로 끝내며 완료 신호는 한 번만 보낸다.
+  const settle = useCallback(() => {
+    if (run.current.completed) return;
+    tidyRef.current();
+    run.current.completed = true;
+    applyReveal(1);
+    if (document.documentElement.hasAttribute('data-intro')) document.documentElement.removeAttribute('data-intro');
+    setDone(true);
+    completeRef.current();
+  }, []);
+  useImperativeHandle(ref, () => ({ finish: settle }), [settle]);
+  // 입력이 오면 숨김 표시는 바로 걷고 남은 진입만 마저 돌린다. 완료 신호(GL host 마운트)는 그 뒤라 문맥 생성이 이 사이에 끼지 않는다.
+  // 시간표가 아직 없으면 돌릴 것이 없으니 바로 끝낸다. 명시적 이동(finish)은 지금처럼 바로 끝낸다.
+  const hurry = () => {
+    const state = run.current, tl = state.timeline;
+    if (state.completed || state.fast) return;
+    if (!tl || !gsapModule) return settle();
+    document.documentElement.removeAttribute('data-intro');
+    if (state.play) gsapModule.gsap.ticker.remove(state.play);
+    state.play = null;
+    state.fast = tl.tweenTo(tl.duration(), { duration: FAST_FINISH, ease: 'power2.out', onComplete: settle });
+  };
+  const hurryRef = useRef(hurry);
+  hurryRef.current = hurry;
+
+  // 페인트 전에 진입을 맡는다. 판정 스크립트의 안전장치가 숨긴 출발 상태를 걷지 않게 표시를 바꾼다.
+  // 하이드레이션이 늦어 안전장치가 이미 걷었다면 다시 숨기지 않고 정적 첫 화면으로 끝낸다.
+  // 안전장치는 'playing'을 걷지 않는다. 맡은 뒤 표시가 없으면 StrictMode의 가짜 언마운트가 지운 것이라 다시 맡는다.
+  useLayoutEffect(() => {
+    const html = document.documentElement;
+    if (!enabled || reducedMotion || !(html.hasAttribute('data-intro') || run.current.claimed)) settle();
+    else if (!run.current.completed) {
+      html.setAttribute('data-intro', 'playing');
+      run.current.claimed = true;
+    }
+  }, [enabled, reducedMotion, settle]);
+  // 배경 ref가 늦게 붙어도 지금의 공개값을 준다. 이미 진행한 값을 0으로 되감지 않는다.
+  useLayoutEffect(() => { background?.setRevealProgress(reveal.current.value); }, [background]);
 
   useEffect(() => {
-    let cancelled = false;
-    void detectQuality()
-      .catch(() => {
-        // 등급을 못 정하면 tier가 영원히 null로 남는데, 아래 타임라인
-        // 게이트가 tier를 보므로 부팅이 시작되지 않아 이름이 아예 안
-        // 보인다. 여덟 경로 계약이 깨지는 최악의 결과다. readBattery의
-        // 상한은 "응답이 없는" 경우만 막아 주므로 "던지는" 경우는 여기서
-        // 받는다. low로 떨어뜨리면 파티클만 포기하고 DOM 워드마크의
-        // opacity 트윈이 이름을 그대로 보여준다.
-        return 'low' as const;
-      })
-      .then((detected) => {
-        if (!cancelled) setTier(detected);
-      });
+    if (!playing) return;
+    let alive = true;
+    const limit = run.current.limit = setTimeout(settle, LOAD_LIMIT_MS);
+    import('@/lib/gsap').then(module => { if (alive) setGsapModule(module); }).catch(() => { if (alive) settle(); });
+    // 안쪽 스크롤러(가로 목록 등)의 초기화 스크롤은 사용자 입력이 아니다. 문서 스크롤만 본다.
+    const onInput = (event: Event) => { if (event.type !== 'scroll' || event.target === document) hurryRef.current(); };
+    const options = { capture: true, passive: true };
+    INPUTS.forEach(type => window.addEventListener(type, onInput, options));
     return () => {
-      cancelled = true;
+      alive = false;
+      clearTimeout(limit);
+      INPUTS.forEach(type => window.removeEventListener(type, onInput, options));
     };
+  }, [playing, settle]);
+  useEffect(() => () => {
+    tidyRef.current();
+    document.documentElement.removeAttribute('data-intro');
   }, []);
 
-  // medium(고밀도 터치 — deviceQuality.ts 기준 실측 기기, 예: Galaxy S25)에서도
-  // 파티클을 돌리기로 판단했다: 이 저장소의 실기기 피드백 전부가 바로 그
-  // 등급의 기기에서 나왔다. low에서만 완전히 끈다 — 판단 근거는
-  // particle-name-report.md 참고.
-  const particleTier: ParticleTextTier | null =
-    tier === 'high' || tier === 'medium' ? tier : null;
-
-  useLayoutEffect(() => {
-    // 부팅 여부는 최초 라우트가 정해지는 그 순간 한 번만 판정한다. active는
-    // 이 조건에 들어가지 않는다. 예전에는 active === OVERVIEW를 함께 요구해서
-    // #projects 같은 딥링크로 들어오면 빗장이 잠기지 않은 채로 남았고, 나중에
-    // 워드마크를 눌러 overview로 갈 때 조건이 그제야 전부 참이 되면서 부팅이
-    // 처음부터 재생됐다(좌상단에서 파티클이 뭉친 뒤에야 overview로 넘어갔다).
-    // tier가 조건에 있는 이유는 파티클 경합 브리프 (나)이고, readBattery()의
-    // 상한이 이 조건을 영원히 막지 않게 하는 안전장치다.
-    const decidable = routeResolved && motionReady && tier !== null;
-
-    if (!decidable || hasDecidedRef.current) return;
-    hasDecidedRef.current = true;
-
-    // 모션을 끈 경우. CSS의 pre-boot 은닉 자체가 no-preference 안에만 있어
-    // 이미 최종 상태로 보인다. 예전과 같이 아무것도 하지 않는다.
-    if (reducedMotion) return;
-
-    // cleanup 시점엔 ref.current가 이미 바뀌어 있을 수 있으므로(린트가 경고하는
-    // 그대로) 이 effect가 실제로 다룰 노드를 지금 스냅샷으로 고정해 둔다.
-    const wordmarkEl = wordmarkRef.current;
-    const roleEl = roleRef.current;
-    const startEl = startRef.current;
-
-    // 이 effect가 아직 살아있는지 — 언마운트·조건 변화로 정리된 뒤에 동적
-    // import promise가 늦게 도착해도 죽은 노드에 timeline을 걸지 않는다.
-    let cancelled = false;
-    let timeline: gsap.core.Timeline | null = null;
-
-    // GSAP 없이도(청크 로드 실패·언마운트 뒤 도착 등) 항상 쓸 수 있는 최종
-    // 상태 노출. 역할 라벨·START의 pre-boot 은닉은 CSS가 소유하므로
-    // (styles/design-tokens.css의 no-preference 오버라이드) 인라인 스타일로
-    // 그것을 덮어써야 드러난다 — gsap.set()과 동일한 값을 직접 대입한다.
-    // onNameRevealed도 여기서 함께 부른다 — 이 경로(GSAP 실패·이탈·언마운트)
-    // 는 이름이 이미 최종 상태로 강제 노출되므로 배경도 같은 순간 드러나야
-    // 한다(그러지 않으면 이름은 보이는데 배경만 영원히 검은 채로 남는다).
-    function revealFinalState() {
-      if (roleEl) {
-        roleEl.style.opacity = '1';
-        roleEl.style.transform = 'translateY(0)';
-      }
-      if (startEl) {
-        startEl.style.opacity = '1';
-        startEl.style.transform = 'translateY(0)';
-      }
-      if (wordmarkEl) {
-        wordmarkEl.style.opacity = '1';
-      }
-      onNameRevealed?.();
-    }
-
-    // 최초 라우트가 overview가 아니었다. 부팅은 영영 재생되지 않는다. 그래도
-    // 최종 상태로는 반드시 맞춰 둬야 한다. 이름·역할·START의 pre-boot 은닉은
-    // CSS가 소유하고(no-preference 오버라이드) 그것을 벗기는 것은 부팅
-    // 타임라인 아니면 이 함수뿐이다. 여기서 부르지 않으면 나중에 워드마크로
-    // overview에 왔을 때 배경과 푸터만 남고 본문이 비어 보인다. 배경을 여는
-    // onNameRevealed도 이 안에 함께 있다.
-    if (active !== OVERVIEW) {
-      revealFinalState();
-      return;
-    }
-
-    import('@/lib/gsap')
-      .then(({ gsap, registerGsap, SITE_EASE }) => {
-        if (cancelled) return;
-        registerGsap();
-
-        const tl = gsap.timeline();
-        timeline = tl;
-
-        // 파티클 형성(ParticleText) 재생 — t=0에 흩어진 조각이 뭉치기
-        // 시작한다(핸드오프 브리프 3절 "파티클이 먼저 완전히 뭉친다"). 위
-        // eligible 게이트가 tier를 포함하므로 이 시점엔 등급이 이미
-        // 정해졌고, particleTier가 있으면 ParticleText도 같은 커밋에서
-        // 이미 마운트돼 layout effect로 샘플링까지 끝낸 뒤다(파티클 경합
-        // 브리프 (나)(다)). particleRef.current가 그래도 없으면(low
-        // tier·reducedMotion처럼 애초에 렌더하지 않는 경우, 또는 getContext
-        // 실패 같은 준비 실패) 옵셔널 체이닝으로 조용히 아무것도 하지
-        // 않는다. 아래 wordmarkEl의 opacity 전환은 이 호출과 완전히
-        // 독립적으로 스케줄되므로, 파티클이 실패해도 이름은 원래 계획대로
-        // 도착한다(파티클 형성 브리프의 "이름 없는 사이트를 만들지 마라"
-        // 대응, 8번째 실패 경로).
-        tl.call(
-          () => {
-            particleRef.current?.play();
-          },
-          undefined,
-          0
-        );
-
-        if (wordmarkEl) {
-          // 핸드오프(브리프 3절, 이음매 완화는 5차) — 크로스페이드가 아니라
-          // 마지막 SEAM_OVERLAP_MS 동안만 캔버스 페이드아웃(ParticleText
-          // 내부)과 겹친다. 3차 피드백이 거부한 0.55초 병렬 페이드(반 초
-          // 동안 파티클과 이름이 둘 다 따로 보였다)와 다르다 — 이번 겹침은
-          // SEAM_OVERLAP_MS(<=150ms 상한, 테스트가 고정)뿐이고 흐려지는
-          // 캔버스 "뒤"에서 일어나 이음매 자체가 거의 안 보인다. pre-boot
-          // opacity(0)는 여전히 CSS([data-wordmark-mode='hero'],
-          // design-tokens.css)가 소유한다 — immediateRender:false가 없으면
-          // gsap이 이 트윈을 만드는 즉시(포지션과 무관하게) opacity:0을
-          // 동기로 인라인에 써버려 "핸드오프 전까지 JS가 인라인을 안
-          // 건드린다"는 계약이 겹침 구간 시작 전에 깨진다 — 반드시 켜 둔다.
-          tl.fromTo(
-            wordmarkEl,
-            { opacity: 0 },
-            {
-              opacity: 1,
-              duration: SEAM_OVERLAP_SECONDS,
-              ease: 'none',
-              immediateRender: false,
-            },
-            NAME_HANDOFF_AT - SEAM_OVERLAP_SECONDS
-          );
-        }
-
-        // 배경 노출 트리거 — 파티클 뭉침이 끝나는 것과 정확히 같은 순간에
-        // 부모(HomeClient)가 Hyperspeed 배경을 페이드로 드러낸다. 위
-        // wordmarkEl 트윈이 끝나는 위치(NAME_HANDOFF_AT)와 같은 곳에 둬 "두
-        // 시각이 한 곳에서 정해진다"는 계약을 만족한다 — 상수가 아니라
-        // 타임라인 위치 자체가 단일 출처다.
-        tl.call(() => onNameRevealed?.(), undefined, NAME_HANDOFF_AT);
-
-        if (roleEl) {
-          tl.fromTo(
-            roleEl,
-            { opacity: 0, y: 8 },
-            { opacity: 1, y: 0, duration: ROLE_REVEAL_DURATION, ease: SITE_EASE },
-            ROLE_REVEAL_AT
-          );
-        }
-
-        if (startEl) {
-          tl.fromTo(
-            startEl,
-            { opacity: 0, y: 8 },
-            { opacity: 1, y: 0, duration: START_REVEAL_DURATION, ease: SITE_EASE },
-            START_REVEAL_AT
-          );
-        }
-
-
-        // 2초 지점을 타임라인 길이로 고정한다 — "2초 안에 완료" 계약의 경계.
-        tl.set({}, {}, BOOT_DURATION_SECONDS);
-      })
-      .catch(() => {
-        // GSAP 청크 로드 실패 — 역할 라벨·START의 pre-boot 은닉은 CSS가
-        // 소유하므로 아무것도 하지 않으면 영원히 안 보인다. 최종 상태로
-        // 강제로 드러낸다(이번 변경이 새로 만드는 위험).
-        if (cancelled) return;
-        revealFinalState();
-      });
-
-    return () => {
-      cancelled = true;
-      // 부팅 도중 이탈(active가 overview를 벗어남·reducedMotion으로 전환 등) —
-      // 역할 라벨·START·워드마크·wrapper·밑줄을 중간 프레임이 아니라 최종
-      // 안정 상태로 맞춘다. 재방문 시 이 최종 상태가 그대로 유지되고
-      // 타임라인은 다시 만들어지지 않는다(hasDecidedRef가 이미 true).
-      // timeline이 아직 없으면(로드 대기 중 이탈) 곧바로 최종 상태로 둔다.
-      timeline?.kill();
-      revealFinalState();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, motionReady, reducedMotion, routeResolved, tier]);
-
-  // active가 바뀌면(START로 이동했든 다른 네비가 이겼든) 눌림 빗장을 푼다.
-  // 그래야 overview로 돌아왔을 때 START가 다시 눌린다. cleanup이라 언마운트도
-  // 같은 자리에서 처리된다.
+  // 시간표 전체를 한 번에 만든다. 0초 한 위치에서 배경 확장과 세 진입이 함께 출발한다.
   useEffect(() => {
-    return () => {
-      startPressedRef.current = false;
+    if (!playing || !gsapModule || !targets || run.current.timeline) return;
+    clearTimeout(run.current.limit);
+    const { gsap, registerGsap, SITE_EASE } = gsapModule;
+    registerGsap();
+    const { wordmark, headline, heroObject } = targets;
+    const T = INTRO_TIMING;
+    // 줄바꿈이 나뉜 단어 때문에 바뀌지 않게 폭을 먼저 고정한다.
+    headline.style.width = `${headline.getBoundingClientRect().width}px`;
+    const split = splitWords(headline);
+    run.current.split = split;
+    // 출발 자세는 지금 그리고, 재생은 다음 tick에 건다. 무거운 커밋 안에서 바로 재생하면 막힌 시간이 첫 프레임에 실린다.
+    const tl = gsap.timeline({ paused: true, onComplete: settle });
+    run.current.timeline = tl;
+    tl.fromTo(wordmark, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: T.name, ease: SITE_EASE }, 0)
+      .fromTo(split.words, { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: T.word, ease: SITE_EASE, stagger: introWordStagger(split.words.length) }, 0)
+      .fromTo(heroObject, { opacity: 0, scale: .92 }, { opacity: 1, scale: 1, duration: T.object, ease: SITE_EASE }, 0)
+      // 가속과 엇갈림은 배경의 가닥별 시간표가 맡는다. 공개값은 시간 그 자체다.
+      .to(reveal.current, { value: 1, duration: T.background, ease: 'none', onUpdate: () => applyReveal(reveal.current.value) }, 0);
+    const play = () => {
+      gsap.ticker.remove(play);
+      run.current.play = null;
+      tl.play();
     };
-  }, [active]);
+    run.current.play = play;
+    gsap.ticker.add(play);
+  }, [playing, gsapModule, targets, settle]);
 
-  // START를 누르면 글자를 새로 마운트해 반짝임(.boot-start-flash)을 재생하고
-  // 곧바로 섹션 전환을 시작한다. 예전에는 반짝임을 다 보여주려고 420ms를
-  // 기다렸는데, 사용자가 "누르는 효과와 동시에 이동"으로 바꿨다. 버튼이 곧
-  // 사라지므로 충전이 끝까지 보이지는 않는다. 그것이 요청한 결과다.
-  // 배경의 fov 펀치("임팩트")는 이 전환이 만드는 isTransitioning edge를
-  // HyperspeedBackground가 이미 boost()로 받는다(기존 계약).
-  //
-  // reducedMotion 분기는 사라졌다. 예전에는 그쪽만 즉시 이동이었는데 이제
-  // 두 경로가 같아졌다.
-  function handleStartClick() {
-    if (startPressedRef.current) return;
-    startPressedRef.current = true;
+  return null;
+});
 
-    // 포커스를 먼저 놓는다. 이 버튼은 곧 aria-hidden·inert가 되는
-    // 서브트리 안에 있어서, 포커스를 쥔 채로 감춰지면 크롬이
-    // "Blocked aria-hidden on an element because its descendant
-    // retained focus"로 막는다. 실제로 감춰진 뒤에도 포커스가 735ms
-    // 동안 여기 남아 있었다. 놓아 주면 전환이 끝날 때 HomeClient의
-    // 포커스 effect가 도착한 섹션의 region으로 가져간다.
-    startRef.current?.blur();
-    setFlashKey((key) => key + 1);
-    onStart();
-  }
-
-  // 워드마크와 마찬가지로 이 컴포넌트는 HomeClient에서 overview 섹션 밖(셸
-  // 레벨)에 렌더된다 — content-visibility의 paint containment가 이 fixed
-  // 요소를 재배치하는 캡션 점프 버그를 피하기 위해서다(브리프 3절). 그래서
-  // 섹션 wrapper의 inert·aria-hidden·은닉을 더 이상 상속받지 못하므로 이
-  // 컴포넌트 자신이 active를 보고 직접 그 상태를 소유한다.
-  const hiddenFromOverview = active !== OVERVIEW;
-
-  // START 버튼 자체 — 호버 시 전기 충전 효과(순수 CSS, .boot-start:hover +
-  // design-tokens.css)가 이 마크업에 걸린다. Magnet(자석 추종 호버)은 사용자
-  // 판단으로 걷어냈다 — "디자인 나쁨. 호버 시 효과를 자석이 아닌, 전기적
-  // 에너지가 글씨에 충전되는듯한 이펙트로" 재검토 결과다. ClickSpark(캔버스
-  // 스파크)도 파티클 이음매 브리프(5차)에서 걷어냈다 — "스파크 안 보임"
-  // 피드백에 스파크 자체를 고치는 대신 걷어내고, 클릭 시 아래 boot-start-flash
-  // (호버와 같은 filter drop-shadow 충전 언어)를 강화하는 쪽을 택했다.
-  const startButton = (
-    <button
-      ref={startRef}
-      data-testid="boot-start"
-      type="button"
-      onClick={handleStartClick}
-      className="boot-start relative inline-flex min-h-11 items-center text-t3 sm:text-t2 md:text-t1 uppercase tracking-[0.2em] text-[var(--color-text-primary)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-cyan-hi)]"
-    >
-      {/* 아이들 광휘를 제거했다(3차 실기기 피드백). 버튼 크기의 220%라
-          START 위로 크게 삐져나와 이름과 START 사이에 정체불명의 얼룩으로
-          보였다 — 무엇을 위한 빛인지 읽히지 않으면 장식 노이즈이고, 2차
-          감사가 지적한 AI slop 6번(장식용 블롭)에 오히려 가까워진다.
-          START의 생동감은 밑줄 draw·호흡과 hover·click 반응이 맡는다. */}
-      {/* 텍스트를 감싸는 relative span — 밑줄의 위치 기준이다. 44px
-          터치 타깃(min-h-11)은 버튼 자신이 지키고, 이 span은 글자
-          자신의 박스 크기만 갖는다. 예전에는 밑줄이 버튼 바로 아래
-          자식(absolute bottom-0)이라 44px 박스의 바닥(글자보다
-          10~13px 아래)에 그어졌다 — 이 wrapper로 밑줄을 글자에
-          붙인다(2차 실기기 피드백). */}
-      <span className="relative inline-block pb-1">
-        {/* 클릭 반짝임 — 사용자 판단으로 클릭 링을 대체했다("에너지가
-            차오르듯이 글씨가 Hyperspeed 색으로 반짝거리기만 하도록",
-            터널 진입 브리프 4절). key를 클릭마다 올려 span을 다시
-            마운트하면 .boot-start-flash(design-tokens.css, 1회성
-            keyframe)가 처음부터 재생된다 — 상시 루프가 아니라 클릭
-            반응이므로 "글자 자신에는 어떤 CSS 애니메이션도 걸리지
-            않는다"는 계약(위 주석)은 정지 상태 한정으로 좁혀 유지한다.
-            reducedMotion에서는 클래스를 걸지 않는다 — 호흡·개수 램프와
-            같은 원칙. 파티클 이음매 브리프(5차)가 이 키프레임에 filter
-            (drop-shadow) 스텝을 더해 호버 충전과 같은 언어로 강화했다 —
-            ClickSpark를 대신한다. key 리마운트만으로 재생되므로 hover
-            상태와 무관하다(모바일에서도 그대로 발동한다). */}
-        <span
-          key={flashKey}
-          data-testid="boot-start-text"
-          className={flashKey > 0 && !reducedMotion ? 'boot-start-flash' : undefined}
-        >
-          START
-        </span>
-      </span>
-    </button>
-  );
-
-  return (
-    <>
-      <h1 className="sr-only">김태인: 개발자</h1>
-      {/* 이름 파티클 형성 — 순수 장식(aria-hidden·pointer-events-none)이고
-          워드마크 DOM과 별개의 독립된 오버레이다. low tier·reducedMotion·
-          기기 등급 미확정(tier===null)에서는 아예 렌더하지 않는다 — 그동안
-          이름은 wordmarkEl의 opacity 트윈(단순 페이드)만으로 보인다. */}
-      {particleTier && !reducedMotion ? (
-        <ParticleText
-          ref={particleRef}
-          wordmarkRef={wordmarkRef}
-          tier={particleTier}
-          durationMs={NAME_HANDOFF_AT_MS}
-          seamMs={SEAM_OVERLAP_MS}
-        />
-      ) : null}
-      {/* 워드마크(Navigation)와 같은 뷰포트 50% 기준점을 쓴다 — margin-top의
-          --boot-caption-gap 하나가 간격의 유일한 출처다(design-tokens.css).
-          bottom 값을 여기서 미세조정하지 않는다. */}
-      <div
-        data-testid="boot-sequence"
-        inert={hiddenFromOverview}
-        aria-hidden={hiddenFromOverview}
-        className={`fixed top-1/2 left-1/2 z-40 mt-[var(--boot-caption-gap)] flex -translate-x-1/2 flex-col items-center gap-2 ${
-          hiddenFromOverview ? 'boot-caption-hidden' : 'boot-caption-visible'
-        }`}
-        {...transitionAttributes}
-      >
-        {/* 역할 라벨 — 정체성 진술. 보조 정보라 START보다 작고 흐리다. */}
-        <span
-          ref={roleRef}
-          data-testid="boot-role"
-          className="boot-role block text-t7 sm:text-t6 md:text-t5 uppercase tracking-[0.1em] text-[var(--color-text-secondary)]"
-        >
-          <span className="block">SOFTWARE DEVELOPER</span>
-        </span>
-        {/* START — 행동 유도. 역할 라벨의 1.36배뿐이던 위계를 깨고 모바일
-            t5/태블릿 t3/데스크톱 t2로 역할 라벨(t8 고정)과 항상 2배 이상
-            벌어지게 한다 — "속삭임 → 행동"이 성립하는 최소 비율. 화살표·
-            목적지 표기 없이 텍스트만 남긴다(3라운드 사용자 판단). 마크업
-            자체는 위 startButton에서 정의한다. */}
-        {startButton}
-      </div>
-    </>
-  );
-}
+export default BootSequence;

@@ -3,13 +3,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
-const ROOT_IMPORTER = 'components/blocks/HyperspeedBackground.tsx';
-const HYPERSPEED_SPECIFIER = '@/components/blocks/Hyperspeed';
+const GSAP_SPECIFIER = '@/lib/gsap';
+const LUMINOUS_MODULE = 'components/blocks/LuminousFlowBackground/index.tsx';
 
 // 예산 상수는 이 한 곳에만 둔다. KB(1024 bytes) 단위다.
-const BUNDLE_BUDGET = {
+// 지연 hard cap 230은 Hero 크리스털 볼을 위한 사용자 결정(2026-10-21)이다. target 180은 warn만 낸다.
+export const BUNDLE_BUDGET = {
   target: { firstLoad: 200, chunk: 180 },
-  hardCap: { firstLoad: 210, chunk: 212 },
+  hardCap: { firstLoad: 210, chunk: 230 },
 };
 
 function readManifest(buildDir, fileName) {
@@ -97,8 +98,7 @@ function ancestorLayoutKeys(pageKey) {
   return layouts;
 }
 
-function resolveFirstLoadAssets(buildDir) {
-  const pageKey = rootPageKey(readManifest(buildDir, 'app-path-routes-manifest.json'));
+function resolveFirstLoadAssets(buildDir, pageKey) {
   const appBuildManifest = readManifest(buildDir, 'app-build-manifest.json');
 
   if (!isRecord(appBuildManifest) || !isRecord(appBuildManifest.pages)) {
@@ -136,45 +136,116 @@ function parseLoadableEdge(key) {
   };
 }
 
-function resolveHyperspeedAssets(buildDir, firstLoadAssets) {
+// 홈 chunk가 `r.e(청크id)...then(r.bind(r,모듈id))`로 부르는 지연 import 호출을 찾는다.
+// react-loadable manifest의 edge는 importer가 아니라 대상 모듈 id로만 홈과 이어진다.
+function findDynamicImportCalls(source) {
+  const calls = [];
+  for (const match of source.matchAll(/((?:[\w$]+\.e\(\d+\)[,\s]*)*)[\]\)]*\.then\([\w$]+\.bind\([\w$]+,(\d+)\)\)/g)) {
+    calls.push({
+      moduleId: Number(match[2]),
+      chunkIds: [...match[1].matchAll(/\.e\((\d+)\)/g)].map((chunk) => Number(chunk[1])),
+    });
+  }
+  return calls;
+}
+
+// 같은 대상 모듈을 다른 route(prototype 등)가 불러도 edge의 숫자 이름 chunk가
+// 홈 호출이 요청한 chunk 안에 있을 때만 홈 edge로 본다.
+function isHomeEdge(call, value) {
+  return (
+    value.id === call.moduleId &&
+    Array.isArray(value.files) &&
+    value.files.every((file) => {
+      // Next의 라이브러리 분할 chunk 이름은 8자리 hex라 우연히 전부 숫자일 수 있다. 숫자 chunk id는 7자리 이하만 본다.
+      const chunkId = /(?:^|\/)(\d{1,7})\.[^/]*\.js$/.exec(normalizeImporter(file))?.[1];
+      return chunkId === undefined || call.chunkIds.includes(Number(chunkId));
+    })
+  );
+}
+
+function resolveDeferredAssets(buildDir, firstLoadAssets) {
   const manifest = readManifest(buildDir, 'react-loadable-manifest.json');
   if (!isRecord(manifest)) {
     throw new Error('Unsupported react-loadable manifest schema');
   }
 
-  const importerEdges = [];
-  for (const [key, value] of Object.entries(manifest)) {
-    const edge = parseLoadableEdge(key);
-    if (edge.importer === ROOT_IMPORTER) {
-      if (!isRecord(value)) {
-        throw new Error('Unsupported react-loadable manifest schema: edge value must be an object');
+  const edges = Object.entries(manifest).map(([key, value]) => {
+    if (!isRecord(value)) {
+      throw new Error('Unsupported react-loadable manifest schema: edge value must be an object');
+    }
+    return { ...parseLoadableEdge(key), value };
+  });
+
+  // 홈 chunk에서 시작해, 지연 chunk 안의 중첩 import까지 고정점까지 따라간다.
+  const deferred = new Set();
+  const homeEdges = new Set();
+  const pending = [...firstLoadAssets];
+  while (pending.length > 0) {
+    const source = readFileSync(path.join(buildDir, pending.pop()), 'utf8');
+    for (const call of findDynamicImportCalls(source)) {
+      // 모듈 id가 같은 edge가 있는데 하나도 홈 호출의 chunk 목록과 맞지 않으면 측정이 조용히 빠지므로 실패시킨다.
+      const sameModule = edges.filter((edge) => edge.value.id === call.moduleId);
+      if (sameModule.length > 0 && !sameModule.some((edge) => isHomeEdge(call, edge.value))) {
+        const names = sameModule.map((edge) => `${edge.importer} -> ${edge.specifier}`).join(', ');
+        throw new Error(`Home dynamic import of module ${call.moduleId} matches no react-loadable edge by chunk list: ${names}`);
       }
-      importerEdges.push({ edge, value });
+      for (const edge of edges) {
+        if (homeEdges.has(edge) || !isHomeEdge(call, edge.value)) continue;
+        homeEdges.add(edge);
+        for (const asset of resolveJavaScriptAssets(buildDir, edge.value.files, `${edge.importer} -> ${edge.specifier}`)) {
+          if (firstLoadAssets.includes(asset) || deferred.has(asset)) continue;
+          deferred.add(asset);
+          pending.push(asset);
+        }
+      }
     }
   }
 
-  if (importerEdges.length === 0) {
-    return { status: 'not-built', metrics: null };
+  if (![...homeEdges].some((edge) => edge.specifier === GSAP_SPECIFIER)) {
+    throw new Error(`Home route has no dynamic import edge for ${GSAP_SPECIFIER}`);
   }
 
-  const matchingEdges = importerEdges.filter(({ edge }) => edge.specifier === HYPERSPEED_SPECIFIER);
-  if (matchingEdges.length !== 1) {
-    throw new Error(
-      `Hyperspeed dynamic import edge must map exactly one edge; found ${matchingEdges.length}`,
-    );
-  }
-
-  const edgeFiles = matchingEdges[0].value.files;
-  const assets = resolveJavaScriptAssets(buildDir, edgeFiles, 'Hyperspeed');
-  const uniqueAssets = assets.filter((asset) => !firstLoadAssets.includes(asset));
-
+  const files = [...deferred].sort();
   return {
-    status: 'measured',
-    metrics: {
-      files: uniqueAssets,
-      gzipBytes: uniqueAssets.reduce((sum, asset) => sum + gzipSize(path.join(buildDir, asset)), 0),
-    },
+    files,
+    // 홈 chunk는 importer가 아니라 대상 모듈만 가리키므로 대상(specifier)만 보고한다.
+    targets: [...new Set([...homeEdges].map((edge) => edge.specifier))].sort(),
+    gzipBytes: files.reduce((sum, asset) => sum + gzipSize(path.join(buildDir, asset)), 0),
   };
+}
+
+// Luminous는 정적 import라 별도 지연 chunk가 없어야 한다. client reference manifest에
+// chunks가 빈 모듈로 올라와 있어야 First Load에 포함된 것으로 본다.
+function resolveLuminousStatus(buildDir, pageKey) {
+  const fileName = `server/app${pageKey}_client-reference-manifest.js`;
+  const marker = `globalThis.__RSC_MANIFEST["${pageKey}"]=`;
+  let source;
+  try {
+    source = readFileSync(path.join(buildDir, fileName), 'utf8');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Unable to read ${fileName}: ${message}`);
+  }
+
+  const start = source.indexOf(marker);
+  if (start === -1) {
+    throw new Error(`Unsupported client reference manifest schema: ${fileName}`);
+  }
+
+  const { clientModules } = JSON.parse(source.slice(start + marker.length).replace(/;\s*$/, ''));
+  if (!isRecord(clientModules)) {
+    throw new Error(`Unsupported client reference manifest schema: ${fileName}`);
+  }
+
+  const luminous = Object.entries(clientModules).find(([file]) => normalizeImporter(file).endsWith(`/${LUMINOUS_MODULE}`));
+  if (!luminous) {
+    throw new Error(`Luminous module is not in the home client graph: ${LUMINOUS_MODULE}`);
+  }
+  if (!Array.isArray(luminous[1].chunks) || luminous[1].chunks.length > 0) {
+    throw new Error('Luminous must be statically included, but it loads separate chunks');
+  }
+
+  return 'static';
 }
 
 export function gzipSize(file) {
@@ -182,16 +253,17 @@ export function gzipSize(file) {
 }
 
 export function resolveBundleMetrics(buildDir) {
-  const firstLoadFiles = resolveFirstLoadAssets(buildDir);
-  const hyperspeed = resolveHyperspeedAssets(buildDir, firstLoadFiles);
+  const pageKey = rootPageKey(readManifest(buildDir, 'app-path-routes-manifest.json'));
+  const firstLoadFiles = resolveFirstLoadAssets(buildDir, pageKey);
+  const deferred = resolveDeferredAssets(buildDir, firstLoadFiles);
 
   return {
     firstLoadJs: {
       files: firstLoadFiles,
       gzipBytes: firstLoadFiles.reduce((sum, asset) => sum + gzipSize(path.join(buildDir, asset)), 0),
     },
-    hyperspeed: hyperspeed.metrics,
-    hyperspeedStatus: hyperspeed.status,
+    deferred,
+    luminous: resolveLuminousStatus(buildDir, pageKey),
   };
 }
 
@@ -201,7 +273,7 @@ export function resolveBundleMetrics(buildDir) {
 export function checkBudget(measured, budget) {
   const metrics = [
     { label: 'First Load JS', value: measured.firstLoad, target: budget.target.firstLoad, hardCap: budget.hardCap.firstLoad },
-    { label: 'Hyperspeed 청크', value: measured.chunk, target: budget.target.chunk, hardCap: budget.hardCap.chunk },
+    { label: '지연 청크', value: measured.chunk, target: budget.target.chunk, hardCap: budget.hardCap.chunk },
   ];
 
   const warnings = [];
@@ -230,42 +302,28 @@ function runCheck() {
   const metrics = resolveBundleMetrics(buildDir);
 
   const firstLoadKb = metrics.firstLoadJs.gzipBytes / 1024;
-  const chunkBuilt = metrics.hyperspeedStatus !== 'not-built';
-  const chunkKb = chunkBuilt ? metrics.hyperspeed.gzipBytes / 1024 : null;
+  const chunkKb = metrics.deferred.gzipBytes / 1024;
+  const result = checkBudget({ firstLoad: firstLoadKb, chunk: chunkKb }, BUNDLE_BUDGET);
 
-  // 아직 안 빌드됐으면 chunk에 target과 정확히 같은 값을 넣어 판정에서 뺀다
-  // (target과 같으면 pass이므로 warnings·violations에 기여하지 않는다).
-  const measured = { firstLoad: firstLoadKb, chunk: chunkBuilt ? chunkKb : BUNDLE_BUDGET.target.chunk };
-  const result = checkBudget(measured, BUNDLE_BUDGET);
+  const lines = [
+    `check-bundle: ${result.status}`,
+    `First Load JS ${firstLoadKb.toFixed(1)}KB / target ${BUNDLE_BUDGET.target.firstLoad}KB, 지연 청크 ${chunkKb.toFixed(1)}KB / target ${BUNDLE_BUDGET.target.chunk}KB`,
+    'Luminous: 정적 포함 (지연 청크 없음)',
+  ];
 
-  if (!chunkBuilt) {
-    process.stdout.write('check-bundle: Hyperspeed 청크가 아직 빌드되지 않아 판정에서 제외한다 (First Load JS만 판정)\n');
+  if (result.status !== 'pass') {
+    lines.push(
+      `hard cap: First Load JS ${BUNDLE_BUDGET.hardCap.firstLoad}KB / 지연 청크 ${BUNDLE_BUDGET.hardCap.chunk}KB`,
+      ...result.warnings,
+      ...result.violations,
+      `First Load JS 자산: ${metrics.firstLoadJs.files.join(', ')}`,
+      `지연 대상: ${metrics.deferred.targets.join(', ')}`,
+      `지연 자산: ${metrics.deferred.files.join(', ')}`,
+    );
   }
 
-  const currentLine = chunkBuilt
-    ? `First Load JS ${firstLoadKb.toFixed(1)}KB / target ${BUNDLE_BUDGET.target.firstLoad}KB, Hyperspeed 청크 ${chunkKb.toFixed(1)}KB / target ${BUNDLE_BUDGET.target.chunk}KB`
-    : `First Load JS ${firstLoadKb.toFixed(1)}KB / target ${BUNDLE_BUDGET.target.firstLoad}KB`;
-  process.stdout.write(`check-bundle: ${result.status}\n${currentLine}\n`);
-
-  if (result.status === 'pass') {
-    return;
-  }
-
-  const hardCapLine = chunkBuilt
-    ? `hard cap: First Load JS ${BUNDLE_BUDGET.hardCap.firstLoad}KB / Hyperspeed 청크 ${BUNDLE_BUDGET.hardCap.chunk}KB`
-    : `hard cap: First Load JS ${BUNDLE_BUDGET.hardCap.firstLoad}KB`;
-  const assetLines = [`First Load JS 자산: ${metrics.firstLoadJs.files.join(', ')}`];
-  if (chunkBuilt) {
-    assetLines.push(`Hyperspeed 자산: ${metrics.hyperspeed.files.join(', ')}`);
-  }
-
-  if (result.status === 'warn') {
-    process.stdout.write(`${hardCapLine}\n${result.warnings.join('\n')}\n${assetLines.join('\n')}\n`);
-    return;
-  }
-
-  process.stdout.write(`${result.violations.join('\n')}\n${assetLines.join('\n')}\n`);
-  process.exitCode = 1;
+  process.stdout.write(`${lines.join('\n')}\n`);
+  if (result.status === 'fail') process.exitCode = 1;
 }
 
 // vitest 워커 등 라이브러리로 import될 때는 process.argv[1]이 이 파일이

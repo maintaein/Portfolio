@@ -1,0 +1,19 @@
+.chapters { position: relative; display: flex; justify-content: center; gap: clamp(12px, 4vw, 64px); width: min(800px, 100%); margin: 0 auto; isolation: isolate; }
+/* 단어 줄 뒤의 판. 광선이 단어 밑을 지나도 비활성 단어의 대비가 유지된다. 네 변 모두 투명으로 끝나 상자 경계가 남지 않는다. */
+.chapters::before { content: ''; position: absolute; inset: -24px -32px; z-index: -1; pointer-events: none; background: linear-gradient(to bottom, transparent, rgb(0 0 0 / .94) 30%, rgb(0 0 0 / .94) 70%, transparent); -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); opacity: 0; transition: opacity var(--animate-duration-slow) cubic-bezier(.23, 1, .32, 1); }
+.chapters[data-entered="true"]::before { opacity: 1; }
+.word { position: relative; flex: 1; min-width: 0; min-height: 44px; border: 0; background: none; padding: 0; font-family: inherit; text-align: center; font-size: clamp(16px, 2vw, 26px); font-weight: 600; letter-spacing: .06em; line-height: 1.8; cursor: pointer; transition: opacity var(--animate-duration-slow) cubic-bezier(.23, 1, .32, 1), transform var(--animate-duration-slow) cubic-bezier(.23, 1, .32, 1); }
+.word:focus-visible { outline: 1px solid var(--color-cyan-hi); outline-offset: 8px; border-radius: 2px; }
+.chapters[data-entered="false"] { pointer-events: none; }
+.chapters[data-entered="true"] .word { opacity: 1; transform: translate3d(0, 0, 0); }
+/* 숨긴 출발점은 하이드레이션 뒤에만 건다(styles.module.css의 .rail과 같은 이유). */
+main[data-route-resolved="true"] .chapters[data-entered="false"] .word { opacity: 0; transform: translate3d(0, 14px, 0); }
+.word:nth-child(2) { transition-delay: 60ms; }
+.word:nth-child(3) { transition-delay: 120ms; }
+/* 비활성 단어도 누를 수 있는 컨트롤이라 흐리지 않는다. 활성과의 차이는 밝기와 광휘가 만든다. */
+.label { display: inline-block; color: var(--color-text-secondary); opacity: .75; transition: opacity calc(var(--chapter-transition) / 2) ease, color calc(var(--chapter-transition) / 2) ease; }
+.word[data-focused="true"] .label { color: var(--color-text-primary); opacity: 1; transition-delay: calc(var(--chapter-transition) / 2); }
+.word:focus-visible .label { color: var(--color-text-primary); opacity: 1; }
+.glow { position: absolute; inset: 0; display: grid; place-items: center; color: var(--color-text-primary); text-shadow: 0 0 5px color-mix(in srgb, var(--color-cyan-hi) 95%, transparent), 0 0 14px color-mix(in srgb, var(--color-cyan-core) 80%, transparent), 0 0 28px color-mix(in srgb, var(--color-cyan-core) 55%, transparent); opacity: 0; pointer-events: none; transition: opacity calc(var(--chapter-transition) / 2) ease; }
+.chapters[data-entered="true"] .word[data-focused="true"] .glow { opacity: 1; transition-delay: calc(var(--chapter-transition) / 2); }
+@media (prefers-reduced-motion: reduce) { .chapters::before, .word { transition: none; transform: none; } .label, .glow { transition: none; } }

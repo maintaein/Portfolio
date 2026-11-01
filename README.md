@@ -139,7 +139,6 @@ portfolio/
 │   ├── blocks/
 │   │   ├── Hyperspeed/         # three.js 터널 (distortions, presets)
 │   │   ├── HyperspeedBackground.tsx  # 배경 배선과 동적 로딩
-│   │   ├── ParticleText/       # 이름을 뭉치는 파티클
 │   │   ├── PreviewMorph/       # 프로젝트 사이 셰이더 모프
 │   │   ├── ProjectModal/       # 좌증거·우논증 상세 판
 │   │   ├── Navigation/

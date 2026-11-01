@@ -23,21 +23,10 @@ test.describe('SEO / 초기 렌더', () => {
   test('overview 상태에서 비활성 섹션의 글자가 content-visibility로 사라지지 않는다', async ({
     page,
   }) => {
-    // 스크립트 요청을 막아 React가 마운트되지 않게 한다. 마운트되면
-    // HomeClient의 유휴 예열(warmedSectionIds)이 곧 About에 section-prewarm을
-    // 붙여 content-visibility를 visible로 덮어쓴다(HomeClient/index.tsx,
-    // .section-prewarm이 .section-hidden보다 소스 순서가 뒤라 이긴다). 그
-    // 타이밍은 requestIdleCallback에 달려 있어 테스트마다 달라지므로,
-    // .section-hidden 규칙 자체를 재려면 그 경쟁을 피해야 한다. 스크립트만
-    // 막으면 SSR이 만든 HTML에 CSS만 적용된, React 개입 이전 상태를 실제
-    // 레이아웃 엔진이 어떻게 계산하는지를 그대로 본다.
     await page.route('**/*', (route) => {
       if (route.request().resourceType() === 'script') return route.abort();
       return route.continue();
     });
-    // 해시 없이 들어가면 useSectionNav의 초기 상태가 overview다
-    // (hooks/useSectionNav.ts). 그 상태에서 About은 비활성이라
-    // .section-hidden이 걸린다(design-tokens.css).
     await page.goto('/');
 
     const about = page.locator('[data-section="about"]');
@@ -49,7 +38,9 @@ test.describe('SEO / 초기 렌더', () => {
     const contentVisibility = await about.evaluate(
       (el) => getComputedStyle(el).contentVisibility
     );
-    expect(contentVisibility).toBe('auto');
+    expect(contentVisibility).not.toBe('hidden');
+    await expect(about).toBeVisible();
+    await expect(page.locator('[data-section][inert], [data-section][aria-hidden="true"]')).toHaveCount(0);
   });
 
   test('섹션 경로 /projects는 없다. 해시가 정본이다 @smoke', async ({ request }) => {

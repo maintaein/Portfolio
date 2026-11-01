@@ -1,0 +1,1 @@
+globalThis.__RSC_MANIFEST=(globalThis.__RSC_MANIFEST||{});globalThis.__RSC_MANIFEST["/page"]={"clientModules":{"C:\\fake\\components\\sections\\HomeClient\\index.tsx":{"id":10,"name":"*","chunks":[],"async":false},"C:\\fake\\components\\blocks\\LuminousFlowBackground\\index.tsx":{"id":11,"name":"*","chunks":[],"async":false}}}

@@ -507,8 +507,8 @@ export default function ProjectModal({
           'fixed inset-0 grid',
           'grid-cols-[3fr_2fr] grid-rows-[64px_minmax(0,1fr)]',
           'overflow-hidden bg-[rgb(6_8_10_/_0.97)]',
-          // 한국어는 어절 중간에서 끊기면 안 읽힌다. balance만으로는 부족하다.
-          '[word-break:keep-all] [overflow-wrap:anywhere] [text-wrap:pretty] [-webkit-font-smoothing:antialiased]'
+          // 어절 단위 줄바꿈(keep-all)은 body가 사이트 전체에 준다. 여기서는 칸보다 긴 낱말만 끊고 끝줄이 홀로 남지 않게 한다.
+          '[overflow-wrap:anywhere] [text-wrap:pretty] [-webkit-font-smoothing:antialiased]'
         )}
       >
         {/* 1100px 아래 재배치는 순수 CSS 미디어 쿼리라 자바스크립트로
