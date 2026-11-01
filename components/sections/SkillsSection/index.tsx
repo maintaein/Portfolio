@@ -41,7 +41,12 @@ function rendered(view: { skill: Skill; leaving: string[] }) {
 }
 
 // 넘김이 React를 거치지 않고 헤드를 바로 숨기거나 세운다. 같은 scroll 안에서 오버레이 헤드와 맞바꿔야 한 프레임도 겹치거나 비지 않는다.
-export interface SkillsSectionHandle { setArrived(arrived: boolean): void }
+// reveal: 넘김 헤드가 곡선에 들어섰다. 목록을 위부터 차례로 꺼낸다(한 번만).
+export interface SkillsSectionHandle { setArrived(arrived: boolean): void; reveal(): void }
+
+// 목록과 제목 자리의 등장. idle: 아직 나오지 않았다(헤드가 오는 중이면 감춘다). rows: 넘김 헤드가 곡선에 들어서 목록이 나온다.
+// full: 그 뒤 도착해 제목 자리도 나온다. done: 넘김 없이 도착했다(nav, 새로 고침, 모바일, 모션 감소). 한 번 나오면 다시 감추지 않는다.
+type Reveal = 'idle' | 'rows' | 'full' | 'done';
 
 // headArrived: Experience에서 넘어온 헤드가 도착했다. 도착한 뒤에 등장한다. onHeadShown: 도착 뒤 헤드를 처음 그렸다.
 export default function SkillsSection({ ref: handleRef, headArrived = true, onHeadShown }: { ref?: Ref<SkillsSectionHandle>; headArrived?: boolean; onHeadShown?: () => void } = {}) {
@@ -52,6 +57,8 @@ export default function SkillsSection({ ref: handleRef, headArrived = true, onHe
   // 그래프는 한 번 만들고, 부를 때마다 지금 받은 콜백을 쓴다.
   const headShownRef = useRef(onHeadShown);
   headShownRef.current = onHeadShown;
+  const [reveal, setReveal] = useState<Reveal>('idle');
+  const revealedRef = useRef(false);
   // 두 번 마운트돼도 url(#…)이 남의 필터를 집지 않게 인스턴스마다 다른 id를 쓴다.
   const zapId = `skills-zap-${useId().replace(/[^\w-]/g, '')}`;
   const { routeResolved, motionReady, pageVisible, reducedMotion, obscured } = useSectionActivity();
@@ -79,7 +86,20 @@ export default function SkillsSection({ ref: handleRef, headArrived = true, onHe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [motionReady]);
 
-  useImperativeHandle(handleRef, () => ({ setArrived: (arrived) => graphRef.current?.setArrived(arrived) }), []);
+  useImperativeHandle(handleRef, () => ({
+    setArrived: (arrived) => graphRef.current?.setArrived(arrived),
+    // 넘김은 매 프레임 부른다. 첫 번만 상태를 바꾼다.
+    reveal: () => {
+      if (revealedRef.current) return;
+      revealedRef.current = true;
+      setReveal((prev) => prev === 'idle' ? 'rows' : prev);
+    },
+  }), []);
+
+  // 그래프 진입과 같은 때(도착하고 보일 때) 제목 자리가 나온다
+  useLayoutEffect(() => {
+    if (entered && headArrived) setReveal((prev) => prev === 'rows' ? 'full' : prev === 'idle' ? 'done' : prev);
+  }, [entered, headArrived]);
 
   // 모션 감소의 정착(헤드 그리기)보다 먼저 도착 여부를 넘긴다.
   useLayoutEffect(() => { graphRef.current?.setArrived(headArrived); }, [headArrived, motionReady]);
@@ -108,13 +128,14 @@ export default function SkillsSection({ ref: handleRef, headArrived = true, onHe
           ref={stageRef}
           data-skill-map
           data-active-skill={selected.name}
+          data-reveal={reveal === 'idle' ? (headArrived ? undefined : 'wait') : reveal}
           className="signal-stage"
           aria-label="선택한 기술의 프로젝트 연결 지도"
         >
           <canvas data-graph="head" className="signal-head" aria-hidden="true" />
           <svg className="signal-lines" aria-hidden="true" focusable="false"><path data-graph="link" /></svg>
           <ScrollArea as="nav" className="signal-nav" aria-label="기술 선택">
-            {skills.map((skill) => {
+            {skills.map((skill, i) => {
               const active = selected.name === skill.name;
               return (
                 <button
@@ -122,7 +143,7 @@ export default function SkillsSection({ ref: handleRef, headArrived = true, onHe
                   type="button"
                   data-skill-row
                   aria-pressed={active}
-                  style={iconStyle(skill.icon)}
+                  style={{ ...iconStyle(skill.icon), '--i': i } as CSSProperties}
                   className="signal-skill"
                   onMouseEnter={() => choose(skill)}
                   onFocus={() => choose(skill)}

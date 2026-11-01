@@ -451,6 +451,35 @@ describe('SkillsSection signal map', () => {
     expect(onHeadShown).toHaveBeenCalledTimes(1);
   });
 
+  it('목록과 제목 자리: 헤드가 오는 중이면 감추고, reveal이면 목록, 도착하면 제목 자리가 나오며 한 번 나온 뒤 다시 감추지 않는다', () => {
+    const ref = createRef<SkillsSectionHandle>();
+    const stage = () => screen.getByLabelText('선택한 기술의 프로젝트 연결 지도');
+    const { rerender } = render(skillsWithActivity({}, { ref, headArrived: false }));
+    expect(stage()).toHaveAttribute('data-reveal', 'wait');
+    act(() => { ref.current!.reveal(); ref.current!.reveal(); });
+    expect(stage()).toHaveAttribute('data-reveal', 'rows');
+    rerender(skillsWithActivity({}, { ref, headArrived: true }));
+    expect(stage()).toHaveAttribute('data-reveal', 'full');
+    rerender(skillsWithActivity({}, { ref, headArrived: false }));
+    expect(stage()).toHaveAttribute('data-reveal', 'full');
+    // 줄마다 차례(--i)를 준다
+    expect(screen.getAllByRole('button', { pressed: false })[0].style.getPropertyValue('--i')).toBe('1');
+    expect(css).toMatch(/\[data-reveal='wait'\]:not\(:focus-within\)/);
+  });
+
+  it('넘김 없이 도착하면(nav, 새로 고침) 전환 없이 보이고, 그 뒤 헤드가 떠나도 감추지 않는다', () => {
+    const ref = createRef<SkillsSectionHandle>();
+    const stage = () => screen.getByLabelText('선택한 기술의 프로젝트 연결 지도');
+    const { rerender } = render(skillsWithActivity({ routeResolved: false }, { ref, headArrived: false }));
+    expect(stage()).toHaveAttribute('data-reveal', 'wait');
+    rerender(skillsWithActivity({}, { ref, headArrived: true }));
+    expect(stage()).toHaveAttribute('data-reveal', 'done');
+    rerender(skillsWithActivity({}, { ref, headArrived: false }));
+    expect(stage()).toHaveAttribute('data-reveal', 'done');
+    act(() => ref.current!.reveal());
+    expect(stage()).toHaveAttribute('data-reveal', 'done');
+  });
+
   // Experience → Skills 넘김은 지점을 지난 scroll 안에서 손잡이로 헤드를 맞바꾼다. React 커밋을 기다리면 한 프레임 겹친다.
   it('손잡이 setArrived(false)는 재렌더 없이 그 자리에서 헤드를 지우고 그리지 않으며, true면 다음 프레임에 다시 그린다', () => {
     enableCanvas();

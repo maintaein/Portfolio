@@ -27,7 +27,7 @@ let wide = true;
 let overlay: { setHandoff: ReturnType<typeof vi.fn> };
 // Skills 헤드 손잡이와 오버레이 호출을 한 줄로 적어 순서를 본다
 let calls: string[] = [];
-const skillsHead = { setArrived: vi.fn((on: boolean) => { calls.push(`skills ${on}`); }) };
+const skillsHead = { setArrived: vi.fn((on: boolean) => { calls.push(`skills ${on}`); }), reveal: vi.fn() };
 let arrivals: boolean[] = [];
 let handoff: SkillsHandoff | null = null;
 
@@ -63,6 +63,7 @@ beforeEach(() => {
   place(rows[1], { x: 200, y: ROW1 - 36, w: 300, h: 72 });
   calls = [];
   skillsHead.setArrived.mockClear();
+  skillsHead.reveal.mockClear();
   overlay = { setHandoff: vi.fn((f: HandoffFrame | null) => { calls.push(f === null ? 'overlay null' : f.head ? `overlay head ${f.head.r}` : 'overlay handed'); }) };
 });
 afterEach(() => { handoff?.destroy(); handoff = null; vi.unstubAllGlobals(); vi.restoreAllMocks(); });
@@ -158,6 +159,35 @@ describe('Skills 넘김: 앞으로와 거꾸로', () => {
     handoff!.release();
     expect(gone(last())).toBe(true);
     expect(arrivals).toEqual([true, false, true]);
+  });
+
+  it('앞으로 가는 헤드가 곡선에서 옆으로 꺾인 뒤, 내려앉기 전에 Skills 목록을 꺼내고, 거꾸로나 nav 도착에서는 꺼내지 않는다', () => {
+    line.dataset.complete = 'true';
+    create();
+    scrollAt(2330);
+    advance(.016);
+    expect(skillsHead.reveal).not.toHaveBeenCalled();
+    // 처음 부른 프레임의 헤드는 축(x 64)을 떠났고 아직 헤드 열(x 160)에 닿지 않았다
+    let at: Drawn['head'] | null = null;
+    while (!at && arrivals.length < 3) {
+      advance(.016);
+      if (skillsHead.reveal.mock.calls.length) at = drawn().at(-1)!.head;
+    }
+    expect(at!.x).toBeGreaterThan(70);
+    expect(at!.x).toBeLessThan(HEAD_X - 10);
+    expect(arrivals).toEqual([true, false]);
+    advance(TOTAL);
+    expect(arrivals).toEqual([true, false, true]);
+    // 거꾸로는 부르지 않는다
+    skillsHead.reveal.mockClear();
+    scrollAt(2000);
+    advance(TOTAL);
+    expect(skillsHead.reveal).not.toHaveBeenCalled();
+    // nav 도착(재생 없음)도 부르지 않는다. 그때는 Skills가 도착으로 바로 보인다.
+    root.setAttribute('data-navigation-target', 'skills');
+    scrollAt(2400);
+    expect(arrivals.at(-1)).toBe(true);
+    expect(skillsHead.reveal).not.toHaveBeenCalled();
   });
 
   it('release가 없으면 500ms 뒤 스스로 헤드를 내려놓는다', () => {

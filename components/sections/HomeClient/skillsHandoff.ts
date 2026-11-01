@@ -19,6 +19,8 @@ const TRIGGER = .7;
 // 도착한 헤드를 Skills가 그릴 때까지 잡아 두는 상한(초). Skills가 그리지 못해도 오버레이가 스스로 비운다.
 const HOLD_SECONDS = .5;
 // 헤드를 Skills에 넘긴 뒤: 아무것도 그리지 않되 타임라인도 그리지 않는다
+// 앞으로 가는 헤드가 곡선을 이만큼 지나면 Skills 목록이 나온다
+const REVEAL_AT = .4;
 const HANDED: HandoffFrame = { line: null, heads: [], head: null, ghosts: [] };
 
 // Experience 선이 Skills 헤드로 빨려 가는 넘김의 재생. Projects → Experience 경계처럼 지점을 지나면 정해진 시간 동안 끝까지 돌고,
@@ -83,6 +85,9 @@ export function createSkillsHandoff({ root, reduced, onArrive }: { root: HTMLEle
     const geo = screenGeo();
     // 표의 세로 길이로 길의 시작을 정한다(Ruling 15). 표는 출발 때 한 번 만들고, 도는 동안 바뀌는 것은 도착 자리뿐이다.
     send(handoffPose(table, { ...geo, top: geo.tail - table.lineLen }, pose.p));
+    // 헤드는 처음부터 곡선 위다(세로선은 꼬리가 삼킨다). 곡선의 40%를 지나 옆으로 꺾이면 Skills 목록을 꺼낸다.
+    // 내려앉기 약 0.4초 전이라 고른 줄(첫 줄, 240ms)이 그때 이미 보인다.
+    if (goal === 1 && table.at(pose.p).head >= table.lineLen + table.curveLen * REVEAL_AT) skillsHead?.reveal();
     if (pose.p >= 1 && goal === 1) {
       report(true);
       if (!hold) hold = gsap.delayedCall(HOLD_SECONDS, release);
