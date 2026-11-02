@@ -3,9 +3,11 @@ import type { ElectricLogoHandle } from '@/components/blocks/ElectricLogo';
 import { GATHER_SECONDS } from '@/components/sections/ExperienceSection/lineMotion';
 import type { ExperienceOverlay, GatherLetter } from '@/components/sections/ExperienceSection/overlay';
 import type { SkillsSectionHandle } from '@/components/sections/SkillsSection';
+import type { AwardsSectionHandle } from '@/components/sections/AwardAndCertificatesSection';
 import { clearCaptionReveal, revealCaption } from '@/components/sections/ProjectsSection/captionReveal';
 import { gsap, registerScrollTrigger, ScrollTrigger, SITE_EASE } from '@/lib/gsap';
 import { readingLineY } from '@/lib/utils/scrollGeometry';
+import { createAwardsHandoff } from './awardsHandoff';
 import { createSkillsHandoff } from './skillsHandoff';
 
 // boundary: Hero↔About 비행, preview: About↔Projects 비행, projects: 프리뷰에 넘기고 숨은 자리.
@@ -18,8 +20,10 @@ export interface PortfolioMotion {
   setOverlay(overlay: ExperienceOverlay | null): void;
   // Skills 헤드 손잡이(늦게 와서 setLogo처럼 따로 받는다). Experience → Skills 넘김이 헤드를 맞바꾸는 데 쓴다.
   setSkillsHead(head: SkillsSectionHandle | null): void;
+  // Awards 손잡이. Skills → Awards 넘김이 원판과 카드를 넘겨받게 한다.
+  setAwards(handle: AwardsSectionHandle | null): void;
   settleProjects(): void;
-  // Skills가 도착한 자리에 제 헤드를 그렸다(Experience → Skills 넘김 헤드를 놓는다).
+  // Skills가 도착한 자리에 제 헤드를 그렸다(두 넘김이 잡아 둔 헤드를 놓는다).
   releaseSkillsHead(): void;
   destroy(): void;
 }
@@ -187,7 +191,16 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   onSkillsHeadArrive?: (arrived: boolean) => void;
 }): PortfolioMotion {
   registerScrollTrigger();
-  const skillsHandoff = createSkillsHandoff({ root, reduced, onArrive: arrived => onSkillsHeadArrive?.(arrived) });
+  // Skills 헤드는 Experience에서 도착했고(exp) Awards로 떠나지 않았을 때(!away)만 선다. 두 넘김은 서로의 상태를 덮어쓰지 않고 이 합만 넘긴다.
+  let skillsHead: SkillsSectionHandle | null = null, exp = true, away = false;
+  const applyHead = () => {
+    skillsHead?.setArrived(exp && !away);
+    onSkillsHeadArrive?.(exp && !away);
+  };
+  const arrive = (on: boolean) => { exp = on; applyHead(); };
+  const skillsHandoff = createSkillsHandoff({ root, reduced, onArrive: arrive });
+  skillsHandoff.setSkillsHead({ setArrived: arrive, reveal: () => skillsHead?.reveal() });
+  const awardsHandoff = createAwardsHandoff({ root, reduced, onAway: on => { away = on; applyHead(); } });
   const inner = logoHost.firstElementChild instanceof HTMLElement ? logoHost.firstElementChild : null;
   const label = wordmark.firstElementChild instanceof HTMLElement ? wordmark.firstElementChild : wordmark;
   const anchor = (name: string) => root.querySelector(`[data-motion-anchor="${name}"]`);
@@ -731,6 +744,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     setPaused: (next) => {
       paused = next;
       skillsHandoff.setPaused(next);
+      awardsHandoff.setPaused(next);
       // 상세가 열린 동안(M4 pause) 선 재생도 그 자리에 멈춘다.
       lineTween?.paused(next);
       syncPin();
@@ -757,6 +771,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     // 오버레이가 오거나 바뀌거나 떠날 때. 옛 오버레이의 경계를 비우고 지금 진행을 새 오버레이에 그린다.
     setOverlay: (next) => {
       skillsHandoff.setOverlay(next);
+      awardsHandoff.setOverlay(next);
       if (next === overlay) return;
       overlay?.setBoundary(null);
       overlay = next;
@@ -774,11 +789,16 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       pose.t = 2;
       renderLogo();
     },
-    setSkillsHead: (next) => skillsHandoff.setSkillsHead(next),
-    releaseSkillsHead: () => skillsHandoff.release(),
+    setSkillsHead: (next) => { skillsHead = next; },
+    setAwards: (next) => awardsHandoff.setAwards(next),
+    releaseSkillsHead: () => {
+      skillsHandoff.release();
+      awardsHandoff.release();
+    },
     destroy: () => {
       alive = false;
       skillsHandoff.destroy();
+      awardsHandoff.destroy();
       cancelAnimationFrame(queued);
       resize?.disconnect();
       projectsSection?.removeEventListener('focusin', reveal);

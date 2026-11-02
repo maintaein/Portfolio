@@ -1580,6 +1580,8 @@ html[data-intro] .hero-ball { opacity: 0; }
 /* Skills → Awards 넘김(M6). 헤드가 오는 동안 감추고, 도착 장면 동안은 star.ts가 쓰는 변수를 따른다. 키보드로 들어오면 다 보인다.
    :focus-within은 마우스 클릭이 남긴 포커스에도 걸려 다음 넘김의 감춤과 도착 장면을 통째로 무르게 하므로 :focus-visible만 본다. */
 .awards-stage[data-star='wait']:not(:has(:focus-visible)) :is(.awards-plane, .awards-axis, .awards-ring, .awards-center, [data-star-rim], .awards-node) { opacity: 0; }
+/* 보이지 않는 카드가 hover로 선택을 바꾸거나 손가락 커서를 띄우지 않는다 */
+.awards-stage[data-star='wait']:not(:has(:focus-visible)) .awards-node { pointer-events: none; }
 .awards-stage[data-star='play']:not(:has(:focus-visible)) :is(.awards-center, [data-star-rim]) { opacity: var(--star-disc); }
 .awards-stage[data-star='play']:not(:has(:focus-visible)) .awards-center > * { opacity: var(--star-text); }
 .awards-stage[data-star='play']:not(:has(:focus-visible)) :is(.awards-plane, .awards-axis) { opacity: var(--star-plane); }

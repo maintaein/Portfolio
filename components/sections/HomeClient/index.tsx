@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useCallback, useEffect, useRef, useState, type ComponentType, type Ref } from 'react';
+import { useCallback, useEffect, useRef, useState, type Ref } from 'react';
 import type { CrystalizedBallHandle } from '@/components/blocks/CrystalizedBall';
 import { BALL_ICONS, ICON_SIZE, fieldPoint, iconStyle } from '@/components/blocks/CrystalizedBall/field';
 import type { ElectricLogoHandle, ElectricLogoProps } from '@/components/blocks/ElectricLogo';
@@ -12,22 +12,16 @@ import { AboutSection, AwardAndCertificateSection, ExperienceSection, Footer, Pr
 import type { AboutSectionHandle } from '@/components/sections/AboutSection';
 import type { ProjectsSectionHandle } from '@/components/sections/ProjectsSection';
 import type { SkillsSectionHandle } from '@/components/sections/SkillsSection';
+import type { AwardsSectionHandle } from '@/components/sections/AwardAndCertificatesSection';
 import { createExperienceOverlay, type ExperienceOverlay } from '@/components/sections/ExperienceSection/overlay';
 import BootSequence, { type BootSequenceHandle, type IntroTargets } from '@/components/sections/BootSequence';
 import { useMotionPreference } from '@/hooks/useMotionPreference';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 import { useProjectModalObscured } from '@/hooks/useProjectModalObscured';
 import { useSectionNav } from '@/hooks/useSectionNav';
-import { HOME_SECTION_CONFIG, NAV_ITEMS, PERSONAL_INFO, SECTION_IDS, type HomeSectionId } from '@/lib/constants';
+import { HOME_SECTION_CONFIG, NAV_ITEMS, PERSONAL_INFO, SECTION_IDS } from '@/lib/constants';
 import { coreValues } from '@/lib/data';
 import type { LogoOwner, PortfolioMotion } from './motion';
-
-const SECTION_COMPONENTS = {
-  [SECTION_IDS.SKILLS]: SkillsSection,
-  [SECTION_IDS.PROJECTS]: ProjectsSection,
-  [SECTION_IDS.AWARDS_CERTIFICATES]: AwardAndCertificateSection,
-  [SECTION_IDS.EXPERIENCE]: ExperienceSection,
-} satisfies Record<Exclude<HomeSectionId, typeof SECTION_IDS.ABOUT>, ComponentType>;
 
 // WebGL 장식은 셸에 한 번만 띄워 Hero와 About이 같은 로고를 나눠 쓴다.
 const DynamicElectricLogo = dynamic<ElectricLogoProps & { ref?: Ref<ElectricLogoHandle> }>(() => import('@/components/blocks/ElectricLogo'), { ssr: false });
@@ -73,6 +67,7 @@ export default function HomeClient() {
   // Experience 선이 Skills 헤드로 내려앉았는지. 경계 모듈이 없거나 넘김이 없는 환경에서는 처음부터 도착이다.
   const [skillsHeadArrived, setSkillsHeadArrived] = useState(true);
   const [skillsHead, setSkillsHead] = useState<SkillsSectionHandle | null>(null);
+  const [awards, setAwards] = useState<AwardsSectionHandle | null>(null);
   const [logoReady, setLogoReady] = useState(false);
   // GL 로고는 쉬는 자리(hero·about)에서만 드러난다. 날아가는 도중에 준비돼도 내려앉은 뒤에 정적 실루엣과 바뀐다.
   const [logoLive, setLogoLive] = useState(false);
@@ -142,6 +137,7 @@ export default function HomeClient() {
   }, [motionModule, reducedMotion]);
   useEffect(() => { motionRef.current?.setLogo(logo); }, [logo, motionModule, reducedMotion]);
   useEffect(() => { motionRef.current?.setSkillsHead(skillsHead); }, [skillsHead, motionModule, reducedMotion]);
+  useEffect(() => { motionRef.current?.setAwards(awards); }, [awards, motionModule, reducedMotion]);
   // 오버레이는 마운트 뒤에 와서 setLogo처럼 따로 넘긴다. 옵션으로 넘기면 오는 순간 경계 전체를 다시 지었다.
   useEffect(() => { motionRef.current?.setOverlay(overlay); }, [overlay, motionModule, reducedMotion]);
   useEffect(() => { motionRef.current?.setPaused(obscured || !pageVisible); }, [obscured, pageVisible, motionModule, reducedMotion]);
@@ -204,9 +200,8 @@ export default function HomeClient() {
           </div>
         </section>
         {HOME_SECTION_CONFIG.map(({ id, label }) => {
-          const Section = id === SECTION_IDS.ABOUT || id === SECTION_IDS.PROJECTS || id === SECTION_IDS.EXPERIENCE || id === SECTION_IDS.SKILLS ? null : SECTION_COMPONENTS[id];
           return <div key={id} data-section={id} role="region" aria-label={label} tabIndex={-1} className="document-section">
-            {id === SECTION_IDS.EXPERIENCE ? <ExperienceSection lineArrived={motionFailed || lineArrived} overlay={overlay} /> : id === SECTION_IDS.SKILLS ? <SkillsSection ref={setSkillsHead} headArrived={motionFailed || skillsHeadArrived} onHeadShown={releaseSkillsHead} /> : id === SECTION_IDS.PROJECTS ? <ProjectsSection ref={projectsRef} beforeAction={beforeProjectsAction} navigationPending={navigationTarget !== null} logoOwner={logoOwner} /> : Section ? <Section /> : <AboutSection ref={aboutRef} onChapterChange={setAboutChapter} navigationPending={navigationTarget !== null} logoOwner={logoOwner} />}
+            {id === SECTION_IDS.EXPERIENCE ? <ExperienceSection lineArrived={motionFailed || lineArrived} overlay={overlay} /> : id === SECTION_IDS.SKILLS ? <SkillsSection ref={setSkillsHead} headArrived={motionFailed || skillsHeadArrived} onHeadShown={releaseSkillsHead} /> : id === SECTION_IDS.AWARDS_CERTIFICATES ? <AwardAndCertificateSection ref={setAwards} /> : id === SECTION_IDS.PROJECTS ? <ProjectsSection ref={projectsRef} beforeAction={beforeProjectsAction} navigationPending={navigationTarget !== null} logoOwner={logoOwner} /> : <AboutSection ref={aboutRef} onChapterChange={setAboutChapter} navigationPending={navigationTarget !== null} logoOwner={logoOwner} />}
           </div>;
         })}
         {/* 공유 로고 host. About의 원형 마스크와 overflow-x: clip 밖, 문서 좌표에 산다.
