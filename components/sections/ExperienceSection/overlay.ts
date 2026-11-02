@@ -2,6 +2,7 @@
 // 두 소비자(경계, 타임라인)의 상태를 받아 rAF 하나로 그린다. 계산은 lineMotion이 맡고 여기서는 그리기만 한다.
 import { GATHER_SECONDS, K, R, clamp, easeInOut, gatherPose, lerp, pulseOffsets, smooth } from './lineMotion';
 import type { HandoffFrame } from './handoff';
+import type { RideFrame } from '@/components/sections/AwardAndCertificatesSection/star';
 import { blobPath, drawGhosts, drawOrb, drawRing, n2 } from './orb';
 
 // 경계 한 프레임. letters: 뭉칠 글자(화면 좌표 글자 상자 가운데, k: 노드에 가까운 순서), font: 그 글자의 CSS font, target: 첫 노드.
@@ -17,6 +18,8 @@ export interface ExperienceOverlay {
   setTimeline(provider: ((dt: number, now: number) => TimelineFrame | null) | null): void;
   // 프레임이 있는 동안은 타임라인 대신 넘김을 그린다. provider는 그대로 불린다.
   setHandoff(frame: HandoffFrame | null): void;
+  // Skills 헤드가 Awards 항성이 되는 넘김. 프레임이 있는 동안 다른 그림 위에 그린다.
+  setRide(frame: RideFrame | null): void;
   setReduced(reduced: boolean): void;
   destroy(): void;
 }
@@ -107,6 +110,7 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
   if (!ctx) return null;
   let boundary: BoundaryFrame | null = null;
   let handoff: HandoffFrame | null = null;
+  let ride: RideFrame | null = null;
   let provider: ((dt: number, now: number) => TimelineFrame | null) | null = null;
   let reduced = false, dead = false, raf = 0, last = 0, dpr = 1, vw = 0, vh = 0;
   // 액체 캔버스: 글자와 방울을 여기에 그리고 SVG 필터(흐리게 번진 알파를 다시 날카롭게 세운다)로 가까운 방울끼리 목이 이어져 붙게 한다.
@@ -316,6 +320,33 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
     if (f.head) drawOrb(ctx, f.head.x, f.head.y, f.head.r, 1, 0, time, K);
   };
 
+  // 항성(빛 반경과 번짐에 상한), 궤도선 자국, 흩어지는 점, 잔상, 떠 있는 헤드, 출발 파동 순서다
+  const drawRide = (f: RideFrame, time: number) => {
+    const s = f.star;
+    if (s) {
+      const { center: c, stage, orb } = s;
+      drawOrb(ctx, c.x, c.y, orb.r, orb.alpha, 0, time, orb.k, { halo: orb.r * 2.6, blur: 40 });
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineWidth = 2;
+      ctx.shadowColor = 'rgba(3,179,195,.9)';
+      ctx.shadowBlur = 12;
+      for (const t of s.traces) {
+        if (t.a <= 0) continue;
+        ctx.beginPath();
+        ctx.ellipse(c.x, c.y, t.orbit.rx * stage.scale, t.orbit.ry * stage.scale, stage.tilt + t.orbit.tilt, t.from, t.to);
+        ctx.strokeStyle = `rgba(200,248,250,${0.95 * t.a})`;
+        ctx.stroke();
+      }
+      ctx.restore();
+      s.fliers.forEach((q, i) => drawOrb(ctx, q.x, q.y, q.r, q.a, 3 + i, time, K * 0.7));
+    }
+    // 잔상은 Trail.ghosts처럼 먼 것부터 온다. drawGhosts는 가까운 것부터 받는다.
+    drawGhosts(ctx, [...f.ghosts].reverse(), time);
+    if (f.head) drawOrb(ctx, f.head.x, f.head.y, f.head.r, 1, 0, time, K);
+    if (f.ring) drawRing(ctx, f.ring.x, f.ring.y, f.ring.r, f.ring.pulse);
+  };
+
   const clear = () => {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, vw, vh);
@@ -334,10 +365,11 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
     else clearGoo();
     if (handoff) drawHandoff(handoff, time);
     else if (timeline) drawTimeline(timeline, time);
+    if (ride) drawRide(ride, time);
     start();
   };
   // 헤드를 넘긴 넘김(head null)은 그릴 것이 없어 루프를 붙잡지 않는다
-  const busy = () => !!(boundary || provider || handoff?.head);
+  const busy = () => !!(boundary || provider || handoff?.head || ride);
   const start = () => {
     if (!raf && !dead && !document.hidden && busy()) raf = requestAnimationFrame(frame);
   };
@@ -376,13 +408,19 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
       handoff = next;
       settle();
     },
+    setRide(next) {
+      // 떠 있는 헤드가 Skills로 돌아가거나 항성이 되는 순간은 그 자리에서 지운다(setHandoff와 같다)
+      if (ride?.head && !next?.head) clear();
+      ride = next;
+      settle();
+    },
     setReduced(next) {
       reduced = next;
     },
     destroy() {
       dead = true;
       stop();
-      boundary = provider = handoff = null;
+      boundary = provider = handoff = ride = null;
       goo?.el.remove();
       goo?.svg.remove();
       window.removeEventListener('resize', measure);

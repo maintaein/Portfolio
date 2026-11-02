@@ -26,11 +26,12 @@ export function blobPath(g: G, x: number, y: number, r: number, amp: number, see
   g.closePath();
 }
 
-export function drawOrb(g: G, x: number, y: number, r: number, alpha: number, seed: number, time: number, k = K) {
+// cap: 큰 반지름(Awards 항성)에서 빛 반경과 그림자 번짐의 상한. 없으면 그림은 그대로다.
+export function drawOrb(g: G, x: number, y: number, r: number, alpha: number, seed: number, time: number, k = K, cap?: { halo?: number; blur?: number }) {
   if (r < 0.4 || alpha <= 0) return;
   const fl = 0.8 + 0.2 * n2(time * 2.4, seed); // 깜빡임
   const br = 0.95 + 0.1 * n2(time * 1.1, seed + 9); // 숨쉬기
-  const halo = r * (2.8 + 3.2 * k) * br;
+  const halo = Math.min(cap?.halo ?? Infinity, r * (2.8 + 3.2 * k) * br);
   const grad = g.createRadialGradient(x, y, r * 0.6, x, y, halo);
   grad.addColorStop(0, `rgba(127,227,238,${0.55 * k * fl * alpha})`);
   grad.addColorStop(0.3, `rgba(3,179,195,${0.28 * k * fl * alpha})`);
@@ -42,7 +43,7 @@ export function drawOrb(g: G, x: number, y: number, r: number, alpha: number, se
   // 입체 그라데이션 대신 평면 원판 세 겹. 셋 다 같은 잡음으로 일렁여 한 덩어리로 읽힌다.
   g.save();
   g.shadowColor = `rgba(3,179,195,${alpha})`;
-  g.shadowBlur = r * (1.2 + 2.2 * k) * fl;
+  g.shadowBlur = Math.min(cap?.blur ?? Infinity, r * (1.2 + 2.2 * k) * fl);
   blobPath(g, x, y, r * br, 0.05 + 0.08 * k, seed, time);
   g.fillStyle = `rgba(3,179,195,${0.95 * alpha})`;
   g.fill();

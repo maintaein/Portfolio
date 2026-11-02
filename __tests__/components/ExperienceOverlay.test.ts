@@ -1,10 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HandoffFrame } from '@/components/sections/ExperienceSection/handoff';
+import { K } from '@/components/sections/ExperienceSection/lineMotion';
+import { drawOrb } from '@/components/sections/ExperienceSection/orb';
 import {
   createExperienceOverlay,
   type BoundaryFrame,
   type TimelineFrame,
 } from '@/components/sections/ExperienceSection/overlay';
+import { AWARD_ORBIT } from '@/components/sections/AwardAndCertificatesSection/orbit';
+import type { RideFrame } from '@/components/sections/AwardAndCertificatesSection/star';
 
 // jsdom에는 2d 캔버스가 없다(canvas npm 패키지 미설치). PreviewMorph.test.tsx처럼 getContext를 모의 컨텍스트로 바꾼다.
 // 픽셀은 여기서 못 본다. 이 파일은 루프의 켜짐·꺼짐과 그리기 호출만 잠근다.
@@ -371,5 +375,71 @@ describe('createExperienceOverlay', () => {
     expect(drawCalls('fill')).toBeGreaterThan(0);
     expect(frames.size).toBe(1);
     overlay.destroy();
+  });
+  // M6 Task 2. Skills 헤드가 Awards 항성이 되는 넘김은 다른 그림 위에 그린다.
+  const rideFrame: RideFrame = {
+    head: { x: 640, y: 300, r: 12 },
+    ghosts: [{ x: 640, y: 250, r: 4, a: 0.1 }, { x: 640, y: 280, r: 9, a: 0.5 }],
+    ring: { x: 184, y: 200, r: 12, pulse: 0.5 },
+    star: {
+      center: { x: 712, y: 488 }, stage: { scale: 0.86, tilt: -0.24 },
+      orb: { r: 60, alpha: 0.8, k: 0.4 },
+      fliers: [{ x: 800, y: 500, r: 5, a: 1 }],
+      traces: [{ orbit: AWARD_ORBIT, from: 0, to: 1.2, a: 0.5 }],
+    },
+  };
+
+  it('ride 프레임이 있으면 루프가 돌고, 타임라인 provider가 있어도 그 위에 ride를 그린다', () => {
+    const provider = vi.fn(() => timeline);
+    const overlay = createExperienceOverlay(canvas)!;
+    overlay.setRide(rideFrame);
+    expect(frames.size).toBe(1);
+    overlay.setTimeline(provider);
+    tick();
+    expect(provider).toHaveBeenCalledTimes(1);
+    expect(movedTo(100)).toBe(true);
+    const ctx = contexts[0];
+    // 궤도 자국은 원판 가운데에서 stage 크기와 기울기를 합친 타원이다
+    expect(ctx.ellipse).toHaveBeenCalledWith(712, 488, AWARD_ORBIT.rx * 0.86, AWARD_ORBIT.ry * 0.86, -0.24 + AWARD_ORBIT.tilt, 0, 1.2);
+    // 마지막 그림은 ride의 고리 펄스다(타임라인보다 위)
+    const arcs = ctx.arc.mock.calls;
+    expect(arcs.at(-1)!.slice(0, 2)).toEqual([184, 200]);
+    expect(arcs.some(([x, y]) => x === 640 && y === 300)).toBe(true);
+    expect(ctx.stroke.mock.invocationCallOrder.some(n => n > ctx.ellipse.mock.invocationCallOrder[0])).toBe(true);
+    // ride만 남아도 루프가 돈다
+    overlay.setTimeline(null);
+    expect(frames.size).toBe(1);
+    overlay.destroy();
+  });
+
+  it('head가 있던 ride 프레임을 null이나 head 없는 프레임으로 바꾸면 그 호출 안에서 지운다', () => {
+    const overlay = createExperienceOverlay(canvas)!;
+    overlay.setTimeline(() => timeline);
+    overlay.setRide(rideFrame);
+    tick();
+    const ctx = contexts[0];
+    let clears = ctx.clearRect.mock.calls.length;
+    overlay.setRide(null);
+    expect(ctx.clearRect.mock.calls.length).toBe(clears + 1);
+
+    overlay.setRide(rideFrame);
+    tick();
+    clears = ctx.clearRect.mock.calls.length;
+    overlay.setRide({ ...rideFrame, head: null });
+    expect(ctx.clearRect.mock.calls.length).toBe(clears + 1);
+    overlay.destroy();
+  });
+
+  it('drawOrb에 cap을 주면 빛 반경을 cap.halo로, 그림자 번짐을 cap.blur로 자른다. 주지 않으면 그대로다', () => {
+    const blurs: number[] = [];
+    const g = fakeContext();
+    const watched = new Proxy(g, { set(t, k, v) { if (k === 'shadowBlur') blurs.push(v); t[k as string] = v; return true; } });
+    const ctx = watched as unknown as CanvasRenderingContext2D;
+    drawOrb(ctx, 0, 0, 137, 1, 0, 0, K, { halo: 137 * 2.6, blur: 40 });
+    expect(g.createRadialGradient.mock.calls[0][5]).toBe(137 * 2.6);
+    expect(blurs[0]).toBe(40);
+    drawOrb(ctx, 0, 0, 137, 1, 0, 0, K);
+    expect(g.createRadialGradient.mock.calls[1][5]).toBeGreaterThan(137 * 2.6);
+    expect(blurs[2]).toBeGreaterThan(40);
   });
 });
