@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { enter, expectActive, SLOW } from './helpers';
 import { projects } from '@/lib/data/projects';
-import { coreValues } from '@/lib/data/profile';
+import { awards, certificates, coreValues } from '@/lib/data/profile';
 
 // 계획 6 Task 5b-2. 접근성 계약 3건. 포커스 순서, 리플로, 레이아웃 이동은
 // 실제 레이아웃 엔진이 있어야 잴 수 있다.
@@ -191,6 +191,26 @@ test.describe('접근성', () => {
     await expect(link).toHaveAttribute('href', projects.find(project => project.title === 'ReBirth')!.githubUrl!);
     await expect(link).toHaveAttribute('target', '_blank');
     await expect(link).toHaveAttribute('rel', /noopener/);
+  });
+
+  // M6 Task 1. 자격증 카드는 수상 카드 다음 Tab 자리에서 고르고 가운데에 원문이 뜬다.
+  test('Awards 자격증 카드를 키보드로 골라 가운데에 OPIC 원문을 띄운다', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await enter(page, 'awards-certificates');
+    const lastAward = page.locator(`[data-award-select="${awards[awards.length - 1].id}"]`);
+    const card = page.getByRole('button', { name: /자격증.*OPIC/ });
+    await lastAward.focus();
+    await page.keyboard.press('Tab');
+    await expect(card).toBeFocused();
+    await expect(card).toHaveAttribute('data-certificate-select', certificates[0].id);
+    await expect(card).toHaveAttribute('aria-pressed', 'true');
+    await expect(lastAward).toHaveAttribute('aria-pressed', 'false');
+    const box = (await card.boundingBox())!;
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    const center = page.locator('[data-orbit-center]');
+    for (const fact of ['OPIC', 'IH', 'ACTFL', '2025. 03', '2027. 03']) await expect(center).toContainText(fact);
+    await expect(center.locator('img')).toHaveAttribute('src', '/logos-mono/opic.png');
   });
 
   test('Tab으로 문서의 다음 섹션에도 접근한다 @smoke', async ({ page }) => {

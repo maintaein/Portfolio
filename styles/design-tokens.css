@@ -1493,6 +1493,10 @@ html[data-intro] .hero-ball { opacity: 0; }
   box-shadow: 0 32px 40px -40px #03b3c3;
   clip-path: inset(50% 0 0 0);
 }
+/* 크기와 기울기는 orbit.ts의 CERT_ORBIT을 인라인으로 받는다. 점선은 색 말고도 수상 궤도와 구분되게 한다. */
+.awards-cert-ring { border-style: dashed; border-color: rgb(23 138 157 / .4); }
+.awards-cert-ring.awards-ring-back { border-top-color: rgb(127 227 238 / .18); }
+.awards-cert-ring.awards-ring-front { border-bottom-color: rgb(127 227 238 / .5); box-shadow: none; }
 .awards-node {
   position: absolute;
   z-index: var(--orbit-layer, 2);
@@ -1528,6 +1532,7 @@ html[data-intro] .hero-ball { opacity: 0; }
   box-shadow: 0 0 0 1px rgb(127 227 238 / .65), 0 0 16px 3px rgb(127 227 238 / .55), 0 0 42px 10px rgb(3 179 195 / .4), 0 0 78px 20px rgb(14 94 165 / .28), 0 16px 44px rgb(0 0 0 / .7);
 }
 .awards-node-face:focus-visible { outline: 2px solid #7fe3ee; outline-offset: 5px; }
+.awards-node-cert { border-style: dashed; }
 .awards-node-number, .awards-kind, .awards-date {
   color: #7fe3ee;
   font: 11px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
@@ -1537,7 +1542,7 @@ html[data-intro] .hero-ball { opacity: 0; }
 .awards-node-rank { margin-top: 2px; color: #d4e8e9; font-size: 12px; }
 .awards-center {
   position: absolute;
-  z-index: 7;
+  z-index: 8;
   top: 50%;
   left: 50%;
   display: flex;
@@ -1559,6 +1564,35 @@ html[data-intro] .hero-ball { opacity: 0; }
 .awards-issuer { margin: 14px 0 0; color: #b0bac5; font-size: 12px; line-height: 1.5; }
 .awards-description { margin: 12px 0 0; font-size: 13px; line-height: 1.6; }
 .awards-date { margin-top: 14px; }
+.awards-logo { width: 76px; height: auto; margin-top: 12px; }
+/* 원판 둘레의 일렁이는 항성 테두리(rim.ts). 캔버스는 원판과 같은 가운데에 원판 위로 겹친다. */
+[data-star-rim] {
+  position: absolute;
+  z-index: 9;
+  top: 50%;
+  left: 50%;
+  width: 500px;
+  height: 500px;
+  pointer-events: none;
+  transform: translate(-50%, -50%) rotate(14deg);
+}
+[data-star-rim][data-ready] + .awards-center { border-color: transparent; }
+/* Skills → Awards 넘김(M6). 헤드가 오는 동안 감추고, 도착 장면 동안은 star.ts가 쓰는 변수를 따른다. 키보드로 들어오면 다 보인다.
+   :focus-within은 마우스 클릭이 남긴 포커스에도 걸려 다음 넘김의 감춤과 도착 장면을 통째로 무르게 하므로 :focus-visible만 본다. */
+.awards-stage[data-star='wait']:not(:has(:focus-visible)) :is(.awards-plane, .awards-axis, .awards-ring, .awards-center, [data-star-rim], .awards-node) { opacity: 0; }
+/* 보이지 않는 카드가 hover로 선택을 바꾸거나 손가락 커서를 띄우지 않는다 */
+.awards-stage[data-star='wait']:not(:has(:focus-visible)) .awards-node { pointer-events: none; }
+/* stage 밖의 옅은 바깥 타원도 기다리는 동안 감춘다(:has 안에 :has를 둘 수 없어 둘로 나눈다) */
+.awards-orbit:has(> .awards-stage[data-star='wait']):not(:has(:focus-visible))::before { opacity: 0; }
+.awards-stage[data-star='play']:not(:has(:focus-visible)) :is(.awards-center, [data-star-rim]) { opacity: var(--star-disc); }
+.awards-stage[data-star='play']:not(:has(:focus-visible)) .awards-center > * { opacity: var(--star-text); }
+.awards-stage[data-star='play']:not(:has(:focus-visible)) :is(.awards-plane, .awards-axis) { opacity: var(--star-plane); }
+.awards-stage[data-star='play']:not(:has(:focus-visible)) .awards-ring:not(.awards-cert-ring) { opacity: var(--orbit-award); }
+.awards-stage[data-star='play']:not(:has(:focus-visible)) .awards-cert-ring { opacity: var(--orbit-cert); }
+.awards-stage[data-star='play']:not(:has(:focus-visible)) [data-card='0'] { opacity: calc(var(--orbit-opacity, 1) * var(--card-0)); }
+.awards-stage[data-star='play']:not(:has(:focus-visible)) [data-card='1'] { opacity: calc(var(--orbit-opacity, 1) * var(--card-1)); }
+.awards-stage[data-star='play']:not(:has(:focus-visible)) [data-card='2'] { opacity: calc(var(--orbit-opacity, 1) * var(--card-2)); }
+.awards-stage[data-star='play']:not(:has(:focus-visible)) [data-card='3'] { opacity: calc(var(--orbit-opacity, 1) * var(--card-3)); }
 .awards-mobile-records { display: none; }
 @media (max-width: 900px) {
   .awards-stage { transform: translate(-50%, -50%) rotate(-14deg) scale(.72); }
@@ -1567,6 +1601,7 @@ html[data-intro] .hero-ball { opacity: 0; }
   .awards-orbit-section { padding: 26px 16px 60px; }
   .awards-orbit { display: none; }
   .awards-mobile-records { display: grid; gap: 14px; max-width: 560px; margin: auto; }
+  .awards-mobile-records + .awards-mobile-records { margin-top: 14px; }
   .awards-mobile-card { padding: 24px; border: 1px solid rgb(25 107 120 / .55); border-radius: 16px; background: linear-gradient(135deg, #08232d, #031319 76%); }
   .awards-mobile-card h3 { font-size: 27px; }
 }

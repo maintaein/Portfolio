@@ -30,7 +30,7 @@ const relations: Record<string, string[]> = {
 };
 const css = readFileSync(resolve(process.cwd(), 'styles/design-tokens.css'), 'utf8');
 
-function skillsWithActivity(state: Partial<Omit<SectionActivityProviderProps, 'children'>> = {}, props: { ref?: Ref<SkillsSectionHandle>; headArrived?: boolean; onHeadShown?: () => void } = {}) {
+function skillsWithActivity(state: Partial<Omit<SectionActivityProviderProps, 'children'>> = {}, props: { ref?: Ref<SkillsSectionHandle>; headArrived?: boolean; headAway?: boolean; onHeadShown?: () => void } = {}) {
   return (
     <SectionActivityProvider obscured={false}
       routeResolved motionReady pageVisible reducedMotion={false} {...state}>
@@ -478,6 +478,46 @@ describe('SkillsSection signal map', () => {
     expect(stage()).toHaveAttribute('data-reveal', 'done');
     act(() => ref.current!.reveal());
     expect(stage()).toHaveAttribute('data-reveal', 'done');
+  });
+
+  // Ruling 11: 헤드가 Awards로 떠나 있어도 목록 등장과 그래프 진입은 그대로다. 헤드 그리기(와 헤드→허브 선)만 꺼진다.
+  it('headAway면 data-reveal과 노드 진입은 headAway 없을 때와 같고 헤드만 그리지 않으며, 돌아오면 헤드와 선이 선다', () => {
+    enableCanvas();
+    const stage = () => screen.getByLabelText('선택한 기술의 프로젝트 연결 지도');
+    const plain = render(skillsWithActivity({}, { headArrived: true }));
+    const plainReveal = stage().getAttribute('data-reveal');
+    plain.unmount();
+    contexts = [];
+    const onHeadShown = vi.fn();
+    const { container, rerender } = render(skillsWithActivity({}, { headArrived: true, headAway: true, onHeadShown }));
+    expect(stage().getAttribute('data-reveal')).toBe(plainReveal);
+    expect(stage()).not.toHaveAttribute('data-reveal', 'wait');
+    step(3000);
+    expectRevealed(container);
+    expect(gradients()).toBe(0);
+    expect(onHeadShown).not.toHaveBeenCalled();
+    expect(linkD(container)).toBe('');
+    rerender(skillsWithActivity({}, { headArrived: true, headAway: false, onHeadShown }));
+    step(16);
+    expect(onHeadShown).toHaveBeenCalledTimes(1);
+    expect(gradients()).toBeGreaterThan(0);
+    step(1000);
+    expect(linkD(container)).toMatch(/^M/);
+    expect(stage().getAttribute('data-reveal')).toBe(plainReveal);
+  });
+
+  it('헤드→허브 선이 다 뻗기 전에 헤드가 떠나도 허브와 노드는 바로 나온다', () => {
+    enableCanvas();
+    const ref = createRef<SkillsSectionHandle>();
+    const { container } = render(skillsWithActivity({}, { ref }));
+    step(50);
+    const hub = container.querySelector<HTMLElement>('[data-graph="hub"]')!;
+    expect(Number(hub.style.opacity || 0)).toBeLessThan(.5);
+    act(() => ref.current!.setArrived(false));
+    step(400);
+    expect(hub.style.opacity).toBe('1');
+    step(2600);
+    expectRevealed(container);
   });
 
   // Experience → Skills 넘김은 지점을 지난 scroll 안에서 손잡이로 헤드를 맞바꾼다. React 커밋을 기다리면 한 프레임 겹친다.

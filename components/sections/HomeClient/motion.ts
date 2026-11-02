@@ -3,9 +3,11 @@ import type { ElectricLogoHandle } from '@/components/blocks/ElectricLogo';
 import { GATHER_SECONDS } from '@/components/sections/ExperienceSection/lineMotion';
 import type { ExperienceOverlay, GatherLetter } from '@/components/sections/ExperienceSection/overlay';
 import type { SkillsSectionHandle } from '@/components/sections/SkillsSection';
+import type { AwardsSectionHandle } from '@/components/sections/AwardAndCertificatesSection';
 import { clearCaptionReveal, revealCaption } from '@/components/sections/ProjectsSection/captionReveal';
 import { gsap, registerScrollTrigger, ScrollTrigger, SITE_EASE } from '@/lib/gsap';
 import { readingLineY } from '@/lib/utils/scrollGeometry';
+import { createAwardsHandoff } from './awardsHandoff';
 import { createSkillsHandoff } from './skillsHandoff';
 
 // boundary: Hero↔About 비행, preview: About↔Projects 비행, projects: 프리뷰에 넘기고 숨은 자리.
@@ -18,8 +20,10 @@ export interface PortfolioMotion {
   setOverlay(overlay: ExperienceOverlay | null): void;
   // Skills 헤드 손잡이(늦게 와서 setLogo처럼 따로 받는다). Experience → Skills 넘김이 헤드를 맞바꾸는 데 쓴다.
   setSkillsHead(head: SkillsSectionHandle | null): void;
+  // Awards 손잡이. Skills → Awards 넘김이 원판과 카드를 넘겨받게 한다.
+  setAwards(handle: AwardsSectionHandle | null): void;
   settleProjects(): void;
-  // Skills가 도착한 자리에 제 헤드를 그렸다(Experience → Skills 넘김 헤드를 놓는다).
+  // Skills가 도착한 자리에 제 헤드를 그렸다(두 넘김이 잡아 둔 헤드를 놓는다).
   releaseSkillsHead(): void;
   destroy(): void;
 }
@@ -176,7 +180,7 @@ const rectBox = (element: Element | null, scroll = 0): Box => {
   return { x: rect.left, y: rect.top + scroll, w: rect.width, h: rect.height };
 };
 
-export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, reduced, onLogoOwnerChange, onLineArrive, onSkillsHeadArrive }: {
+export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, reduced, onLogoOwnerChange, onLineArrive, onSkillsHeadArrive, onSkillsHeadAway }: {
   root: HTMLElement; header: HTMLElement; wordmark: HTMLButtonElement; logoHost: HTMLElement; reduced: boolean;
   // GL 볼 손잡이(없으면 정적 볼). 볼은 진입 뒤에 늦게 떠서 ref로 받는다.
   ball?: { current: CrystalizedBallHandle | null };
@@ -185,9 +189,30 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   onLineArrive?: (arrived: boolean) => void;
   // Experience 선이 Skills 헤드에 내려앉았는지(넘김 100%). Skills 헤드와 등장이 이것을 기다린다.
   onSkillsHeadArrive?: (arrived: boolean) => void;
+  // Skills 헤드가 Awards로 떠나 있는지. 헤드 그리기만 끈다(목록 등장은 onSkillsHeadArrive만 따른다).
+  onSkillsHeadAway?: (away: boolean) => void;
 }): PortfolioMotion {
   registerScrollTrigger();
-  const skillsHandoff = createSkillsHandoff({ root, reduced, onArrive: arrived => onSkillsHeadArrive?.(arrived) });
+  // Skills 헤드는 Experience에서 도착했고(exp) Awards로 떠나지 않았을 때(!away)만 선다. 두 넘김은 서로의 상태를 덮어쓰지 않는다.
+  // 손잡이에는 같은 scroll 안의 맞바꿈을 위해 합을 넘기고, React에는 둘을 따로 넘긴다. away가 목록 등장을 막으면 안 된다(Ruling 11).
+  let skillsHead: SkillsSectionHandle | null = null, exp = true, away = false;
+  const applyHead = () => {
+    skillsHead?.setArrived(exp && !away);
+    onSkillsHeadArrive?.(exp);
+    onSkillsHeadAway?.(away);
+  };
+  const awardsHandoff = createAwardsHandoff({ root, reduced, onAway: on => { away = on; applyHead(); } });
+  // Awards 넘김은 Skills 헤드가 실제로 그려져 있을 때만 떠난다. Experience에서 도착했고(Ruling 9) 넘김 헤드를 잡아 두고 있지 않을 때다(Ruling 15).
+  // 잡아 둔 동안 떠나면 줄 자리의 넘김 헤드와 떠 있는 헤드가 함께 보인다.
+  let held = false;
+  const gate = () => awardsHandoff.setHeadArrived(exp && !held);
+  const arrive = (on: boolean) => {
+    exp = on;
+    gate();
+    applyHead();
+  };
+  const skillsHandoff = createSkillsHandoff({ root, reduced, onArrive: arrive, onHold: on => { held = on; gate(); } });
+  skillsHandoff.setSkillsHead({ setArrived: arrive, reveal: () => skillsHead?.reveal() });
   const inner = logoHost.firstElementChild instanceof HTMLElement ? logoHost.firstElementChild : null;
   const label = wordmark.firstElementChild instanceof HTMLElement ? wordmark.firstElementChild : wordmark;
   const anchor = (name: string) => root.querySelector(`[data-motion-anchor="${name}"]`);
@@ -731,6 +756,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     setPaused: (next) => {
       paused = next;
       skillsHandoff.setPaused(next);
+      awardsHandoff.setPaused(next);
       // 상세가 열린 동안(M4 pause) 선 재생도 그 자리에 멈춘다.
       lineTween?.paused(next);
       syncPin();
@@ -757,6 +783,7 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     // 오버레이가 오거나 바뀌거나 떠날 때. 옛 오버레이의 경계를 비우고 지금 진행을 새 오버레이에 그린다.
     setOverlay: (next) => {
       skillsHandoff.setOverlay(next);
+      awardsHandoff.setOverlay(next);
       if (next === overlay) return;
       overlay?.setBoundary(null);
       overlay = next;
@@ -774,10 +801,16 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
       pose.t = 2;
       renderLogo();
     },
-    setSkillsHead: (next) => skillsHandoff.setSkillsHead(next),
-    releaseSkillsHead: () => skillsHandoff.release(),
+    setSkillsHead: (next) => { skillsHead = next; },
+    setAwards: (next) => awardsHandoff.setAwards(next),
+    releaseSkillsHead: () => {
+      skillsHandoff.release();
+      awardsHandoff.release();
+    },
     destroy: () => {
       alive = false;
+      // Awards 넘김을 먼저 정리한다. Exp 넘김이 정리되며 잡아 두기를 풀어도 Awards 넘김이 다시 판정하지 않는다.
+      awardsHandoff.destroy();
       skillsHandoff.destroy();
       cancelAnimationFrame(queued);
       resize?.disconnect();

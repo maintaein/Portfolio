@@ -25,7 +25,8 @@ const HANDED: HandoffFrame = { line: null, heads: [], head: null, ghosts: [] };
 
 // Experience 선이 Skills 헤드로 빨려 가는 넘김의 재생. Projects → Experience 경계처럼 지점을 지나면 정해진 시간 동안 끝까지 돌고,
 // 되돌아 지나면 지금 진행도에서 거꾸로 돈다. 그림은 오버레이가, 쉬는 헤드는 Skills가 그린다. 아래쪽 입력은 막지 않는다(설계 판단).
-export function createSkillsHandoff({ root, reduced, onArrive }: { root: HTMLElement; reduced: boolean; onArrive: (arrived: boolean) => void }): SkillsHandoff {
+// onHold: 도착한 넘김 헤드를 Skills가 그릴 때까지 잡아 두기 시작(true)하고 놓았다(false). 그동안 Skills 헤드는 아직 화면에 없다.
+export function createSkillsHandoff({ root, reduced, onArrive, onHold }: { root: HTMLElement; reduced: boolean; onArrive: (arrived: boolean) => void; onHold?: (held: boolean) => void }): SkillsHandoff {
   const line = root.querySelector<HTMLElement>('[data-part="experience-line"]');
   const section = line?.closest('section') ?? null;
   const skills = root.querySelector<HTMLElement>('[data-skill-map]');
@@ -63,8 +64,10 @@ export function createSkillsHandoff({ root, reduced, onArrive }: { root: HTMLEle
     overlay?.setHandoff(frame);
   };
   const stopHold = () => {
-    hold?.kill();
+    if (!hold) return;
+    hold.kill();
     hold = null;
+    onHold?.(false);
   };
   const center = (el: Element | null | undefined) => el?.getBoundingClientRect();
   // 도착 자리: 고른 줄 가운데 y와 헤드 캔버스 가운데 x(화면 좌표). 매 프레임 다시 잰다.
@@ -89,14 +92,19 @@ export function createSkillsHandoff({ root, reduced, onArrive }: { root: HTMLEle
     // 내려앉기 약 0.4초 전이라 고른 줄(첫 줄, 240ms)이 그때 이미 보인다.
     if (goal === 1 && table.at(pose.p).head >= table.lineLen + table.curveLen * REVEAL_AT) skillsHead?.reveal();
     if (pose.p >= 1 && goal === 1) {
+      // 잡아 두기를 도착보다 먼저 알린다. 도착을 알리는 그 호출에서 Awards 넘김이 아직 그려지지 않은 헤드를 데려가지 않게 한다.
+      if (!hold) {
+        hold = gsap.delayedCall(HOLD_SECONDS, release);
+        onHold?.(true);
+      }
       report(true);
-      if (!hold) hold = gsap.delayedCall(HOLD_SECONDS, release);
     }
   };
   const release = () => {
     if (!hold) return;
-    stopHold();
+    // 넘김 헤드를 먼저 비우고 잡아 두기를 푼다. 풀리는 그 호출에서 Awards 넘김이 떠나도 두 헤드가 함께 남지 않는다.
     send(HANDED);
+    stopHold();
   };
   // 재생 없이 끝 상태에 놓는다. 1이면 넘김 헤드도 그리지 않고 바로 Skills에 넘긴다.
   const land = (next: number) => {
