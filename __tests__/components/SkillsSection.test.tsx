@@ -23,9 +23,9 @@ const visibleSkills = [
   'React', 'TypeScript', 'Next.js', 'Tailwind CSS',
   'Python', 'React Query', 'Zustand', 'Figma',
 ];
-const WEB = ['TUI (Taein UI)', 'Portfolio', 'AlphaMail', 'Ttabong'];
+const WEB = ['Dragon Bar', 'TUI (Taein UI)', 'Portfolio', 'AlphaMail', 'Ttabong'];
 const relations: Record<string, string[]> = {
-  React: WEB, TypeScript: WEB, 'Next.js': ['Portfolio'], 'Tailwind CSS': ['Portfolio', 'AlphaMail', 'Ttabong'],
+  React: WEB, TypeScript: WEB, 'Next.js': ['Dragon Bar', 'Portfolio'], 'Tailwind CSS': ['Portfolio', 'AlphaMail', 'Ttabong'],
   Python: ['PoseTive'], 'React Query': ['AlphaMail'], Zustand: ['AlphaMail', 'Ttabong'], Figma: ['ReBirth'],
 };
 const css = readFileSync(resolve(process.cwd(), 'styles/design-tokens.css'), 'utf8');
@@ -188,7 +188,7 @@ describe('SkillsSection signal map', () => {
     expectRevealed(container);
   });
 
-  it('React→TypeScript 전환은 네 노드를 언마운트하지 않고 in으로 남긴다', () => {
+  it('React→TypeScript 전환은 다섯 노드를 언마운트하지 않고 in으로 남긴다', () => {
     const { container } = render(skillsWithActivity());
     step(3000);
     const before = nodes(container);
@@ -200,7 +200,7 @@ describe('SkillsSection signal map', () => {
     expect(before.every((node) => node.dataset.state === 'in')).toBe(true);
   });
 
-  it('React→Python 전환은 빠지는 네 노드가 out을 거쳐 사라지고 PoseTive 하나만 남는다', () => {
+  it('React→Python 전환은 빠지는 다섯 노드가 out을 거쳐 사라지고 PoseTive 하나만 남는다', () => {
     const { container } = render(skillsWithActivity());
     step(3000);
     fireEvent.click(screen.getByRole('button', { name: 'Python' }));
@@ -236,7 +236,7 @@ describe('SkillsSection signal map', () => {
     expectRevealed(container);
   });
 
-  it.each([100, 150, 200, 300])('React→Python→TypeScript를 %ims 간격으로 고르면 회수 중이던 네 노드가 다시 다 펼쳐진다', (gap) => {
+  it.each([100, 150, 200, 300])('React→Python→TypeScript를 %ims 간격으로 고르면 회수 중이던 다섯 노드가 다시 다 펼쳐진다', (gap) => {
     const { container } = render(skillsWithActivity());
     step(3000);
     fireEvent.click(screen.getByRole('button', { name: 'Python' }));
