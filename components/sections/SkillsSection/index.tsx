@@ -49,7 +49,8 @@ export interface SkillsSectionHandle { setArrived(arrived: boolean): void; revea
 type Reveal = 'idle' | 'rows' | 'full' | 'done';
 
 // headArrived: Experience에서 넘어온 헤드가 도착했다. 도착한 뒤에 등장한다. onHeadShown: 도착 뒤 헤드를 처음 그렸다.
-export default function SkillsSection({ ref: handleRef, headArrived = true, onHeadShown }: { ref?: Ref<SkillsSectionHandle>; headArrived?: boolean; onHeadShown?: () => void } = {}) {
+// headAway: 헤드가 Awards로 떠나 있다. 헤드 그리기만 끄고 목록 등장과 그래프 진입은 건드리지 않는다.
+export default function SkillsSection({ ref: handleRef, headArrived = true, headAway = false, onHeadShown }: { ref?: Ref<SkillsSectionHandle>; headArrived?: boolean; headAway?: boolean; onHeadShown?: () => void } = {}) {
   const [view, setView] = useState({ skill: skills[0], leaving: [] as string[] });
   const selected = view.skill;
   const stageRef = useRef<HTMLDivElement>(null);
@@ -102,7 +103,7 @@ export default function SkillsSection({ ref: handleRef, headArrived = true, onHe
   }, [entered, headArrived]);
 
   // 모션 감소의 정착(헤드 그리기)보다 먼저 도착 여부를 넘긴다.
-  useLayoutEffect(() => { graphRef.current?.setArrived(headArrived); }, [headArrived, motionReady]);
+  useLayoutEffect(() => { graphRef.current?.setArrived(headArrived && !headAway); }, [headArrived, headAway, motionReady]);
 
   useLayoutEffect(() => { graphRef.current?.setReduced(reducedMotion); }, [reducedMotion]);
 

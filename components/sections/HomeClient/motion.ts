@@ -180,7 +180,7 @@ const rectBox = (element: Element | null, scroll = 0): Box => {
   return { x: rect.left, y: rect.top + scroll, w: rect.width, h: rect.height };
 };
 
-export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, reduced, onLogoOwnerChange, onLineArrive, onSkillsHeadArrive }: {
+export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, reduced, onLogoOwnerChange, onLineArrive, onSkillsHeadArrive, onSkillsHeadAway }: {
   root: HTMLElement; header: HTMLElement; wordmark: HTMLButtonElement; logoHost: HTMLElement; reduced: boolean;
   // GL 볼 손잡이(없으면 정적 볼). 볼은 진입 뒤에 늦게 떠서 ref로 받는다.
   ball?: { current: CrystalizedBallHandle | null };
@@ -189,13 +189,17 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
   onLineArrive?: (arrived: boolean) => void;
   // Experience 선이 Skills 헤드에 내려앉았는지(넘김 100%). Skills 헤드와 등장이 이것을 기다린다.
   onSkillsHeadArrive?: (arrived: boolean) => void;
+  // Skills 헤드가 Awards로 떠나 있는지. 헤드 그리기만 끈다(목록 등장은 onSkillsHeadArrive만 따른다).
+  onSkillsHeadAway?: (away: boolean) => void;
 }): PortfolioMotion {
   registerScrollTrigger();
-  // Skills 헤드는 Experience에서 도착했고(exp) Awards로 떠나지 않았을 때(!away)만 선다. 두 넘김은 서로의 상태를 덮어쓰지 않고 이 합만 넘긴다.
+  // Skills 헤드는 Experience에서 도착했고(exp) Awards로 떠나지 않았을 때(!away)만 선다. 두 넘김은 서로의 상태를 덮어쓰지 않는다.
+  // 손잡이에는 같은 scroll 안의 맞바꿈을 위해 합을 넘기고, React에는 둘을 따로 넘긴다. away가 목록 등장을 막으면 안 된다(Ruling 11).
   let skillsHead: SkillsSectionHandle | null = null, exp = true, away = false;
   const applyHead = () => {
     skillsHead?.setArrived(exp && !away);
-    onSkillsHeadArrive?.(exp && !away);
+    onSkillsHeadArrive?.(exp);
+    onSkillsHeadAway?.(away);
   };
   const awardsHandoff = createAwardsHandoff({ root, reduced, onAway: on => { away = on; applyHead(); } });
   // Experience 쪽에서 헤드가 오지 않았으면 Awards 넘김은 떠나지 않는다(Ruling 9)

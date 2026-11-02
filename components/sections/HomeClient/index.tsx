@@ -66,6 +66,8 @@ export default function HomeClient() {
   const [motionFailed, setMotionFailed] = useState(false);
   // Experience 선이 Skills 헤드로 내려앉았는지. 경계 모듈이 없거나 넘김이 없는 환경에서는 처음부터 도착이다.
   const [skillsHeadArrived, setSkillsHeadArrived] = useState(true);
+  // Skills 헤드가 Awards로 떠나 있는지(헤드 그리기만 끈다)
+  const [skillsHeadAway, setSkillsHeadAway] = useState(false);
   const [skillsHead, setSkillsHead] = useState<SkillsSectionHandle | null>(null);
   const [awards, setAwards] = useState<AwardsSectionHandle | null>(null);
   const [logoReady, setLogoReady] = useState(false);
@@ -131,9 +133,9 @@ export default function HomeClient() {
   useEffect(() => {
     const root = rootRef.current, header = headerRef.current, wordmark = wordmarkRef.current, logoHost = logoHostRef.current;
     if (!motionModule || !root || !header || !wordmark || !logoHost) return;
-    const motion = motionModule.createPortfolioMotion({ root, header, wordmark, logoHost, ball: ballRef, reduced: reducedMotion, onLogoOwnerChange: setLogoOwner, onLineArrive: setLineArrived, onSkillsHeadArrive: setSkillsHeadArrived });
+    const motion = motionModule.createPortfolioMotion({ root, header, wordmark, logoHost, ball: ballRef, reduced: reducedMotion, onLogoOwnerChange: setLogoOwner, onLineArrive: setLineArrived, onSkillsHeadArrive: setSkillsHeadArrived, onSkillsHeadAway: setSkillsHeadAway });
     motionRef.current = motion;
-    return () => { motion.destroy(); motionRef.current = null; setLogoOwner('none'); setLineArrived(false); setSkillsHeadArrived(true); };
+    return () => { motion.destroy(); motionRef.current = null; setLogoOwner('none'); setLineArrived(false); setSkillsHeadArrived(true); setSkillsHeadAway(false); };
   }, [motionModule, reducedMotion]);
   useEffect(() => { motionRef.current?.setLogo(logo); }, [logo, motionModule, reducedMotion]);
   useEffect(() => { motionRef.current?.setSkillsHead(skillsHead); }, [skillsHead, motionModule, reducedMotion]);
@@ -201,7 +203,7 @@ export default function HomeClient() {
         </section>
         {HOME_SECTION_CONFIG.map(({ id, label }) => {
           return <div key={id} data-section={id} role="region" aria-label={label} tabIndex={-1} className="document-section">
-            {id === SECTION_IDS.EXPERIENCE ? <ExperienceSection lineArrived={motionFailed || lineArrived} overlay={overlay} /> : id === SECTION_IDS.SKILLS ? <SkillsSection ref={setSkillsHead} headArrived={motionFailed || skillsHeadArrived} onHeadShown={releaseSkillsHead} /> : id === SECTION_IDS.AWARDS_CERTIFICATES ? <AwardAndCertificateSection ref={setAwards} /> : id === SECTION_IDS.PROJECTS ? <ProjectsSection ref={projectsRef} beforeAction={beforeProjectsAction} navigationPending={navigationTarget !== null} logoOwner={logoOwner} /> : <AboutSection ref={aboutRef} onChapterChange={setAboutChapter} navigationPending={navigationTarget !== null} logoOwner={logoOwner} />}
+            {id === SECTION_IDS.EXPERIENCE ? <ExperienceSection lineArrived={motionFailed || lineArrived} overlay={overlay} /> : id === SECTION_IDS.SKILLS ? <SkillsSection ref={setSkillsHead} headArrived={motionFailed || skillsHeadArrived} headAway={!motionFailed && skillsHeadAway} onHeadShown={releaseSkillsHead} /> : id === SECTION_IDS.AWARDS_CERTIFICATES ? <AwardAndCertificateSection ref={setAwards} /> : id === SECTION_IDS.PROJECTS ? <ProjectsSection ref={projectsRef} beforeAction={beforeProjectsAction} navigationPending={navigationTarget !== null} logoOwner={logoOwner} /> : <AboutSection ref={aboutRef} onChapterChange={setAboutChapter} navigationPending={navigationTarget !== null} logoOwner={logoOwner} />}
           </div>;
         })}
         {/* 공유 로고 host. About의 원형 마스크와 overflow-x: clip 밖, 문서 좌표에 산다.

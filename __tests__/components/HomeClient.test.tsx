@@ -9,8 +9,9 @@ const motion = vi.hoisted(() => ({
   create: vi.fn(), destroy: vi.fn(), setPaused: vi.fn(), setLogo: vi.fn(), setOverlay: vi.fn(), refresh: vi.fn(), settleProjects: vi.fn(), releaseSkillsHead: vi.fn(), setSkillsHead: vi.fn(), setAwards: vi.fn(),
   owner: null as ((owner: 'hero' | 'about' | 'boundary' | 'preview' | 'projects' | 'none') => void) | null,
   skillsHead: null as ((arrived: boolean) => void) | null,
+  skillsAway: null as ((away: boolean) => void) | null,
 }));
-const skills = vi.hoisted(() => ({ props: null as null | { headArrived?: boolean; onHeadShown?: () => void } }));
+const skills = vi.hoisted(() => ({ props: null as null | { headArrived?: boolean; headAway?: boolean; onHeadShown?: () => void } }));
 const awardsHandle = vi.hoisted(() => ({ setStar: () => {}, angle: () => 0 }));
 vi.mock('@/hooks/useProjectModalObscured', () => ({ useProjectModalObscured: () => flags.obscured }));
 vi.mock('@/hooks/usePageVisibility', () => ({ usePageVisibility: () => flags.pageVisible }));
@@ -37,13 +38,13 @@ vi.mock('@/components/sections', async () => {
     useImperativeHandle(ref, () => ({ release: projectsGate.release }), []);
     return <p data-logo-owner-prop={logoOwner} onClick={() => onChapterChange(2)}>About original body</p>;
   });
-  return { AboutSection: About, ProjectsSection: ({ ref, beforeAction, navigationPending, logoOwner }: { ref?: import('react').Ref<unknown>; beforeAction?: (run: () => void) => void; navigationPending?: boolean; logoOwner?: string }) => { projectsGate.before = beforeAction ?? null; projectsLock.props = { navigationPending, logoOwner }; useImperativeHandle(ref, () => ({ release: projectsLock.release }), []); return <p>Projects original body</p>; }, ExperienceSection: () => <p>Experience original body</p>, SkillsSection: (props: { headArrived?: boolean; onHeadShown?: () => void }) => { skills.props = props; return <p>Skills original body</p>; }, AwardAndCertificateSection: ({ ref }: { ref?: import('react').Ref<unknown> }) => { useImperativeHandle(ref, () => awardsHandle, []); return <p>Awards original body</p>; }, Footer: () => <footer>Contacts</footer> };
+  return { AboutSection: About, ProjectsSection: ({ ref, beforeAction, navigationPending, logoOwner }: { ref?: import('react').Ref<unknown>; beforeAction?: (run: () => void) => void; navigationPending?: boolean; logoOwner?: string }) => { projectsGate.before = beforeAction ?? null; projectsLock.props = { navigationPending, logoOwner }; useImperativeHandle(ref, () => ({ release: projectsLock.release }), []); return <p>Projects original body</p>; }, ExperienceSection: () => <p>Experience original body</p>, SkillsSection: (props: { headArrived?: boolean; headAway?: boolean; onHeadShown?: () => void }) => { skills.props = props; return <p>Skills original body</p>; }, AwardAndCertificateSection: ({ ref }: { ref?: import('react').Ref<unknown> }) => { useImperativeHandle(ref, () => awardsHandle, []); return <p>Awards original body</p>; }, Footer: () => <footer>Contacts</footer> };
 });
 const overlay = vi.hoisted(() => ({ setBoundary: vi.fn(), setTimeline: vi.fn(), setReduced: vi.fn(), destroy: vi.fn() }));
 vi.mock('@/components/sections/ExperienceSection/overlay', () => ({ createExperienceOverlay: () => overlay }));
 vi.mock('@/components/sections/HomeClient/motion', () => ({
-  createPortfolioMotion: (options: { onLogoOwnerChange: (owner: 'hero' | 'about' | 'boundary' | 'preview' | 'projects' | 'none') => void; onSkillsHeadArrive?: (arrived: boolean) => void }) => {
-    motion.create(options); motion.owner = options.onLogoOwnerChange; motion.skillsHead = options.onSkillsHeadArrive ?? null;
+  createPortfolioMotion: (options: { onLogoOwnerChange: (owner: 'hero' | 'about' | 'boundary' | 'preview' | 'projects' | 'none') => void; onSkillsHeadArrive?: (arrived: boolean) => void; onSkillsHeadAway?: (away: boolean) => void }) => {
+    motion.create(options); motion.owner = options.onLogoOwnerChange; motion.skillsHead = options.onSkillsHeadArrive ?? null; motion.skillsAway = options.onSkillsHeadAway ?? null;
     return { destroy: motion.destroy, setPaused: motion.setPaused, setLogo: motion.setLogo, setOverlay: motion.setOverlay, refresh: motion.refresh, settleProjects: motion.settleProjects, releaseSkillsHead: motion.releaseSkillsHead, setSkillsHead: motion.setSkillsHead, setAwards: motion.setAwards };
   },
 }));
@@ -72,7 +73,7 @@ beforeEach(() => {
   flags.obscured = false; flags.pageVisible = true; flags.reduced = false; flags.wide = false; flags.ready = true;
   Object.values(motion).forEach(value => typeof value === 'function' && 'mockClear' in value && value.mockClear());
   Object.values(overlay).forEach(fn => fn.mockClear());
-  motion.owner = null; motion.skillsHead = null; skills.props = null;
+  motion.owner = null; motion.skillsHead = null; motion.skillsAway = null; skills.props = null;
   boot.props = null; boot.finish.mockClear(); document.documentElement.removeAttribute('data-intro');
   window.history.replaceState(null, '', '/'); vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
   vi.stubGlobal('matchMedia', vi.fn((query: string) => ({ matches: query === '(min-width: 1024px)' && flags.wide, media: query, addEventListener: () => {}, removeEventListener: () => {} })));
@@ -567,6 +568,19 @@ it('경계 모듈이 알린 Skills 헤드 도착을 넘기고, Skills가 제 헤
   skills.props!.onHeadShown!();
   expect(motion.releaseSkillsHead).toHaveBeenCalledTimes(1);
   act(() => motion.skillsHead!(false));
+  unmount();
+});
+
+// Ruling 11. 헤드가 Awards로 떠난 것은 headAway로만 넘긴다. 도착(headArrived, 목록 등장)은 그대로이고, 경계 모듈이 사라지면 false로 돌아온다.
+it('경계 모듈이 알린 Skills 헤드 떠남을 headAway로 넘기고 headArrived는 건드리지 않는다', async () => {
+  const { unmount } = render(<HomeClient />);
+  expect(skills.props!.headAway).toBe(false);
+  await flush();
+  act(() => motion.skillsAway!(true));
+  expect(skills.props!.headAway).toBe(true);
+  expect(skills.props!.headArrived).toBe(true);
+  act(() => motion.skillsAway!(false));
+  expect(skills.props!.headAway).toBe(false);
   unmount();
 });
 

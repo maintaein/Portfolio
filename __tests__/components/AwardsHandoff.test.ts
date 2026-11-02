@@ -323,6 +323,24 @@ describe('Awards 넘김: 떠 있기와 도착', () => {
     expect(star.fliers[3].y).toBeCloseTo(q.y, 0);
   });
 
+  // Trail.ghosts(문서, 먼 것부터)를 starPose의 scattered(화면, 가까운 것부터)로 바꾸는 순서를 잠근다(리뷰 M2)
+  it('흩어지는 점 0은 도착 순간 헤드에 가장 가까운 잔상에서, 점 1은 그다음 잔상에서 출발한다', () => {
+    create();
+    // 시간 없이 크게 내려가 꼬리가 길게 남는다
+    for (const y of [SD + 4, 3000, 3200, 3400, SA - 1]) scrollAt(y);
+    scrollAt(SA + 5);
+    const ride = frames().filter((f): f is RideFrame => !!f?.head).at(-1)!;
+    expect(ride.ghosts.length).toBeGreaterThanOrEqual(3);
+    const near = ride.ghosts.at(-1)!, next = ride.ghosts.at(-2)!, far = ride.ghosts[0];
+    expect(Math.hypot(near.x - far.x, near.y - far.y)).toBeGreaterThan(20);
+    advance(.016);
+    const star = last()!.star!;
+    expect(star.fliers[0].x).toBeCloseTo(near.x, 0);
+    expect(star.fliers[0].y).toBeCloseTo(near.y, 0);
+    expect(star.fliers[1].x).toBeCloseTo(next.x, 0);
+    expect(star.fliers[1].y).toBeCloseTo(next.y, 0);
+  });
+
   it('도착 장면 중 setPaused(true)면 p가 1로 가고 트윈이 남지 않는다', () => {
     create();
     for (const y of [SD + 4, 3000, 3300, SA + 5]) scrollAt(y);
@@ -402,10 +420,11 @@ describe('motion: Skills 헤드 합치기', () => {
       return { setOverlay() {}, setAwards() {}, setPaused() {}, setHeadArrived: headArrived, release: releases.awards, destroy() {} };
     });
     document.body.innerHTML = '<nav></nav><main><button><span>K</span></button><div data-logo-host><div></div></div></main>';
-    const react: boolean[] = [];
+    const react: boolean[] = [], reactAway: boolean[] = [];
     const motion = createPortfolioMotion({
       root: document.querySelector('main')!, header: document.querySelector('nav')!, wordmark: document.querySelector('button')!,
-      logoHost: document.querySelector<HTMLElement>('[data-logo-host]')!, reduced: false, onLogoOwnerChange() {}, onSkillsHeadArrive: on => react.push(on),
+      logoHost: document.querySelector<HTMLElement>('[data-logo-host]')!, reduced: false, onLogoOwnerChange() {},
+      onSkillsHeadArrive: on => react.push(on), onSkillsHeadAway: on => reactAway.push(on),
     });
     const real = { setArrived: vi.fn(), reveal: vi.fn() };
     motion.setSkillsHead(real);
@@ -416,10 +435,13 @@ describe('motion: Skills 헤드 합치기', () => {
     expect(shown()).toBe(true);
     got.away!(true);
     expect(shown()).toBe(false);
-    expect(react.at(-1)).toBe(false);
+    // Ruling 11: React에는 둘을 따로 넘긴다. 떠나도 도착(목록 등장)은 그대로다.
+    expect(react.at(-1)).toBe(true);
+    expect(reactAway.at(-1)).toBe(true);
     got.away!(false);
     expect(shown()).toBe(true);
     expect(react.at(-1)).toBe(true);
+    expect(reactAway.at(-1)).toBe(false);
     // Exp 넘김이 거꾸로인 동안에는 Awards가 돌아와도 서지 않는다
     got.head!.setArrived(false);
     got.arrive!(false);
@@ -438,6 +460,46 @@ describe('motion: Skills 헤드 합치기', () => {
     motion.releaseSkillsHead();
     expect(releases.skills).toHaveBeenCalledTimes(1);
     expect(releases.awards).toHaveBeenCalledTimes(1);
+    motion.destroy();
+  });
+
+  // Ruling 11(리뷰 I1의 길): Hero에서 nav로 Awards에 내려앉은 뒤 위로 올라가 떠 있기 구간을 지난다.
+  // 헤드는 떠나 있지만 React의 도착(목록 등장과 그래프 진입)은 줄곧 true라 Skills 목록이 wait에 묶이지 않는다.
+  it('nav로 Awards에 간 뒤 떠 있기 구간을 거슬러 올라가도 React 도착은 true로 남고 헤드 그리기만 꺼졌다 돌아온다', async () => {
+    vi.mocked(createSkillsHandoff).mockImplementationOnce(() => ({ setOverlay() {}, setSkillsHead() {}, setPaused() {}, release() {}, destroy() {} }));
+    root.insertAdjacentHTML('beforeend', '<button data-test-wordmark><span>K</span></button><div data-logo-host><div></div></div>');
+    documentY = 0;
+    const react: boolean[] = [], reactAway: boolean[] = [];
+    const motion = createPortfolioMotion({
+      root, header: document.querySelector<HTMLElement>('[data-scroll-header]')!, wordmark: root.querySelector<HTMLButtonElement>('[data-test-wordmark]')!,
+      logoHost: root.querySelector<HTMLElement>('[data-logo-host]')!, reduced: false, onLogoOwnerChange() {},
+      onSkillsHeadArrive: on => react.push(on), onSkillsHeadAway: on => reactAway.push(on),
+    });
+    const real = { setArrived: vi.fn(), reveal: vi.fn() };
+    motion.setSkillsHead(real);
+    motion.setAwards(awards as AwardsSectionHandle);
+    motion.setOverlay({ ...overlay, setBoundary: vi.fn(), setTimeline: vi.fn(), setHandoff: vi.fn() } as unknown as ExperienceOverlay);
+    root.setAttribute('data-navigation-target', 'awards-certificates');
+    await Promise.resolve();
+    for (const y of [900, 1800, 2700, 3600, 4000]) scrollAt(y);
+    root.removeAttribute('data-navigation-target');
+    await Promise.resolve();
+    expect(reactAway.at(-1)).toBe(true);
+    // 손으로 위로: 도착 장면을 거꾸로, 떠 있기, 그리고 sD 위로 돌아온다
+    scrollAt(3800);
+    scrollAt(SA - 5);
+    play(STAR_SECONDS + .1);
+    for (let y = SA - 50; y > SD + 4; y -= 150) {
+      scrollAt(y);
+      expect(last()!.head).not.toBeNull();
+      expect(reactAway.at(-1)).toBe(true);
+      expect(real.setArrived.mock.calls.at(-1)?.[0]).toBe(false);
+    }
+    scrollAt(SD - 50);
+    expect(reactAway.at(-1)).toBe(false);
+    expect(real.setArrived.mock.calls.at(-1)?.[0]).toBe(true);
+    expect(react.length).toBeGreaterThan(0);
+    expect(react.every(on => on)).toBe(true);
     motion.destroy();
   });
 });

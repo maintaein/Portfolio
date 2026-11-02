@@ -130,6 +130,11 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
   };
 
   // 회수가 끝났다. 예약된 진입(회수 도중 다시 고른 노드)은 지우지 않는다. 시안처럼 그 시각에 다시 자란다.
+  // 허브와 고른 노드들이 나온다(진입에서 한 번)
+  const showHub = () => {
+    hubShown = true; hubA.ease(1, 240);
+    pending.forEach((title, k) => { const n = nodes.get(title); if (n) enter(n, 120 + k * 70, slot(k, pending.length)); });
+  };
   const gone = (title: string, n: Node) => { n.state = 'gone'; options.onGone(title); };
   const exit = (n: Node, d: number) => {
     n.state = 'out';
@@ -170,10 +175,7 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
     for (const v of [headY, linkS, hubA]) { busy ||= !!v.tw; v.tick(); }
     // 걷혔으면(0에 닿으면) 그때 헤드 쪽에서 다시 뻗는다. 걷히는 도중에 기준점을 바꾸면 선이 한 프레임에 반대쪽 끝으로 건너뛴다.
     if (arrived && started && linkS.to === 0 && !linkS.tw) { retract = false; linkS.spring(1, 0, 9.4); }
-    if (linkS.v >= .98 && !hubShown) {
-      hubShown = true; hubA.ease(1, 240);
-      pending.forEach((title, k) => { const n = nodes.get(title); if (n) enter(n, 120 + k * 70, slot(k, pending.length)); });
-    }
+    if (linkS.v >= .98 && !hubShown) showHub();
     nodes.forEach((n, title) => {
       if (n.enterAt !== null && now() >= n.enterAt) {
         if (n.state === 'gone') n.y.set(n.enterY); else n.y.spring(n.enterY, 0, 9, .8);
@@ -318,7 +320,9 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
       if (started || reduced) return;
       started = true;
       pending = order;
-      linkS.spring(1, 0, 9.4);
+      // 헤드가 Awards로 떠나 있는 채 들어오면(nav로 Awards에 간 뒤 위로) 선 없이 허브와 노드만 나온다. 헤드가 돌아오면 tick이 선을 뻗는다.
+      if (arrived) linkS.spring(1, 0, 9.4);
+      else showHub();
     },
     setRunning(on) {
       on &&= !reduced;

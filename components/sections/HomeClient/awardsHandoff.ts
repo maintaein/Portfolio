@@ -237,7 +237,7 @@ export function createAwardsHandoff({ root, reduced, onAway }: { root: HTMLEleme
       setStar(null);
       return report(arrived);
     }
-    if (root.hasAttribute('data-navigation-target') || dy > window.innerHeight) jumped = true;
+    if (dy > window.innerHeight) jumped = true;
     else if (dy) jumped = false;
     const g = geo();
     if (!g) return;
