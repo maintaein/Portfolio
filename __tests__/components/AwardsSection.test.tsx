@@ -10,7 +10,8 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AwardsSection from '@/components/sections/AwardAndCertificatesSection';
-import { awards } from '@/lib/data';
+import { awards, certificates } from '@/lib/data';
+import { AWARD_ORBIT, CERT_ORBIT, certAngle, orbitPoint } from '@/components/sections/AwardAndCertificatesSection/orbit';
 import { SECTION_IDS } from '@/lib/constants';
 
 let frames = new Map<number, FrameRequestCallback>();
@@ -112,5 +113,56 @@ describe('Awards orbit', () => {
     unmount();
     expect(frames.size).toBe(0);
     expect(cancelFrame).toHaveBeenCalled();
+  });
+
+  it('자격증 사실도 상호작용 전에 SSR 본문과 자격증 노드에 있다', () => {
+    const rendered = new DOMParser().parseFromString(renderToString(awardsView()), 'text/html');
+    const certificate = certificates[0];
+    const card = rendered.querySelector(`[data-certificate-card="${certificate.id}"]`);
+    const button = rendered.querySelector(`[data-certificate-select="${certificate.id}"]`);
+    for (const fact of [certificate.name, certificate.grade, certificate.organization, certificate.date, certificate.validUntil!]) {
+      expect(card?.textContent).toContain(fact);
+      expect(button?.textContent).toContain(fact);
+    }
+    expect(button?.textContent).toContain('자격증');
+    expect(rendered.querySelectorAll('[data-orbit-cert]')).toHaveLength(certificates.length);
+  });
+
+  it('수상 id 1과 자격증 id 1을 따로 고르고 자격증 hover, focus, click에서 원문을 가운데에 띄운다', () => {
+    const { container } = render(awardsView());
+    const award = container.querySelector<HTMLButtonElement>('[data-award-select="1"]')!;
+    const certificate = container.querySelector<HTMLButtonElement>('[data-certificate-select="1"]')!;
+    const center = () => container.querySelector('[data-orbit-center]')!;
+    for (const select of [fireEvent.pointerEnter, fireEvent.focus, fireEvent.click]) {
+      fireEvent.click(award);
+      expect(award).toHaveAttribute('aria-pressed', 'true');
+      expect(certificate).toHaveAttribute('aria-pressed', 'false');
+      expect(center().textContent).toContain(awards[0].project);
+      select(certificate);
+      expect(certificate).toHaveAttribute('aria-pressed', 'true');
+      expect(award).toHaveAttribute('aria-pressed', 'false');
+      for (const fact of ['OPIC', 'IH', 'ACTFL', '2025. 03', '2027. 03']) expect(center().textContent).toContain(fact);
+      expect(center().querySelector('img')?.getAttribute('src')).toBe('/logos-mono/opic.png');
+    }
+  });
+
+  it('자격증 노드는 수상과 같은 angleRef의 certAngle 자리를 하나의 rAF로 돈다', () => {
+    const { container } = render(awardsView());
+    const award = container.querySelector<HTMLElement>('[data-orbit-node]')!;
+    const certificate = container.querySelector<HTMLElement>('[data-orbit-cert]')!;
+    const expectCertAtShared = () => {
+      const x = Number(award.style.getPropertyValue('--orbit-x'));
+      const y = Number(award.style.getPropertyValue('--orbit-y'));
+      const expected = orbitPoint(CERT_ORBIT, certAngle(Math.atan2(y / AWARD_ORBIT.ry, x / AWARD_ORBIT.rx)));
+      expect(Number(certificate.style.getPropertyValue('--orbit-x'))).toBeCloseTo(expected.x, 1);
+      expect(Number(certificate.style.getPropertyValue('--orbit-y'))).toBeCloseTo(expected.y, 1);
+    };
+    expectCertAtShared();
+    const before = certificate.style.getPropertyValue('--orbit-x');
+    step(1000);
+    step(2000);
+    expect(certificate.style.getPropertyValue('--orbit-x')).not.toBe(before);
+    expectCertAtShared();
+    expect(frames.size).toBe(1);
   });
 });
