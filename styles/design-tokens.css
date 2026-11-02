@@ -1582,6 +1582,8 @@ html[data-intro] .hero-ball { opacity: 0; }
 .awards-stage[data-star='wait']:not(:has(:focus-visible)) :is(.awards-plane, .awards-axis, .awards-ring, .awards-center, [data-star-rim], .awards-node) { opacity: 0; }
 /* 보이지 않는 카드가 hover로 선택을 바꾸거나 손가락 커서를 띄우지 않는다 */
 .awards-stage[data-star='wait']:not(:has(:focus-visible)) .awards-node { pointer-events: none; }
+/* stage 밖의 옅은 바깥 타원도 기다리는 동안 감춘다(:has 안에 :has를 둘 수 없어 둘로 나눈다) */
+.awards-orbit:has(> .awards-stage[data-star='wait']):not(:has(:focus-visible))::before { opacity: 0; }
 .awards-stage[data-star='play']:not(:has(:focus-visible)) :is(.awards-center, [data-star-rim]) { opacity: var(--star-disc); }
 .awards-stage[data-star='play']:not(:has(:focus-visible)) .awards-center > * { opacity: var(--star-text); }
 .awards-stage[data-star='play']:not(:has(:focus-visible)) :is(.awards-plane, .awards-axis) { opacity: var(--star-plane); }

@@ -4,11 +4,14 @@ import type { AwardsSectionHandle } from '@/components/sections/AwardAndCertific
 import { readStage } from '@/components/sections/AwardAndCertificatesSection/orbit';
 import { STAR_SECONDS, createTrail, rideHead, rideRange, starPose, type RideFrame, type RideGeo, type StarDom } from '@/components/sections/AwardAndCertificatesSection/star';
 import { gsap } from '@/lib/gsap';
+import { SECTION_IDS } from '@/lib/constants';
 
 export interface AwardsHandoff {
   setOverlay(overlay: ExperienceOverlay | null): void;
   setAwards(awards: AwardsSectionHandle | null): void;
   setPaused(paused: boolean): void;
+  // Experience 쪽에서 Skills 헤드가 와 있는가. 오지 않았으면(헤드가 없으면) 떠나지 않고 Awards는 쉰다(Ruling 9).
+  setHeadArrived(arrived: boolean): void;
   // Skills가 돌아온 헤드를 제 자리에 그렸다. 잡아 둔 넘김 헤드를 놓는다.
   release(): void;
   destroy(): void;
@@ -49,6 +52,7 @@ export function createAwardsHandoff({ root, reduced, onAway }: { root: HTMLEleme
   let raf = 0;
   let lastTime = 0;
   let paused = false;
+  let headArrived = true;
   let alive = true;
   // 바로 이동(nav, 화면 높이 넘는 한 번의 점프)으로 온 뒤 사용자가 아직 직접 스크롤하지 않았는지. 도착 장면을 재생하지 않는다.
   let lastY = window.scrollY;
@@ -83,7 +87,7 @@ export function createAwardsHandoff({ root, reduced, onAway }: { root: HTMLEleme
     return {
       home: { x: canvas.left + canvas.width / 2, y: row.top + row.height / 2 + y },
       center: { x: c.left + c.width / 2, y: c.top + c.height / 2 + y },
-      departY: top + .25 * span, landY: top + .5 * span, r: c.width / 2,
+      departY: top + .15 * span, landY: top + .5 * span, r: c.width / 2,
     };
   };
   // Trail은 문서 좌표, 먼 것부터다
@@ -211,7 +215,7 @@ export function createAwardsHandoff({ root, reduced, onAway }: { root: HTMLEleme
   };
   const decide = () => {
     if (!alive) return;
-    if (reduced || !overlay || (wide && !wide.matches)) {
+    if (reduced || !overlay || (wide && !wide.matches) || !headArrived) {
       reset();
       goal = -1;
       setStar(null);
@@ -220,6 +224,19 @@ export function createAwardsHandoff({ root, reduced, onAway }: { root: HTMLEleme
     // Projects → Experience, Exp → Skills와 같은 표시(data-navigation-target)로 nav 이동을 안다
     const y = window.scrollY, dy = Math.abs(y - lastY);
     lastY = y;
+    const target = root.getAttribute('data-navigation-target');
+    if (target !== null) {
+      // nav 중에는 떠 있지 않는다. 목적지 쪽 끝에 바로 놓고(Awards면 도착, 그 밖이면 home), 표시가 걷히면 첫 배치처럼 다시 놓는다(Ruling 8).
+      const arrived = target === SECTION_IDS.AWARDS_CERTIFICATES;
+      reset();
+      goal = -1;
+      if (arrived) {
+        pose.p = 1;
+        side = 'star';
+      }
+      setStar(null);
+      return report(arrived);
+    }
     if (root.hasAttribute('data-navigation-target') || dy > window.innerHeight) jumped = true;
     else if (dy) jumped = false;
     const g = geo();
@@ -244,6 +261,9 @@ export function createAwardsHandoff({ root, reduced, onAway }: { root: HTMLEleme
   // 떠 있는 동안 다른 기술 줄을 고르면 출발 자리와 돌아갈 자리가 바뀐다
   const selection = typeof MutationObserver === 'undefined' || !skills ? null : new MutationObserver(decide);
   selection?.observe(skills!, { subtree: true, attributeFilter: ['aria-pressed'] });
+  // nav 표시가 서고 걷히는 때도 다시 판정한다(걷힌 뒤 scroll이 없을 수 있다)
+  const navigation = typeof MutationObserver === 'undefined' ? null : new MutationObserver(decide);
+  navigation?.observe(root, { attributeFilter: ['data-navigation-target'] });
   document.addEventListener('visibilitychange', onVisibility);
   decide();
 
@@ -268,6 +288,12 @@ export function createAwardsHandoff({ root, reduced, onAway }: { root: HTMLEleme
       if (next) finish();
       else decide();
     },
+    setHeadArrived(next) {
+      if (next === headArrived) return;
+      headArrived = next;
+      goal = -1;
+      decide();
+    },
     release,
     destroy() {
       reset();
@@ -276,6 +302,7 @@ export function createAwardsHandoff({ root, reduced, onAway }: { root: HTMLEleme
       window.removeEventListener('scroll', decide);
       window.removeEventListener('resize', decide);
       selection?.disconnect();
+      navigation?.disconnect();
       document.removeEventListener('visibilitychange', onVisibility);
     },
   };

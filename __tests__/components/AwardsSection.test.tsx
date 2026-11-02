@@ -258,6 +258,8 @@ describe('Awards 넘김 손잡이와 항성 테두리', () => {
     for (const part of ['.awards-center', '.awards-node', '.awards-ring', '.awards-plane', '[data-star-rim]']) expect(wait![1]).toContain(part);
     // 보이지 않는 카드는 마우스를 받지 않는다(키보드 진입은 위 :has(:focus-visible) 예외로 그대로다)
     expect(CSS).toContain(".awards-stage[data-star='wait']:not(:has(:focus-visible)) .awards-node { pointer-events: none; }");
+    // stage 밖의 바깥 타원도 기다리는 동안 감춘다(Ruling 10)
+    expect(CSS).toContain(".awards-orbit:has(> .awards-stage[data-star='wait']):not(:has(:focus-visible))::before { opacity: 0; }");
     const play = ".awards-stage[data-star='play']:not(:has(:focus-visible))";
     expect(CSS).toContain(`${play} :is(.awards-center, [data-star-rim]) { opacity: var(--star-disc); }`);
     expect(CSS).toContain(`${play} .awards-center > * { opacity: var(--star-text); }`);

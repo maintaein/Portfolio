@@ -29,12 +29,12 @@ function place(element: Element, box: Box, fixed = false) {
   };
 }
 
-// 1440×900, nav 76: 출발 높이 76 + .25 × 824 = 282, 도착 높이 76 + .5 × 824 = 488.
+// 1440×900, nav 76: 출발 높이 76 + .15 × 824 = 199.6(Ruling 7), 도착 높이 76 + .5 × 824 = 488.
 // 헤드 열 가운데 x 184, React 줄 가운데 3000, Figma 줄 3504(7줄 아래). 원판 가운데 (720, 4023), 폭 275.2(320 × .86).
-// sA = 4023 - 488 = 3535. sD: React 3000 - 282 = 2718, Figma min(3222, 3535 - 120) = 3222.
+// sA = 4023 - 488 = 3535. sD: React 3000 - 199.6 = 2800.4, Figma min(3304.4, 3535 - 120) = 3304.4.
 // Awards 섹션 3640~4406은 스크롤 2740~4406에서 화면 안이다.
 const HEAD_X = 184, ROW0 = 3000, ROW7 = 3504, CX = 720, CY = 4023, DISC = 275.2;
-const DEPART = 282, LAND = 488, SA = 3535, SD = 2718;
+const DEPART = 199.6, LAND = 488, SA = 3535, SD = 2800.4;
 const STAGE = { scale: .86, tilt: -14 * Math.PI / 180 };
 const ANGLE = .5;
 let root: HTMLElement; let rows: HTMLElement[]; let disc: HTMLElement;
@@ -114,16 +114,60 @@ describe('Awards 넘김: 재생하지 않는 경우', () => {
     expect(stars().filter(s => s !== null)).toEqual([]);
   });
 
-  it('nav 이동(data-navigation-target) 중에 sA를 지나면 도착 장면 없이 Awards는 쉬는 상태다', () => {
+  // Ruling 8: nav 중에는 떠 있지 않고 목적지 쪽 끝에 바로 놓는다. 표시가 걷힌 뒤 첫 scroll은 헤드를 뛰게 하지 않는다.
+  it('nav로 Awards에 가는 동안 떠 있지 않고 도착 상태로 놓이며, 표시가 걷힌 뒤 작은 scroll에도 그대로이고 그 뒤 거꾸로는 재생한다', async () => {
     create();
     root.setAttribute('data-navigation-target', 'awards-certificates');
-    for (const y of [2722, 3000, 3300, SA + 5]) scrollAt(y);
+    await Promise.resolve();
+    expect(away()).toEqual(['away true']);
+    for (const y of [2900, 3100, 3300, 3500, SA + 100]) scrollAt(y);
     advance(2);
-    expect(frames().some(f => f?.star)).toBe(false);
+    expect(frames().filter(f => f !== null)).toEqual([]);
+    expect(stars().filter(s => s !== null)).toEqual([]);
+    root.removeAttribute('data-navigation-target');
+    await Promise.resolve();
+    scrollAt(SA + 108);
+    advance(1);
+    expect(frames().filter(f => f !== null)).toEqual([]);
+    expect(stars().filter(s => s !== null)).toEqual([]);
+    expect(away()).toEqual(['away true']);
+    // 손으로 되돌아 지나면 평소대로 거꾸로 재생한다
+    scrollAt(SA + 60);
+    scrollAt(SA - 5);
+    advance(.3);
+    expect(frames().some(f => f?.star)).toBe(true);
+  });
+
+  it('nav로 Awards에서 다른 섹션에 가는 동안 떠 있지 않고 home에 놓이며, 표시가 걷힌 뒤 작은 scroll에도 그대로이고 그 뒤 출발은 평소대로다', async () => {
+    create({ at: 3600 });
+    expect(away()).toEqual(['away true']);
+    root.setAttribute('data-navigation-target', 'skills');
+    await Promise.resolve();
+    expect(away()).toEqual(['away true', 'away false']);
+    for (const y of [3400, 3200, 3000, 2800, 2600]) scrollAt(y);
+    expect(frames().filter(f => f !== null)).toEqual([]);
+    expect(stars().filter(s => s !== null)).toEqual([]);
+    root.removeAttribute('data-navigation-target');
+    await Promise.resolve();
+    scrollAt(2608);
+    expect(frames().filter(f => f !== null)).toEqual([]);
+    expect(away()).toEqual(['away true', 'away false']);
+    // 손으로 sD를 지나면 평소대로 home 자리에서 떠난다
+    for (const y of [2700, 2790, SD + 4]) scrollAt(y);
+    expect(away().at(-1)).toBe('away true');
+    expect(heads()[0].x).toBeCloseTo(HEAD_X, 0);
+    expect(stars().at(-1)).toBe('wait');
+  });
+
+  it('nav 표시가 떠 있는 도중에 서면 떠 있는 헤드를 거두고 목적지 쪽 끝에 놓는다', async () => {
+    create();
+    for (const y of [SD + 4, 3000]) scrollAt(y);
+    expect(last()!.head).not.toBeNull();
+    root.setAttribute('data-navigation-target', 'about');
+    await Promise.resolve();
     expect(last()).toBeNull();
     expect(stars().at(-1)).toBeNull();
-    expect(doms()).toEqual([]);
-    expect(away()).toEqual(['away true']);
+    expect(away().at(-1)).toBe('away false');
   });
 
   it('화면 높이를 넘게 한 번에 뛰어 sA를 지나면 프레임 없이 Awards는 쉬는 상태다', () => {
@@ -244,13 +288,13 @@ describe('Awards 넘김: 떠 있기와 도착', () => {
 
   it('Review Focus 1: 떠 있는 동안 고른 줄을 Figma로 옮기고 되돌아가면 home이 Figma 줄이다', async () => {
     create();
-    for (const y of [SD + 4, 3000, 3300]) scrollAt(y);
+    for (const y of [SD + 4, 3000, 3350]) scrollAt(y);
     rows[0].setAttribute('aria-pressed', 'false');
     rows[7].setAttribute('aria-pressed', 'true');
     await Promise.resolve();
-    // Figma의 sD(3222)를 되돌아 지난다
-    scrollAt(3200);
-    expect(last()!.head).toEqual({ x: HEAD_X, y: ROW7 - 3200, r: 12 });
+    // Figma의 sD(3304.4)를 되돌아 지난다
+    scrollAt(3290);
+    expect(last()!.head).toEqual({ x: HEAD_X, y: ROW7 - 3290, r: 12 });
     expect(away().at(-1)).toBe('away false');
   });
 
@@ -316,18 +360,46 @@ describe('Awards 넘김: 떠 있기와 도착', () => {
   });
 });
 
+// Ruling 9: Experience 쪽에서 Skills 헤드가 오지 않았으면 Awards 넘김은 떠나지 않는다
+describe('Awards 넘김: Skills 헤드가 없을 때', () => {
+  it('setHeadArrived(false)면 sD와 sA를 지나도 떠 있는 헤드도 wait도 onAway도 없다', () => {
+    create();
+    handoff!.setHeadArrived(false);
+    for (const y of [SD + 4, 3000, 3300, SA + 5]) scrollAt(y);
+    advance(2);
+    scrollAt(3000);
+    advance(2);
+    expect(frames().filter(f => f !== null)).toEqual([]);
+    expect(awards.setStar).not.toHaveBeenCalled();
+    expect(away()).toEqual([]);
+  });
+
+  it('떠 있는 동안 헤드가 없어지면 떠 있는 헤드를 거두고 Awards는 쉬며, 다시 오면 그 자리에 바로 놓는다', () => {
+    create();
+    for (const y of [SD + 4, 3000]) scrollAt(y);
+    handoff!.setHeadArrived(false);
+    expect(last()).toBeNull();
+    expect(stars().at(-1)).toBeNull();
+    expect(away().at(-1)).toBe('away false');
+    handoff!.setHeadArrived(true);
+    expect(last()!.head).not.toBeNull();
+    expect(stars().at(-1)).toBe('wait');
+  });
+});
+
 // Review Focus 4: Skills 헤드의 표시는 두 넘김의 합이다. 두 넘김 모듈을 바꿔 끼우고 motion.ts의 합치기만 본다.
 describe('motion: Skills 헤드 합치기', () => {
   it('Exp 넘김이 도착한 뒤에만 Awards 넘김의 떠남과 돌아옴이 진짜 setArrived에 닿는다', () => {
     const got: { arrive?: (on: boolean) => void; head?: { setArrived(on: boolean): void; reveal(): void } | null; away?: (on: boolean) => void } = {};
     const releases = { skills: vi.fn(), awards: vi.fn() };
+    const headArrived = vi.fn();
     vi.mocked(createSkillsHandoff).mockImplementationOnce(({ onArrive }) => {
       got.arrive = onArrive;
       return { setOverlay() {}, setSkillsHead(h) { got.head = h; }, setPaused() {}, release: releases.skills, destroy() {} };
     });
     vi.mocked(createAwardsHandoff).mockImplementationOnce(({ onAway }) => {
       got.away = onAway;
-      return { setOverlay() {}, setAwards() {}, setPaused() {}, release: releases.awards, destroy() {} };
+      return { setOverlay() {}, setAwards() {}, setPaused() {}, setHeadArrived: headArrived, release: releases.awards, destroy() {} };
     });
     document.body.innerHTML = '<nav></nav><main><button><span>K</span></button><div data-logo-host><div></div></div></main>';
     const react: boolean[] = [];
@@ -355,6 +427,11 @@ describe('motion: Skills 헤드 합치기', () => {
     got.away!(false);
     expect(shown()).toBe(false);
     expect(react.at(-1)).toBe(false);
+    // Ruling 9: Exp 넘김의 도착 여부를 Awards 넘김에도 넘긴다
+    expect(headArrived).toHaveBeenLastCalledWith(false);
+    got.arrive!(true);
+    expect(headArrived).toHaveBeenLastCalledWith(true);
+    got.arrive!(false);
     // reveal은 진짜 손잡이로 간다. Skills가 헤드를 그리면 두 넘김을 다 놓는다.
     got.head!.reveal();
     expect(real.reveal).toHaveBeenCalledTimes(1);

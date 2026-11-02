@@ -197,10 +197,15 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     skillsHead?.setArrived(exp && !away);
     onSkillsHeadArrive?.(exp && !away);
   };
-  const arrive = (on: boolean) => { exp = on; applyHead(); };
+  const awardsHandoff = createAwardsHandoff({ root, reduced, onAway: on => { away = on; applyHead(); } });
+  // Experience 쪽에서 헤드가 오지 않았으면 Awards 넘김은 떠나지 않는다(Ruling 9)
+  const arrive = (on: boolean) => {
+    exp = on;
+    awardsHandoff.setHeadArrived(on);
+    applyHead();
+  };
   const skillsHandoff = createSkillsHandoff({ root, reduced, onArrive: arrive });
   skillsHandoff.setSkillsHead({ setArrived: arrive, reveal: () => skillsHead?.reveal() });
-  const awardsHandoff = createAwardsHandoff({ root, reduced, onAway: on => { away = on; applyHead(); } });
   const inner = logoHost.firstElementChild instanceof HTMLElement ? logoHost.firstElementChild : null;
   const label = wordmark.firstElementChild instanceof HTMLElement ? wordmark.firstElementChild : wordmark;
   const anchor = (name: string) => root.querySelector(`[data-motion-anchor="${name}"]`);
