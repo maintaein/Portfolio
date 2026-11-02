@@ -253,10 +253,10 @@ describe('Awards 넘김 손잡이와 항성 테두리', () => {
   });
 
   it('CSS: wait에서 키보드 진입 전에는 감추고, play에서는 각자 변수를 따른다', () => {
-    const wait = CSS.match(/\.awards-stage\[data-star='wait'\]:not\(:focus-within\) :is\(([^)]*)\) \{ opacity: 0; \}/);
+    const wait = CSS.match(/\.awards-stage\[data-star='wait'\]:not\(:has\(:focus-visible\)\) :is\(([^)]*)\) \{ opacity: 0; \}/);
     expect(wait).not.toBeNull();
     for (const part of ['.awards-center', '.awards-node', '.awards-ring', '.awards-plane', '[data-star-rim]']) expect(wait![1]).toContain(part);
-    const play = ".awards-stage[data-star='play']:not(:focus-within)";
+    const play = ".awards-stage[data-star='play']:not(:has(:focus-visible))";
     expect(CSS).toContain(`${play} :is(.awards-center, [data-star-rim]) { opacity: var(--star-disc); }`);
     expect(CSS).toContain(`${play} .awards-center > * { opacity: var(--star-text); }`);
     expect(CSS).toContain(`${play} :is(.awards-plane, .awards-axis) { opacity: var(--star-plane); }`);

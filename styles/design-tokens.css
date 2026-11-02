@@ -1577,17 +1577,18 @@ html[data-intro] .hero-ball { opacity: 0; }
   transform: translate(-50%, -50%) rotate(14deg);
 }
 [data-star-rim][data-ready] + .awards-center { border-color: transparent; }
-/* Skills → Awards 넘김(M6). 헤드가 오는 동안 감추고, 도착 장면 동안은 star.ts가 쓰는 변수를 따른다. 키보드로 들어오면 다 보인다. */
-.awards-stage[data-star='wait']:not(:focus-within) :is(.awards-plane, .awards-axis, .awards-ring, .awards-center, [data-star-rim], .awards-node) { opacity: 0; }
-.awards-stage[data-star='play']:not(:focus-within) :is(.awards-center, [data-star-rim]) { opacity: var(--star-disc); }
-.awards-stage[data-star='play']:not(:focus-within) .awards-center > * { opacity: var(--star-text); }
-.awards-stage[data-star='play']:not(:focus-within) :is(.awards-plane, .awards-axis) { opacity: var(--star-plane); }
-.awards-stage[data-star='play']:not(:focus-within) .awards-ring:not(.awards-cert-ring) { opacity: var(--orbit-award); }
-.awards-stage[data-star='play']:not(:focus-within) .awards-cert-ring { opacity: var(--orbit-cert); }
-.awards-stage[data-star='play']:not(:focus-within) [data-card='0'] { opacity: calc(var(--orbit-opacity, 1) * var(--card-0)); }
-.awards-stage[data-star='play']:not(:focus-within) [data-card='1'] { opacity: calc(var(--orbit-opacity, 1) * var(--card-1)); }
-.awards-stage[data-star='play']:not(:focus-within) [data-card='2'] { opacity: calc(var(--orbit-opacity, 1) * var(--card-2)); }
-.awards-stage[data-star='play']:not(:focus-within) [data-card='3'] { opacity: calc(var(--orbit-opacity, 1) * var(--card-3)); }
+/* Skills → Awards 넘김(M6). 헤드가 오는 동안 감추고, 도착 장면 동안은 star.ts가 쓰는 변수를 따른다. 키보드로 들어오면 다 보인다.
+   :focus-within은 마우스 클릭이 남긴 포커스에도 걸려 다음 넘김의 감춤과 도착 장면을 통째로 무르게 하므로 :focus-visible만 본다. */
+.awards-stage[data-star='wait']:not(:has(:focus-visible)) :is(.awards-plane, .awards-axis, .awards-ring, .awards-center, [data-star-rim], .awards-node) { opacity: 0; }
+.awards-stage[data-star='play']:not(:has(:focus-visible)) :is(.awards-center, [data-star-rim]) { opacity: var(--star-disc); }
+.awards-stage[data-star='play']:not(:has(:focus-visible)) .awards-center > * { opacity: var(--star-text); }
+.awards-stage[data-star='play']:not(:has(:focus-visible)) :is(.awards-plane, .awards-axis) { opacity: var(--star-plane); }
+.awards-stage[data-star='play']:not(:has(:focus-visible)) .awards-ring:not(.awards-cert-ring) { opacity: var(--orbit-award); }
+.awards-stage[data-star='play']:not(:has(:focus-visible)) .awards-cert-ring { opacity: var(--orbit-cert); }
+.awards-stage[data-star='play']:not(:has(:focus-visible)) [data-card='0'] { opacity: calc(var(--orbit-opacity, 1) * var(--card-0)); }
+.awards-stage[data-star='play']:not(:has(:focus-visible)) [data-card='1'] { opacity: calc(var(--orbit-opacity, 1) * var(--card-1)); }
+.awards-stage[data-star='play']:not(:has(:focus-visible)) [data-card='2'] { opacity: calc(var(--orbit-opacity, 1) * var(--card-2)); }
+.awards-stage[data-star='play']:not(:has(:focus-visible)) [data-card='3'] { opacity: calc(var(--orbit-opacity, 1) * var(--card-3)); }
 .awards-mobile-records { display: none; }
 @media (max-width: 900px) {
   .awards-stage { transform: translate(-50%, -50%) rotate(-14deg) scale(.72); }
