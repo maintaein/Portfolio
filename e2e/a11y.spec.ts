@@ -77,9 +77,9 @@ test.describe('접근성', () => {
   });
 
   // M4 Task 8. lg 아래에는 이름 목록이 없고 프리뷰 캡션이 지금 프로젝트의 제목을 보여 준다
-  test('긴 프로젝트 제목이 모바일 화면 안에 보인다', async ({ page }) => {
-    const longest = projects.reduce((at, project, i) => project.title.length > projects[at].title.length ? i : at, 0);
-    for (const width of [320, 375, 390]) {
+  for (const width of [320, 375, 390]) {
+    test(`긴 프로젝트 제목이 모바일 화면 안에 보인다 (${width}px)`, async ({ page }) => {
+      const longest = projects.reduce((at, project, i) => project.title.length > projects[at].title.length ? i : at, 0);
       await page.setViewportSize({ width, height: 812 });
       await enter(page, 'projects');
       await expect(page.locator('#projects [data-part="index"]')).toBeHidden();
@@ -90,8 +90,8 @@ test.describe('접근성', () => {
       expect(bounds).not.toBeNull();
       expect(bounds!.x).toBeGreaterThanOrEqual(0);
       expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
-    }
-  });
+    });
+  }
 
   // M4 Task 8. lg 아래에서 포인터 없이 넘기는 길은 보이는 이전·다음 단추다. 끝에서는 순환하지 않는다
   test('모바일 Projects 진행 안내가 키보드의 이전·다음과 함께 갱신된다', async ({ page }) => {

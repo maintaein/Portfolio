@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { enter, SLOW } from './helpers';
+import { projects } from '@/lib/data/projects';
 for (const [width, height] of [[1440, 900], [1280, 720], [1024, 768]]) {
   test(`이름이 헤더 아래 화면 안에 들어오고 모든 선택에서 프리뷰 폭이 같다 ${width}x${height}`, async ({ page }) => {
     test.setTimeout(180_000);
@@ -7,7 +8,7 @@ for (const [width, height] of [[1440, 900], [1280, 720], [1024, 768]]) {
     await enter(page, 'projects');
     await expect(page.locator('#projects')).toHaveAttribute('data-locked', 'true', SLOW);
     const results = [];
-    for (const index of [0, 1, 2, 3, 4, 5]) {
+    for (let index = 0; index < projects.length; index += 1) {
       await page.locator('#projects [aria-selected="true"]').focus();
       await page.keyboard.press(index === 0 ? 'Home' : 'ArrowDown');
       await expect(page.locator(`#projects [data-name="${index}"]`)).toHaveAttribute('aria-selected', 'true');

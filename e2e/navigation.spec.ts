@@ -12,6 +12,8 @@ test('history returns to the previous reading destination @smoke', async ({ page
   await page.goForward(); await expectActive(page, 'projects');
 });
 test('back and forward keep the reading position of each entry @smoke', async ({ page }) => {
+  // 소프트웨어 WebKit에서는 섹션을 오간 뒤 프레임과 위치 복원 확인에 60초를 넘긴다.
+  test.setTimeout(180_000);
   await enter(page, 'experience');
   await page.locator('[data-section="experience"]').evaluate(el => window.scrollTo(0, el.getBoundingClientRect().top + scrollY - 76 + 150));
   await waitFrames(page, 5); await expectActive(page, 'experience');
