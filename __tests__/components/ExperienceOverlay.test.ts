@@ -412,21 +412,33 @@ describe('createExperienceOverlay', () => {
     overlay.destroy();
   });
 
-  it('head가 있던 ride 프레임을 null이나 head 없는 프레임으로 바꾸면 그 호출 안에서 지운다', () => {
+  it('head가 있던 ride 프레임을 null이나 빈 프레임(head도 star도 없음)으로 바꾸면 그 호출 안에서 지운다', () => {
+    const headOnly: RideFrame = { ...rideFrame, star: null };
     const overlay = createExperienceOverlay(canvas)!;
     overlay.setTimeline(() => timeline);
-    overlay.setRide(rideFrame);
+    overlay.setRide(headOnly);
     tick();
     const ctx = contexts[0];
     let clears = ctx.clearRect.mock.calls.length;
     overlay.setRide(null);
     expect(ctx.clearRect.mock.calls.length).toBe(clears + 1);
 
-    overlay.setRide(rideFrame);
+    overlay.setRide(headOnly);
     tick();
     clears = ctx.clearRect.mock.calls.length;
-    overlay.setRide({ ...rideFrame, head: null });
+    overlay.setRide({ head: null, ghosts: [], ring: null, star: null });
     expect(ctx.clearRect.mock.calls.length).toBe(clears + 1);
+    overlay.destroy();
+  });
+
+  // 항성도 이 오버레이가 그린다. 지우면 rAF가 이미 돈 틱에서 도착 순간 빛이 한 프레임 꺼진다.
+  it('head 프레임에서 항성 프레임(head 없음, star 있음)으로 바뀌면 그 호출 안에서 지우지 않는다', () => {
+    const overlay = createExperienceOverlay(canvas)!;
+    overlay.setRide({ ...rideFrame, star: null });
+    tick();
+    const ctx = contexts[0], clears = ctx.clearRect.mock.calls.length;
+    overlay.setRide({ ...rideFrame, head: null, ghosts: [], ring: null });
+    expect(ctx.clearRect.mock.calls.length).toBe(clears);
     overlay.destroy();
   });
 

@@ -109,6 +109,8 @@ const CERT_SWEEP = 1.8 * Math.PI;
 export function starPose(geo: StarGeo, since: number, scattered: readonly Ghost[]): { overlay: StarOverlay; dom: StarDom } {
   const { center, stage, angle, discR } = geo;
   const cool = smooth(0.3, 0.85, since);
+  // 끝의 10% 빛은 1.3~1.6초에 0으로 내린다. 쉬는 빛은 Awards 테두리 캔버스 몫이고, 남겨 두면 setRide(null)에서 한 프레임에 사라진다.
+  const fade = 1 - smooth(1.3, 1.6, since);
   const cards: [number, number, number, number] = [0, 0, 0, 0];
   const fliers: Ghost[] = [], traces: Trace[] = [];
   for (let i = 0; i < 4; i++) {
@@ -126,7 +128,7 @@ export function starPose(geo: StarGeo, since: number, scattered: readonly Ghost[
     if (sc > 0.95 && f < 1) traces.push({ orbit: o, from: phi - 1.2, to: phi, a: 1 - smooth(0.85, 1, f) });
   }
   return {
-    overlay: { center, stage, orb: { r: lerp(12, discR, easeOut(since / 0.45)), alpha: 1 - 0.9 * cool, k: lerp(K, 0.25, cool) }, fliers, traces },
+    overlay: { center, stage, orb: { r: lerp(12, discR, easeOut(since / 0.45)), alpha: (1 - 0.9 * cool) * fade, k: lerp(K, 0.25, cool) }, fliers, traces },
     dom: {
       disc: cool, text: smooth(0.65, 1, since), plane: smooth(0.1, 1, since),
       awardLine: smooth(0.55, 1.35, since), certLine: smooth(0.7, 1.45, since), cards,

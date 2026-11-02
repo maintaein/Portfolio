@@ -409,8 +409,9 @@ export function createExperienceOverlay(canvas: HTMLCanvasElement): ExperienceOv
       settle();
     },
     setRide(next) {
-      // 떠 있는 헤드가 Skills로 돌아가거나 항성이 되는 순간은 그 자리에서 지운다(setHandoff와 같다)
-      if (ride?.head && !next?.head) clear();
+      // 떠 있는 헤드가 Skills로 돌아가는 순간(헤드도 항성도 없음)은 그 자리에서 지운다(setHandoff와 같다).
+      // 항성이 되는 순간은 지우지 않는다. 다음 그림도 이 오버레이가 그려서, 지우면 한 프레임 빈 화면만 남는다.
+      if (ride?.head && !next?.head && !next?.star) clear();
       ride = next;
       settle();
     },

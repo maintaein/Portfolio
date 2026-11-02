@@ -112,10 +112,10 @@ describe('starPose', () => {
     expect(overlay.fliers[0].y).toBeCloseTo(400);
   });
 
-  it('끝(since 1.6)에는 원판·글씨·궤도선·카드가 다 서고 점과 자국은 사라진다', () => {
+  it('끝(since 1.6)에는 원판·글씨·궤도선·카드가 다 서고 항성 빛, 점, 자국은 사라진다', () => {
     const { overlay, dom } = starPose(star, STAR_SECONDS, scattered);
     expect(STAR_SECONDS).toBe(1.6);
-    expect(overlay.orb.alpha).toBeCloseTo(.1);
+    expect(overlay.orb.alpha).toBe(0);
     expect(overlay.orb.r).toBeCloseTo(137);
     expect([dom.disc, dom.text, dom.awardLine, dom.certLine]).toEqual([1, 1, 1, 1]);
     expect(dom.cards).toEqual([1, 1, 1, 1]);
@@ -130,6 +130,16 @@ describe('starPose', () => {
       const q = toScreen(star.center, star.stage, p);
       expect(Math.hypot(overlay.fliers[i].x - q.x, overlay.fliers[i].y - q.y)).toBeLessThan(1);
     });
+  });
+
+  it('항성 빛은 식으며 10%까지 옅어졌다가 1.3초부터 0으로 내려간다. 늘지 않는다', () => {
+    expect(starPose(star, 1.3, scattered).overlay.orb.alpha).toBeCloseTo(.1);
+    let prev = Infinity;
+    for (let s = 0; s <= STAR_SECONDS + 1e-9; s += 0.02) {
+      const { alpha } = starPose(star, s, scattered).overlay.orb;
+      expect(alpha).toBeLessThanOrEqual(prev + 1e-12);
+      prev = alpha;
+    }
   });
 
   it('since가 늘면 DOM 값과 카드는 줄지 않는다(거꾸로 재생이 같은 그림을 낸다)', () => {
