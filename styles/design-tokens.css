@@ -1542,7 +1542,7 @@ html[data-intro] .hero-ball { opacity: 0; }
 .awards-node-rank { margin-top: 2px; color: #d4e8e9; font-size: 12px; }
 .awards-center {
   position: absolute;
-  z-index: 7;
+  z-index: 8;
   top: 50%;
   left: 50%;
   display: flex;
@@ -1565,6 +1565,29 @@ html[data-intro] .hero-ball { opacity: 0; }
 .awards-description { margin: 12px 0 0; font-size: 13px; line-height: 1.6; }
 .awards-date { margin-top: 14px; }
 .awards-logo { width: 76px; height: auto; margin-top: 12px; }
+/* 원판 둘레의 일렁이는 항성 테두리(rim.ts). 캔버스는 원판과 같은 가운데에 원판 위로 겹친다. */
+[data-star-rim] {
+  position: absolute;
+  z-index: 9;
+  top: 50%;
+  left: 50%;
+  width: 500px;
+  height: 500px;
+  pointer-events: none;
+  transform: translate(-50%, -50%) rotate(14deg);
+}
+[data-star-rim][data-ready] + .awards-center { border-color: transparent; }
+/* Skills → Awards 넘김(M6). 헤드가 오는 동안 감추고, 도착 장면 동안은 star.ts가 쓰는 변수를 따른다. 키보드로 들어오면 다 보인다. */
+.awards-stage[data-star='wait']:not(:focus-within) :is(.awards-plane, .awards-axis, .awards-ring, .awards-center, [data-star-rim], .awards-node) { opacity: 0; }
+.awards-stage[data-star='play']:not(:focus-within) :is(.awards-center, [data-star-rim]) { opacity: var(--star-disc); }
+.awards-stage[data-star='play']:not(:focus-within) .awards-center > * { opacity: var(--star-text); }
+.awards-stage[data-star='play']:not(:focus-within) :is(.awards-plane, .awards-axis) { opacity: var(--star-plane); }
+.awards-stage[data-star='play']:not(:focus-within) .awards-ring:not(.awards-cert-ring) { opacity: var(--orbit-award); }
+.awards-stage[data-star='play']:not(:focus-within) .awards-cert-ring { opacity: var(--orbit-cert); }
+.awards-stage[data-star='play']:not(:focus-within) [data-card='0'] { opacity: calc(var(--orbit-opacity, 1) * var(--card-0)); }
+.awards-stage[data-star='play']:not(:focus-within) [data-card='1'] { opacity: calc(var(--orbit-opacity, 1) * var(--card-1)); }
+.awards-stage[data-star='play']:not(:focus-within) [data-card='2'] { opacity: calc(var(--orbit-opacity, 1) * var(--card-2)); }
+.awards-stage[data-star='play']:not(:focus-within) [data-card='3'] { opacity: calc(var(--orbit-opacity, 1) * var(--card-3)); }
 .awards-mobile-records { display: none; }
 @media (max-width: 900px) {
   .awards-stage { transform: translate(-50%, -50%) rotate(-14deg) scale(.72); }
