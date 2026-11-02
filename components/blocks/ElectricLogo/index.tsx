@@ -963,12 +963,18 @@ const ElectricLogo = forwardRef<ElectricLogoHandle, ElectricLogoProps>(function 
     const container = containerRef.current;
     if (!container) return undefined;
 
-    const renderer = new Renderer({
-      dpr: Math.min(window.devicePixelRatio || 1, maxDprRef.current),
-      alpha: true,
-      premultipliedAlpha: true,
-      antialias: false
-    });
+    let renderer: Renderer;
+    try {
+      renderer = new Renderer({
+        dpr: Math.min(window.devicePixelRatio || 1, maxDprRef.current),
+        alpha: true,
+        premultipliedAlpha: true,
+        antialias: false
+      });
+    } catch {
+      // WebGL을 만들 수 없어도 정적 로고와 문서는 남긴다.
+      return undefined;
+    }
     const gl = renderer.gl;
     const gl2 = gl as WebGL2RenderingContext;
     if (!renderer.isWebgl2) {

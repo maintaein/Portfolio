@@ -4,12 +4,13 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 // The GL mock records uniforms per draw and counts renderer/texture lifetimes. Visual continuity is checked in M4.
 type Drawn = Record<string, number | number[]>;
-const gpu = vi.hoisted(() => ({ renderers: 0, textures: 0, uploads: 0, deleted: 0, drawn: [] as Record<string, number | number[]>[] }));
+const gpu = vi.hoisted(() => ({ fail: false, renderers: 0, textures: 0, uploads: 0, deleted: 0, drawn: [] as Record<string, number | number[]>[] }));
 vi.mock('ogl', () => {
   class Renderer {
     dpr: number; isWebgl2 = true; width = 0; height = 0;
     gl: Record<string, unknown> & { canvas: HTMLCanvasElement };
     constructor({ dpr }: { dpr: number }) {
+      if (gpu.fail) throw new TypeError('unable to create webgl context');
       gpu.renderers++;
       this.dpr = dpr;
       this.gl = { canvas: document.createElement('canvas'), getExtension: () => null, clearColor() {}, deleteTexture() { gpu.deleted++; }, renderer: this };
@@ -54,6 +55,7 @@ let side = 200;
 const frames = new Map<number, FrameRequestCallback>();
 const images: { onload?: () => void }[] = [];
 beforeEach(() => {
+  gpu.fail = false;
   gpu.renderers = 0; gpu.textures = 0; gpu.uploads = 0; gpu.deleted = 0; gpu.drawn.length = 0;
   frames.clear(); images.length = 0; clock = 1000; side = 200;
   let id = 0;
@@ -104,6 +106,19 @@ function mount(src: string, next?: string, ref = createRef<ElectricLogoHandle>()
   }
   return { ...view, ref };
 }
+
+it('keeps the document mounted when the WebGL context cannot be created', () => {
+  gpu.fail = true;
+  const ref = createRef<ElectricLogoHandle>();
+  const onReady = vi.fn();
+  const { container } = render(<ElectricLogo ref={ref} src="fallback.svg" onReady={onReady} />);
+  loadImages(200);
+  tick();
+  expect(container.querySelector('canvas')).toBeNull();
+  expect(ref.current!.beginBoundary(box)).toBe(false);
+  expect(onReady).not.toHaveBeenCalled();
+  expect(frames.size).toBe(0);
+});
 
 it('keeps the 1 s time morph for a logo without a ref', () => {
   const view = render(<ElectricLogo src="plain-a.svg" />);
