@@ -45,7 +45,7 @@ export const dragonBar: Project = {
         'Vitest와 Playwright 설정에서 결제·본인인증 제공자를 mock으로 고정해 개발자 환경변수와 테스트 환경 분리',
       ],
       intent: '개발 과정에서의 규칙을 기억에만 의존하지 않도록, 반복해서 지켜야 할 조건을 코드와 도구 설정에 넣었습니다. 1인 프로젝트로 진행하면서도, 추후 새로운 인원이 합류했을 때 규칙을 지킬 수 있도록 검증 환경을 고정했습니다.',
-      video: '/projects/dragonvape/03-common-rules.mp4',
+      video: '/projects/dragonvape/03-development-guardrails',
     },
     {
       category: '오류 관측과 빌드 조건',
@@ -55,7 +55,7 @@ export const dragonBar: Project = {
         '소스맵 필수 모드에서 자격증명·공개 DSN 누락 시 빌드 중단, 업로드 후 소스맵 삭제 설정',
       ],
       intent: '오류를 분석할 단서는 남기면서 주문자 정보와 인증 정보의 수집을 제한했습니다. 현재 범위는 오류 수집과 빌드 조건이며, 성능 추적·사용자 세션 리플레이·자동 배포 파이프라인은 포함하지 않습니다.',
-      video: '/projects/dragonvape/04-error-observability.mp4',
+      video: '/projects/dragonvape/04-observability-build.mp4',
     },
   ],
 
