@@ -1,7 +1,8 @@
 import type { Ghost } from '@/components/sections/ExperienceSection/orb';
 import type { ExperienceOverlay } from '@/components/sections/ExperienceSection/overlay';
 import type { AwardsSectionHandle } from '@/components/sections/AwardAndCertificatesSection';
-import { readStage } from '@/components/sections/AwardAndCertificatesSection/orbit';
+import { readStage, type StageTransform } from '@/components/sections/AwardAndCertificatesSection/orbit';
+import { easeInOut, lerp } from '@/components/sections/ExperienceSection/lineMotion';
 import { STAR_SECONDS, createTrail, rideHead, rideRange, starPose, type RideFrame, type RideGeo, type StarDom } from '@/components/sections/AwardAndCertificatesSection/star';
 import { gsap } from '@/lib/gsap';
 import { SECTION_IDS } from '@/lib/constants';
@@ -21,6 +22,8 @@ export interface AwardsHandoff {
 const R = 12;
 const RING_SECONDS = .6;
 const HOLD_SECONDS = .5;
+// 거꾸로 도착 장면이 끝난 뒤 헤드가 원판 가운데에서 지금 스크롤의 떠 있는 자리로 옮겨 가는 시간(초, Ruling 13)
+const BLEND_SECONDS = .35;
 
 // Skills 헤드가 화면에 머물며 내려가 Awards 항성이 되는 넘김의 재생. 떠 있는 구간은 스크롤에 묶이고,
 // 도착 장면만 Exp → Skills처럼 정해진 시간 동안 끝까지 돈다(되돌아 지나면 지금 진행도에서 거꾸로). 판정 규칙은 skillsHandoff.ts와 같다.
@@ -31,6 +34,7 @@ export function createAwardsHandoff({ root, reduced, onAway }: { root: HTMLEleme
   const stage = disc?.closest<HTMLElement>('.awards-stage') ?? null;
   const section = disc?.closest('section') ?? null;
   const wide = window.matchMedia?.('(min-width: 768px)');
+  const readSt = (): StageTransform => stage ? readStage(stage) : { scale: .86, tilt: -14 * Math.PI / 180 };
   const trail = createTrail();
   const pose = { p: 0 };
   // -1: 아직 자리를 정하지 않았다(처음, 자격을 다시 얻음). 그때는 재생 없이 놓는다.
@@ -45,9 +49,15 @@ export function createAwardsHandoff({ root, reduced, onAway }: { root: HTMLEleme
   let shown = false;
   let away = false;
   let star: 'wait' | StarDom | null = null;
-  // 도착 장면이 시작될 때 붙잡은 잔상(화면 좌표, 가까운 것부터)과 Awards 각도
+  // 도착 장면이 쉬다가 출발할 때 붙잡은 잔상(화면 좌표, 가까운 것부터), Awards 각도, stage 변환
   let scattered: Ghost[] = [];
   let angle = 0;
+  let st = readSt();
+  // 거꾸로 끝에서 원판 가운데 → 떠 있는 자리로 섞는 진행도(1이면 섞지 않는다)
+  const blendPose = { t: 1 };
+  let blend: gsap.core.Tween | null = null;
+  // Skills 헤드가 막 그려져 떠날 수 있게 됐다(setHeadArrived(true)). 그 첫 배치는 바로 이동이 아니라 줄에서 출발한다(Ruling 15).
+  let opened = false;
   let departAt = -Infinity;
   let raf = 0;
   let lastTime = 0;
@@ -76,6 +86,11 @@ export function createAwardsHandoff({ root, reduced, onAway }: { root: HTMLEleme
   const stopHold = () => {
     hold?.kill();
     hold = null;
+  };
+  const stopBlend = () => {
+    blend?.kill();
+    blend = null;
+    blendPose.t = 1;
   };
   // 문서 좌표의 자리와 화면 높이. header 높이는 매번 잰다.
   const geo = (): (RideGeo & { r: number }) | null => {
@@ -111,15 +126,21 @@ export function createAwardsHandoff({ root, reduced, onAway }: { root: HTMLEleme
         return setStar(null);
       }
       const since = pose.p * STAR_SECONDS;
-      const { overlay: o, dom } = starPose({ center: { x: g.center.x, y: g.center.y - y }, discR: g.r, angle, stage: stage ? readStage(stage) : { scale: .86, tilt: -14 * Math.PI / 180 } }, since, scattered);
+      const { overlay: o, dom } = starPose({ center: { x: g.center.x, y: g.center.y - y }, discR: g.r, angle, stage: st }, since, scattered);
       send({ head: null, ghosts: [], ring: null, star: o });
       return setStar(dom);
     }
     if (side === 'star') {
-      // 도착 장면이 거꾸로 0에 닿았다. 헤드는 원판 가운데에서 다시 떠 있다(바로 이동이면 지금 자리에서).
+      // 도착 장면이 거꾸로 0에 닿았다. 헤드는 원판 가운데에서 출발해 BLEND_SECONDS 동안 지금 스크롤의 떠 있는 자리로 옮겨 간다.
+      // 그동안 계속 올라가도 목표를 매 프레임 다시 잡아 순간 이동하지 않고, 꼬리가 그 길을 쫓아 잔상이 남는다(Ruling 13). 바로 이동이면 그 자리에 선다.
       side = 'ride';
       trail.reset(jumped ? rideHead(g, y) : g.center);
       departAt = -Infinity;
+      if (!jumped) {
+        stopBlend();
+        blendPose.t = 0;
+        blend = gsap.to(blendPose, { t: 1, duration: BLEND_SECONDS, ease: 'none', onUpdate: () => place(), onComplete: () => { blend = null; } });
+      }
       setStar('wait');
       start();
     }
@@ -134,12 +155,14 @@ export function createAwardsHandoff({ root, reduced, onAway }: { root: HTMLEleme
         setStar('wait');
         start();
       }
-      const pulse = 1 - (performance.now() - departAt) / 1000 / RING_SECONDS;
-      return headFrame(rideHead(g, y), dt, pulse > 0 ? { x: g.home.x, y: g.home.y - y, r: R, pulse } : null);
+      const pulse = 1 - (performance.now() - departAt) / 1000 / RING_SECONDS, at = rideHead(g, y), e = easeInOut(blendPose.t);
+      const to = e < 1 ? { x: lerp(g.center.x, at.x, e), y: lerp(g.center.y, at.y, e) } : at;
+      return headFrame(to, dt, pulse > 0 ? { x: g.home.x, y: g.home.y - y, r: R, pulse } : null);
     }
     if (side === 'ride') {
       // 돌아옴: home 자리 헤드 프레임을 보낸 뒤 Skills 헤드를 세운다. Skills가 그릴 때까지(release, 500ms) 잡아 둔다.
       side = 'home';
+      stopBlend();
       headFrame(g.home, dt, null);
       report(false);
       setStar(null);
@@ -174,6 +197,7 @@ export function createAwardsHandoff({ root, reduced, onAway }: { root: HTMLEleme
   const land = (next: number) => {
     tween?.kill();
     tween = null;
+    stopBlend();
     pose.p = next;
     place();
   };
@@ -187,12 +211,16 @@ export function createAwardsHandoff({ root, reduced, onAway }: { root: HTMLEleme
     if (paused || document.hidden || jumped || awardsOff()) return land(next);
     tween?.kill();
     tween = null;
-    // 도착 장면이 0에서 오르는 순간의 잔상과 각도를 붙잡는다. 점은 그 잔상 자리에서 흩어지고 카드는 그 각도에서 공전을 잇는다.
-    // 한 scroll이 sD와 sA를 함께 넘었으면 먼저 떠난다(꼬리는 home에서 시작한다).
-    if (pose.p <= 0 && next) {
-      place();
-      scattered = side === 'ride' ? ghosts().reverse() : [];
-      angle = awards?.angle() ?? 0;
+    stopBlend();
+    // 도착 장면이 어느 끝에서든 쉬다가 출발하면 Awards의 지금 각도와 stage를 붙잡는다(Ruling 14). 점과 DOM 카드가 같은 궤도 자리에서 바뀐다.
+    // 한 번 출발한 재생은 끝에 닿을 때까지 그 각도를 쓴다(Awards는 재생 동안 공전을 세운다).
+    if (pose.p <= 0 || pose.p >= 1) {
+      angle = awards?.angle() ?? angle;
+      st = readSt();
+      // 0에서 오르면 그 순간의 잔상에서 흩어진다. 한 scroll이 sD와 sA를 함께 넘었으면 먼저 떠난다(꼬리는 home에서 시작한다).
+      // 1에서 거꾸로 가면 옛 잔상은 의미가 없어 원판 가운데 근처에서 채운다.
+      if (pose.p <= 0) place();
+      scattered = pose.p <= 0 && side === 'ride' ? ghosts().reverse() : [];
     }
     if (pose.p !== next) {
       tween = gsap.to(pose, {
@@ -206,6 +234,7 @@ export function createAwardsHandoff({ root, reduced, onAway }: { root: HTMLEleme
     tween?.kill();
     tween = null;
     stopHold();
+    stopBlend();
     cancelAnimationFrame(raf);
     raf = 0;
     lastTime = 0;
@@ -215,21 +244,26 @@ export function createAwardsHandoff({ root, reduced, onAway }: { root: HTMLEleme
   };
   const decide = () => {
     if (!alive) return;
+    // 쉬는 동안(헤드가 없을 때)에도 스크롤을 따라가 둔다. 문이 열리는 순간의 판정이 그 사이의 스크롤을 한 번의 점프로 읽지 않는다.
+    const y = window.scrollY, dy = Math.abs(y - lastY);
+    lastY = y;
+    if (dy > window.innerHeight) jumped = true;
+    else if (dy) jumped = false;
     if (reduced || !overlay || (wide && !wide.matches) || !headArrived) {
       reset();
       goal = -1;
+      opened = false;
       setStar(null);
       return report(false);
     }
     // Projects → Experience, Exp → Skills와 같은 표시(data-navigation-target)로 nav 이동을 안다
-    const y = window.scrollY, dy = Math.abs(y - lastY);
-    lastY = y;
     const target = root.getAttribute('data-navigation-target');
     if (target !== null) {
       // nav 중에는 떠 있지 않는다. 목적지 쪽 끝에 바로 놓고(Awards면 도착, 그 밖이면 home), 표시가 걷히면 첫 배치처럼 다시 놓는다(Ruling 8).
       const arrived = target === SECTION_IDS.AWARDS_CERTIFICATES;
       reset();
       goal = -1;
+      opened = false;
       if (arrived) {
         pose.p = 1;
         side = 'star';
@@ -237,14 +271,14 @@ export function createAwardsHandoff({ root, reduced, onAway }: { root: HTMLEleme
       setStar(null);
       return report(arrived);
     }
-    if (dy > window.innerHeight) jumped = true;
-    else if (dy) jumped = false;
     const g = geo();
     if (!g) return;
     const next = y >= rideRange(g).sA ? 1 : 0;
     if (goal === -1) {
-      // 처음 놓인 자리(#awards 새로 고침, 복원)는 바로 이동이다
-      jumped = true;
+      // 처음 놓인 자리(#awards 새로 고침, 복원)는 바로 이동이다. Skills 헤드가 막 그려져 문이 열린 때는 스크롤이 정한 대로 둔다
+      // (이미 sD를 지났으면 헤드가 줄에서 떠 있는 자리로 잔상을 끌며 달려간다).
+      if (!opened) jumped = true;
+      opened = false;
       goal = next;
       return land(next);
     }
@@ -257,7 +291,12 @@ export function createAwardsHandoff({ root, reduced, onAway }: { root: HTMLEleme
   const onVisibility = () => { if (document.hidden) finish(); };
 
   window.addEventListener('scroll', decide, { passive: true });
-  window.addEventListener('resize', decide);
+  // 창 크기가 바뀌면 stage 변환(≤900px에서 scale)도 다시 읽는다
+  const onResize = () => {
+    st = readSt();
+    decide();
+  };
+  window.addEventListener('resize', onResize);
   // 떠 있는 동안 다른 기술 줄을 고르면 출발 자리와 돌아갈 자리가 바뀐다
   const selection = typeof MutationObserver === 'undefined' || !skills ? null : new MutationObserver(decide);
   selection?.observe(skills!, { subtree: true, attributeFilter: ['aria-pressed'] });
@@ -292,6 +331,7 @@ export function createAwardsHandoff({ root, reduced, onAway }: { root: HTMLEleme
       if (next === headArrived) return;
       headArrived = next;
       goal = -1;
+      opened = next;
       decide();
     },
     release,
@@ -300,7 +340,7 @@ export function createAwardsHandoff({ root, reduced, onAway }: { root: HTMLEleme
       alive = false;
       setStar(null);
       window.removeEventListener('scroll', decide);
-      window.removeEventListener('resize', decide);
+      window.removeEventListener('resize', onResize);
       selection?.disconnect();
       navigation?.disconnect();
       document.removeEventListener('visibilitychange', onVisibility);

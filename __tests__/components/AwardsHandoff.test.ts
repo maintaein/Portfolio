@@ -3,7 +3,8 @@ import { gsap } from '@/lib/gsap';
 import type { ExperienceOverlay } from '@/components/sections/ExperienceSection/overlay';
 import type { AwardsSectionHandle } from '@/components/sections/AwardAndCertificatesSection';
 import { AWARD_ORBIT, CERT_ORBIT, awardAngle, certAngle, orbitPoint, toScreen } from '@/components/sections/AwardAndCertificatesSection/orbit';
-import { STAR_SECONDS, type RideFrame, type StarDom } from '@/components/sections/AwardAndCertificatesSection/star';
+import { STAR_SECONDS, rideHead, type RideFrame, type StarDom } from '@/components/sections/AwardAndCertificatesSection/star';
+import type { HandoffFrame } from '@/components/sections/ExperienceSection/handoff';
 import { createAwardsHandoff, type AwardsHandoff } from '@/components/sections/HomeClient/awardsHandoff';
 import { createSkillsHandoff } from '@/components/sections/HomeClient/skillsHandoff';
 import { createPortfolioMotion } from '@/components/sections/HomeClient/motion';
@@ -341,6 +342,89 @@ describe('Awards 넘김: 떠 있기와 도착', () => {
     expect(star.fliers[1].y).toBeCloseTo(next.y, 0);
   });
 
+  // Ruling 13(최종 리뷰 I1): 거꾸로 재생 동안 계속 올라가도 끝에서 헤드가 원판 가운데에서 스크롤 자리로 순간 이동하지 않는다.
+  it('거꾸로 도착 장면 동안 프레임마다 5px씩 계속 올라가도 헤드는 원판 가운데에서 0.35초에 걸쳐 떠 있는 자리로 옮겨 가고 그 뒤 rideHead와 같다', () => {
+    const G = { home: { x: HEAD_X, y: ROW0 }, center: { x: CX, y: CY }, departY: DEPART, landY: LAND };
+    const step = 5, BLEND = .35;
+    create({ at: SA + 100 });
+    scrollAt(SA + 60);
+    let y = SA - 5;
+    scrollAt(y);
+    // 프레임마다의 화면 자리: 항성 프레임은 orb 가운데, 헤드 프레임은 헤드. 그 프레임의 원판 가운데와 rideHead 사이 거리도 적는다.
+    const seq: { x: number; y: number; head: boolean; gap: number }[] = [];
+    let blendFrames = 0;
+    for (let i = 0; i < 200; i++) {
+      y -= step;
+      scrollAt(y);
+      advance(.016);
+      const f = last()!;
+      const at = rideHead(G, y), gap = Math.hypot(at.x - CX, at.y - CY);
+      if (f.star) seq.push({ x: f.star.center.x, y: f.star.center.y, head: false, gap });
+      else if (f.head) {
+        seq.push({ x: f.head.x, y: f.head.y, head: true, gap });
+        if (seq.filter(q => q.head).length * .016 > BLEND + .1) break;
+        blendFrames++;
+      }
+    }
+    const first = seq.findIndex(q => q.head);
+    expect(first).toBeGreaterThan(10);
+    // 항성에서 헤드로 바뀌는 프레임은 원판 가운데에서 이어진다(스크롤 한 칸 안)
+    expect(Math.hypot(seq[first].x - seq[first - 1].x, seq[first].y - seq[first - 1].y)).toBeLessThanOrEqual(step + 1);
+    // 섞는 동안 한 프레임의 이동은 스크롤 두 칸(원판 가운데와 rideHead가 각자 스크롤을 따라 움직인 몫)과
+    // 섞기 한 걸음(ease-in-out 기울기 최대 3 × 16ms / 0.35초 × 둘 사이 거리)을 넘지 않는다
+    for (let k = first + 1; k < seq.length; k++) {
+      const d = Math.hypot(seq[k].x - seq[k - 1].x, seq[k].y - seq[k - 1].y);
+      expect(d).toBeLessThanOrEqual(2 * step + 3 * .016 / BLEND * seq[k - 1].gap + 1);
+    }
+    expect(blendFrames).toBeGreaterThan(15);
+    // 섞기가 끝나면 rideHead 그대로다
+    const end = last()!.head!, at = rideHead(G, y);
+    expect(end.x).toBeCloseTo(at.x, 1);
+    expect(end.y).toBeCloseTo(at.y - y, 1);
+    // 잔상이 원판 쪽에서 헤드를 쫓는다
+    expect(last()!.ghosts.length).toBeGreaterThan(0);
+  });
+
+  // Ruling 14(최종 리뷰 I2): 도착 장면이 쉬다가 출발할 때마다 Awards의 지금 각도를 붙잡는다. 첫 점은 DOM 카드 자리에서 나온다.
+  const cardAt = (angle: number, i: number, y: number) => toScreen({ x: CX, y: CY - y }, STAGE, orbitPoint(i === 3 ? CERT_ORBIT : AWARD_ORBIT, i === 3 ? certAngle(angle) : awardAngle(angle, i)));
+  const expectAtCards = (star: NonNullable<RideFrame['star']>, angle: number, y: number) => {
+    for (let i = 0; i < 4; i++) {
+      const c = cardAt(angle, i, y);
+      expect(Math.hypot(star.fliers[i].x - c.x, star.fliers[i].y - c.y)).toBeLessThanOrEqual(1);
+    }
+  };
+
+  it('앞으로 도착한 뒤 쉬는 동안 각도가 돌았으면, 되돌아 지난 첫 항성 프레임의 점은 지금 DOM 카드 자리에 있고 그 재생은 끝까지 그 각도를 쓴다', () => {
+    create();
+    for (const y of [SD + 4, 3000, 3300, SA + 5]) scrollAt(y);
+    play(STAR_SECONDS + .1);
+    expect(last()).toBeNull();
+    // 쉬는 동안 Awards가 10초 돌았다(0.15 rad/s)
+    awards.angle = () => ANGLE + 1.5;
+    scrollAt(SA - 5);
+    // p 1에서 거꾸로 출발한 첫 tick의 항성 프레임
+    advance(.016);
+    expectAtCards(last()!.star!, ANGLE + 1.5, SA - 5);
+    // 재생 도중 다시 내려가도 각도는 바뀌지 않는다(Awards는 재생 동안 공전을 세운다)
+    play(.4);
+    awards.angle = () => ANGLE + 3;
+    scrollAt(SA + 5);
+    let star = last()!.star!;
+    while (last()) {
+      star = last()!.star!;
+      advance(.016);
+    }
+    expectAtCards(star, ANGLE + 1.5, SA + 5);
+  });
+
+  it('#awards 첫 배치(도착 장면을 한 번도 돌지 않음) 뒤 되돌아 지나도 첫 항성 프레임의 점은 지금 DOM 카드 자리에 있다', () => {
+    create({ at: SA + 100 });
+    scrollAt(SA + 60);
+    scrollAt(SA - 5);
+    advance(.016);
+    expectAtCards(last()!.star!, ANGLE, SA - 5);
+  });
+
   it('도착 장면 중 setPaused(true)면 p가 1로 가고 트윈이 남지 않는다', () => {
     create();
     for (const y of [SD + 4, 3000, 3300, SA + 5]) scrollAt(y);
@@ -500,6 +584,95 @@ describe('motion: Skills 헤드 합치기', () => {
     expect(real.setArrived.mock.calls.at(-1)?.[0]).toBe(true);
     expect(react.length).toBeGreaterThan(0);
     expect(react.every(on => on)).toBe(true);
+    motion.destroy();
+  });
+});
+
+// Ruling 15(최종 리뷰 I3): Exp → Skills 넘김이 끝나기 전에 sD를 지나도 헤드가 둘로 보이지 않는다.
+// 실제 두 넘김과 motion.ts 합치기를 함께 돌린다. Skills 그래프는 "setArrived(true) 다음 tick에 헤드를 그리고 onHeadShown(release)" 모형이다.
+describe('Exp → Skills 끝과 Skills → Awards 출발의 이음', () => {
+  // measureTimeline은 offset을 읽는다
+  const placeAll = (element: Element, box: Box) => {
+    Object.defineProperties(element, {
+      offsetLeft: { configurable: true, get: () => box.x }, offsetTop: { configurable: true, get: () => box.y },
+      offsetWidth: { configurable: true, get: () => box.w }, offsetHeight: { configurable: true, get: () => box.h },
+      offsetParent: { configurable: true, get: () => null },
+    });
+    place(element, box);
+  };
+  // 선 끝 2720, Skills 첫 줄 가운데 2956(지점: 스크롤 2326), 헤드 열 x 160, 원판 가운데 (720, 3979).
+  // sD = 2956 - 199.6 = 2756.4, sA = 3979 - 488 = 3491. 넘김(약 1초)이 끝나기 전에 sD를 지나려면 430px를 1초 안에 내려가면 된다.
+  const EXP_ROW = 2956, EXP_HEAD_X = 160, EXP_SD = 2756.4;
+  const build = () => {
+    document.body.innerHTML = `<nav data-scroll-header></nav><main>
+      <section id="experience"><span data-part="experience-line" data-complete="true"></span>
+        <article><div data-part="experience-axis"></div><div><h3 data-part="experience-node">A</h3></div></article>
+        <article><div data-part="experience-axis"></div><div><h3 data-part="experience-node">B</h3></div></article>
+      </section>
+      <section id="skills"><div data-skill-map><canvas data-graph="head"></canvas>
+        <nav><button data-skill-row aria-pressed="true">React</button><button data-skill-row aria-pressed="false">TypeScript</button></nav>
+      </div></section>
+      <section id="awards-certificates"><div class="awards-stage"><div data-orbit-center></div></div></section>
+      <button data-test-wordmark><span>K</span></button><div data-logo-host><div></div></div>
+    </main>`;
+    place(document.querySelector('[data-scroll-header]')!, { x: 0, y: 0, w: 1440, h: 76 }, true);
+    const main = document.querySelector('main')!;
+    const [a, b] = [...main.querySelectorAll('article')];
+    placeAll(a, { x: 0, y: 1000, w: 1200, h: 800 });
+    placeAll(b, { x: 0, y: 1800, w: 1200, h: 1000 });
+    main.querySelectorAll('[data-part="experience-axis"]').forEach(el => placeAll(el, { x: 40, y: 0, w: 48, h: 600 }));
+    const [na, nb] = [...main.querySelectorAll('[data-part="experience-node"]')];
+    placeAll(na, { x: 120, y: 1040, w: 600, h: 40 });
+    placeAll(nb, { x: 120, y: 1840, w: 600, h: 40 });
+    placeAll(main.querySelector('#skills')!, { x: 0, y: 2850, w: 1440, h: 1000 });
+    placeAll(main.querySelector('[data-graph="head"]')!, { x: EXP_HEAD_X - 24, y: 2900, w: 48, h: 600 });
+    const [r0, r1] = [...main.querySelectorAll('[data-skill-row]')];
+    placeAll(r0, { x: 200, y: EXP_ROW - 36, w: 300, h: 72 });
+    placeAll(r1, { x: 200, y: EXP_ROW + 36, w: 300, h: 72 });
+    placeAll(main.querySelector('[data-orbit-center]')!, { x: 720 - DISC / 2, y: 3979 - DISC / 2, w: DISC, h: DISC });
+    placeAll(main.querySelector('#awards-certificates')!, { x: 0, y: 3600, w: 1440, h: 800 });
+    return main;
+  };
+
+  it.each([4, 7, 9, 12])('Experience에서 프레임당 %ipx로 계속 내려가도 넘김 헤드, Skills 헤드, 떠 있는 헤드 중 둘이 함께 그려지는 프RE임이 없고 떠 있기는 줄에서 출발한다'.replace('프RE임', '프레임'), (step) => {
+    const main = build();
+    documentY = 2000;
+    let handoffNow: HandoffFrame | null = null, rideNow: RideFrame | null = null;
+    const fakeOverlay = {
+      setHandoff: (f: HandoffFrame | null) => { handoffNow = f; }, setRide: (f: RideFrame | null) => { rideNow = f; },
+      setBoundary() {}, setTimeline() {}, setReduced() {}, destroy() {},
+    } as unknown as ExperienceOverlay;
+    // Skills 그래프 모형: setArrived(true)면 다음 tick에 헤드를 그리고 release를 부른다. false면 그 자리에서 지운다.
+    let drawn = true, pending = false;
+    const motion = createPortfolioMotion({
+      root: main, header: document.querySelector<HTMLElement>('[data-scroll-header]')!, wordmark: main.querySelector<HTMLButtonElement>('[data-test-wordmark]')!,
+      logoHost: main.querySelector<HTMLElement>('[data-logo-host]')!, reduced: false, onLogoOwnerChange() {},
+    });
+    motion.setSkillsHead({ setArrived: (on: boolean) => { if (!on) { drawn = false; pending = false; } else if (!drawn) pending = true; }, reveal() {} });
+    motion.setAwards({ setStar() {}, angle: () => 0 });
+    motion.setOverlay(fakeOverlay);
+    let doubled = 0, firstRide: RideFrame | null = null, rideY = 0, heldSeen = false;
+    for (let i = 0; i < 400 && documentY < 3400; i++) {
+      documentY += step;
+      window.dispatchEvent(new Event('scroll'));
+      gsap.updateRoot(gsap.globalTimeline.time() + .016);
+      if (pending) {
+        pending = false;
+        drawn = true;
+        motion.releaseSkillsHead();
+      }
+      const h = handoffNow as HandoffFrame | null, r = rideNow as RideFrame | null;
+      if (h?.head && h.head.r === 12) heldSeen = true;
+      const count = (h?.head ? 1 : 0) + (r?.head ? 1 : 0) + (drawn ? 1 : 0);
+      if (count > 1) doubled++;
+      if (r?.head && !firstRide) { firstRide = r; rideY = documentY; }
+    }
+    expect(heldSeen).toBe(true);
+    expect(doubled).toBe(0);
+    // 떠 있기는 줄에서 출발한다: 출발 파동이 줄 자리에 있고 잔상이 남는다
+    expect(firstRide).not.toBeNull();
+    expect(rideY).toBeGreaterThan(EXP_SD);
+    expect(firstRide!.ring).toEqual(expect.objectContaining({ x: EXP_HEAD_X, y: EXP_ROW - rideY }));
     motion.destroy();
   });
 });

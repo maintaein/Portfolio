@@ -202,13 +202,16 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     onSkillsHeadAway?.(away);
   };
   const awardsHandoff = createAwardsHandoff({ root, reduced, onAway: on => { away = on; applyHead(); } });
-  // Experience 쪽에서 헤드가 오지 않았으면 Awards 넘김은 떠나지 않는다(Ruling 9)
+  // Awards 넘김은 Skills 헤드가 실제로 그려져 있을 때만 떠난다. Experience에서 도착했고(Ruling 9) 넘김 헤드를 잡아 두고 있지 않을 때다(Ruling 15).
+  // 잡아 둔 동안 떠나면 줄 자리의 넘김 헤드와 떠 있는 헤드가 함께 보인다.
+  let held = false;
+  const gate = () => awardsHandoff.setHeadArrived(exp && !held);
   const arrive = (on: boolean) => {
     exp = on;
-    awardsHandoff.setHeadArrived(on);
+    gate();
     applyHead();
   };
-  const skillsHandoff = createSkillsHandoff({ root, reduced, onArrive: arrive });
+  const skillsHandoff = createSkillsHandoff({ root, reduced, onArrive: arrive, onHold: on => { held = on; gate(); } });
   skillsHandoff.setSkillsHead({ setArrived: arrive, reveal: () => skillsHead?.reveal() });
   const inner = logoHost.firstElementChild instanceof HTMLElement ? logoHost.firstElementChild : null;
   const label = wordmark.firstElementChild instanceof HTMLElement ? wordmark.firstElementChild : wordmark;
@@ -806,8 +809,9 @@ export function createPortfolioMotion({ root, header, wordmark, logoHost, ball, 
     },
     destroy: () => {
       alive = false;
-      skillsHandoff.destroy();
+      // Awards 넘김을 먼저 정리한다. Exp 넘김이 정리되며 잡아 두기를 풀어도 Awards 넘김이 다시 판정하지 않는다.
       awardsHandoff.destroy();
+      skillsHandoff.destroy();
       cancelAnimationFrame(queued);
       resize?.disconnect();
       projectsSection?.removeEventListener('focusin', reveal);

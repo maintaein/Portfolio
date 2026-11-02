@@ -190,6 +190,32 @@ describe('Skills 넘김: 앞으로와 거꾸로', () => {
     expect(skillsHead.reveal).not.toHaveBeenCalled();
   });
 
+  // Ruling 15: Awards 넘김은 잡아 두는 동안 떠나지 않는다. 잡아 두기는 도착 알림보다 먼저, 놓기는 넘김 헤드를 비운 뒤에 알린다.
+  it('onHold는 도착 알림보다 먼저 true이고, release에서 넘김 헤드를 비운 뒤 false이며, 500ms 놓기에서도 false다', () => {
+    line.dataset.complete = 'true';
+    documentY = 2000;
+    handoff = createSkillsHandoff({ root, reduced: false, onArrive: on => calls.push(`arrive ${on}`), onHold: on => calls.push(`hold ${on}`) });
+    handoff.setSkillsHead(skillsHead);
+    handoff.setOverlay(overlay as unknown as ExperienceOverlay);
+    calls = [];
+    scrollAt(2330);
+    advance(TOTAL + .1);
+    const arrived = calls.indexOf('arrive true');
+    expect(calls.indexOf('hold true')).toBeGreaterThan(-1);
+    expect(calls.indexOf('hold true')).toBeLessThan(arrived);
+    calls = [];
+    handoff.release();
+    expect(calls).toEqual(['overlay handed', 'hold false']);
+    // 다시 거꾸로 갔다가 앞으로 도착한 뒤 release 없이 500ms
+    scrollAt(2300);
+    advance(TOTAL + .1);
+    scrollAt(2330);
+    advance(TOTAL + .1);
+    calls = [];
+    advance(.6);
+    expect(calls).toEqual(['overlay handed', 'hold false']);
+  });
+
   it('release가 없으면 500ms 뒤 스스로 헤드를 내려놓는다', () => {
     line.dataset.complete = 'true';
     create();
