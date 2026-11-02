@@ -345,6 +345,8 @@ export function createSkillGraph(stage: HTMLElement, options: { reduced: boolean
         shown = false;
         layer?.clear();
         if (!started) return;
+        // 선이 다 뻗기 전에 떠나면 허브와 노드가 선을 기다리며 숨어 있게 된다. 바로 꺼낸다.
+        if (!hubShown) showHub();
         // 빈 자리에 매달리지 않게 허브 쪽으로 걷는다. 허브와 노드는 그대로 둔다.
         // 다 뻗어 쉬는 선만 기준점을 허브로 바꾼다(그때는 같은 곡선이다). 아직 뻗는 중이면 헤드 쪽으로 거둬 건너뛰지 않게 한다.
         retract ||= !linkS.tw;

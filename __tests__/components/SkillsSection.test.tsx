@@ -506,6 +506,20 @@ describe('SkillsSection signal map', () => {
     expect(stage().getAttribute('data-reveal')).toBe(plainReveal);
   });
 
+  it('헤드→허브 선이 다 뻗기 전에 헤드가 떠나도 허브와 노드는 바로 나온다', () => {
+    enableCanvas();
+    const ref = createRef<SkillsSectionHandle>();
+    const { container } = render(skillsWithActivity({}, { ref }));
+    step(50);
+    const hub = container.querySelector<HTMLElement>('[data-graph="hub"]')!;
+    expect(Number(hub.style.opacity || 0)).toBeLessThan(.5);
+    act(() => ref.current!.setArrived(false));
+    step(400);
+    expect(hub.style.opacity).toBe('1');
+    step(2600);
+    expectRevealed(container);
+  });
+
   // Experience → Skills 넘김은 지점을 지난 scroll 안에서 손잡이로 헤드를 맞바꾼다. React 커밋을 기다리면 한 프레임 겹친다.
   it('손잡이 setArrived(false)는 재렌더 없이 그 자리에서 헤드를 지우고 그리지 않으며, true면 다음 프레임에 다시 그린다', () => {
     enableCanvas();
