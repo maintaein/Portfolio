@@ -57,3 +57,4 @@ graphify-out/
 docs/
 # 저장소 밖 프로젝트(자체 .git이 있다). 실수로 서브모듈 링크로 커밋되지 않게 뺀다.
 /career-ops/
+my-motion
