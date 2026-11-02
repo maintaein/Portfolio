@@ -25,7 +25,7 @@ export const dragonBar: Project = {
         '관리자 목록의 검색·정렬·페이지 조건과 상세 화면의 복귀 경로를 URL로 연결',
       ],
       intent: '구매자는 중단된 주문을 이어가고, 운영자는 목록과 상세를 오가며 업무 맥락을 유지할 수 있도록 구성했습니다. 공개몰과 관리자는 하나의 Next.js 앱 안에 있으며, 라우트 그룹과 공통 레이아웃으로 화면을 구분했습니다.',
-      video: '/projects/dragonvape/admin.mp4',
+      video: '/projects/dragonvape/01-storefront-admin.mp4',
     },
     {
       category: '불확실한 주문·결제 결과의 복구',
@@ -35,7 +35,7 @@ export const dragonBar: Project = {
         'Playwright에서 서버 처리 뒤 응답만 유실시키는 결함 주입과 새로고침 복구 시나리오 작성',
       ],
       intent: '요청이 실패한 것과 서버 처리가 실패한 것은 다르다고 봤습니다. 화면이 결과를 모르는 상황을 별도 상태로 다루고, 확인된 사실에 따라 사용자가 할 수 있는 행동을 제한했습니다.',
-      image: '/projects/DragonBar.webp',
+      video: '/projects/dragonvape/02-order-recovery.mp4',
     },
     {
       category: '공통 개발 규칙과 검증 환경',
@@ -45,7 +45,7 @@ export const dragonBar: Project = {
         'Vitest와 Playwright 설정에서 결제·본인인증 제공자를 mock으로 고정해 개발자 환경변수와 테스트 환경 분리',
       ],
       intent: '개발 과정에서의 규칙을 기억에만 의존하지 않도록, 반복해서 지켜야 할 조건을 코드와 도구 설정에 넣었습니다. 1인 프로젝트로 진행하면서도, 추후 새로운 인원이 합류했을 때 규칙을 지킬 수 있도록 검증 환경을 고정했습니다.',
-      image: '/projects/DragonBar.webp',
+      video: '/projects/dragonvape/03-common-rules.mp4',
     },
     {
       category: '오류 관측과 빌드 조건',
@@ -55,7 +55,7 @@ export const dragonBar: Project = {
         '소스맵 필수 모드에서 자격증명·공개 DSN 누락 시 빌드 중단, 업로드 후 소스맵 삭제 설정',
       ],
       intent: '오류를 분석할 단서는 남기면서 주문자 정보와 인증 정보의 수집을 제한했습니다. 현재 범위는 오류 수집과 빌드 조건이며, 성능 추적·사용자 세션 리플레이·자동 배포 파이프라인은 포함하지 않습니다.',
-      image: '/projects/DragonBar.webp',
+      video: '/projects/dragonvape/04-error-observability.mp4',
     },
   ],
 
