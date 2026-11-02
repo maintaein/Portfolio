@@ -634,7 +634,7 @@ describe('Exp → Skills 끝과 Skills → Awards 출발의 이음', () => {
     return main;
   };
 
-  it.each([4, 7, 9, 12])('Experience에서 프레임당 %ipx로 계속 내려가도 넘김 헤드, Skills 헤드, 떠 있는 헤드 중 둘이 함께 그려지는 프RE임이 없고 떠 있기는 줄에서 출발한다'.replace('프RE임', '프레임'), (step) => {
+  it.each([4, 7, 9, 12])('Experience에서 프레임당 %ipx로 계속 내려가도 넘김 헤드, Skills 헤드, 떠 있는 헤드 중 둘이 함께 그려지는 프레임이 없고 떠 있기는 줄에서 출발한다', (step) => {
     const main = build();
     documentY = 2000;
     let handoffNow: HandoffFrame | null = null, rideNow: RideFrame | null = null;
